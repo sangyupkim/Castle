@@ -1,139 +1,225 @@
 'use strict';
 
-// ─── Unit factory ─────────────────────────────────────────────────────────────
-let _unitId = 0;
-function makeMerc(typeId) {
-  const tpl = MERC_TYPES[typeId];
+// ─── Unit Factory ─────────────────────────────────────────────────────────────
+let _uid = 0;
+
+function makeUnit(typeId) {
+  const t = UNIT_TYPES[typeId];
   return {
-    id: ++_unitId,
-    typeId,
-    x: MERC_SPAWN_X + Math.random() * 30,
-    y: GROUND_Y,
-    hp: tpl.hp, maxHp: tpl.hp,
-    atk: tpl.atk, atkSpd: tpl.atkSpd,
-    moveSpd: tpl.moveSpd,
-    radius: tpl.radius,
-    facing: 1,   // +1 = right
-    atkCooldown: 0,
-    state: 'move', // move | fight
-    target: null,
+    id: ++_uid, typeId, isPlayer: true,
+    name: t.name, icon: t.icon, color: t.color,
+    hp: t.hp, maxHp: t.hp,
+    atk: t.atk, def: t.def,
+    mp: t.mp, maxMp: t.maxMp,
+    skillName: t.skillName, skillAtk: t.skillAtk,
+    skillCost: t.skillCost, skillColor: t.skillColor,
+    healAmt: t.healAmt || 0,
+    ticksSinceSkill: 0,
     dead: false,
-    floaty: null  // floating damage text
+    flashTimer: 0, flashColor: '#fff'
   };
 }
 
-function makeBattleEnemy(typeId) {
-  const tpl = BATTLE_ENEMY_TYPES[typeId];
+function makeMob(typeId) {
+  const t = BATTLE_MOB_TYPES[typeId];
   return {
-    id: ++_unitId,
-    typeId,
-    x: MOB_SPAWN_X - Math.random() * 20,
-    y: GROUND_Y,
-    hp: tpl.hp, maxHp: tpl.hp,
-    atk: tpl.atk, atkSpd: tpl.atkSpd,
-    moveSpd: tpl.moveSpd,
-    radius: tpl.radius,
-    facing: -1,  // -1 = left
-    atkCooldown: 0,
-    state: 'move',
-    target: null,
-    dead: false
+    id: ++_uid, typeId, isPlayer: false,
+    name: t.name, icon: t.icon, color: t.color,
+    hp: t.hp, maxHp: t.hp,
+    atk: t.atk, def: t.def,
+    mp: t.mp, maxMp: t.maxMp,
+    skillAtk: t.skillAtk, skillCost: t.skillCost,
+    ticksSinceSkill: 0,
+    dead: false,
+    flashTimer: 0, flashColor: '#fff'
   };
 }
 
-// ─── Skill system ─────────────────────────────────────────────────────────────
-const SKILLS = [
-  { id:'rally',  name:'결집',  desc:'아군 공격력 +50% (5초)', icon:'⚡', cd:20, activeCd:0 },
-  { id:'shield', name:'방패막', desc:'아군 방어 (피해 50% 감소 3초)', icon:'🛡', cd:25, activeCd:0 },
-  { id:'charge', name:'돌격',  desc:'아군 이동속도 2배 (3초)', icon:'💨', cd:18, activeCd:0 }
-];
+// ─── Battle State Machine ─────────────────────────────────────────────────────
+function createBattle() {
+  return {
+    phase: 'hire',       // hire | fighting | won | lost | idle
+    ourTeam: [],         // hired units (max 4 initially)
+    enemyTeam: [],       // enemy units for this wave
+    maxSlots: 4,
+    tickTimer: 0,        // counts up to TICK_INTERVAL
+    tickCount: 0,
+    log: [],             // [{text, color, timer}]
+    floaties: [],        // [{text, x, y, vy, life, color}]
+    result: null         // 'won' | 'lost' | null
+  };
+}
 
-const battleEffects = { rally:0, shield:0, charge:0 };
+// ─── Hire Phase ───────────────────────────────────────────────────────────────
+function hireUnit(battle, typeId, gold) {
+  const t = UNIT_TYPES[typeId];
+  if (!t) return gold;
+  if (battle.ourTeam.length >= battle.maxSlots) return gold;
+  if (gold < t.cost) return gold;
+  battle.ourTeam.push(makeUnit(typeId));
+  return gold - t.cost;
+}
 
-function activateSkill(skillId, mercs) {
-  const skill = SKILLS.find(s => s.id === skillId);
-  if (!skill || skill.activeCd > 0) return false;
-  skill.activeCd = skill.cd;
-  if (skillId === 'rally')  { battleEffects.rally  = 5; }
-  if (skillId === 'shield') { battleEffects.shield = 3; }
-  if (skillId === 'charge') { battleEffects.charge = 3; }
-  return true;
+function fireUnit(battle, idx) {
+  if (idx < 0 || idx >= battle.ourTeam.length) return;
+  const unit = battle.ourTeam[idx];
+  const refund = Math.floor(UNIT_TYPES[unit.typeId].cost / 2);
+  battle.ourTeam.splice(idx, 1);
+  return refund;
+}
+
+// ─── Combat Tick ──────────────────────────────────────────────────────────────
+function battleTick(battle) {
+  battle.tickCount++;
+
+  const our = battle.ourTeam.filter(u => !u.dead);
+  const foe = battle.enemyTeam.filter(u => !u.dead);
+
+  if (our.length === 0 || foe.length === 0) return;
+
+  // ── player units attack ───────────────────────────────────────────────────
+  for (const u of our) {
+    u.ticksSinceSkill++;
+    const useSkill = u.ticksSinceSkill >= SKILL_TICK_CD && u.mp >= u.skillCost;
+
+    if (useSkill) {
+      u.ticksSinceSkill = 0;
+      u.mp -= u.skillCost;
+
+      if (u.healAmt > 0) {
+        // Healer: heal lowest HP ally
+        const target = our.slice().sort((a,b) => (a.hp/a.maxHp) - (b.hp/b.maxHp))[0];
+        const healed = Math.min(target.maxHp - target.hp, u.healAmt);
+        target.hp += healed;
+        addFloaty(battle, `+${healed}`, unitX(target), unitY(battle.ourTeam.indexOf(target)), '#34d399');
+        addLog(battle, `${u.name}의 ${u.skillName}! +${healed} 회복`, u.skillColor);
+        u.flashTimer = 0.3; u.flashColor = u.skillColor;
+      } else {
+        // Attack skill: hit all enemies OR random target
+        const dmg = Math.max(1, u.skillAtk - foe[0].def);
+        const target = foe[Math.floor(Math.random() * foe.length)];
+        applyDamage(target, dmg, battle, u.skillColor);
+        addLog(battle, `${u.name}의 ${u.skillName}! ${dmg} 피해`, u.skillColor);
+      }
+    } else {
+      // Normal attack on random alive enemy
+      const target = foe[Math.floor(Math.random() * foe.length)];
+      const dmg = Math.max(1, u.atk - target.def);
+      applyDamage(target, dmg, battle, '#fbbf24');
+    }
+
+    // MP regen
+    u.mp = Math.min(u.maxMp, u.mp + MP_REGEN_TICK);
+  }
+
+  // ── enemy units attack ───────────────────────────────────────────────────
+  for (const mob of foe) {
+    mob.ticksSinceSkill++;
+    const useSkill = mob.ticksSinceSkill >= SKILL_TICK_CD && mob.mp >= mob.skillCost;
+
+    if (useSkill) {
+      mob.ticksSinceSkill = 0;
+      mob.mp -= mob.skillCost;
+      const target = our[Math.floor(Math.random() * our.length)];
+      const dmg = Math.max(1, mob.skillAtk - target.def);
+      applyDamage(target, dmg, battle, '#ef4444');
+      addLog(battle, `${mob.name}의 스킬! ${dmg} 피해`, '#ef4444');
+    } else {
+      const target = our[Math.floor(Math.random() * our.length)];
+      const dmg = Math.max(1, mob.atk - target.def);
+      applyDamage(target, dmg, battle, '#fca5a5');
+    }
+    mob.mp = Math.min(mob.maxMp, mob.mp + MP_REGEN_TICK);
+  }
+
+  // ── check end ──────────────────────────────────────────────────────────────
+  const aliveOur = battle.ourTeam.filter(u => !u.dead).length;
+  const aliveFoe = battle.enemyTeam.filter(u => !u.dead).length;
+
+  if (aliveFoe === 0) { battle.phase = 'won';  battle.result = 'won';  }
+  if (aliveOur === 0) { battle.phase = 'lost'; battle.result = 'lost'; }
+}
+
+function applyDamage(target, dmg, battle, color) {
+  target.hp -= dmg;
+  target.flashTimer = 0.25;
+  target.flashColor = color;
+  const isPlayer = target.isPlayer;
+  const idx = (isPlayer ? battle.ourTeam : battle.enemyTeam).indexOf(target);
+  const x = isPlayer ? BATTLE_TEAM_X : BATTLE_ENEMY_X;
+  const y = unitY(idx);
+  addFloaty(battle, `-${dmg}`, x, y, color);
+  if (target.hp <= 0) { target.dead = true; target.hp = 0; }
+}
+
+function addLog(battle, text, color) {
+  battle.log.unshift({ text, color, timer: 2.5 });
+  if (battle.log.length > 5) battle.log.pop();
+}
+
+function addFloaty(battle, text, x, y, color) {
+  battle.floaties.push({ text, x, y: y - BATTLE_UNIT_R, vy: -40, life: 1.2, color });
+}
+
+function unitX(unit) { return unit.isPlayer ? BATTLE_TEAM_X : BATTLE_ENEMY_X; }
+
+function unitY(idx) {
+  const total = 4;
+  const startY = BATTLE_UNIT_START_Y + 40;
+  return startY + idx * BATTLE_UNIT_GAP + BATTLE_UNIT_R;
 }
 
 // ─── Update ──────────────────────────────────────────────────────────────────
-function updateBattle(mercs, mobs, dt) {
-  // Update effect timers
-  for (const k of Object.keys(battleEffects)) {
-    if (battleEffects[k] > 0) battleEffects[k] = Math.max(0, battleEffects[k] - dt);
-  }
-  for (const sk of SKILLS) {
-    if (sk.activeCd > 0) sk.activeCd = Math.max(0, sk.activeCd - dt);
-  }
+function updateBattle(battle, dt) {
+  if (battle.phase !== 'fighting') return;
 
-  const rallyMult  = battleEffects.rally  > 0 ? 1.5 : 1;
-  const chargeMult = battleEffects.charge > 0 ? 2   : 1;
-  const shieldMult = battleEffects.shield > 0 ? 0.5 : 1;
-
-  // Update mercs
-  for (const m of mercs) {
-    if (m.dead) continue;
-    m.atkCooldown = Math.max(0, m.atkCooldown - dt);
-
-    // Find nearest enemy in attack range
-    const range = m.radius + 30;
-    let nearest = null, nearDist = Infinity;
-    for (const mob of mobs) {
-      if (mob.dead) continue;
-      const d = Math.abs(mob.x - m.x);
-      if (d < nearDist) { nearest = mob; nearDist = d; }
-    }
-
-    if (nearest && nearDist <= range) {
-      m.state = 'fight';
-      m.target = nearest;
-      if (m.atkCooldown <= 0) {
-        const dmg = Math.round(m.atk * rallyMult);
-        const actual = Math.max(1, Math.round(dmg * shieldMult)); // shield applies to received dmg
-        nearest.hp -= dmg;
-        m.atkCooldown = 1 / m.atkSpd;
-        if (nearest.hp <= 0) nearest.dead = true;
-      }
-    } else {
-      m.state = 'move';
-      m.target = null;
-      m.x += m.moveSpd * chargeMult * dt;
-    }
-    // Clamp
-    m.x = Math.min(CW - m.radius, m.x);
+  // Flash timers
+  for (const u of [...battle.ourTeam, ...battle.enemyTeam]) {
+    if (u.flashTimer > 0) u.flashTimer = Math.max(0, u.flashTimer - dt);
   }
 
-  // Update mobs
-  for (const mob of mobs) {
-    if (mob.dead) continue;
-    mob.atkCooldown = Math.max(0, mob.atkCooldown - dt);
-
-    const range = mob.radius + 30;
-    let nearest = null, nearDist = Infinity;
-    for (const m of mercs) {
-      if (m.dead) continue;
-      const d = Math.abs(m.x - mob.x);
-      if (d < nearDist) { nearest = m; nearDist = d; }
-    }
-
-    if (nearest && nearDist <= range) {
-      mob.state = 'fight';
-      mob.target = nearest;
-      if (mob.atkCooldown <= 0) {
-        const dmg = Math.max(1, Math.round(mob.atk * shieldMult));
-        nearest.hp -= dmg;
-        mob.atkCooldown = 1 / mob.atkSpd;
-        if (nearest.hp <= 0) nearest.dead = true;
-      }
-    } else {
-      mob.state = 'move';
-      mob.target = null;
-      mob.x += mob.moveSpd * mob.facing * dt;
-    }
-    // Clamp (mobs shouldn't go past left edge - they "win" if they do, handled in wave.js)
+  // Floaties
+  for (let i = battle.floaties.length - 1; i >= 0; i--) {
+    const f = battle.floaties[i];
+    f.y  += f.vy * dt;
+    f.life -= dt;
+    if (f.life <= 0) battle.floaties.splice(i, 1);
   }
+
+  // Log timers
+  for (let i = battle.log.length - 1; i >= 0; i--) {
+    battle.log[i].timer -= dt;
+    if (battle.log[i].timer <= 0) battle.log.splice(i, 1);
+  }
+
+  // Tick
+  battle.tickTimer += dt;
+  if (battle.tickTimer >= TICK_INTERVAL) {
+    battle.tickTimer -= TICK_INTERVAL;
+    battleTick(battle);
+  }
+}
+
+// ─── Setup Enemy Team from Wave Definition ───────────────────────────────────
+function setupEnemyTeam(battle, waveIdx) {
+  battle.enemyTeam = [];
+  const def = WAVE_DEFS[waveIdx];
+  for (const entry of def.battleEnemies) {
+    for (let i = 0; i < entry.count; i++) {
+      battle.enemyTeam.push(makeMob(entry.type));
+    }
+  }
+  battle.maxSlots = 4;
+}
+
+function startFighting(battle) {
+  if (battle.ourTeam.length === 0) return false;
+  battle.phase = 'fighting';
+  battle.tickTimer = 0;
+  battle.tickCount = 0;
+  battle.result = null;
+  // Reset tick counters
+  for (const u of battle.ourTeam)   u.ticksSinceSkill = 0;
+  for (const u of battle.enemyTeam) u.ticksSinceSkill = 0;
+  return true;
 }

@@ -3,194 +3,180 @@
 // ─── Canvas Setup ─────────────────────────────────────────────────────────────
 const canvas = document.getElementById('gameCanvas');
 const ctx    = canvas.getContext('2d');
+let _scale   = 1;
 
-// Responsive sizing – keep portrait 480×800, scale to fit window
 function resize() {
-  const scale = Math.min(window.innerWidth / CW, window.innerHeight / CH);
-  canvas.width  = CW;
-  canvas.height = CH;
-  canvas.style.width  = `${CW * scale}px`;
-  canvas.style.height = `${CH * scale}px`;
-  _canvasScale = scale;
+  const s = Math.min(window.innerWidth/CW, window.innerHeight/CH);
+  canvas.width  = CW; canvas.height = CH;
+  canvas.style.width  = `${CW*s}px`;
+  canvas.style.height = `${CH*s}px`;
+  _scale = s;
 }
-let _canvasScale = 1;
 window.addEventListener('resize', resize);
 resize();
 
-// ─── Game State ───────────────────────────────────────────────────────────────
-function createInitialState() {
+// ─── State ────────────────────────────────────────────────────────────────────
+function newState() {
   return {
-    phase:  1,
-    wave:   0,      // 0-based (displayed as wave+1)
-    gold:   10,
-    baseHP: BASE_HP_MAX,
-
-    towers:        [],
-    defenseEnemies:[],
-    projectiles:   [],
-
-    mercs:         [],
-    battleEnemies: [],
-
+    phase: 1, wave: 0,
+    gold: 10, baseHP: BASE_HP_MAX,
+    towers: [], defenseEnemies: [], projectiles: [],
+    battle: null,
     waveActive: false,
-    gameOver:   false,
-    stageCleared: false,
-
+    gameOver: false, stageCleared: false,
     hero: { level:1, exp:0, hp:50, maxHp:50, dead:false, reviveTimer:0 },
-
     hoveredCell: null,
-
-    ui: {
-      waveBtn:   { x:0, y:0, w:0, h:0 },
-      skillBtns: [{},{},{} ]
-    },
-
-    // floating texts
-    floaties: []
+    floaties: [],
+    ui: { waveBtn:{x:0,y:0,w:0,h:0}, hireCards:[], hiredSlots:[] }
   };
 }
 
-let gs = createInitialState();
+let gs  = newState();
 const wm  = createWaveManager();
 const tut = createTutorial();
 
+// Init battle for wave 0
+gs.battle = createBattle();
+setupEnemyTeam(gs.battle, 0);
+
 // Load save
-const saved = SaveManager.load();
-if (saved) {
-  gs.phase   = saved.phase  || 1;
-  gs.wave    = saved.wave   || 0;
-  gs.gold    = saved.gold   || 10;
-  gs.baseHP  = saved.baseHP || BASE_HP_MAX;
-  gs.hero.level = saved.heroLevel || 1;
-  gs.hero.exp   = saved.heroExp   || 0;
+(function() {
+  const sv = SaveManager.load();
+  if (!sv) return;
+  gs.gold   = sv.gold   || 10;
+  gs.baseHP = sv.baseHP || BASE_HP_MAX;
+  gs.wave   = sv.wave   || 0;
+  gs.hero.level = sv.heroLevel || 1;
+  gs.hero.exp   = sv.heroExp   || 0;
   wm.init(gs.wave);
-}
+  setupEnemyTeam(gs.battle, gs.wave);
+})();
 
 tut.start();
 
 // ─── Input ────────────────────────────────────────────────────────────────────
-function canvasPoint(e) {
-  const rect = canvas.getBoundingClientRect();
-  const touch = e.touches ? e.touches[0] : e;
-  return {
-    x: (touch.clientX - rect.left) / _canvasScale,
-    y: (touch.clientY - rect.top)  / _canvasScale
-  };
+function pt(e) {
+  const r = canvas.getBoundingClientRect();
+  const t = e.touches ? e.touches[0] : e;
+  return { x:(t.clientX-r.left)/_scale, y:(t.clientY-r.top)/_scale };
 }
 
 canvas.addEventListener('mousemove', e => {
-  const pt = canvasPoint(e);
-  gs.hoveredCell = screenToCell(pt.x, pt.y);
+  const p = pt(e);
+  gs.hoveredCell = p.y < UIBAR_Y ? screenToCell(p.x, p.y) : null;
 });
-
 canvas.addEventListener('mouseleave', () => { gs.hoveredCell = null; });
+canvas.addEventListener('click', e => tap(pt(e)));
+canvas.addEventListener('touchstart', e => { e.preventDefault(); tap(pt(e)); }, {passive:false});
 
-canvas.addEventListener('click',     e => handleTap(canvasPoint(e)));
-canvas.addEventListener('touchstart', e => { e.preventDefault(); handleTap(canvasPoint(e)); }, { passive: false });
+function tap(p) {
+  const { x, y } = p;
 
-function handleTap(pt) {
-  // Tutorial dismissal
-  if (tut.active) { tut.next(); return; }
+  if (tut.active)      { tut.next(); return; }
+  if (gs.gameOver)     { resetGame(false); return; }
+  if (gs.stageCleared) { resetGame(true);  return; }
 
-  // Game over / clear → restart
-  if (gs.gameOver)    { resetGame(); return; }
-  if (gs.stageCleared){ resetGame(true); return; }
-
-  const { x, y } = pt;
-
-  // ── UI Bar buttons ───────────────────────────────────────────────────────
+  // ── UI Bar: wave start button ──────────────────────────────────────────
   const btn = gs.ui.waveBtn;
-  if (hitTest(x, y, btn)) {
+  if (hitTest(x,y,btn)) {
     if (wm.phase === 'idle') {
-      wm.startWave(gs);
-      gs.waveActive = true;
-    } else if (wm.phase === 'active' && gs.gold >= MERC_TYPES.swordsman.cost) {
-      gs.gold -= MERC_TYPES.swordsman.cost;
-      gs.mercs.push(makeMerc('swordsman'));
-      spawnFloaty(`+검사`, btn.x + btn.w / 2, btn.y, '#60a5fa');
+      if (gs.battle.phase === 'hire') {
+        // Need at least 1 unit hired or can skip battle part
+        wm.startWave(gs);
+        gs.waveActive = true;
+      }
     }
     return;
   }
 
-  // ── Skill buttons ────────────────────────────────────────────────────────
-  for (const sb of gs.ui.skillBtns) {
-    if (sb.skillId && hitTest(x, y, sb)) {
-      const ok = activateSkill(sb.skillId, gs.mercs);
-      if (ok) spawnFloaty(SKILLS.find(s => s.id === sb.skillId).icon, sb.x + sb.w/2, sb.y, '#fbbf24');
-      return;
+  // ── Hire Phase: hire cards ─────────────────────────────────────────────
+  if (gs.battle.phase === 'hire') {
+    for (const card of gs.ui.hireCards||[]) {
+      if (hitTest(x,y,card)) {
+        const prev = gs.gold;
+        gs.gold = hireUnit(gs.battle, card.typeId, gs.gold);
+        if (gs.gold < prev) {
+          spawnFloaty(`+${UNIT_TYPES[card.typeId].name}`, card.x+card.w/2, card.y, '#60a5fa');
+        } else {
+          spawnFloaty('골드 부족!', x, y, '#ef4444');
+        }
+        return;
+      }
     }
-  }
 
-  // ── Defense zone: place tower ────────────────────────────────────────────
-  if (y < UIBAR_Y) {
-    const cell = screenToCell(x, y);
-    if (cell && !PATH_CELLS.has(`${cell.c},${cell.r}`)) {
-      // Don't place on start/end
-      if (cell.c === 4 && (cell.r === 0 || cell.r === 6)) return;
-      // Already has tower?
-      if (gs.towers.some(t => t.col === cell.c && t.row === cell.r)) return;
-      const cost = TOWER_TYPES.arrow.cost;
-      if (gs.gold >= cost) {
-        gs.gold -= cost;
-        gs.towers.push(makeTower(cell.c, cell.r, 'arrow'));
-        spawnFloaty(`-${cost}💰`, x, y, '#fbbf24');
-      } else {
-        spawnFloaty('골드 부족!', x, y, '#ef4444');
+    // Hired slots: tap to remove
+    for (const slot of gs.ui.hiredSlots||[]) {
+      if (hitTest(x,y,slot) && gs.battle.ourTeam[slot.idx]) {
+        const refund = fireUnit(gs.battle, slot.idx) || 0;
+        gs.gold += refund;
+        spawnFloaty(`+${refund}💰`, x, y, COLORS.gold);
+        return;
       }
     }
   }
-}
 
-function hitTest(x, y, rect) {
-  return x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
-}
-
-function screenToCell(x, y) {
-  if (y < GRID_OY || y > GRID_OY + GRID_ROWS * CELL_H) return null;
-  const c = Math.floor((x - GRID_OX) / CELL_W);
-  const r = Math.floor((y - GRID_OY) / CELL_H);
-  if (c < 0 || c >= GRID_COLS || r < 0 || r >= GRID_ROWS) return null;
-  return { c, r };
-}
-
-// ─── Floating Texts ───────────────────────────────────────────────────────────
-function spawnFloaty(text, x, y, color) {
-  gs.floaties.push({ text, x, y, color, life: 1.2, opacity: 1 });
-}
-
-function updateFloaties(dt) {
-  for (let i = gs.floaties.length - 1; i >= 0; i--) {
-    const f = gs.floaties[i];
-    f.life -= dt;
-    f.y -= 28 * dt;
-    f.opacity = Math.max(0, f.life / 1.2);
-    if (f.life <= 0) gs.floaties.splice(i, 1);
+  // ── Defense zone: place tower ──────────────────────────────────────────
+  if (y < UIBAR_Y) {
+    const cell = screenToCell(x, y);
+    if (!cell) return;
+    if (PATH_CELLS.has(`${cell.c},${cell.r}`)) return;
+    if (cell.c===4 && (cell.r===0||cell.r===6)) return;
+    if (gs.towers.some(t => t.col===cell.c && t.row===cell.r)) {
+      spawnFloaty('이미 있음', x, y, '#64748b'); return;
+    }
+    const cost = TOWER_TYPES.arrow.cost;
+    if (gs.gold >= cost) {
+      gs.gold -= cost;
+      gs.towers.push(makeTower(cell.c, cell.r, 'arrow'));
+      spawnFloaty(`-${cost}💰`, x, y, COLORS.gold);
+    } else {
+      spawnFloaty('골드 부족!', x, y, '#ef4444');
+    }
   }
 }
 
-function renderFloaties(ctx) {
+function hitTest(x,y,r) { return r && x>=r.x && x<=r.x+r.w && y>=r.y && y<=r.y+r.h; }
+
+function screenToCell(x, y) {
+  const c = Math.floor((x-GRID_OX)/CELL_W);
+  const r = Math.floor((y-GRID_OY)/CELL_H);
+  if (c<0||c>=GRID_COLS||r<0||r>=GRID_ROWS) return null;
+  return { c, r };
+}
+
+// ─── Floaties ─────────────────────────────────────────────────────────────────
+function spawnFloaty(text, x, y, color) {
+  gs.floaties.push({text, x, y, color, life:1.2, vy:-28});
+}
+
+function updateFloaties(dt) {
+  for (let i=gs.floaties.length-1; i>=0; i--) {
+    const f = gs.floaties[i];
+    f.life -= dt; f.y += f.vy*dt;
+    if (f.life<=0) gs.floaties.splice(i,1);
+  }
+}
+
+function drawFloaties(ctx) {
   for (const f of gs.floaties) {
-    ctx.globalAlpha = f.opacity;
-    ctx.fillStyle = f.color;
-    ctx.font = 'bold 13px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    ctx.globalAlpha = Math.max(0, f.life/1.2);
+    ctx.fillStyle = f.color; ctx.font = 'bold 13px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(f.text, f.x, f.y);
   }
   ctx.globalAlpha = 1;
 }
 
-// ─── Game Logic ───────────────────────────────────────────────────────────────
+// ─── Update ──────────────────────────────────────────────────────────────────
 function update(dt) {
   if (gs.gameOver || gs.stageCleared) return;
 
-  // Hero revive timer
+  // Hero revive
   if (gs.hero.dead) {
     gs.hero.reviveTimer -= dt;
     if (gs.hero.reviveTimer <= 0) {
-      gs.hero.dead = false;
-      gs.hero.hp = gs.hero.maxHp;
-      spawnFloaty('영웅 부활!', CW / 2, CH / 2, '#22c55e');
+      gs.hero.dead = false; gs.hero.hp = gs.hero.maxHp;
+      spawnFloaty('영웅 부활!', CW/2, CH/2, '#22c55e');
     }
   }
 
@@ -199,100 +185,73 @@ function update(dt) {
     return;
   }
 
-  // Wave update (spawning)
   wm.update(gs, dt);
 
-  // Defense enemies
+  // Defense
   updateDefenseEnemies(gs.defenseEnemies, dt);
-
-  // Check enemies reaching base
   for (const e of gs.defenseEnemies) {
     if (e.reached && !e._counted) {
       e._counted = true;
       gs.baseHP = Math.max(0, gs.baseHP - e.dmg);
-      spawnFloaty(`-${e.dmg} HP`, CW / 2, DEFENSE_Y + DEFENSE_H - 30, '#ef4444');
+      spawnFloaty(`-${e.dmg} HP`, CW/2, DEFENSE_H-25, '#ef4444');
       if (gs.baseHP <= 0) { gs.gameOver = true; return; }
     }
   }
-
-  // Towers shoot
   updateTowers(gs.towers, gs.defenseEnemies, gs.projectiles, dt);
-
-  // Projectiles
   updateProjectiles(gs.projectiles, (killed) => {
     gs.gold += killed.reward;
     spawnFloaty(`+${killed.reward}💰`, killed.x, killed.y, COLORS.gold);
   }, dt);
-
-  // Battle zone
-  updateBattle(gs.mercs, gs.battleEnemies, dt);
-
-  // Remove dead units
   gs.defenseEnemies = gs.defenseEnemies.filter(e => !e.dead && !e.reached);
-  gs.battleEnemies  = gs.battleEnemies.filter(e => {
-    // If enemy walks off left edge, it doesn't damage anything in battle zone,
-    // but we can count it as escaped
-    if (e.x < -20) { e.dead = true; return false; }
-    return !e.dead;
-  });
-  gs.mercs = gs.mercs.filter(m => !m.dead);
-  gs.projectiles = gs.projectiles.filter(() => true); // projectiles self-clean in updateProjectiles
 
-  // Wave ended?
+  // Battle
+  updateBattle(gs.battle, dt);
+
+  // End wave check (wm handles this internally)
   if (wm.phase === 'intermission') {
     gs.waveActive = false;
-    // auto-advance handled in updateIntermission
   }
 
   updateFloaties(dt);
 }
 
-// ─── Render ───────────────────────────────────────────────────────────────────
-let _lastTime = 0;
-function gameLoop(ts) {
-  const dt = Math.min((ts - _lastTime) / 1000, 0.05); // cap at 50ms
-  _lastTime = ts;
+// ─── Loop ─────────────────────────────────────────────────────────────────────
+let _last = 0;
+function loop(ts) {
+  const dt = Math.min((ts - _last)/1000, 0.05);
+  _last = ts;
 
-  ctx.clearRect(0, 0, CW, CH);
-
+  ctx.clearRect(0,0,CW,CH);
   renderDefense(ctx, gs);
   renderUIBar(ctx, gs, wm);
-  renderBattle(ctx, gs, dt);
+  renderBattle(ctx, gs);
   renderHUD(ctx, gs);
-  renderFloaties(ctx);
+  drawFloaties(ctx);
   renderTutorial(ctx, tut);
 
-  if (!gs.gameOver && !gs.stageCleared) update(dt);
-
-  requestAnimationFrame(gameLoop);
+  update(dt);
+  requestAnimationFrame(loop);
 }
 
 // ─── Reset ────────────────────────────────────────────────────────────────────
-function resetGame(newStage) {
-  const prev = gs;
-  gs = createInitialState();
-
-  if (newStage) {
-    // Keep hero progress, start fresh wave
-    gs.hero = prev.hero;
-    gs.hero.dead = false;
-    gs.hero.hp = gs.hero.maxHp;
-    gs.wave = 0;
-    wm.init(0);
+function resetGame(nextStage) {
+  const hero = gs.hero;
+  gs = newState();
+  if (nextStage) {
+    gs.hero = hero;
+    gs.hero.dead = false; gs.hero.hp = gs.hero.maxHp;
     SaveManager.clear();
   } else {
-    // Retry: restore pre-wave state from save
     const sv = SaveManager.load();
     if (sv) {
-      gs.gold  = sv.gold  || 10;
-      gs.baseHP= sv.baseHP|| BASE_HP_MAX;
-      gs.wave  = sv.wave  || 0;
-      gs.hero.level = sv.heroLevel || 1;
-      gs.hero.exp   = sv.heroExp   || 0;
+      gs.gold = sv.gold || 10; gs.baseHP = sv.baseHP || BASE_HP_MAX;
+      gs.wave = sv.wave || 0;
+      gs.hero.level = sv.heroLevel||1; gs.hero.exp = sv.heroExp||0;
     }
-    wm.init(gs.wave);
   }
+  gs.battle = createBattle();
+  setupEnemyTeam(gs.battle, gs.wave);
+  wm.init(gs.wave);
 }
 
-// ─── Start ────────────────────────────────────────────────────────────────────
-requestAnimationFrame(ts => { _lastTime = ts; requestAnimationFrame(gameLoop); });
+requestAnimationFrame(ts => { _last=ts; requestAnimationFrame(loop); });
