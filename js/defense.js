@@ -1,0 +1,105 @@
+'use strict';
+
+// ─── Tower ───────────────────────────────────────────────────────────────────
+function makeTower(col, row, typeId) {
+  const tpl = TOWER_TYPES[typeId];
+  return {
+    col, row, typeId,
+    dmg: tpl.dmg, spd: tpl.spd, range: tpl.range,
+    cooldown: 0,
+    totalKills: 0
+  };
+}
+
+// ─── Defense Enemy ────────────────────────────────────────────────────────────
+let _defEnemyId = 0;
+function makeDefenseEnemy(typeId, pathKey) {
+  const tpl = ENEMY_TYPES[typeId];
+  const path = pathKey === 'A' ? PATH_A : PATH_B;
+  const start = cellCenter(path[0][0], path[0][1]);
+  return {
+    id: ++_defEnemyId,
+    typeId, pathKey,
+    path,
+    wpIdx: 0,       // current waypoint index
+    x: start.x, y: start.y,
+    hp: tpl.hp, maxHp: tpl.hp,
+    spd: tpl.spd * ENEMY_CELL_SPD,
+    dmg: tpl.dmg, reward: tpl.reward,
+    radius: tpl.radius,
+    dead: false,
+    reached: false  // reached the base
+  };
+}
+
+// ─── Projectile ───────────────────────────────────────────────────────────────
+function makeProjectile(sx, sy, target, dmg, color) {
+  return { x: sx, y: sy, tx: target.x, ty: target.y, target, dmg, color, spd: 320 };
+}
+
+// ─── Update Logic ─────────────────────────────────────────────────────────────
+function updateDefenseEnemies(enemies, dt) {
+  for (const e of enemies) {
+    if (e.dead || e.reached) continue;
+    if (e.wpIdx >= e.path.length - 1) { e.reached = true; continue; }
+
+    const next = cellCenter(e.path[e.wpIdx + 1][0], e.path[e.wpIdx + 1][1]);
+    const dx = next.x - e.x, dy = next.y - e.y;
+    const dist = Math.hypot(dx, dy);
+    const step = e.spd * dt;
+
+    if (step >= dist) {
+      e.x = next.x; e.y = next.y;
+      e.wpIdx++;
+    } else {
+      e.x += (dx / dist) * step;
+      e.y += (dy / dist) * step;
+    }
+  }
+}
+
+function updateTowers(towers, enemies, projectiles, dt) {
+  for (const tower of towers) {
+    tower.cooldown = Math.max(0, tower.cooldown - dt);
+    if (tower.cooldown > 0) continue;
+
+    const center = cellCenter(tower.col, tower.row);
+    // find nearest alive enemy in range
+    let best = null, bestDist = Infinity;
+    for (const e of enemies) {
+      if (e.dead || e.reached) continue;
+      const d = Math.hypot(e.x - center.x, e.y - center.y);
+      if (d <= tower.range && d < bestDist) { best = e; bestDist = d; }
+    }
+    if (!best) continue;
+
+    tower.cooldown = 1 / tower.spd;
+    const tpl = TOWER_TYPES[tower.typeId];
+    projectiles.push(makeProjectile(center.x, center.y, best, tower.dmg, tpl.projColor));
+  }
+}
+
+function updateProjectiles(projectiles, onKill, dt) {
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    const p = projectiles[i];
+    const tgt = p.target;
+
+    if (!tgt || tgt.dead || tgt.reached) { projectiles.splice(i, 1); continue; }
+
+    // Track target current position
+    p.tx = tgt.x; p.ty = tgt.y;
+    const dx = p.tx - p.x, dy = p.ty - p.y;
+    const dist = Math.hypot(dx, dy);
+    const step = p.spd * dt;
+
+    if (step >= dist) {
+      // Hit
+      tgt.hp -= p.dmg;
+      if (tgt.hp <= 0) { tgt.dead = true; onKill(tgt); }
+      projectiles.splice(i, 1);
+    } else {
+      p.x += (dx / dist) * step;
+      p.y += (dy / dist) * step;
+    }
+  }
+}
