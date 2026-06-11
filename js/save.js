@@ -1,24 +1,26 @@
 'use strict';
 
-const SAVE_KEY = 'dualfrontier_v1';
+const SAVE_KEY = 'dualfrontier_v2';
 
 const SaveManager = {
   load() {
     try {
       const raw = localStorage.getItem(SAVE_KEY);
-      if (!raw) return null;
-      return JSON.parse(raw);
+      return raw ? JSON.parse(raw) : null;
     } catch(e) { return null; }
   },
 
-  save(state) {
+  save(gs) {
     const data = {
-      phase:      state.phase,
-      wave:       state.wave,
-      gold:       state.gold,
-      baseHP:     state.baseHP,
-      heroLevel:  state.hero.level,
-      heroExp:    state.hero.exp,
+      phase:      gs.phase,
+      wave:       gs.wave,
+      gold:       gs.gold,
+      baseHP:     gs.baseHP,
+      heroLevel:  gs.hero.level,
+      heroExp:    gs.hero.exp,
+      // 몬스터 체력 이월: 생존 몬스터 직렬화
+      persistedEnemies: serializeEnemies(gs.battle.enemyTeam),
+      totalGoldEarned: gs.battle.totalGoldEarned,
       timestamp:  Date.now()
     };
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch(e) {}

@@ -200,14 +200,24 @@ function renderUIBar(ctx, gs, wm) {
   // Gold
   ctx.fillStyle = COLORS.gold; ctx.font = 'bold 13px sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(`💰 ${gs.gold}`, CW/2, cy-6);
+  ctx.fillText(`💰 ${gs.gold}`, CW/2 - 30, cy - 6);
 
-  // Battle phase label
+  // Battle phase + earned gold
   const bphase = gs.battle.phase;
-  const bLabel = bphase==='hire' ? '병력 고용 중' : bphase==='fighting' ? '⚔️ 전투 중!' : bphase==='won' ? '✅ 승리' : bphase==='lost' ? '❌ 패배' : '';
-  ctx.fillStyle = bphase==='fighting' ? '#f59e0b' : bphase==='won' ? '#22c55e' : bphase==='lost' ? '#ef4444' : COLORS.textDim;
+  const bLabel = bphase==='hire'     ? '병력 고용 중'
+               : bphase==='fighting' ? `⚔️ 전투 중!  +${gs.battle.goldEarned}💰`
+               : bphase==='won'      ? `✅ 승리`
+               : bphase==='lost'     ? `❌ 패배`     : '';
+  ctx.fillStyle = bphase==='fighting' ? '#f59e0b'
+                : bphase==='won'      ? '#22c55e'
+                : bphase==='lost'     ? '#ef4444'    : COLORS.textDim;
   ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
-  ctx.fillText(bLabel, CW/2, cy+9);
+  ctx.fillText(bLabel, CW/2 - 30, cy + 9);
+
+  // 누적 획득 골드 (우측 상단)
+  ctx.fillStyle = COLORS.textDim; ctx.font = '9px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(`총 획득: ${gs.battle.totalGoldEarned}💰`, 8, cy + 9);
 
   // Main action button (right side)
   const bw = 108, bh = 38, bx = CW-bw-6, by = UIBAR_Y+(UIBAR_H-bh)/2;
@@ -337,10 +347,23 @@ function renderHirePhase(ctx, gs) {
     ctx.fillText(mob.name, ex+20, epY+49);
   });
 
-  // Wave start hint at bottom
-  ctx.fillStyle = '#64748b'; ctx.font = '11px sans-serif';
+  // Wave start hint / warning
+  const hasUnit = battle.ourTeam.length > 0;
+  ctx.fillStyle = hasUnit ? '#64748b' : '#f87171';
+  ctx.font = hasUnit ? '10px sans-serif' : 'bold 11px sans-serif';
   ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-  ctx.fillText('병력 고용 후 우측 [웨이브 시작] 버튼을 누르세요', CW/2, BATTLE_Y+BATTLE_H-6);
+  const hintText = hasUnit
+    ? `고용 완료 (${battle.ourTeam.length}명) → 우측 [웨이브 시작]`
+    : '⚠️ 병력을 1명 이상 고용해야 웨이브를 시작할 수 있습니다';
+  ctx.fillText(hintText, CW/2, BATTLE_Y+BATTLE_H-6);
+
+  // 생존 몬스터 이월 안내
+  const survivors = battle.enemyTeam.filter(m => !m.dead);
+  if (survivors.length > 0) {
+    ctx.fillStyle = '#fbbf24'; ctx.font = '9px sans-serif';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(`⚠️ 이전 전투 생존 몬스터 ${survivors.length}마리가 이월됩니다`, CW/2, BATTLE_Y+BATTLE_H-18);
+  }
 }
 
 // ─── Fight Phase ──────────────────────────────────────────────────────────────

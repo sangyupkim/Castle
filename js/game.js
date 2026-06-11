@@ -35,21 +35,27 @@ let gs  = newState();
 const wm  = createWaveManager();
 const tut = createTutorial();
 
-// Init battle for wave 0
+// Init battle
 gs.battle = createBattle();
-setupEnemyTeam(gs.battle, 0);
 
-// Load save
+// Load save — 몬스터 체력 이월 복원 포함
 (function() {
   const sv = SaveManager.load();
-  if (!sv) return;
+  if (!sv) {
+    // 첫 시작: 웨이브 0 초기 적 없음 (startWave 시 addEnemies 호출됨)
+    return;
+  }
   gs.gold   = sv.gold   || 10;
   gs.baseHP = sv.baseHP || BASE_HP_MAX;
   gs.wave   = sv.wave   || 0;
   gs.hero.level = sv.heroLevel || 1;
   gs.hero.exp   = sv.heroExp   || 0;
+  gs.battle.totalGoldEarned = sv.totalGoldEarned || 0;
+  // 저장된 몬스터 체력 복원 (재시작 시 이월)
+  if (sv.persistedEnemies && sv.persistedEnemies.length > 0) {
+    gs.battle.enemyTeam = restoreEnemies(sv.persistedEnemies);
+  }
   wm.init(gs.wave);
-  setupEnemyTeam(gs.battle, gs.wave);
 })();
 
 tut.start();
@@ -198,10 +204,8 @@ function update(dt) {
     }
   }
   updateTowers(gs.towers, gs.defenseEnemies, gs.projectiles, dt);
-  updateProjectiles(gs.projectiles, (killed) => {
-    gs.gold += killed.reward;
-    spawnFloaty(`+${killed.reward}💰`, killed.x, killed.y, COLORS.gold);
-  }, dt);
+  // 타워 킬은 골드 없음 — 자원은 하단 전투에서만 획득
+  updateProjectiles(gs.projectiles, () => {}, dt);
   gs.defenseEnemies = gs.defenseEnemies.filter(e => !e.dead && !e.reached);
 
   // Battle
@@ -237,20 +241,27 @@ function loop(ts) {
 function resetGame(nextStage) {
   const hero = gs.hero;
   gs = newState();
+  gs.battle = createBattle();
+
   if (nextStage) {
     gs.hero = hero;
     gs.hero.dead = false; gs.hero.hp = gs.hero.maxHp;
     SaveManager.clear();
   } else {
+    // 재시작: 저장된 몬스터 체력 이월 복원
     const sv = SaveManager.load();
     if (sv) {
-      gs.gold = sv.gold || 10; gs.baseHP = sv.baseHP || BASE_HP_MAX;
-      gs.wave = sv.wave || 0;
-      gs.hero.level = sv.heroLevel||1; gs.hero.exp = sv.heroExp||0;
+      gs.gold   = sv.gold   || 10;
+      gs.baseHP = sv.baseHP || BASE_HP_MAX;
+      gs.wave   = sv.wave   || 0;
+      gs.hero.level = sv.heroLevel || 1;
+      gs.hero.exp   = sv.heroExp   || 0;
+      gs.battle.totalGoldEarned = sv.totalGoldEarned || 0;
+      if (sv.persistedEnemies && sv.persistedEnemies.length > 0) {
+        gs.battle.enemyTeam = restoreEnemies(sv.persistedEnemies);
+      }
     }
   }
-  gs.battle = createBattle();
-  setupEnemyTeam(gs.battle, gs.wave);
   wm.init(gs.wave);
 }
 

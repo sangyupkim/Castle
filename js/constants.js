@@ -117,39 +117,38 @@ const UNIT_TYPES = {
 
 // ─── Battle Enemy Types (적팀) ────────────────────────────────────────────────
 const BATTLE_MOB_TYPES = {
-  goblin: { id:'goblin', name:'고블린', hp:30,  atk:8,  def:1, mp:20, maxMp:20, skillAtk:15, skillCost:10, color:'#4ade80', icon:'👺' },
-  orc:    { id:'orc',    name:'오크',   hp:80,  atk:15, def:4, mp:20, maxMp:20, skillAtk:30, skillCost:15, color:'#818cf8', icon:'👹' },
-  boss:   { id:'boss',   name:'보스',   hp:200, atk:25, def:8, mp:30, maxMp:30, skillAtk:50, skillCost:20, color:'#ef4444', icon:'💀' }
+  goblin: { id:'goblin', name:'고블린', hp:30,  atk:8,  def:1, mp:20, maxMp:20, skillAtk:15, skillCost:10, color:'#4ade80', icon:'👺', goldReward:8  },
+  orc:    { id:'orc',    name:'오크',   hp:80,  atk:15, def:4, mp:20, maxMp:20, skillAtk:30, skillCost:15, color:'#818cf8', icon:'👹', goldReward:20 },
+  boss:   { id:'boss',   name:'보스',   hp:200, atk:25, def:8, mp:30, maxMp:30, skillAtk:50, skillCost:20, color:'#ef4444', icon:'💀', goldReward:60 }
 };
 
 // ─── Wave Definitions (Phase 1) ───────────────────────────────────────────────
+// addEnemies: 해당 웨이브 시작 시 기존 생존 풀에 추가되는 몬스터
+// (생존 몬스터는 체력 유지한 채 다음 웨이브로 이월됨)
 const WAVE_DEFS = [
   {
     defenseEnemies: [
-      { type:'goblin', count:5, path:'A', interval:1600 }
+      { type:'goblin', count:5, interval:1600 }
     ],
-    battleEnemies: [
+    addEnemies: [                          // 웨이브 1 시작 시 신규 추가
       { type:'goblin', count:3 }
     ]
   },
   {
     defenseEnemies: [
-      { type:'goblin', count:4, path:'A', interval:1300 },
-      { type:'goblin', count:4, path:'B', interval:1300 }
+      { type:'goblin', count:8, interval:1200 }
     ],
-    battleEnemies: [
-      { type:'goblin', count:3 },
+    addEnemies: [                          // 기존 생존자 + 이 몬스터들 추가
+      { type:'goblin', count:2 },
       { type:'orc',    count:1 }
     ]
   },
   {
     defenseEnemies: [
-      { type:'goblin', count:6, path:'A', interval:1100 },
-      { type:'goblin', count:6, path:'B', interval:1100 },
-      { type:'orc',    count:2, path:'A', interval:3000 }
+      { type:'goblin', count:6, interval:1100 },
+      { type:'orc',    count:2, interval:3000 }
     ],
-    battleEnemies: [
-      { type:'goblin', count:2 },
+    addEnemies: [
       { type:'orc',    count:2 },
       { type:'boss',   count:1 }
     ]
