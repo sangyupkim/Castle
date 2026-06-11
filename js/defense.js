@@ -15,7 +15,7 @@ function makeTower(col, row, typeId) {
 let _defEnemyId = 0;
 function makeDefenseEnemy(typeId, pathKey) {
   const tpl = ENEMY_TYPES[typeId];
-  const path = pathKey === 'A' ? PATH_A : PATH_B;
+  const path = THE_PATH;  // 단일 경로 사용 (pathKey 무시)
   const start = cellCenter(path[0][0], path[0][1]);
   return {
     id: ++_defEnemyId,
