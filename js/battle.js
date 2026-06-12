@@ -177,9 +177,9 @@ function battleTick(battle) {
     mob.mp = Math.min(mob.maxMp, mob.mp + MP_REGEN_TICK);
   }
 
-  // 종료 체크
-  if (!battle.enemyTeam.some(u => !u.dead)) { battle.phase='won';  battle.result='won';  }
-  if (!battle.ourTeam.some(u => !u.dead))   { battle.phase='lost'; battle.result='lost'; }
+  // 종료 체크: 아군 전멸 시에만 즉시 종료
+  // 적 전멸은 종료 조건이 아님 — 웨이브 타이머 동안 계속 스폰되므로
+  if (!battle.ourTeam.some(u => !u.dead)) { battle.phase='lost'; battle.result='lost'; }
 }
 
 // ─── 피해 적용 ────────────────────────────────────────────────────────────────

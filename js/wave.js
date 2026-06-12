@@ -79,13 +79,13 @@ function createWaveManager() {
 
       // 아군 전멸 시 전투만 중단, 타이머는 계속
       if (gs.battle.phase === 'lost') {
-        gs.battle.phase = 'idle_defeated'; // 전투 끝, 타이머 진행 중
+        gs.battle.phase = 'idle_defeated';
       }
 
-      // 종료 조건
+      // 종료 조건: 타이머 종료 or (상단 클리어 + 아군 전멸)
       const defDone = this.defenseQueues.every(q=>q.remaining<=0) &&
                       gs.defenseEnemies.every(e=>e.dead||e.reached);
-      const batDone = gs.battle.phase==='won' || gs.battle.phase==='idle_defeated';
+      const batDone = gs.battle.phase==='idle_defeated';
       if (this.timer <= 0 || (defDone && batDone)) {
         this.endWave(gs);
       }
@@ -94,6 +94,12 @@ function createWaveManager() {
     endWave(gs) {
       this.phase = 'intermission';
       this.intermissionTimer = INTERMISSION;
+
+      // 웨이브 종료 시 승패 판정 — 아군이 살아있으면 승리
+      if (gs.battle.phase === 'fighting') {
+        gs.battle.phase  = 'won';
+        gs.battle.result = 'won';
+      }
 
       // ─ 자원 지급 ────────────────────────────────────────────────────────
       // 처치 골드 (누적) + 승리 보너스 + 처치량 보너스
