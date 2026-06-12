@@ -18,7 +18,7 @@ const SaveManager = {
       baseHP:     gs.baseHP,
       heroLevel:  gs.hero.level,
       heroExp:    gs.hero.exp,
-      // 몬스터 체력 이월: 생존 몬스터 직렬화
+      caveLevel:  gs.caveLevel,
       persistedEnemies: serializeEnemies(gs.battle.enemyTeam),
       totalGoldEarned: gs.battle.totalGoldEarned,
       timestamp:  Date.now()

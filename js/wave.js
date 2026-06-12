@@ -70,7 +70,7 @@ function createWaveManager() {
           q.nextSpawn -= dt;
           if (q.nextSpawn <= 0) {
             if (this.elapsed <= WAVE_DURATION) {
-              gs.battle.enemyTeam.push(makeMob(q.type));
+              gs.battle.enemyTeam.push(makeScaledMob(q.type, gs.battle.killCount, gs.caveLevel));
             }
             q.nextSpawn = q.interval;
           }
@@ -95,15 +95,19 @@ function createWaveManager() {
       this.phase = 'intermission';
       this.intermissionTimer = INTERMISSION;
 
-      // ─ 자원 지급: 하단 처치 골드 + 승리 보너스 ─────────────────────────
-      const earned = gs.battle.goldEarned;
-      const bonus  = (gs.battle.result === 'won') ? (15 + this.waveIndex*10) : 0;
-      const total  = earned + bonus;
+      // ─ 자원 지급 ────────────────────────────────────────────────────────
+      // 처치 골드 (누적) + 승리 보너스 + 처치량 보너스
+      const earned    = gs.battle.goldEarned;
+      const killBonus = gs.battle.killCount * (this.waveIndex + 1); // 웨이브 진행마다 처치당 보너스 증가
+      const winBonus  = (gs.battle.result === 'won') ? (20 + this.waveIndex * 15) : 0;
+      const total     = earned + killBonus + winBonus;
       gs.gold += total;
 
-      if (total > 0) {
-        addLog(gs.battle, `웨이브 ${this.waveIndex+1} 보상: +${total}💰`, COLORS.gold);
-      }
+      const parts = [];
+      if (earned > 0)    parts.push(`처치 +${earned}💰`);
+      if (killBonus > 0) parts.push(`처치보너스 +${killBonus}💰`);
+      if (winBonus > 0)  parts.push(`승리 +${winBonus}💰`);
+      addLog(gs.battle, `웨이브${this.waveIndex+1} 보상: ${parts.join(' ')}`, COLORS.gold);
 
       // 정리
       gs.defenseEnemies = [];

@@ -19,6 +19,7 @@ function newState() {
   return {
     phase:1, wave:0,
     gold:10, baseHP:BASE_HP_MAX,
+    caveLevel:1,
     towers:[], defenseEnemies:[], projectiles:[],
     battle: null,
     hero: {
@@ -56,6 +57,7 @@ gs.battle = createBattle();
   gs.hero.exp   = sv.heroExp || 0;
   gs.hero.hp    = HERO_LEVELS[gs.hero.level].hp;
   gs.battle.totalGoldEarned = sv.totalGoldEarned || 0;
+  gs.caveLevel  = Math.max(1, Math.min(5, sv.caveLevel||1));
   wm.init(gs.wave);
 })();
 
@@ -92,6 +94,21 @@ function tap({x,y}) {
 
   // ── 영웅 배치 버튼 (고용 화면에서만) ────────────────────────────────────
   if (gs.battle.phase==='hire' && wm.phase==='idle') {
+    // 케이브 업그레이드
+    if (gs.ui.caveBtn && hitTest(x,y,gs.ui.caveBtn)) {
+      const nextLv = gs.caveLevel + 1;
+      if (nextLv <= 5) {
+        const cost = CAVE_LEVELS[nextLv].upgradeCost;
+        if (gs.gold >= cost) {
+          gs.gold -= cost;
+          gs.caveLevel = nextLv;
+          spawnFloaty(`🗿 케이브 Lv.${nextLv}!`, CW/2, BATTLE_Y+40, '#a78bfa');
+        } else {
+          spawnFloaty('골드 부족!', x, y, '#ef4444');
+        }
+      }
+      return;
+    }
     if (hitTest(x,y,gs.ui.heroDefBtn)) {
       gs.hero.placement = gs.hero.placement==='defense' ? 'none' : 'defense';
       // 하단 배치였으면 영웅 아군에서 제거
@@ -297,8 +314,10 @@ function loop(ts) {
 // ─── 리셋 ────────────────────────────────────────────────────────────────────
 function resetGame(next) {
   const hero=gs.hero;
+  const cave=gs.caveLevel;
   gs=newState();
   gs.battle=createBattle();
+  gs.caveLevel=cave; // 케이브 레벨은 영구 유지
 
   if (next) {
     gs.hero=hero;
@@ -314,6 +333,7 @@ function resetGame(next) {
       gs.hero.exp=sv.heroExp||0;
       gs.hero.hp=HERO_LEVELS[gs.hero.level].hp;
       gs.battle.totalGoldEarned=sv.totalGoldEarned||0;
+      gs.caveLevel=Math.max(1,Math.min(5,sv.caveLevel||cave));
     }
   }
   wm.init(gs.wave);

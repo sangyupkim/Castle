@@ -32,6 +32,29 @@ function makeMob(typeId) {
   };
 }
 
+// 처치 수 + 케이브 레벨 반영 스케일링 몹
+function makeScaledMob(typeId, killCount, caveLevel) {
+  const t  = BATTLE_MOB_TYPES[typeId];
+  const cv = CAVE_LEVELS[caveLevel] || CAVE_LEVELS[1];
+  const km = 1 + killCount * KILL_SCALE;   // 처치 기반 배율
+  const sm = km * cv.statMult;              // 스탯 최종 배율
+  const gm = km * cv.goldMult;              // 골드 최종 배율
+  return {
+    id:++_uid, typeId, isPlayer:false,
+    name:t.name, icon:t.icon, color:t.color,
+    hp:      Math.max(1, Math.round(t.hp       * sm)),
+    maxHp:   Math.max(1, Math.round(t.hp       * sm)),
+    atk:     Math.max(1, Math.round(t.atk      * sm)),
+    def:     Math.max(0, Math.round(t.def      * sm)),
+    mp:t.mp, maxMp:t.maxMp,
+    skillAtk:Math.max(1, Math.round(t.skillAtk * sm)),
+    skillCost:t.skillCost,
+    goldReward: Math.max(1, Math.round(t.goldReward * gm)),
+    ticksSinceSkill:0, dead:false,
+    flashTimer:0, flashColor:'#fff'
+  };
+}
+
 // 영웅을 전투용 유닛으로 변환
 function makeHeroUnit(hero) {
   const lv = HERO_LEVELS[hero.level];
@@ -58,6 +81,7 @@ function createBattle() {
     tickCount: 0,
     goldEarned: 0,       // 이번 웨이브 적립
     totalGoldEarned: 0,  // 스테이지 누적 (표시용)
+    killCount: 0,        // 이번 웨이브 처치 수 (스케일링 기준)
     log: [],
     floaties: [],
     result: null
@@ -87,6 +111,7 @@ function startFighting(battle) {
   battle.phase      = 'fighting';
   battle.tickTimer  = 0;
   battle.tickCount  = 0;
+  battle.killCount  = 0;
   battle.result     = null;
   battle.goldEarned = 0;
   for (const u of [...battle.ourTeam, ...battle.enemyTeam]) u.ticksSinceSkill = 0;
@@ -168,10 +193,13 @@ function applyDamage(target, dmg, battle, color, isMobTarget) {
 
   if (target.hp <= 0) {
     target.dead = true; target.hp = 0;
-    if (isMobTarget && target.goldReward) {
-      battle.goldEarned      += target.goldReward;
-      battle.totalGoldEarned += target.goldReward;
-      addFloaty(battle, `+${target.goldReward}💰`, x, unitY(idx)-22, COLORS.gold);
+    if (isMobTarget) {
+      battle.killCount++;
+      if (target.goldReward) {
+        battle.goldEarned      += target.goldReward;
+        battle.totalGoldEarned += target.goldReward;
+        addFloaty(battle, `+${target.goldReward}💰`, x, unitY(idx)-22, COLORS.gold);
+      }
     }
   }
 }

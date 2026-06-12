@@ -396,6 +396,37 @@ function renderHirePhase(ctx, gs) {
     ctx.fillText(`${s.interval}s 주기`, ex+23, epY+52);
   });
 
+  // ── 케이브 업그레이드 패널 ───────────────────────────────────────────
+  const caveY = epY + 62;
+  const cv    = CAVE_LEVELS[gs.caveLevel];
+  const nextCv= CAVE_LEVELS[gs.caveLevel + 1] || null;
+
+  roundRect(ctx, 6, caveY, CW-12, 56, 6);
+  ctx.fillStyle='#0a0d1a'; ctx.fill();
+  ctx.strokeStyle='#4c1d95'; ctx.lineWidth=1.5; ctx.stroke();
+
+  ctx.fillStyle='#a78bfa'; ctx.font='bold 10px sans-serif';
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText(`🗿 몬스터 케이브  ${cv.label} (Lv.${gs.caveLevel}/5)`, 12, caveY+6);
+
+  ctx.fillStyle='#94a3b8'; ctx.font='9px sans-serif';
+  ctx.fillText(`현재: 몬스터 ${cv.statMult}배 강함  /  보상 ${cv.goldMult}배`, 12, caveY+20);
+
+  if (nextCv) {
+    ctx.fillText(`다음: 몬스터 ${nextCv.statMult}배  /  보상 ${nextCv.goldMult}배`, 12, caveY+32);
+    const canAfford = gs.gold >= nextCv.upgradeCost;
+    const bw=140, bh=24, bx=CW-12-bw, by=caveY+16;
+    drawBtn(ctx, bx, by, bw, bh,
+      `업그레이드  ${nextCv.upgradeCost}💰`,
+      canAfford?'#4c1d95':'#1e293b',
+      canAfford?'#a78bfa':'#6b7280', canAfford);
+    gs.ui.caveBtn = {x:bx, y:by, w:bw, h:bh};
+  } else {
+    gs.ui.caveBtn = null;
+    ctx.fillStyle='#f59e0b'; ctx.font='bold 9px sans-serif';
+    ctx.fillText('★ 최고 등급 달성!', 12, caveY+32);
+  }
+
   // 경고 / 안내
   const hasUnit = battle.ourTeam.length > 0;
   const hasHero = gs.hero.placement !== 'none';
@@ -419,6 +450,13 @@ function renderFightPhase(ctx, gs) {
   ctx.font='bold 12px sans-serif'; ctx.textBaseline='top'; ctx.textAlign='center';
   ctx.fillStyle='#60a5fa'; ctx.fillText('우리팀', BATTLE_TEAM_X, BATTLE_Y+6);
   ctx.fillStyle='#f87171'; ctx.fillText('적팀',   BATTLE_ENEMY_X, BATTLE_Y+6);
+
+  // 처치 수 & 강화 배율 표시
+  const pct = Math.round(battle.killCount * KILL_SCALE * 100);
+  const cv  = CAVE_LEVELS[gs.caveLevel];
+  ctx.font='8px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
+  ctx.fillStyle='#7c3aed';
+  ctx.fillText(`🗿Lv.${gs.caveLevel}  처치 ${battle.killCount}회  강화 +${pct}%`, CW/2, BATTLE_Y+22);
 
   ctx.strokeStyle='#334155'; ctx.lineWidth=1; ctx.setLineDash([4,4]);
   ctx.beginPath(); ctx.moveTo(CW/2,BATTLE_Y+25); ctx.lineTo(CW/2,BATTLE_Y+BATTLE_H-65); ctx.stroke();

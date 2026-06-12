@@ -121,6 +121,19 @@ const WAVE_DEFS = [
   }
 ];
 
+// ─── 케이브 업그레이드 ────────────────────────────────────────────────────────
+// statMult: 몹 기본 스탯 배율, goldMult: 보상 배율, upgradeCost: 업그레이드 비용
+const CAVE_LEVELS = [
+  null,
+  { label:'자연 동굴', statMult:1.0, goldMult:1.0, upgradeCost:  0 },
+  { label:'강화 동굴', statMult:1.4, goldMult:1.5, upgradeCost: 20 },
+  { label:'위험 동굴', statMult:1.9, goldMult:2.2, upgradeCost: 35 },
+  { label:'심연 동굴', statMult:2.6, goldMult:3.2, upgradeCost: 55 },
+  { label:'지옥 동굴', statMult:3.5, goldMult:4.5, upgradeCost: 80 }
+];
+// 처치 1회마다 다음 몹 스탯/보상 8% 증가
+const KILL_SCALE = 0.08;
+
 const WAVE_DURATION    = 60;
 const INTERMISSION     = 15;
 const BASE_HP_MAX      = 100;
