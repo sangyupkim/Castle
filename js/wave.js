@@ -64,13 +64,17 @@ function createWaveManager() {
         }
       }
 
-      // 하단 연속 스폰 (전투 중이고 팀이 살아있을 때만)
+      // 하단 연속 스폰 (전투 중일 때만, 최대 생존 적 수 제한)
       if (gs.battle.phase === 'fighting') {
+        const liveEnemies = gs.battle.enemyTeam.filter(e => !e.dead).length;
         for (const q of this.battleSpawnQueues) {
           q.nextSpawn -= dt;
           if (q.nextSpawn <= 0) {
-            if (this.elapsed <= WAVE_DURATION) {
-              gs.battle.enemyTeam.push(makeScaledMob(q.type, gs.battle.killCount, gs.caveLevel));
+            if (this.elapsed <= WAVE_DURATION && liveEnemies < BATTLE_MAX_LIVE_ENEMIES) {
+              const mob = makeScaledMob(q.type, gs.battle.killCount, gs.caveLevel);
+              // drawY: 슬롯 위치 (0 or 1번째 줄)
+              mob.drawY = unitY(liveEnemies);
+              gs.battle.enemyTeam.push(mob);
             }
             q.nextSpawn = q.interval;
           }

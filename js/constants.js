@@ -59,11 +59,15 @@ const ENEMY_TYPES = {
 const ENEMY_CELL_SPD = CELL_W;
 
 // ─── Battle Layout ────────────────────────────────────────────────────────────
-const BATTLE_TEAM_X       = 110;
-const BATTLE_ENEMY_X      = 370;
+const BATTLE_TEAM_X        = 110;   // 아군 x (렌더 기준)
+const BATTLE_ENEMY_X       = 340;   // 적 전투 대기 x
+const BATTLE_ENEMY_SPAWN_X = CW + 70; // 적 스폰 위치 (화면 밖)
+const BATTLE_MAX_LIVE_ENEMIES = 2;  // 동시 최대 생존 적 수
+const BATTLE_MARCH_SPD     = 90;    // 배경 스크롤 속도 (전진 연출)
+const BATTLE_ENEMY_WALK_SPD = 180;  // 적 걸어오는 속도 px/s
 const BATTLE_UNIT_R       = 24;
-const BATTLE_UNIT_GAP     = 72;
-const BATTLE_UNIT_START_Y = BATTLE_Y + 75;
+const BATTLE_UNIT_GAP     = 64;
+const BATTLE_UNIT_START_Y = BATTLE_Y + 55;
 
 // ─── 아군 유닛 ───────────────────────────────────────────────────────────────
 const UNIT_TYPES = {
@@ -95,17 +99,18 @@ const BATTLE_MOB_TYPES = {
 };
 
 // ─── 웨이브 정의 ─────────────────────────────────────────────────────────────
-// battleSpawns: 웨이브 60초 동안 연속 스폰 (offset = 최초 스폰 시각(초), interval = 재스폰 간격)
+// battleSpawns: offset=최초 스폰 딜레이(초), interval=슬롯 비면 대기 시간(초)
+// 최대 동시 생존 적 수(BATTLE_MAX_LIVE_ENEMIES)를 넘으면 스폰 보류
 const WAVE_DEFS = [
   {
     defenseEnemies: [{ type:'goblin', count:5, interval:1600 }],
-    battleSpawns:   [{ type:'goblin', offset:2,  interval:9  }]
+    battleSpawns:   [{ type:'goblin', offset:0, interval:1.2 }]
   },
   {
     defenseEnemies: [{ type:'goblin', count:8, interval:1200 }],
     battleSpawns:   [
-      { type:'goblin', offset:2,  interval:7  },
-      { type:'orc',    offset:12, interval:22 }
+      { type:'goblin', offset:0, interval:1.0 },
+      { type:'orc',    offset:8, interval:8   }
     ]
   },
   {
@@ -114,9 +119,9 @@ const WAVE_DEFS = [
       { type:'orc',    count:2, interval:3000 }
     ],
     battleSpawns: [
-      { type:'goblin', offset:2,  interval:5  },
-      { type:'orc',    offset:8,  interval:16 },
-      { type:'boss',   offset:30, interval:999 } // 단 1회 (30초에 등장)
+      { type:'goblin', offset:0,  interval:0.8  },
+      { type:'orc',    offset:5,  interval:6    },
+      { type:'boss',   offset:30, interval:999  }
     ]
   }
 ];

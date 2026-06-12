@@ -14,7 +14,8 @@ function makeUnit(typeId) {
     skillCost:t.skillCost, skillColor:t.skillColor,
     healAmt:t.healAmt||0,
     ticksSinceSkill:0, dead:false,
-    flashTimer:0, flashColor:'#fff'
+    flashTimer:0, flashColor:'#fff',
+    drawX: BATTLE_TEAM_X   // 시각적 x (아군은 고정)
   };
 }
 
@@ -28,7 +29,8 @@ function makeMob(typeId) {
     skillAtk:t.skillAtk, skillCost:t.skillCost,
     goldReward:t.goldReward,
     ticksSinceSkill:0, dead:false,
-    flashTimer:0, flashColor:'#fff'
+    flashTimer:0, flashColor:'#fff',
+    drawX: BATTLE_ENEMY_SPAWN_X, drawY: 0, deadTimer: 0
   };
 }
 
@@ -36,9 +38,9 @@ function makeMob(typeId) {
 function makeScaledMob(typeId, killCount, caveLevel) {
   const t  = BATTLE_MOB_TYPES[typeId];
   const cv = CAVE_LEVELS[caveLevel] || CAVE_LEVELS[1];
-  const km = 1 + killCount * KILL_SCALE;   // 처치 기반 배율
-  const sm = km * cv.statMult;              // 스탯 최종 배율
-  const gm = km * cv.goldMult;              // 골드 최종 배율
+  const km = 1 + killCount * KILL_SCALE;
+  const sm = km * cv.statMult;
+  const gm = km * cv.goldMult;
   return {
     id:++_uid, typeId, isPlayer:false,
     name:t.name, icon:t.icon, color:t.color,
@@ -51,11 +53,11 @@ function makeScaledMob(typeId, killCount, caveLevel) {
     skillCost:t.skillCost,
     goldReward: Math.max(1, Math.round(t.goldReward * gm)),
     ticksSinceSkill:0, dead:false,
-    flashTimer:0, flashColor:'#fff'
+    flashTimer:0, flashColor:'#fff',
+    drawX: BATTLE_ENEMY_SPAWN_X, drawY: 0, deadTimer: 0
   };
 }
 
-// 영웅을 전투용 유닛으로 변환
 function makeHeroUnit(hero) {
   const lv = HERO_LEVELS[hero.level];
   return {
@@ -66,22 +68,25 @@ function makeHeroUnit(hero) {
     skillName:'영웅 일격', skillAtk: Math.floor(lv.atk*2.2),
     skillCost:15, skillColor:'#fbbf24', healAmt:0,
     ticksSinceSkill:0, dead:false,
-    flashTimer:0, flashColor:'#fff'
+    flashTimer:0, flashColor:'#fff',
+    drawX: BATTLE_TEAM_X
   };
 }
 
 // ─── 배틀 상태 ────────────────────────────────────────────────────────────────
 function createBattle() {
   return {
-    phase: 'hire',       // hire | fighting | won | lost
+    phase: 'hire',
     ourTeam: [],
     enemyTeam: [],
     maxSlots: 4,
     tickTimer: 0,
     tickCount: 0,
-    goldEarned: 0,       // 이번 웨이브 적립
-    totalGoldEarned: 0,  // 스테이지 누적 (표시용)
-    killCount: 0,        // 이번 웨이브 처치 수 (스케일링 기준)
+    goldEarned: 0,
+    totalGoldEarned: 0,
+    killCount: 0,
+    scrollX: 0,       // 배경 스크롤 (전진 연출)
+    playerDrift: 0,   // 아군 전진 드리프트
     log: [],
     floaties: [],
     result: null
@@ -99,7 +104,7 @@ function hireUnit(battle, typeId, gold) {
 function fireUnit(battle, idx) {
   if (idx < 0 || idx >= battle.ourTeam.length) return 0;
   const u = battle.ourTeam[idx];
-  if (u.isHero) return 0; // 영웅은 해고 불가
+  if (u.isHero) return 0;
   const refund = Math.floor(UNIT_TYPES[u.typeId].cost / 2);
   battle.ourTeam.splice(idx, 1);
   return refund;
@@ -108,12 +113,14 @@ function fireUnit(battle, idx) {
 // ─── 전투 시작 ────────────────────────────────────────────────────────────────
 function startFighting(battle) {
   if (battle.ourTeam.length === 0) return false;
-  battle.phase      = 'fighting';
-  battle.tickTimer  = 0;
-  battle.tickCount  = 0;
-  battle.killCount  = 0;
-  battle.result     = null;
-  battle.goldEarned = 0;
+  battle.phase       = 'fighting';
+  battle.tickTimer   = 0;
+  battle.tickCount   = 0;
+  battle.killCount   = 0;
+  battle.scrollX     = 0;
+  battle.playerDrift = 0;
+  battle.result      = null;
+  battle.goldEarned  = 0;
   for (const u of [...battle.ourTeam, ...battle.enemyTeam]) u.ticksSinceSkill = 0;
   return true;
 }
@@ -123,7 +130,8 @@ function battleTick(battle) {
   battle.tickCount++;
 
   const our = battle.ourTeam.filter(u => !u.dead);
-  const foe = battle.enemyTeam.filter(u => !u.dead);
+  // 전투 대상: 화면에 도착한 적만 (아직 걸어오는 중이면 제외)
+  const foe = battle.enemyTeam.filter(u => !u.dead && u.drawX <= BATTLE_ENEMY_X + 10);
   if (!our.length || !foe.length) return;
 
   // 아군 공격
@@ -136,15 +144,13 @@ function battleTick(battle) {
       u.mp -= u.skillCost;
 
       if (u.healAmt > 0) {
-        // 치유사: HP 비율 최저 아군 치유
         const target = our.slice().sort((a,b) => (a.hp/a.maxHp)-(b.hp/b.maxHp))[0];
         const healed = Math.min(target.maxHp - target.hp, u.healAmt);
         target.hp += healed;
         const idx = battle.ourTeam.indexOf(target);
-        addFloaty(battle, `+${healed}`, BATTLE_TEAM_X, unitY(idx), '#34d399');
+        addFloaty(battle, `+${healed}`, target.drawX, unitY(idx), '#34d399');
         addLog(battle, `${u.name}의 ${u.skillName}! +${healed}회복`, u.skillColor);
       } else {
-        // 공격 스킬
         const target = foe[Math.floor(Math.random()*foe.length)];
         const dmg = Math.max(1, u.skillAtk - target.def);
         applyDamage(target, dmg, battle, u.skillColor, true);
@@ -177,8 +183,7 @@ function battleTick(battle) {
     mob.mp = Math.min(mob.maxMp, mob.mp + MP_REGEN_TICK);
   }
 
-  // 종료 체크: 아군 전멸 시에만 즉시 종료
-  // 적 전멸은 종료 조건이 아님 — 웨이브 타이머 동안 계속 스폰되므로
+  // 아군 전멸 시에만 즉시 패배 처리
   if (!battle.ourTeam.some(u => !u.dead)) { battle.phase='lost'; battle.result='lost'; }
 }
 
@@ -188,8 +193,9 @@ function applyDamage(target, dmg, battle, color, isMobTarget) {
   target.flashTimer = 0.25; target.flashColor = color;
   const arr = isMobTarget ? battle.enemyTeam : battle.ourTeam;
   const idx = arr.indexOf(target);
-  const x   = isMobTarget ? BATTLE_ENEMY_X : BATTLE_TEAM_X;
-  addFloaty(battle, `-${dmg}`, x, unitY(idx), color);
+  const x   = isMobTarget ? (target.drawX || BATTLE_ENEMY_X) : (target.drawX || BATTLE_TEAM_X);
+  const y   = isMobTarget ? (target.drawY || unitY(idx)) : unitY(idx);
+  addFloaty(battle, `-${dmg}`, x, y, color);
 
   if (target.hp <= 0) {
     target.dead = true; target.hp = 0;
@@ -198,7 +204,7 @@ function applyDamage(target, dmg, battle, color, isMobTarget) {
       if (target.goldReward) {
         battle.goldEarned      += target.goldReward;
         battle.totalGoldEarned += target.goldReward;
-        addFloaty(battle, `+${target.goldReward}💰`, x, unitY(idx)-22, COLORS.gold);
+        addFloaty(battle, `+${target.goldReward}💰`, x, y - 22, COLORS.gold);
       }
     }
   }
@@ -208,6 +214,7 @@ function applyDamage(target, dmg, battle, color, isMobTarget) {
 function updateBattle(battle, dt) {
   if (battle.phase !== 'fighting') return;
 
+  // 플래시/플로티/로그
   for (const u of [...battle.ourTeam, ...battle.enemyTeam]) {
     if (u.flashTimer > 0) u.flashTimer = Math.max(0, u.flashTimer - dt);
   }
@@ -221,6 +228,27 @@ function updateBattle(battle, dt) {
     if (battle.log[i].timer <= 0) battle.log.splice(i,1);
   }
 
+  // 적 걷기 애니메이션: 오른쪽에서 왼쪽으로 이동
+  for (const e of battle.enemyTeam) {
+    if (e.dead) {
+      e.deadTimer += dt;
+    } else {
+      e.drawX = Math.max(BATTLE_ENEMY_X, e.drawX - BATTLE_ENEMY_WALK_SPD * dt);
+    }
+  }
+  // 사망 후 0.7초 지난 적 제거
+  battle.enemyTeam = battle.enemyTeam.filter(e => !e.dead || e.deadTimer < 0.7);
+
+  // 아군 전진 연출: 생존 적이 없을 때 배경 스크롤 + 아군 드리프트
+  const hasLiveEnemies = battle.enemyTeam.some(e => !e.dead);
+  if (!hasLiveEnemies && battle.ourTeam.some(u => !u.dead)) {
+    battle.scrollX    += BATTLE_MARCH_SPD * dt;
+    battle.playerDrift = Math.min(55, battle.playerDrift + 75 * dt);
+  } else if (hasLiveEnemies) {
+    battle.playerDrift = Math.max(0, battle.playerDrift - 250 * dt);
+  }
+
+  // 전투 틱
   battle.tickTimer += dt;
   if (battle.tickTimer >= TICK_INTERVAL) {
     battle.tickTimer -= TICK_INTERVAL;
@@ -242,6 +270,5 @@ function unitY(idx) {
   return BATTLE_UNIT_START_Y + 40 + idx * BATTLE_UNIT_GAP + BATTLE_UNIT_R;
 }
 
-// 세이브용 직렬화 (이월 없으므로 빈 배열 반환 — 호환성 유지)
 function serializeEnemies() { return []; }
 function restoreEnemies()   { return []; }

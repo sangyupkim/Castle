@@ -447,98 +447,124 @@ function renderHirePhase(ctx, gs) {
 function renderFightPhase(ctx, gs) {
   const {battle} = gs;
 
-  ctx.font='bold 12px sans-serif'; ctx.textBaseline='top'; ctx.textAlign='center';
+  // 배경: 가로줄 스크롤 (전진 연출)
+  ctx.fillStyle = '#0a1520';
+  ctx.fillRect(0, BATTLE_Y, CW, BATTLE_H);
+
+  // 스크롤 세로 스트라이프 (오른쪽→왼쪽으로 흐름)
+  const strW = 60;
+  const sOff = battle.scrollX % (strW * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.018)';
+  for (let x = -sOff; x < CW + strW * 2; x += strW * 2) {
+    ctx.fillRect(x, BATTLE_Y, strW, BATTLE_H - 65);
+  }
+
+  // 중앙선
+  ctx.strokeStyle = '#1e2d40'; ctx.lineWidth = 1; ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(CW/2, BATTLE_Y+35); ctx.lineTo(CW/2, BATTLE_Y+BATTLE_H-65); ctx.stroke();
+
+  // 헤더
+  ctx.font='bold 11px sans-serif'; ctx.textBaseline='top'; ctx.textAlign='center';
   ctx.fillStyle='#60a5fa'; ctx.fillText('우리팀', BATTLE_TEAM_X, BATTLE_Y+6);
   ctx.fillStyle='#f87171'; ctx.fillText('적팀',   BATTLE_ENEMY_X, BATTLE_Y+6);
 
-  // 처치 수 & 강화 배율 표시
+  // 처치 수 & 강화 배율
   const pct = Math.round(battle.killCount * KILL_SCALE * 100);
-  const cv  = CAVE_LEVELS[gs.caveLevel];
-  ctx.font='8px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
-  ctx.fillStyle='#7c3aed';
-  ctx.fillText(`🗿Lv.${gs.caveLevel}  처치 ${battle.killCount}회  강화 +${pct}%`, CW/2, BATTLE_Y+22);
+  ctx.font='8px sans-serif'; ctx.fillStyle='#7c3aed'; ctx.textAlign='center';
+  ctx.fillText(`🗿Lv.${gs.caveLevel}  처치 ${battle.killCount}회  강화 +${pct}%`, CW/2, BATTLE_Y+20);
 
-  ctx.strokeStyle='#334155'; ctx.lineWidth=1; ctx.setLineDash([4,4]);
-  ctx.beginPath(); ctx.moveTo(CW/2,BATTLE_Y+25); ctx.lineTo(CW/2,BATTLE_Y+BATTLE_H-65); ctx.stroke();
-  ctx.setLineDash([]);
+  // 아군 유닛 (playerDrift 적용)
+  const px = BATTLE_TEAM_X + battle.playerDrift;
+  battle.ourTeam.forEach((u, i) => renderBattleUnit(ctx, u, i, px, unitY(i)));
 
-  battle.ourTeam.forEach((u,i)   => renderBattleUnit(ctx,u,i,true));
-  battle.enemyTeam.forEach((u,i) => renderBattleUnit(ctx,u,i,false));
+  // 적 유닛 (drawX/drawY 사용, 사망 페이드아웃)
+  for (const e of battle.enemyTeam) {
+    const alpha = e.dead ? Math.max(0, 1 - e.deadTimer / 0.7) : 1;
+    if (alpha > 0.01) renderBattleUnit(ctx, e, -1, e.drawX, e.drawY, alpha);
+  }
 
   // 플로티
   for (const f of battle.floaties) {
-    ctx.globalAlpha = Math.max(0, f.life/1.2);
-    ctx.fillStyle=f.color; ctx.font='bold 12px sans-serif';
-    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.globalAlpha = Math.max(0, f.life / 1.2);
+    ctx.fillStyle = f.color; ctx.font = 'bold 12px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(f.text, f.x, f.y);
   }
-  ctx.globalAlpha=1;
+  ctx.globalAlpha = 1;
 
   // 전투 로그
-  const logY = BATTLE_Y+BATTLE_H-65;
-  ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(0,logY-2,CW,67);
-  battle.log.slice(0,4).forEach((e,i) => {
-    ctx.globalAlpha = Math.min(1, e.timer/0.8);
-    ctx.fillStyle=e.color; ctx.font='9px sans-serif';
-    ctx.textAlign='left'; ctx.textBaseline='top';
-    ctx.fillText(e.text, 6, logY+2+i*14);
+  const logY = BATTLE_Y + BATTLE_H - 65;
+  ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(0, logY - 2, CW, 67);
+  battle.log.slice(0, 4).forEach((e, i) => {
+    ctx.globalAlpha = Math.min(1, e.timer / 0.8);
+    ctx.fillStyle = e.color; ctx.font = '9px sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText(e.text, 6, logY + 2 + i * 14);
   });
-  ctx.globalAlpha=1;
+  ctx.globalAlpha = 1;
 
-  // 틱 프로그레스
-  const tp = battle.tickTimer/TICK_INTERVAL;
-  ctx.fillStyle='#1e293b'; ctx.fillRect(6,BATTLE_Y+BATTLE_H-7,CW-12,5);
-  ctx.fillStyle='#6366f1'; ctx.fillRect(6,BATTLE_Y+BATTLE_H-7,(CW-12)*tp,5);
+  // 틱 프로그레스 바
+  const tp = battle.tickTimer / TICK_INTERVAL;
+  ctx.fillStyle = '#1e293b'; ctx.fillRect(6, BATTLE_Y + BATTLE_H - 7, CW - 12, 5);
+  ctx.fillStyle = '#6366f1'; ctx.fillRect(6, BATTLE_Y + BATTLE_H - 7, (CW - 12) * tp, 5);
 
   // 결과 오버레이
-  if (battle.phase==='won') {
-    ctx.fillStyle='rgba(0,40,0,0.72)'; ctx.fillRect(0,BATTLE_Y,CW,BATTLE_H-65);
-    ctx.fillStyle='#22c55e'; ctx.font='bold 24px sans-serif';
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(`전투 승리! 🎉 +${battle.goldEarned}💰`, CW/2, BATTLE_Y+(BATTLE_H-65)/2);
-  } else if (battle.phase==='idle_defeated'||battle.phase==='lost') {
-    ctx.fillStyle='rgba(40,0,0,0.72)'; ctx.fillRect(0,BATTLE_Y,CW,BATTLE_H-65);
-    ctx.fillStyle='#ef4444'; ctx.font='bold 22px sans-serif';
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(`병력 전멸  획득: ${battle.goldEarned}💰`, CW/2, BATTLE_Y+(BATTLE_H-65)/2);
+  if (battle.phase === 'won') {
+    ctx.fillStyle = 'rgba(0,40,0,0.72)'; ctx.fillRect(0, BATTLE_Y, CW, BATTLE_H - 65);
+    ctx.fillStyle = '#22c55e'; ctx.font = 'bold 24px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(`전투 승리! 🎉 +${battle.goldEarned}💰`, CW / 2, BATTLE_Y + (BATTLE_H - 65) / 2);
+  } else if (battle.phase === 'idle_defeated' || battle.phase === 'lost') {
+    ctx.fillStyle = 'rgba(40,0,0,0.72)'; ctx.fillRect(0, BATTLE_Y, CW, BATTLE_H - 65);
+    ctx.fillStyle = '#ef4444'; ctx.font = 'bold 22px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(`병력 전멸  획득: ${battle.goldEarned}💰`, CW / 2, BATTLE_Y + (BATTLE_H - 65) / 2);
   }
 }
 
-function renderBattleUnit(ctx, u, idx, isPlayer) {
-  const x = isPlayer ? BATTLE_TEAM_X : BATTLE_ENEMY_X;
-  const y = unitY(idx);
+// idx=-1이면 x,y를 직접 사용 (적), 그 외 플레이어 인덱스 기반
+function renderBattleUnit(ctx, u, idx, x, y, alpha) {
   const r = BATTLE_UNIT_R;
+  if (alpha !== undefined) ctx.globalAlpha = alpha;
 
   if (u.dead) {
-    ctx.globalAlpha=0.22;
-    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2);
-    ctx.fillStyle='#374151'; ctx.fill(); ctx.globalAlpha=1;
-    ctx.font='12px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText('💀',x,y);
+    // 사망한 아군은 반투명 해골로 표시
+    if (u.isPlayer) {
+      ctx.globalAlpha = (alpha !== undefined ? alpha : 1) * 0.35;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = '#374151'; ctx.fill();
+      ctx.globalAlpha = (alpha !== undefined ? alpha : 1) * 0.5;
+      ctx.font = '14px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('💀', x, y);
+    }
+    ctx.globalAlpha = 1;
     return;
   }
 
-  if (u.flashTimer>0) {
-    ctx.beginPath(); ctx.arc(x,y,r+4,0,Math.PI*2);
-    ctx.fillStyle=u.flashColor; ctx.fill();
+  if (u.flashTimer > 0) {
+    ctx.beginPath(); ctx.arc(x, y, r + 4, 0, Math.PI * 2);
+    ctx.fillStyle = u.flashColor; ctx.fill();
   }
 
-  ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2);
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
   ctx.fillStyle = u.isHero ? COLORS.hero : u.color; ctx.fill();
-  // 영웅 테두리 강조
   ctx.strokeStyle = u.isHero ? '#fef08a' : '#fff';
   ctx.lineWidth = u.isHero ? 2.5 : 1.5; ctx.stroke();
 
-  ctx.font=`${Math.floor(r*0.85)}px sans-serif`;
-  ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText(u.icon,x,y+1);
+  ctx.font = `${Math.floor(r * 0.85)}px sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(u.icon, x, y + 1);
 
-  const bw=r*2+8;
-  drawHPBar(ctx,x-bw/2,y+r+3,bw,5,u.hp/u.maxHp);
-  drawMPBar(ctx,x-bw/2,y+r+10,bw,3,u.mp/u.maxMp);
-  ctx.fillStyle='#cbd5e1'; ctx.font='8px sans-serif';
-  ctx.textAlign='center'; ctx.textBaseline='top';
-  ctx.fillText(`${u.name} ${u.hp}`,x,y+r+16);
+  const bw = r * 2 + 8;
+  drawHPBar(ctx, x - bw/2, y + r + 3, bw, 5, u.hp / u.maxHp);
+  if (!u.isPlayer || u.maxMp > 0) {
+    drawMPBar(ctx, x - bw/2, y + r + 10, bw, 3, u.mp / u.maxMp);
+  }
+  ctx.fillStyle = '#cbd5e1'; ctx.font = '8px sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.fillText(`${u.name} ${u.hp}`, x, y + r + 16);
+
+  ctx.globalAlpha = 1;
 }
 
 // ─── HUD ─────────────────────────────────────────────────────────────────────
