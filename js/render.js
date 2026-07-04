@@ -830,5 +830,11 @@ function renderTitleScreen(ctx, alpha) {
   ctx.font = '11px sans-serif'; ctx.textBaseline = 'bottom';
   ctx.fillText('화면을 탭하여 시작', CW/2, CH - 18);
 
+  // 버전 표기 (우측 하단)
+  ctx.fillStyle = 'rgba(255,255,255,0.30)';
+  ctx.font = '9px monospace';
+  ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+  ctx.fillText('v0.1.1.3', CW - 8, CH - 6);
+
   ctx.restore();
 }
