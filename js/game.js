@@ -14,6 +14,12 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
+// ─── 타이틀 이미지 ───────────────────────────────────────────────────────────
+const _titleImg = new Image();
+_titleImg.src = 'assets/images/mainpage.png';
+let _titleScreen = true;  // 앱 시작 시 타이틀 화면 표시
+let _titleAlpha  = 1;     // 페이드아웃용
+
 // ─── 영구 데이터 (런 초기화 후에도 유지) ─────────────────────────────────────
 let _soulStones   = 0;
 let _metaUpgrades = {};
@@ -104,6 +110,7 @@ canvas.addEventListener('click', e=>tap(pt(e)));
 canvas.addEventListener('touchstart', e=>{ e.preventDefault(); tap(pt(e)); },{passive:false});
 
 function tap({x,y}) {
+  if (_titleScreen) { _startFadeOut(); return; }
   if (tut.active) { tut.next(); return; }
 
   // ── 메타 업그레이드 화면 ──────────────────────────────────────────────────
@@ -316,8 +323,23 @@ function heroGainExp(amount) {
   }
 }
 
+// ─── 타이틀 페이드아웃 ───────────────────────────────────────────────────────
+let _fadingOut = false;
+function _startFadeOut() {
+  if (_fadingOut) return;
+  _fadingOut = true;
+}
+
 // ─── 업데이트 ─────────────────────────────────────────────────────────────────
 function update(dt) {
+  // 타이틀 페이드아웃
+  if (_fadingOut) {
+    _titleAlpha = Math.max(0, _titleAlpha - dt * 1.8);
+    if (_titleAlpha <= 0) { _titleScreen = false; _fadingOut = false; }
+    return;
+  }
+  if (_titleScreen) return;
+
   if (gs.gameOver||gs.stageCleared||gs.showMeta) return;
   if (gs.upgradePick.active) { updateFloaties(dt); return; }
 
@@ -386,6 +408,7 @@ function loop(ts) {
   if (gs.showMeta) renderMetaScreen(ctx,gs);
   drawFloaties(ctx);
   renderTutorial(ctx,tut);
+  if (_titleScreen || _fadingOut) renderTitleScreen(ctx, _titleAlpha);
   update(dt);
   requestAnimationFrame(loop);
 }

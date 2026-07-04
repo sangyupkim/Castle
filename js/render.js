@@ -769,3 +769,66 @@ function renderTutorial(ctx, tut) {
   ctx.fillStyle='#64748b'; ctx.font='10px sans-serif';
   ctx.textBaseline='bottom'; ctx.fillText('탭하여 계속 ▶',CW/2,cy+ch-3);
 }
+
+// ─── 타이틀 화면 ─────────────────────────────────────────────────────────────
+function renderTitleScreen(ctx, alpha) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // 배경 이미지 (세로 480×800 캔버스에 꽉 채움)
+  if (_titleImg.complete && _titleImg.naturalWidth > 0) {
+    // 이미지 비율 유지하며 캔버스 커버
+    const iw = _titleImg.naturalWidth, ih = _titleImg.naturalHeight;
+    const scale = Math.max(CW / iw, CH / ih);
+    const dw = iw * scale, dh = ih * scale;
+    const dx = (CW - dw) / 2, dy = (CH - dh) / 2;
+    ctx.drawImage(_titleImg, dx, dy, dw, dh);
+  } else {
+    ctx.fillStyle = '#0a0a1a';
+    ctx.fillRect(0, 0, CW, CH);
+  }
+
+  // 상단 반투명 그라디언트 (제목 가독성)
+  const grad = ctx.createLinearGradient(0, 0, 0, 220);
+  grad.addColorStop(0,   'rgba(0,0,0,0.75)');
+  grad.addColorStop(1,   'rgba(0,0,0,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, CW, 220);
+
+  // 게임 타이틀
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.fillStyle = '#fbbf24';
+  ctx.font = 'bold 38px sans-serif';
+  ctx.shadowColor = '#000'; ctx.shadowBlur = 12;
+  ctx.fillText('듀얼 프론티어', CW/2, 30);
+  ctx.font = '13px sans-serif';
+  ctx.fillStyle = '#e2e8f0';
+  ctx.fillText('Dual Frontier', CW/2, 78);
+  ctx.shadowBlur = 0;
+
+  // 하단 그라디언트 (버튼 가독성)
+  const grad2 = ctx.createLinearGradient(0, CH-200, 0, CH);
+  grad2.addColorStop(0, 'rgba(0,0,0,0)');
+  grad2.addColorStop(1, 'rgba(0,0,0,0.85)');
+  ctx.fillStyle = grad2;
+  ctx.fillRect(0, CH-200, CW, 200);
+
+  // 시작 버튼
+  const bw=220, bh=52, bx=(CW-bw)/2, by=CH-110;
+  roundRect(ctx, bx, by, bw, bh, 26);
+  const btnGrad = ctx.createLinearGradient(bx, by, bx, by+bh);
+  btnGrad.addColorStop(0, '#6366f1');
+  btnGrad.addColorStop(1, '#4f46e5');
+  ctx.fillStyle = btnGrad; ctx.fill();
+  ctx.strokeStyle = '#a5b4fc'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = '#ffffff'; ctx.font = 'bold 18px sans-serif';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('▶  게임 시작', CW/2, by + bh/2);
+
+  // 탭 안내 (버튼 아래)
+  ctx.fillStyle = 'rgba(255,255,255,0.45)';
+  ctx.font = '11px sans-serif'; ctx.textBaseline = 'bottom';
+  ctx.fillText('화면을 탭하여 시작', CW/2, CH - 18);
+
+  ctx.restore();
+}
