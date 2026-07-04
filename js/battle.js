@@ -242,7 +242,7 @@ function applyDamage(target, dmg, battle, color, isMobTarget) {
 }
 
 // ─── 업데이트 ─────────────────────────────────────────────────────────────────
-function updateBattle(battle, dt) {
+function updateBattle(battle, dt, isAdvancing) {
   if (battle.phase !== 'fighting') return;
 
   // 플래시/플로티/로그
@@ -270,12 +270,18 @@ function updateBattle(battle, dt) {
   // 사망 후 0.7초 지난 적 제거
   battle.enemyTeam = battle.enemyTeam.filter(e => !e.dead || e.deadTimer < 0.7);
 
-  // 아군 전진 연출: 생존 적이 없을 때 배경 스크롤 + 아군 드리프트
+  // 아군 전진 연출
   const hasLiveEnemies = battle.enemyTeam.some(e => !e.dead);
-  if (!hasLiveEnemies && battle.ourTeam.some(u => !u.dead)) {
+  if (isAdvancing && battle.ourTeam.some(u => !u.dead)) {
+    // 그룹 전멸 후 전진 단계: 빠르게 전진
+    battle.scrollX    += BATTLE_MARCH_SPD * 2.2 * dt;
+    battle.playerDrift = Math.min(55, battle.playerDrift + 180 * dt);
+  } else if (!hasLiveEnemies && battle.ourTeam.some(u => !u.dead)) {
+    // 일반 적 없을 때 소폭 전진
     battle.scrollX    += BATTLE_MARCH_SPD * dt;
     battle.playerDrift = Math.min(55, battle.playerDrift + 75 * dt);
   } else if (hasLiveEnemies) {
+    // 적 등장 시 복귀
     battle.playerDrift = Math.max(0, battle.playerDrift - 250 * dt);
   }
 

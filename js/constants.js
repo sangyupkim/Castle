@@ -99,18 +99,25 @@ const BATTLE_MOB_TYPES = {
 };
 
 // ─── 웨이브 정의 ─────────────────────────────────────────────────────────────
-// battleSpawns: offset=최초 스폰 딜레이(초), interval=슬롯 비면 대기 시간(초)
-// 최대 동시 생존 적 수(BATTLE_MAX_LIVE_ENEMIES)를 넘으면 스폰 보류
+// battleGroups: 하단 전투 그룹 배열. 한 그룹을 전멸시켜야 다음 그룹 등장.
+// 각 그룹은 types 배열 (동시 등장 몬스터 목록)
 const WAVE_DEFS = [
   {
     defenseEnemies: [{ type:'goblin', count:5, interval:1600 }],
-    battleSpawns:   [{ type:'goblin', offset:0, interval:1.2 }]
+    battleGroups: [
+      { types:['goblin'] },
+      { types:['goblin'] },
+      { types:['goblin', 'goblin'] },
+      { types:['goblin', 'goblin'] },
+    ]
   },
   {
     defenseEnemies: [{ type:'goblin', count:8, interval:1200 }],
-    battleSpawns:   [
-      { type:'goblin', offset:0, interval:1.0 },
-      { type:'orc',    offset:8, interval:8   }
+    battleGroups: [
+      { types:['goblin', 'goblin'] },
+      { types:['goblin', 'orc']   },
+      { types:['orc',    'orc']   },
+      { types:['goblin', 'goblin', 'orc'] },
     ]
   },
   {
@@ -118,10 +125,12 @@ const WAVE_DEFS = [
       { type:'goblin', count:6, interval:1100 },
       { type:'orc',    count:2, interval:3000 }
     ],
-    battleSpawns: [
-      { type:'goblin', offset:0,  interval:0.8  },
-      { type:'orc',    offset:5,  interval:6    },
-      { type:'boss',   offset:30, interval:999  }
+    battleGroups: [
+      { types:['goblin', 'goblin'] },
+      { types:['orc',    'goblin'] },
+      { types:['orc',    'orc']   },
+      { types:['goblin', 'orc',  'goblin'] },
+      { types:['boss'] },
     ]
   }
 ];

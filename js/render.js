@@ -379,15 +379,18 @@ function renderHirePhase(ctx, gs) {
     ctx.fillText('영웅', hsx+slotW/2, hsy+slotH-2);
   }
 
-  // 적 편성 미리보기
+  // 적 편성 미리보기 (그룹 기반)
   const epY = lineY + 82;
   ctx.fillStyle='#f87171'; ctx.font='bold 10px sans-serif';
   ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillText('이번 웨이브 등장 몬스터:', 6, epY);
 
-  const spawns = WAVE_DEFS[gs.wave]?.battleSpawns || [];
-  spawns.forEach((s,i) => {
-    const t = BATTLE_MOB_TYPES[s.type];
+  const groups = WAVE_DEFS[gs.wave]?.battleGroups || [];
+  // 등장하는 고유 몬스터 타입만 표시
+  const uniqueTypes = [...new Set(groups.flatMap(g => g.types))];
+  uniqueTypes.forEach((type, i) => {
+    const t = BATTLE_MOB_TYPES[type];
+    if (!t) return;
     const ex = 6 + i*52;
     roundRect(ctx,ex,epY+14,46,40,4);
     ctx.fillStyle='#1a0d0d'; ctx.fill();
@@ -395,8 +398,10 @@ function renderHirePhase(ctx, gs) {
     ctx.font='16px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(t.icon, ex+23, epY+30);
     ctx.fillStyle='#94a3b8'; ctx.font='8px sans-serif'; ctx.textBaseline='bottom';
-    ctx.fillText(`${s.interval}s 주기`, ex+23, epY+52);
+    ctx.fillText(t.name, ex+23, epY+52);
   });
+  ctx.fillStyle='#64748b'; ctx.font='8px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText(`총 ${groups.length}그룹`, 6 + uniqueTypes.length*52 + 4, epY+22);
 
   // ── 케이브 업그레이드 패널 ───────────────────────────────────────────
   const caveY = epY + 62;

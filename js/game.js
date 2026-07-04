@@ -404,7 +404,7 @@ function update(dt) {
   gs.defenseEnemies=gs.defenseEnemies.filter(e=>!e.dead&&!e.reached);
 
   updateHeroDefense(dt);
-  updateBattle(gs.battle,dt);
+  updateBattle(gs.battle, dt, wm.groupPhase === 'advancing');
 
   if (wm.phase==='intermission') gs.waveActive=false;
 
