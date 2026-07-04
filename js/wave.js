@@ -55,6 +55,7 @@ function createWaveManager() {
 
       // 적팀 클린 스타트
       gs.battle.enemyTeam = [];
+      reapplyAllBonuses(gs);
       startFighting(gs.battle);
 
       // 첫 그룹 바로 스폰
@@ -192,6 +193,8 @@ function createWaveManager() {
         this.intermissionTimer = INTERMISSION;
       }
 
+      gs.town.waveBuffs = [];
+      reapplyAllBonuses(gs);
       SaveManager.save(gs);
     },
 

@@ -98,6 +98,28 @@ function renderDefense(ctx, gs) {
   ctx.fillStyle=COLORS.text; ctx.font='10px sans-serif';
   ctx.textAlign='left'; ctx.textBaseline='middle';
   ctx.fillText(`기지 HP ${gs.baseHP}/${BASE_HP_MAX}`, bx+184, by+4);
+
+  // 타워 개별 강화 액션
+  if (gs.ui.towerAction && wm && wm.phase==='idle') {
+    const ta=gs.ui.towerAction;
+    const cc=cellCenter(ta.col,ta.row);
+    const tower=gs.towers.find(t=>t.col===ta.col&&t.row===ta.row);
+    if (tower) {
+      const lv=tower.level||1;
+      const ax=cc.x-50, ay2=cc.y+CELL_H/2+2, aw=100, ah=22;
+      roundRect(ctx,ax,ay2,aw,ah,4); ctx.fillStyle='#0f172a'; ctx.fill(); ctx.strokeStyle='#f59e0b'; ctx.lineWidth=1.5; ctx.stroke();
+      ctx.fillStyle='#f59e0b'; ctx.font='bold 8px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(`Lv.${lv}/3`,ax+18,ay2+ah/2);
+      if (lv<3) {
+        roundRect(ctx,ax+26,ay2+2,42,ah-4,3); ctx.fillStyle='#1e3a5f'; ctx.fill(); ctx.strokeStyle='#60a5fa'; ctx.lineWidth=1; ctx.stroke();
+        ctx.fillStyle='#60a5fa'; ctx.font='7px sans-serif'; ctx.fillText(`강화 ${lv*15}💰`,ax+47,ay2+ah/2);
+        gs.ui.towerUpgradeBtn={x:ax+26,y:ay2+2,w:42,h:ah-4};
+      } else { gs.ui.towerUpgradeBtn=null; }
+      roundRect(ctx,ax+72,ay2+2,24,ah-4,3); ctx.fillStyle='#3f1515'; ctx.fill(); ctx.strokeStyle='#ef4444'; ctx.lineWidth=1; ctx.stroke();
+      ctx.fillStyle='#ef4444'; ctx.font='7px sans-serif'; ctx.fillText('철거',ax+84,ay2+ah/2);
+      gs.ui.towerRemoveBtn={x:ax+72,y:ay2+2,w:24,h:ah-4};
+    }
+  }
 }
 
 function labelCell(ctx,text,x,y,color) {
@@ -227,33 +249,27 @@ function renderUIBar(ctx, gs, wm) {
 
   // 웨이브 시작 버튼
   const bw=110, bh=38, bx=CW-bw-6, by2=UIBAR_Y+(UIBAR_H-bh)/2;
-  const canStart = wm.phase==='idle' && gs.battle.ourTeam.length>0 && gs.hero.placement!==null;
-  if (wm.phase==='idle') {
-    drawBtn(ctx, bx, by2, bw, bh, '▶ 웨이브 시작', '#4f46e5','#a5b4fc', canStart);
-  } else if (wm.phase==='active') {
-    drawBtn(ctx, bx, by2, bw, bh, '진행 중...', '#1e293b','#475569', false);
+  if (wm.phase==='active') {
+    drawBtn(ctx,bx,by2,bw,bh,'진행 중...',  '#1e293b','#475569',false);
   } else if (wm.phase==='upgradePick') {
-    drawBtn(ctx, bx, by2, bw, bh, '강화 선택 중...', '#2d1b69','#a78bfa', false);
+    drawBtn(ctx,bx,by2,bw,bh,'강화 선택 중...','#2d1b69','#a78bfa',false);
+  } else if (wm.phase==='intermission') {
+    drawBtn(ctx,bx,by2,bw,bh,`인터미션 ${Math.ceil(wm.intermissionTimer)}s`,'#1e293b','#475569',false);
   } else {
-    drawBtn(ctx, bx, by2, bw, bh, `인터미션 ${Math.ceil(wm.intermissionTimer)}s`, '#1e293b','#475569', false);
+    // idle - deploy button is in town army tab
+    drawBtn(ctx,bx,by2,bw,bh,'🏰 마을 준비 중','#0f172a','#334155',false);
   }
-  gs.ui.waveBtn = {x:bx, y:by2, w:bw, h:bh};
+  gs.ui.waveBtn={x:bx,y:by2,w:bw,h:bh};
 }
 
 // ─── Battle Zone ─────────────────────────────────────────────────────────────
 function renderBattle(ctx, gs) {
-  ctx.fillStyle='#0a1520'; ctx.fillRect(0, BATTLE_Y, CW, BATTLE_H);
-  ctx.strokeStyle='rgba(255,255,255,0.03)'; ctx.lineWidth=1;
-  for (let yy=BATTLE_Y; yy<BATTLE_Y+BATTLE_H; yy+=40) {
-    ctx.beginPath(); ctx.moveTo(0,yy); ctx.lineTo(CW,yy); ctx.stroke();
-  }
+  ctx.fillStyle='#0a1520'; ctx.fillRect(0,BATTLE_Y,CW,BATTLE_H);
 
-  const {battle, hero} = gs;
-
-  if (battle.phase==='hire') {
-    renderHirePhase(ctx, gs);
+  if (wm.phase==='idle' || wm.phase==='upgradePick') {
+    renderTownScreen(ctx,gs);
   } else {
-    renderFightPhase(ctx, gs);
+    renderFightPhase(ctx,gs);
   }
 }
 
@@ -751,6 +767,356 @@ function renderMetaScreen(ctx, gs) {
   ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.fillText('▶ 새 게임 시작', bx+bw/2, btnY+bh/2);
   gs.ui.metaStartBtn = {x:bx, y:btnY, w:bw, h:bh};
+}
+
+// ─── 마을 화면 라우터 ────────────────────────────────────────────────────────────
+function renderTownScreen(ctx, gs) {
+  const t=gs.town;
+  if (t.screen!=='main') { renderBuildingScreen(ctx,gs,t.screen); return; }
+
+  // Background
+  ctx.fillStyle='#0c0f1a'; ctx.fillRect(0,BATTLE_Y,CW,BATTLE_H);
+  ctx.strokeStyle='rgba(255,255,255,0.05)'; ctx.lineWidth=1;
+  for (let yy=BATTLE_Y;yy<BATTLE_Y+BATTLE_H;yy+=30) { ctx.beginPath(); ctx.moveTo(0,yy); ctx.lineTo(CW,yy); ctx.stroke(); }
+
+  // Tabs
+  const tabY=BATTLE_Y+4, tabH=26, tabW=130;
+  const tabs=[{id:'town',label:'🏰 마을'},{id:'army',label:'⚔️ 출전준비'}];
+  gs.ui.tabTownBtn=null; gs.ui.tabArmyBtn=null;
+  tabs.forEach((tab,i)=>{
+    const tx=8+i*(tabW+6), active=t.tab===tab.id;
+    roundRect(ctx,tx,tabY,tabW,tabH,5);
+    ctx.fillStyle=active?'#1e3a5f':'#0f172a'; ctx.fill();
+    ctx.strokeStyle=active?'#60a5fa':'#334155'; ctx.lineWidth=1.5; ctx.stroke();
+    ctx.fillStyle=active?'#e2e8f0':'#64748b'; ctx.font='bold 10px sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(tab.label,tx+tabW/2,tabY+tabH/2);
+    if (tab.id==='town') gs.ui.tabTownBtn={x:tx,y:tabY,w:tabW,h:tabH};
+    else gs.ui.tabArmyBtn={x:tx,y:tabY,w:tabW,h:tabH};
+  });
+
+  const contentY=tabY+tabH+6;
+  if (t.tab==='town') renderTownBuildingGrid(ctx,gs,contentY);
+  else renderArmyScreen(ctx,gs,contentY);
+}
+
+// ─── 건물 그리드 ─────────────────────────────────────────────────────────────
+function renderTownBuildingGrid(ctx, gs, startY) {
+  const bw=(CW-12)/2-4, bh=105, gap=8, ml=6;
+  gs.ui.buildingCards=[];
+
+  TOWN_BUILDINGS.forEach((def,i)=>{
+    const col=i%2, row=Math.floor(i/2);
+    const bx=ml+col*(bw+gap), by=startY+row*(bh+gap);
+    const bs=gs.town.buildings[def.id];
+    const built=bs&&bs.built;
+
+    roundRect(ctx,bx,by,bw,bh,7);
+    ctx.fillStyle=built?'#0d1929':'#080d18'; ctx.fill();
+    ctx.strokeStyle=built?def.color:'#334155'; ctx.lineWidth=built?2:1; ctx.stroke();
+
+    // Icon + name
+    ctx.font='26px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillText(def.icon,bx+8,by+7);
+    ctx.fillStyle=built?def.color:'#64748b'; ctx.font='bold 10px sans-serif';
+    ctx.fillText(def.name,bx+40,by+8);
+    if (built) {
+      const lvDef=TOWN_BUILDINGS.find(b=>b.id===def.id);
+      const maxLv=lvDef.levels.length-1;
+      ctx.fillStyle='#475569'; ctx.font='8px sans-serif';
+      ctx.fillText(`Lv.${(bs.level||0)+1}/${maxLv+1}`,bx+40,by+22);
+    }
+
+    // Desc
+    ctx.fillStyle='#64748b'; ctx.font='8px sans-serif'; ctx.textBaseline='top';
+    ctx.fillText(def.desc,bx+8,by+38);
+
+    // Status/button
+    if (!built && def.id!=='cave') {
+      const canAfford=gs.gold>=def.buildCost;
+      roundRect(ctx,bx+8,by+bh-26,bw-16,20,4);
+      ctx.fillStyle=canAfford?'#1e3a5f':'#1a1a2e'; ctx.fill();
+      ctx.strokeStyle=canAfford?'#60a5fa':'#334155'; ctx.lineWidth=1; ctx.stroke();
+      ctx.fillStyle=canAfford?'#e2e8f0':'#475569'; ctx.font='bold 9px sans-serif';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(`건설 ${def.buildCost}💰`,bx+bw/2,by+bh-16);
+    } else if (built) {
+      roundRect(ctx,bx+8,by+bh-26,bw-16,20,4);
+      ctx.fillStyle='#0f2040'; ctx.fill();
+      ctx.strokeStyle=def.color; ctx.lineWidth=1; ctx.stroke();
+      ctx.fillStyle=def.color; ctx.font='bold 9px sans-serif';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('입장 →',bx+bw/2,by+bh-16);
+    } else {
+      // cave always built
+      roundRect(ctx,bx+8,by+bh-26,bw-16,20,4);
+      ctx.fillStyle='#0f2040'; ctx.fill();
+      ctx.strokeStyle=def.color; ctx.lineWidth=1; ctx.stroke();
+      ctx.fillStyle=def.color; ctx.font='bold 9px sans-serif';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('입장 →',bx+bw/2,by+bh-16);
+    }
+
+    gs.ui.buildingCards.push({x:bx,y:by,w:bw,h:bh,id:def.id,built:built||def.alwaysBuilt});
+  });
+
+  // Cave level upgrade (separate from building enter)
+  const caveY=startY+2*(bh+gap)+4;
+  const cv=CAVE_LEVELS[gs.caveLevel], nextCv=CAVE_LEVELS[gs.caveLevel+1]||null;
+  roundRect(ctx,6,caveY,CW-12,38,5);
+  ctx.fillStyle='#0a0d1a'; ctx.fill();
+  ctx.strokeStyle='#4c1d95'; ctx.lineWidth=1; ctx.stroke();
+  ctx.fillStyle='#a78bfa'; ctx.font='bold 9px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
+  ctx.fillText(`🗿 케이브 ${cv.label} Lv.${gs.caveLevel}/5  │  몬스터 ×${cv.statMult}  보상 ×${cv.goldMult}`,14,caveY+12);
+  if (nextCv) {
+    const canAfford=gs.gold>=nextCv.upgradeCost;
+    const bw2=130, bh2=22, bx2=CW-12-bw2, by2=caveY+8;
+    roundRect(ctx,bx2,by2,bw2,bh2,4);
+    ctx.fillStyle=canAfford?'#4c1d95':'#1a1a2e'; ctx.fill();
+    ctx.fillStyle=canAfford?'#c4b5fd':'#6b7280'; ctx.font='bold 8px sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(`업그레이드 ${nextCv.upgradeCost}💰`,bx2+bw2/2,by2+bh2/2);
+    gs.ui.caveBtn={x:bx2,y:by2,w:bw2,h:bh2};
+  } else { gs.ui.caveBtn=null; }
+}
+
+// ─── 건물 서브 화면 ───────────────────────────────────────────────────────────
+function renderBuildingScreen(ctx, gs, buildingId) {
+  if (buildingId==='heroShop') { renderHeroShopScreen(ctx,gs); return; }
+  const def=TOWN_BUILDINGS.find(b=>b.id===buildingId);
+  const bs=gs.town.buildings[buildingId];
+  if (!def||!bs) return;
+
+  ctx.fillStyle='#0c0f1a'; ctx.fillRect(0,BATTLE_Y,CW,BATTLE_H);
+
+  // Header
+  const hY=BATTLE_Y+6;
+  ctx.fillStyle=def.color; ctx.font='bold 13px sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  ctx.fillText(`${def.icon} ${def.name}`,CW/2,hY);
+
+  // Back button
+  roundRect(ctx,6,hY,50,22,4);
+  ctx.fillStyle='#1e293b'; ctx.fill();
+  ctx.strokeStyle='#475569'; ctx.lineWidth=1; ctx.stroke();
+  ctx.fillStyle='#94a3b8'; ctx.font='9px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('← 뒤로',31,hY+11);
+  gs.ui.townBackBtn={x:6,y:hY,w:50,h:22};
+
+  // Level up button
+  const curLv=bs.level||0, maxLv=def.levels.length-1;
+  const nextLvDef=curLv<maxLv?def.levels[curLv+1]:null;
+  if (nextLvDef) {
+    const canAff=gs.gold>=nextLvDef.upgradeCost;
+    const bw=140,bh=22,bx=CW-6-bw,by2=hY;
+    roundRect(ctx,bx,by2,bw,bh,4);
+    ctx.fillStyle=canAff?'#1e3a5f':'#1a1a2e'; ctx.fill();
+    ctx.strokeStyle=canAff?'#f59e0b':'#374151'; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle=canAff?'#fbbf24':'#6b7280'; ctx.font='bold 8px sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(`건물 Lv.UP ${nextLvDef.upgradeCost}💰`,bx+bw/2,by2+bh/2);
+    gs.ui.buildingLvUpBtn={x:bx,y:by2,w:bw,h:bh};
+  } else { gs.ui.buildingLvUpBtn=null; }
+
+  ctx.fillStyle='#475569'; ctx.font='9px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText(`현재 ${def.levels[curLv].levelName} | 최대 ${def.levels[maxLv].levelName}`,6,hY+26);
+
+  // Upgrades
+  gs.ui.upgradeBtns=[];
+  let uy=BATTLE_Y+52;
+  for (let lv=0;lv<=curLv&&lv<def.levels.length;lv++) {
+    const lvDef=def.levels[lv];
+    if (lv>0) { ctx.fillStyle='#1e293b'; ctx.fillRect(6,uy,CW-12,1); uy+=6; }
+    ctx.fillStyle='#64748b'; ctx.font='bold 8px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillText(lvDef.levelName+' 업그레이드',8,uy); uy+=12;
+
+    for (const upg of lvDef.upgrades) {
+      const curUpgLv=bs.upgrades[upg.id]||0;
+      const maxed=curUpgLv>=upg.maxLv;
+      const canAff=!maxed&&gs.gold>=upg.cost;
+      const uh=32;
+      roundRect(ctx,6,uy,CW-12,uh,5);
+      ctx.fillStyle=maxed?'#0f1a0f':canAff?'#0d1929':'#0f0f1a'; ctx.fill();
+      ctx.strokeStyle=maxed?'#22c55e':canAff?def.color:'#334155'; ctx.lineWidth=1; ctx.stroke();
+      ctx.font='12px sans-serif'; ctx.textBaseline='middle';
+      ctx.fillText(upg.icon,12,uy+uh/2);
+      ctx.fillStyle='#e2e8f0'; ctx.font='bold 9px sans-serif'; ctx.textAlign='left';
+      ctx.fillText(upg.name,28,uy+uh/2-6);
+      ctx.fillStyle='#94a3b8'; ctx.font='8px sans-serif';
+      ctx.fillText(upg.desc(curUpgLv>0?curUpgLv:1),28,uy+uh/2+5);
+      // level dots
+      for (let d=0;d<upg.maxLv;d++) {
+        ctx.beginPath(); ctx.arc(CW-100+d*10,uy+uh/2,3.5,0,Math.PI*2);
+        ctx.fillStyle=d<curUpgLv?'#22c55e':'#334155'; ctx.fill();
+      }
+      if (!maxed) {
+        const bw2=68,bh2=20,bx2=CW-8-bw2,by2=uy+(uh-bh2)/2;
+        roundRect(ctx,bx2,by2,bw2,bh2,4);
+        ctx.fillStyle=canAff?def.color:'#1e293b'; ctx.fill();
+        ctx.fillStyle=canAff?'#fff':'#475569'; ctx.font='bold 8px sans-serif';
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(`${upg.cost}💰`,bx2+bw2/2,by2+bh2/2);
+        gs.ui.upgradeBtns.push({x:bx2,y:by2,w:bw2,h:bh2,id:upg.id});
+      } else {
+        ctx.fillStyle='#22c55e'; ctx.font='bold 8px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText('MAX',CW-30,uy+uh/2);
+      }
+      uy+=uh+4;
+    }
+  }
+
+  // Locked levels
+  for (let lv=curLv+1;lv<def.levels.length;lv++) {
+    const lvDef=def.levels[lv];
+    roundRect(ctx,6,uy,CW-12,30,5);
+    ctx.fillStyle='#080d18'; ctx.fill();
+    ctx.strokeStyle='#374151'; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle='#374151'; ctx.font='9px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(`🔒 ${lvDef.levelName} (건물 레벨업 필요 ${lvDef.upgradeCost}💰)`,CW/2,uy+15);
+    uy+=34;
+  }
+}
+
+// ─── 영웅 상점 ───────────────────────────────────────────────────────────────
+function renderHeroShopScreen(ctx, gs) {
+  ctx.fillStyle='#0c0f1a'; ctx.fillRect(0,BATTLE_Y,CW,BATTLE_H);
+  const hY=BATTLE_Y+6;
+  ctx.fillStyle='#a78bfa'; ctx.font='bold 13px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
+  ctx.fillText('🏪 영웅 상점',CW/2,hY);
+  roundRect(ctx,6,hY,50,22,4); ctx.fillStyle='#1e293b'; ctx.fill(); ctx.strokeStyle='#475569'; ctx.lineWidth=1; ctx.stroke();
+  ctx.fillStyle='#94a3b8'; ctx.font='9px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('← 뒤로',31,hY+11);
+  gs.ui.townBackBtn={x:6,y:hY,w:50,h:22};
+  gs.ui.shopItemBtns=[];
+
+  let sy=BATTLE_Y+34;
+  // Fixed items
+  ctx.fillStyle='#64748b'; ctx.font='bold 8px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText('소비 아이템',8,sy); sy+=12;
+  for (const item of HERO_SHOP_FIXED) {
+    const ih=34;
+    const gc=item.grade==='rare'?'#60a5fa':'#94a3b8';
+    roundRect(ctx,6,sy,CW-12,ih,5); ctx.fillStyle='#0d1929'; ctx.fill(); ctx.strokeStyle=gc; ctx.lineWidth=1; ctx.stroke();
+    ctx.font='16px sans-serif'; ctx.textBaseline='middle'; ctx.fillText(item.icon,12,sy+ih/2);
+    ctx.fillStyle='#e2e8f0'; ctx.font='bold 9px sans-serif'; ctx.textAlign='left'; ctx.fillText(item.name,30,sy+ih/2-6);
+    ctx.fillStyle='#94a3b8'; ctx.font='8px sans-serif'; ctx.fillText(item.desc,30,sy+ih/2+5);
+    const canAff=gs.gold>=item.cost;
+    const bw=60,bh=20,bx=CW-8-bw,by2=sy+(ih-bh)/2;
+    roundRect(ctx,bx,by2,bw,bh,4); ctx.fillStyle=canAff?'#4c1d95':'#1e293b'; ctx.fill();
+    ctx.fillStyle=canAff?'#c4b5fd':'#475569'; ctx.font='bold 8px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(`${item.cost}💰`,bx+bw/2,by2+bh/2);
+    gs.ui.shopItemBtns.push({x:bx,y:by2,w:bw,h:bh,item});
+    sy+=ih+4;
+  }
+
+  sy+=4;
+  ctx.fillStyle='#64748b'; ctx.font='bold 8px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText('영웅 장비 (웨이브마다 갱신)',8,sy); sy+=12;
+  const shopItems=gs.town.buildings.heroShop.built?gs.town.shopItems:[];
+  if (!gs.town.buildings.heroShop.built) {
+    ctx.fillStyle='#374151'; ctx.font='9px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('영웅 상점 건설 후 이용 가능',CW/2,sy+20);
+  }
+  for (const item of shopItems) {
+    const ih=38;
+    const gc=item.grade==='epic'?'#a78bfa':item.grade==='rare'?'#60a5fa':'#94a3b8';
+    const owned=gs.town.equippedItems.includes(item.id);
+    roundRect(ctx,6,sy,CW-12,ih,5); ctx.fillStyle=owned?'#141e0d':'#0d1929'; ctx.fill(); ctx.strokeStyle=gc; ctx.lineWidth=owned?2:1; ctx.stroke();
+    ctx.font='18px sans-serif'; ctx.textBaseline='middle'; ctx.fillText(item.icon,12,sy+ih/2);
+    ctx.fillStyle=gc; ctx.font='bold 9px sans-serif'; ctx.textAlign='left'; ctx.fillText(`[${item.slot}] ${item.name}`,32,sy+ih/2-8);
+    ctx.fillStyle='#94a3b8'; ctx.font='8px sans-serif'; ctx.fillText(item.desc,32,sy+ih/2+4);
+    if (owned) { ctx.fillStyle='#22c55e'; ctx.font='bold 8px sans-serif'; ctx.textAlign='right'; ctx.textBaseline='middle'; ctx.fillText('장착중',CW-10,sy+ih/2); }
+    else {
+      const canAff=gs.gold>=item.cost;
+      const bw=60,bh=22,bx=CW-8-bw,by2=sy+(ih-bh)/2;
+      roundRect(ctx,bx,by2,bw,bh,4); ctx.fillStyle=canAff?'#2d1b69':'#1e293b'; ctx.fill();
+      ctx.fillStyle=canAff?gc:'#475569'; ctx.font='bold 8px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(`${item.cost}💰`,bx+bw/2,by2+bh/2);
+      gs.ui.shopItemBtns.push({x:bx,y:by2,w:bw,h:bh,item});
+    }
+    sy+=ih+4;
+  }
+
+  // Equipped items display
+  if (gs.town.equippedItems.length>0) {
+    sy+=4; ctx.fillStyle='#64748b'; ctx.font='bold 8px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillText('장착 중인 아이템:',8,sy); sy+=11;
+    const icons=gs.town.equippedItems.map(id=>HERO_EQUIPMENT_POOL.find(e=>e.id===id)).filter(Boolean);
+    ctx.font='14px sans-serif'; ctx.textBaseline='top';
+    icons.forEach((item,i)=>{ ctx.fillText(item.icon,8+i*20,sy); });
+  }
+}
+
+// ─── 출전 준비 화면 ───────────────────────────────────────────────────────────
+function renderArmyScreen(ctx, gs, startY) {
+  const {battle,hero}=gs;
+  let ay=startY;
+
+  // 영웅 박스
+  const lv=HERO_LEVELS[hero.level];
+  roundRect(ctx,6,ay,200,54,5); ctx.fillStyle='#1a2535'; ctx.fill(); ctx.strokeStyle=COLORS.hero; ctx.lineWidth=1.5; ctx.stroke();
+  ctx.font='16px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.fillText('👑',10,ay+6);
+  ctx.fillStyle=COLORS.hero; ctx.font='bold 9px sans-serif'; ctx.fillText(`영웅 Lv.${hero.level}`,30,ay+6);
+  ctx.fillStyle='#94a3b8'; ctx.font='8px sans-serif'; ctx.fillText(`ATK:${lv.atk}  HP:${hero.hp}/${lv.hp}  DEF:${lv.def}`,30,ay+18);
+  const expRatio=hero.exp/lv.expNeeded;
+  ctx.fillStyle='#1e293b'; ctx.fillRect(10,ay+34,184,5);
+  ctx.fillStyle='#f59e0b'; ctx.fillRect(10,ay+34,184*Math.min(1,expRatio),5);
+  ctx.fillStyle='#64748b'; ctx.font='7px sans-serif'; ctx.textAlign='right'; ctx.fillText(`EXP ${hero.exp}/${lv.expNeeded}`,192,ay+46);
+
+  // Hero placement buttons
+  const pDef=hero.placement==='defense', pBat=hero.placement==='battle';
+  const btnW=86,btnH=24,btnY=ay+60;
+  drawBtn(ctx,6,btnY,btnW,btnH,pDef?'✅ 상단 배치':'상단 배치',pDef?'#064e3b':'#1e293b',pDef?'#34d399':'#60a5fa');
+  drawBtn(ctx,6+btnW+4,btnY,btnW,btnH,pBat?'✅ 하단 배치':'하단 배치',pBat?'#4c1d95':'#1e293b',pBat?'#a78bfa':'#f87171');
+  gs.ui.heroDefBtn={x:6,y:btnY,w:btnW,h:btnH};
+  gs.ui.heroBatBtn={x:6+btnW+4,y:btnY,w:btnW,h:btnH};
+
+  // Hire cards
+  ay=startY+90;
+  ctx.fillStyle='#94a3b8'; ctx.font='bold 9px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText('병력 고용',6,ay); ay+=12;
+  const units=Object.values(UNIT_TYPES), cardW=70,cardH=56,cgap=5;
+  gs.ui.hireCards=[];
+  units.forEach((ut,i)=>{
+    const cx=6+i*(cardW+cgap), canAff=gs.gold>=Math.max(1,ut.cost-BONUSES.hireCostDiscount);
+    roundRect(ctx,cx,ay,cardW,cardH,5);
+    ctx.fillStyle=canAff?'#1e293b':'#111827'; ctx.fill();
+    ctx.strokeStyle=canAff?ut.color:'#374151'; ctx.lineWidth=1.5; ctx.stroke();
+    ctx.font='18px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillText(ut.icon,cx+cardW/2,ay+4);
+    ctx.fillStyle=canAff?'#e2e8f0':'#64748b'; ctx.font='bold 8px sans-serif'; ctx.textBaseline='bottom';
+    ctx.fillText(ut.name,cx+cardW/2,ay+cardH-14);
+    ctx.fillStyle=canAff?COLORS.gold:'#64748b'; ctx.font='8px sans-serif';
+    ctx.fillText(`💰${Math.max(1,ut.cost-BONUSES.hireCostDiscount)}`,cx+cardW/2,ay+cardH-2);
+    gs.ui.hireCards.push({x:cx,y:ay,w:cardW,h:cardH,typeId:ut.id});
+  });
+
+  // Hired slots
+  ay+=cardH+8;
+  ctx.fillStyle='#94a3b8'; ctx.font='bold 9px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText(`고용 병력 (${battle.ourTeam.filter(u=>!u.isHero).length}/${battle.maxSlots})`,6,ay); ay+=12;
+  const slotW=48,slotH=48,sgap=5; gs.ui.hiredSlots=[];
+  for (let i=0;i<battle.maxSlots;i++) {
+    const sx=6+i*(slotW+sgap), unit=battle.ourTeam.filter(u=>!u.isHero)[i];
+    roundRect(ctx,sx,ay,slotW,slotH,5);
+    ctx.fillStyle=unit?'#1e3a5f':'#0f172a'; ctx.fill();
+    ctx.strokeStyle=unit?(unit.color||'#60a5fa'):'#334155'; ctx.lineWidth=1.5; ctx.stroke();
+    if (unit) {
+      ctx.font='16px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(unit.icon,sx+slotW/2,ay+slotW/2-4);
+      ctx.fillStyle='#94a3b8'; ctx.font='7px sans-serif'; ctx.textBaseline='bottom'; ctx.fillText(unit.name,sx+slotW/2,ay+slotH-2);
+      ctx.fillStyle='#ef4444'; ctx.font='10px sans-serif'; ctx.textBaseline='top'; ctx.fillText('✕',sx+slotW-10,ay+2);
+    } else { ctx.fillStyle='#334155'; ctx.font='20px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('+',sx+slotW/2,ay+slotH/2); }
+    gs.ui.hiredSlots.push({x:sx,y:ay,w:slotW,h:slotH,idx:i});
+  }
+
+  // Deploy button
+  const hasUnit=battle.ourTeam.length>0;
+  const dbY=ay+slotH+8, dbW=CW-12, dbH=36;
+  roundRect(ctx,6,dbY,dbW,dbH,8);
+  ctx.fillStyle=hasUnit?'#166534':'#1e293b'; ctx.fill();
+  ctx.strokeStyle=hasUnit?'#22c55e':'#374151'; ctx.lineWidth=2; ctx.stroke();
+  ctx.fillStyle=hasUnit?'#ffffff':'#475569'; ctx.font='bold 14px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(hasUnit?'▶ 웨이브 시작!':'병력 필요 (최소 1명)',6+dbW/2,dbY+dbH/2);
+  gs.ui.deployBtn={x:6,y:dbY,w:dbW,h:dbH};
 }
 
 // ─── Tutorial ─────────────────────────────────────────────────────────────────

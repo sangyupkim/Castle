@@ -5,6 +5,7 @@ function makeTower(col, row, typeId) {
   const tpl = TOWER_TYPES[typeId];
   return {
     col, row, typeId,
+    level: 1,
     dmg:   tpl.dmg,
     spd:   tpl.spd   * BONUSES.towerSpdMult,
     range: tpl.range  * BONUSES.towerRangeMult,

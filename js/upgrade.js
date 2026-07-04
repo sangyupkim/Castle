@@ -13,6 +13,7 @@ function createDefaultBonuses() {
     undying: false, undyingUsed: false,
     // 케이브/전투
     battleGoldMult: 1.0, mobHpMult: 1.0, spawnSpeedMult: 1.0,
+    eliteChance: 0, dropChance: 0,
     // 영웅
     heroAtk: 0, heroRegen: 0, heroAura: 0,
     heroExpMult: 1.0, heroInstantRevive: false,
