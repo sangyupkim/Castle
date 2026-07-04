@@ -5,17 +5,29 @@ const canvas = document.getElementById('gameCanvas');
 const ctx    = canvas.getContext('2d');
 let _scale   = 1;
 
+function getViewport() {
+  // visualViewport가 있으면 사용 (모바일 브라우저 주소창 제외한 실제 높이)
+  if (window.visualViewport) {
+    return { w: window.visualViewport.width, h: window.visualViewport.height };
+  }
+  return { w: window.innerWidth, h: window.innerHeight };
+}
+
 function resize() {
   const dpr = window.devicePixelRatio || 1;
-  const s   = Math.min(window.innerWidth/CW, window.innerHeight/CH);
+  const vp  = getViewport();
+  const s   = Math.min(vp.w / CW, vp.h / CH);
   canvas.width  = Math.round(CW * dpr);
   canvas.height = Math.round(CH * dpr);
-  canvas.style.width  = `${CW*s}px`;
-  canvas.style.height = `${CH*s}px`;
+  canvas.style.width  = `${CW * s}px`;
+  canvas.style.height = `${CH * s}px`;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   _scale = s;
 }
 window.addEventListener('resize', resize);
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', resize);
+}
 resize();
 
 // ─── 타이틀 이미지 ───────────────────────────────────────────────────────────
