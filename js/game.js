@@ -6,10 +6,14 @@ const ctx    = canvas.getContext('2d');
 let _scale   = 1;
 
 function resize() {
-  const s = Math.min(window.innerWidth/CW, window.innerHeight/CH);
-  canvas.width=CW; canvas.height=CH;
-  canvas.style.width=`${CW*s}px`; canvas.style.height=`${CH*s}px`;
-  _scale=s;
+  const dpr = window.devicePixelRatio || 1;
+  const s   = Math.min(window.innerWidth/CW, window.innerHeight/CH);
+  canvas.width  = Math.round(CW * dpr);
+  canvas.height = Math.round(CH * dpr);
+  canvas.style.width  = `${CW*s}px`;
+  canvas.style.height = `${CH*s}px`;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  _scale = s;
 }
 window.addEventListener('resize', resize);
 resize();
