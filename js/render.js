@@ -232,6 +232,8 @@ function renderUIBar(ctx, gs, wm) {
     drawBtn(ctx, bx, by2, bw, bh, '▶ 웨이브 시작', '#4f46e5','#a5b4fc', canStart);
   } else if (wm.phase==='active') {
     drawBtn(ctx, bx, by2, bw, bh, '진행 중...', '#1e293b','#475569', false);
+  } else if (wm.phase==='upgradePick') {
+    drawBtn(ctx, bx, by2, bw, bh, '강화 선택 중...', '#2d1b69','#a78bfa', false);
   } else {
     drawBtn(ctx, bx, by2, bw, bh, `인터미션 ${Math.ceil(wm.intermissionTimer)}s`, '#1e293b','#475569', false);
   }
@@ -570,21 +572,180 @@ function renderBattleUnit(ctx, u, idx, x, y, alpha) {
 // ─── HUD ─────────────────────────────────────────────────────────────────────
 function renderHUD(ctx, gs) {
   if (gs.gameOver) {
-    renderOverlay(ctx,'게임 오버','#ef4444','탭하여 재시작');
+    const earned = calcSoulStones(gs);
+    ctx.fillStyle='rgba(0,0,0,0.82)'; ctx.fillRect(0,0,CW,CH);
+    ctx.fillStyle='#ef4444'; ctx.font='bold 28px sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('게임 오버', CW/2, CH/2-55);
+    ctx.fillStyle='#94a3b8'; ctx.font='13px sans-serif';
+    ctx.fillText(`${gs.wave}웨이브 클리어  기지 HP: ${gs.baseHP}`, CW/2, CH/2-22);
+    ctx.fillStyle='#a78bfa'; ctx.font='bold 16px sans-serif';
+    ctx.fillText(`💎 영혼석 +${earned} 획득`, CW/2, CH/2+10);
+    ctx.fillStyle='#c4b5fd'; ctx.font='12px sans-serif';
+    ctx.fillText(`보유: ${gs.soulStones + earned}  (탭하여 강화 화면으로)`, CW/2, CH/2+32);
   } else if (gs.stageCleared) {
     const g = gs.baseHP>=80?'S':gs.baseHP>=50?'A':gs.baseHP>=20?'B':'C';
-    renderOverlay(ctx,`스테이지 클리어! (${g})`,
-      '#22c55e',`누적 획득 골드: ${gs.battle.totalGoldEarned}💰 | 탭하여 계속`);
+    const earned = calcSoulStones(gs);
+    ctx.fillStyle='rgba(0,0,0,0.82)'; ctx.fillRect(0,0,CW,CH);
+    ctx.fillStyle='#22c55e'; ctx.font='bold 28px sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(`스테이지 클리어! (${g})`, CW/2, CH/2-55);
+    ctx.fillStyle='#94a3b8'; ctx.font='13px sans-serif';
+    ctx.fillText(`누적 획득 골드: ${gs.battle.totalGoldEarned}💰`, CW/2, CH/2-22);
+    ctx.fillStyle='#a78bfa'; ctx.font='bold 16px sans-serif';
+    ctx.fillText(`💎 영혼석 +${earned} 획득`, CW/2, CH/2+10);
+    ctx.fillStyle='#c4b5fd'; ctx.font='12px sans-serif';
+    ctx.fillText('탭하여 강화 화면으로', CW/2, CH/2+32);
   }
 }
 
-function renderOverlay(ctx, title, color, sub) {
-  ctx.fillStyle='rgba(0,0,0,0.75)'; ctx.fillRect(0,0,CW,CH);
-  ctx.fillStyle=color; ctx.font='bold 28px sans-serif';
+// ─── 업그레이드 픽 화면 ──────────────────────────────────────────────────────
+function renderUpgradePick(ctx, gs) {
+  ctx.fillStyle='rgba(0,0,0,0.80)'; ctx.fillRect(0,0,CW,CH);
+
+  ctx.fillStyle='#a5b4fc'; ctx.font='bold 16px sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  ctx.fillText('웨이브 클리어! 강화를 선택하세요', CW/2, 24);
+  ctx.fillStyle='#64748b'; ctx.font='11px sans-serif';
+  ctx.fillText(`웨이브 ${gs.wave+1} 완료`, CW/2, 45);
+
+  const cards = gs.upgradePick.cards;
+  const cardW=130, cardH=190, gap=12;
+  const totalW = cards.length * cardW + (cards.length-1)*gap;
+  const startX = (CW-totalW)/2;
+  const startY = 70;
+
+  gs.ui.upgradeCards = [];
+
+  cards.forEach((card, i) => {
+    const cx = startX + i*(cardW+gap);
+    const cy = startY;
+
+    const gradeColor = card.grade==='epic' ? '#a78bfa'
+                     : card.grade==='rare' ? '#60a5fa' : '#94a3b8';
+    const gradeBg    = card.grade==='epic' ? '#1e0a3c'
+                     : card.grade==='rare' ? '#0a1e3c' : '#0f172a';
+
+    roundRect(ctx, cx, cy, cardW, cardH, 8);
+    ctx.fillStyle=gradeBg; ctx.fill();
+    ctx.strokeStyle=gradeColor; ctx.lineWidth=2; ctx.stroke();
+
+    // 등급 배지
+    const gradeLabel = card.grade==='epic'?'★ EPIC':card.grade==='rare'?'◆ RARE':'● COMMON';
+    ctx.fillStyle=gradeColor; ctx.font='bold 8px sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.fillText(gradeLabel, cx+cardW/2, cy+8);
+
+    // 아이콘
+    ctx.font='36px sans-serif'; ctx.textBaseline='middle';
+    ctx.fillText(card.icon, cx+cardW/2, cy+60);
+
+    // 이름
+    ctx.fillStyle='#e2e8f0'; ctx.font='bold 12px sans-serif'; ctx.textBaseline='top';
+    ctx.fillText(card.name, cx+cardW/2, cy+95);
+
+    // 카테고리
+    const catLabel = card.cat==='tower'?'타워':card.cat==='unit'?'유닛':
+                     card.cat==='hero'?'영웅':card.cat==='base'?'기지':
+                     card.cat==='cave'?'케이브':'자원';
+    ctx.fillStyle=gradeColor; ctx.font='9px sans-serif';
+    ctx.fillText(catLabel, cx+cardW/2, cy+112);
+
+    // 설명 (줄바꿈)
+    ctx.fillStyle='#94a3b8'; ctx.font='9px sans-serif';
+    const words = card.desc.split(' ');
+    let line='', lineY=cy+130;
+    for (const w of words) {
+      const test = line ? line+' '+w : w;
+      if (ctx.measureText(test).width > cardW-12) {
+        ctx.fillText(line, cx+cardW/2, lineY); line=w; lineY+=13;
+      } else { line=test; }
+    }
+    if (line) ctx.fillText(line, cx+cardW/2, lineY);
+
+    // 선택 버튼
+    roundRect(ctx, cx+8, cy+cardH-30, cardW-16, 22, 5);
+    ctx.fillStyle=gradeColor; ctx.fill();
+    ctx.fillStyle='#0f172a'; ctx.font='bold 10px sans-serif'; ctx.textBaseline='middle';
+    ctx.fillText('선택', cx+cardW/2, cy+cardH-19);
+
+    gs.ui.upgradeCards.push({x:cx, y:cy, w:cardW, h:cardH, card});
+  });
+}
+
+// ─── 메타 업그레이드 화면 ────────────────────────────────────────────────────
+function renderMetaScreen(ctx, gs) {
+  ctx.fillStyle='rgba(5,5,20,0.96)'; ctx.fillRect(0,0,CW,CH);
+
+  // 헤더
+  ctx.fillStyle='#a78bfa'; ctx.font='bold 18px sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  ctx.fillText('💎 영구 강화', CW/2, 12);
+  ctx.fillStyle='#c4b5fd'; ctx.font='12px sans-serif';
+  ctx.fillText(`보유 영혼석: ${gs.soulStones}`, CW/2, 36);
+
+  const upgs = META_UPGRADES;
+  const cw2=210, ch2=48, cols=2, gap=6;
+  const gridW = cols*cw2+(cols-1)*gap;
+  const startX = (CW-gridW)/2;
+  const startY = 60;
+
+  gs.ui.metaCards = [];
+
+  upgs.forEach((upg, i) => {
+    const col = i % cols, row = Math.floor(i / cols);
+    const cx = startX + col*(cw2+gap);
+    const cy = startY + row*(ch2+gap);
+    const curLv = gs.metaUpgrades[upg.id] || 0;
+    const maxed = curLv >= upg.maxLv;
+    const cost  = upg.cost * (curLv+1);
+    const canBuy= !maxed && gs.soulStones >= cost;
+
+    roundRect(ctx, cx, cy, cw2, ch2, 6);
+    ctx.fillStyle = maxed ? '#14120a' : canBuy ? '#0d1a2e' : '#0f0f1a';
+    ctx.fill();
+    ctx.strokeStyle = maxed ? '#f59e0b' : canBuy ? '#6366f1' : '#374151';
+    ctx.lineWidth=1.5; ctx.stroke();
+
+    ctx.font='14px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillText(upg.icon, cx+6, cy+8);
+
+    ctx.fillStyle='#e2e8f0'; ctx.font='bold 9px sans-serif';
+    ctx.fillText(upg.name, cx+24, cy+8);
+
+    ctx.fillStyle='#64748b'; ctx.font='8px sans-serif';
+    ctx.fillText(curLv>0 ? upg.desc(curLv) : '미구매', cx+24, cy+22);
+
+    // 레벨 점
+    for (let l=0; l<upg.maxLv; l++) {
+      ctx.beginPath(); ctx.arc(cx+24+l*10, cy+36, 3.5, 0, Math.PI*2);
+      ctx.fillStyle = l<curLv ? '#f59e0b' : '#334155'; ctx.fill();
+    }
+
+    if (!maxed) {
+      const bw=52, bh=18;
+      roundRect(ctx, cx+cw2-bw-4, cy+(ch2-bh)/2, bw, bh, 4);
+      ctx.fillStyle = canBuy ? '#4f46e5' : '#1e293b'; ctx.fill();
+      ctx.fillStyle = canBuy ? '#a5b4fc' : '#475569';
+      ctx.font='8px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(`${cost}💎`, cx+cw2-bw/2-4, cy+ch2/2);
+      gs.ui.metaCards.push({x:cx, y:cy, w:cw2, h:ch2, upg});
+    } else {
+      ctx.fillStyle='#f59e0b'; ctx.font='bold 8px sans-serif';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('MAX', cx+cw2-30, cy+ch2/2);
+    }
+  });
+
+  // 시작 버튼
+  const btnY = startY + Math.ceil(upgs.length/cols)*(ch2+gap) + 8;
+  const bw=200, bh=38, bx=(CW-bw)/2;
+  roundRect(ctx, bx, btnY, bw, bh, 8);
+  ctx.fillStyle='#22c55e'; ctx.fill();
+  ctx.fillStyle='#0f172a'; ctx.font='bold 14px sans-serif';
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText(title,CW/2,CH/2-18);
-  ctx.fillStyle='#e2e8f0'; ctx.font='13px sans-serif';
-  ctx.fillText(sub,CW/2,CH/2+18);
+  ctx.fillText('▶ 새 게임 시작', bx+bw/2, btnY+bh/2);
+  gs.ui.metaStartBtn = {x:bx, y:btnY, w:bw, h:bh};
 }
 
 // ─── Tutorial ─────────────────────────────────────────────────────────────────

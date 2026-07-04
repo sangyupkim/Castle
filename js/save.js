@@ -1,6 +1,6 @@
 'use strict';
 
-const SAVE_KEY = 'dualfrontier_v2';
+const SAVE_KEY = 'dualfrontier_v3';
 
 const SaveManager = {
   load() {
@@ -21,6 +21,8 @@ const SaveManager = {
       caveLevel:  gs.caveLevel,
       persistedEnemies: serializeEnemies(gs.battle.enemyTeam),
       totalGoldEarned: gs.battle.totalGoldEarned,
+      soulStones:  gs.soulStones  || 0,
+      metaUpgrades: gs.metaUpgrades || {},
       timestamp:  Date.now()
     };
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch(e) {}

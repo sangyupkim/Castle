@@ -96,19 +96,15 @@ function createWaveManager() {
     },
 
     endWave(gs) {
-      this.phase = 'intermission';
-      this.intermissionTimer = INTERMISSION;
-
-      // 웨이브 종료 시 승패 판정 — 아군이 살아있으면 승리
+      // 승패 판정
       if (gs.battle.phase === 'fighting') {
         gs.battle.phase  = 'won';
         gs.battle.result = 'won';
       }
 
-      // ─ 자원 지급 ────────────────────────────────────────────────────────
-      // 처치 골드 (누적) + 승리 보너스 + 처치량 보너스
+      // 자원 지급
       const earned    = gs.battle.goldEarned;
-      const killBonus = gs.battle.killCount * (this.waveIndex + 1); // 웨이브 진행마다 처치당 보너스 증가
+      const killBonus = gs.battle.killCount * (this.waveIndex + 1);
       const winBonus  = (gs.battle.result === 'won') ? (20 + this.waveIndex * 15) : 0;
       const total     = earned + killBonus + winBonus;
       gs.gold += total;
@@ -117,27 +113,42 @@ function createWaveManager() {
       if (earned > 0)    parts.push(`처치 +${earned}💰`);
       if (killBonus > 0) parts.push(`처치보너스 +${killBonus}💰`);
       if (winBonus > 0)  parts.push(`승리 +${winBonus}💰`);
-      addLog(gs.battle, `웨이브${this.waveIndex+1} 보상: ${parts.join(' ')}`, COLORS.gold);
+      addLog(gs.battle, `웨이브${this.waveIndex+1}: ${parts.join(' ')}`, COLORS.gold);
 
       // 정리
-      gs.defenseEnemies = [];
-      gs.projectiles    = [];
-      gs.battle.enemyTeam = [];       // 이월 없음: 완전 초기화
-      gs.battle.ourTeam   = gs.battle.ourTeam.filter(u => !u.dead); // 생존 아군 유지
-      gs.battle.phase     = 'hire';
-      gs.battle.result    = null;
+      gs.defenseEnemies    = [];
+      gs.projectiles       = [];
+      gs.battle.enemyTeam  = [];
+      gs.battle.ourTeam    = gs.battle.ourTeam.filter(u => !u.dead);
+      gs.battle.phase      = 'hire';
+      gs.battle.result     = null;
       gs.battle.goldEarned = 0;
-      gs.battle.floaties  = [];
-      // log는 보상 메시지 보이도록 유지
+      gs.battle.floaties   = [];
+      gs.battle.maxSlots   = 4 + BONUSES.maxSlotBonus;
 
-      // 영웅 전투 배치 해제 (다음 웨이브 배치 선택 위해)
       if (gs.hero.placement === 'battle') {
-        // 전투 유닛에서 영웅 제거
         gs.battle.ourTeam = gs.battle.ourTeam.filter(u => !u.isHero);
       }
       gs.hero.placement = 'none';
 
+      // 웨이브 클리어 강화 픽 (마지막 웨이브 이전)
+      const isLast = (this.waveIndex + 1 >= WAVE_DEFS.length);
+      if (!isLast) {
+        this.phase = 'upgradePick';
+        gs.upgradePick = { active: true, cards: rollUpgradeCards() };
+      } else {
+        this.phase = 'intermission';
+        this.intermissionTimer = INTERMISSION;
+      }
+
       SaveManager.save(gs);
+    },
+
+    confirmPick(gs) {
+      // 업그레이드 픽 확인 후 인터미션 시작
+      gs.upgradePick = { active: false, cards: [] };
+      this.phase = 'intermission';
+      this.intermissionTimer = INTERMISSION;
     },
 
     updateIntermission(gs, dt) {

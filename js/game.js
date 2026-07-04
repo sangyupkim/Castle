@@ -14,6 +14,10 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
+// ─── 영구 데이터 (런 초기화 후에도 유지) ─────────────────────────────────────
+let _soulStones   = 0;
+let _metaUpgrades = {};
+
 // ─── 초기 상태 ────────────────────────────────────────────────────────────────
 function newState() {
   return {
@@ -25,18 +29,25 @@ function newState() {
     hero: {
       level:1, exp:0,
       hp: HERO_LEVELS[1].hp,
-      placement:'none',  // 'none' | 'defense' | 'battle'
+      placement:'none',
       dead:false, reviveTimer:0,
-      // 방어존에서의 위치 (가운데 배치)
       defX: GRID_OX + 4*CELL_W + CELL_W/2,
       defY: GRID_OY + 3*CELL_H + CELL_H/2,
       atkCooldown:0
     },
     waveActive:false,
     gameOver:false, stageCleared:false,
+    showMeta:false,
+    upgradePick: { active:false, cards:[] },
+    activeUpgrades: [],
     hoveredCell:null,
     floaties:[],
-    ui:{ waveBtn:{}, hireCards:[], hiredSlots:[], heroDefBtn:{}, heroBatBtn:{} }
+    ui:{ waveBtn:{}, hireCards:[], hiredSlots:[], heroDefBtn:{}, heroBatBtn:{}, metaCards:[], metaStartBtn:{} },
+    // 영구 데이터 참조
+    get soulStones()   { return _soulStones; },
+    set soulStones(v)  { _soulStones = v; },
+    get metaUpgrades() { return _metaUpgrades; },
+    set metaUpgrades(v){ _metaUpgrades = v; },
   };
 }
 
@@ -58,8 +69,22 @@ gs.battle = createBattle();
   gs.hero.hp    = HERO_LEVELS[gs.hero.level].hp;
   gs.battle.totalGoldEarned = sv.totalGoldEarned || 0;
   gs.caveLevel  = Math.max(1, Math.min(5, sv.caveLevel||1));
+  _soulStones   = sv.soulStones   || 0;
+  _metaUpgrades = sv.metaUpgrades || {};
   wm.init(gs.wave);
 })();
+
+// 메타 업그레이드 및 시작 보너스 적용
+resetBonuses();
+applyMetaUpgrades(gs);
+_applyStartBonuses();
+
+function _applyStartBonuses() {
+  gs.gold    += BONUSES.startGoldBonus;
+  gs.baseHP   = Math.min(BASE_HP_MAX + BONUSES.baseHpMax, gs.baseHP + BONUSES.baseHpMax);
+  gs.hero.exp = Math.min(HERO_LEVELS[gs.hero.level].expNeeded - 1, gs.hero.exp + BONUSES.heroStartExp);
+  gs.battle.maxSlots = 4 + BONUSES.maxSlotBonus;
+}
 
 tut.start();
 
@@ -79,9 +104,54 @@ canvas.addEventListener('click', e=>tap(pt(e)));
 canvas.addEventListener('touchstart', e=>{ e.preventDefault(); tap(pt(e)); },{passive:false});
 
 function tap({x,y}) {
-  if (tut.active)      { tut.next(); return; }
-  if (gs.gameOver)     { resetGame(false); return; }
-  if (gs.stageCleared) { resetGame(true);  return; }
+  if (tut.active) { tut.next(); return; }
+
+  // ── 메타 업그레이드 화면 ──────────────────────────────────────────────────
+  if (gs.showMeta) {
+    // 시작 버튼
+    if (hitTest(x,y,gs.ui.metaStartBtn)) {
+      gs.showMeta = false;
+      resetGame(false);
+      return;
+    }
+    // 카드 클릭
+    for (const card of gs.ui.metaCards||[]) {
+      if (hitTest(x,y,card)) {
+        if (buyMetaUpgrade(card.upg, gs)) {
+          SaveManager.save(gs);
+          spawnFloaty(`${card.upg.icon} 구매!`, x, y, '#a78bfa');
+        } else {
+          spawnFloaty('영혼석 부족!', x, y, '#ef4444');
+        }
+        return;
+      }
+    }
+    return;
+  }
+
+  if (gs.gameOver) {
+    // 게임오버 → 메타 화면으로
+    gs.showMeta = true;
+    return;
+  }
+  if (gs.stageCleared) {
+    gs.showMeta = true;
+    return;
+  }
+
+  // ── 업그레이드 픽 화면 ────────────────────────────────────────────────────
+  if (gs.upgradePick.active) {
+    for (const card of gs.ui.upgradeCards||[]) {
+      if (hitTest(x,y,card)) {
+        applyUpgradeCard(card.card, gs);
+        wm.confirmPick(gs);
+        gs.upgradePick = { active:false, cards:[] };
+        gs.waveActive = false;
+        return;
+      }
+    }
+    return;
+  }
 
   // ── 웨이브 시작 버튼 ────────────────────────────────────────────────────
   if (hitTest(x,y,gs.ui.waveBtn)) {
@@ -111,7 +181,6 @@ function tap({x,y}) {
     }
     if (hitTest(x,y,gs.ui.heroDefBtn)) {
       gs.hero.placement = gs.hero.placement==='defense' ? 'none' : 'defense';
-      // 하단 배치였으면 영웅 아군에서 제거
       if (gs.hero.placement==='defense') {
         gs.battle.ourTeam = gs.battle.ourTeam.filter(u=>!u.isHero);
       }
@@ -123,7 +192,6 @@ function tap({x,y}) {
         gs.battle.ourTeam = gs.battle.ourTeam.filter(u=>!u.isHero);
       } else {
         gs.hero.placement='battle';
-        // 영웅 전투 유닛 추가 (이미 없으면)
         if (!gs.battle.ourTeam.some(u=>u.isHero)) {
           gs.battle.ourTeam.unshift(makeHeroUnit(gs.hero));
         }
@@ -165,7 +233,7 @@ function tap({x,y}) {
     if (gs.towers.some(t=>t.col===cell.c&&t.row===cell.r)) {
       spawnFloaty('이미 있음',x,y,'#64748b'); return;
     }
-    const cost=TOWER_TYPES.arrow.cost;
+    const cost=TOWER_TYPES.arrow.cost - BONUSES.towerCostDiscount;
     if (gs.gold>=cost) {
       gs.gold-=cost;
       gs.towers.push(makeTower(cell.c,cell.r,'arrow'));
@@ -213,7 +281,6 @@ function updateHeroDefense(dt) {
   hero.atkCooldown=Math.max(0,hero.atkCooldown-dt);
   if (hero.atkCooldown>0) return;
 
-  // 사거리 내 가장 가까운 적 탐색
   let best=null, bestD=Infinity;
   for (const e of gs.defenseEnemies) {
     if (e.dead||e.reached) continue;
@@ -222,16 +289,14 @@ function updateHeroDefense(dt) {
   }
   if (!best) return;
 
-  hero.atkCooldown=1.0; // 초당 1회
+  hero.atkCooldown=1.0;
   best.hp-=lv.atk;
   if (best.hp<=0) {
     best.dead=true;
-    // EXP 획득
-    const expGain = ENEMY_TYPES[best.typeId]?.reward || 2;
+    const expGain = (ENEMY_TYPES[best.typeId]?.reward || 2) * BONUSES.heroExpMult;
     heroGainExp(expGain);
-    spawnFloaty(`EXP+${expGain}`,hero.defX,hero.defY-20,'#f59e0b');
+    spawnFloaty(`EXP+${Math.floor(expGain)}`,hero.defX,hero.defY-20,'#f59e0b');
   }
-  // 타격 투사체 (시각 효과)
   gs.projectiles.push({
     x:hero.defX, y:hero.defY, tx:best.x, ty:best.y,
     target:best, dmg:0, color:'#f59e0b', spd:350, _heroShot:true
@@ -245,7 +310,7 @@ function heroGainExp(amount) {
   if (hero.level<5&&hero.exp>=lv.expNeeded) {
     hero.exp-=lv.expNeeded;
     hero.level++;
-    hero.hp=HERO_LEVELS[hero.level].hp; // HP 풀 회복
+    hero.hp=HERO_LEVELS[hero.level].hp;
     spawnFloaty(`영웅 레벨업! Lv.${hero.level}`,CW/2,DEFENSE_H/2,'#f59e0b');
     addLog(gs.battle,`👑 영웅이 Lv.${hero.level}로 성장!`,COLORS.hero);
   }
@@ -253,19 +318,23 @@ function heroGainExp(amount) {
 
 // ─── 업데이트 ─────────────────────────────────────────────────────────────────
 function update(dt) {
-  if (gs.gameOver||gs.stageCleared) return;
+  if (gs.gameOver||gs.stageCleared||gs.showMeta) return;
+  if (gs.upgradePick.active) { updateFloaties(dt); return; }
 
   // 영웅 부활
   if (gs.hero.dead) {
+    const revTime = Math.max(5, 30 - BONUSES.heroReviveReduction);
     gs.hero.reviveTimer-=dt;
     if (gs.hero.reviveTimer<=0) {
-      gs.hero.dead=false;
-      gs.hero.hp=HERO_LEVELS[gs.hero.level].hp;
-      spawnFloaty('영웅 부활!',CW/2,DEFENSE_H/2,'#22c55e');
+      if (BONUSES.heroInstantRevive || gs.hero.reviveTimer <= -revTime) {
+        gs.hero.dead=false;
+        gs.hero.hp=HERO_LEVELS[gs.hero.level].hp;
+        spawnFloaty('영웅 부활!',CW/2,DEFENSE_H/2,'#22c55e');
+      }
     }
   }
 
-  if (!gs.waveActive) { wm.updateIntermission(gs,dt); return; }
+  if (!gs.waveActive) { wm.updateIntermission(gs,dt); updateFloaties(dt); return; }
 
   wm.update(gs,dt);
 
@@ -274,21 +343,29 @@ function update(dt) {
   for (const e of gs.defenseEnemies) {
     if (e.reached&&!e._counted) {
       e._counted=true;
-      gs.baseHP=Math.max(0,gs.baseHP-e.dmg);
-      spawnFloaty(`-${e.dmg}HP`,CW/2,DEFENSE_H-25,'#ef4444');
-      if (gs.baseHP<=0) { gs.gameOver=true; return; }
+      const dmg = Math.max(1, Math.round(e.dmg * (1 - BONUSES.baseDefPct)));
+      gs.baseHP=Math.max(0,gs.baseHP-dmg);
+      spawnFloaty(`-${dmg}HP`,CW/2,DEFENSE_H-25,'#ef4444');
+      if (gs.baseHP<=0) {
+        gs.gameOver=true;
+        const earned = calcSoulStones(gs);
+        _soulStones += earned;
+        SaveManager.save(gs);
+        return;
+      }
     }
   }
 
-  // 타워 공격 (킬 보상 없음 — 자원은 하단에서만)
+  // 기지 재생
+  if (BONUSES.baseRegen > 0) {
+    gs.baseHP = Math.min(BASE_HP_MAX + BONUSES.baseHpMax, gs.baseHP + BONUSES.baseRegen * dt);
+  }
+
   updateTowers(gs.towers,gs.defenseEnemies,gs.projectiles,dt);
   updateProjectiles(gs.projectiles,()=>{},dt);
   gs.defenseEnemies=gs.defenseEnemies.filter(e=>!e.dead&&!e.reached);
 
-  // 영웅 방어 공격
   updateHeroDefense(dt);
-
-  // 하단 전투
   updateBattle(gs.battle,dt);
 
   if (wm.phase==='intermission') gs.waveActive=false;
@@ -305,6 +382,8 @@ function loop(ts) {
   renderUIBar(ctx,gs,wm);
   renderBattle(ctx,gs);
   renderHUD(ctx,gs);
+  if (gs.upgradePick.active) renderUpgradePick(ctx,gs);
+  if (gs.showMeta) renderMetaScreen(ctx,gs);
   drawFloaties(ctx);
   renderTutorial(ctx,tut);
   update(dt);
@@ -312,30 +391,25 @@ function loop(ts) {
 }
 
 // ─── 리셋 ────────────────────────────────────────────────────────────────────
-function resetGame(next) {
-  const hero=gs.hero;
-  const cave=gs.caveLevel;
-  gs=newState();
-  gs.battle=createBattle();
-  gs.caveLevel=cave; // 케이브 레벨은 영구 유지
+function resetGame(fromMeta) {
+  const hero = gs.hero;
+  const cave = gs.caveLevel;
+  gs = newState();
+  gs.battle = createBattle();
+  gs.caveLevel = cave;
 
-  if (next) {
-    gs.hero=hero;
-    gs.hero.dead=false; gs.hero.hp=HERO_LEVELS[gs.hero.level].hp;
-    gs.hero.placement='none';
+  if (fromMeta) {
+    // 스테이지 클리어 후 계속 (영웅 이어받기)
+    gs.hero = hero;
+    gs.hero.dead = false;
+    gs.hero.hp = HERO_LEVELS[gs.hero.level].hp;
+    gs.hero.placement = 'none';
     SaveManager.clear();
-  } else {
-    const sv=SaveManager.load();
-    if (sv) {
-      gs.gold=sv.gold||10; gs.baseHP=sv.baseHP||BASE_HP_MAX;
-      gs.wave=sv.wave||0;
-      gs.hero.level=Math.max(1,Math.min(5,sv.heroLevel||1));
-      gs.hero.exp=sv.heroExp||0;
-      gs.hero.hp=HERO_LEVELS[gs.hero.level].hp;
-      gs.battle.totalGoldEarned=sv.totalGoldEarned||0;
-      gs.caveLevel=Math.max(1,Math.min(5,sv.caveLevel||cave));
-    }
   }
+
+  resetBonuses();
+  applyMetaUpgrades(gs);
+  _applyStartBonuses();
   wm.init(gs.wave);
 }
 

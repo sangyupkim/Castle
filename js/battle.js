@@ -4,18 +4,21 @@ let _uid = 0;
 
 // ─── 유닛 생성 ────────────────────────────────────────────────────────────────
 function makeUnit(typeId) {
-  const t = UNIT_TYPES[typeId];
+  const t  = UNIT_TYPES[typeId];
+  const hp = t.hp  + BONUSES.unitHp;
+  const ak = t.atk + BONUSES.unitAtk;
+  const df = t.def + BONUSES.unitDef + BONUSES.heroAura;
   return {
     id:++_uid, typeId, isPlayer:true, isHero:false,
     name:t.name, icon:t.icon, color:t.color,
-    hp:t.hp, maxHp:t.hp, atk:t.atk, def:t.def,
+    hp, maxHp:hp, atk:ak, def:df,
     mp:t.mp, maxMp:t.maxMp,
-    skillName:t.skillName, skillAtk:t.skillAtk,
+    skillName:t.skillName, skillAtk: t.skillAtk + BONUSES.unitAtk,
     skillCost:t.skillCost, skillColor:t.skillColor,
     healAmt:t.healAmt||0,
-    ticksSinceSkill:0, dead:false,
+    ticksSinceSkill:0, dead:false, undyingUsed:false,
     flashTimer:0, flashColor:'#fff',
-    drawX: BATTLE_TEAM_X   // 시각적 x (아군은 고정)
+    drawX: BATTLE_TEAM_X
   };
 }
 
@@ -44,8 +47,8 @@ function makeScaledMob(typeId, killCount, caveLevel) {
   return {
     id:++_uid, typeId, isPlayer:false,
     name:t.name, icon:t.icon, color:t.color,
-    hp:      Math.max(1, Math.round(t.hp       * sm)),
-    maxHp:   Math.max(1, Math.round(t.hp       * sm)),
+    hp:      Math.max(1, Math.round(t.hp * sm * BONUSES.mobHpMult)),
+    maxHp:   Math.max(1, Math.round(t.hp * sm * BONUSES.mobHpMult)),
     atk:     Math.max(1, Math.round(t.atk      * sm)),
     def:     Math.max(0, Math.round(t.def      * sm)),
     mp:t.mp, maxMp:t.maxMp,
@@ -59,15 +62,19 @@ function makeScaledMob(typeId, killCount, caveLevel) {
 }
 
 function makeHeroUnit(hero) {
-  const lv = HERO_LEVELS[hero.level];
+  const lv  = HERO_LEVELS[hero.level];
+  const sm  = BONUSES.heroStatMult;
+  const atk = Math.round((lv.atk + BONUSES.heroAtk) * sm);
+  const hp  = Math.round(lv.hp * sm);
+  const def = Math.round(lv.def * sm);
   return {
     id:++_uid, typeId:'hero', isPlayer:true, isHero:true,
     name:'영웅', icon:'👑', color:COLORS.hero,
-    hp:hero.hp, maxHp:lv.hp, atk:lv.atk, def:lv.def,
+    hp:Math.min(hp, hero.hp), maxHp:hp, atk, def,
     mp:30, maxMp:30,
-    skillName:'영웅 일격', skillAtk: Math.floor(lv.atk*2.2),
+    skillName:'영웅 일격', skillAtk: Math.floor(atk * 2.2),
     skillCost:15, skillColor:'#fbbf24', healAmt:0,
-    ticksSinceSkill:0, dead:false,
+    ticksSinceSkill:0, dead:false, undyingUsed:false,
     flashTimer:0, flashColor:'#fff',
     drawX: BATTLE_TEAM_X
   };
@@ -96,9 +103,10 @@ function createBattle() {
 // ─── 고용 / 해고 ─────────────────────────────────────────────────────────────
 function hireUnit(battle, typeId, gold) {
   const t = UNIT_TYPES[typeId];
-  if (!t || battle.ourTeam.length >= battle.maxSlots || gold < t.cost) return gold;
+  const cost = Math.max(1, t.cost - BONUSES.hireCostDiscount);
+  if (!t || battle.ourTeam.length >= battle.maxSlots || gold < cost) return gold;
   battle.ourTeam.push(makeUnit(typeId));
-  return gold - t.cost;
+  return gold - cost;
 }
 
 function fireUnit(battle, idx) {
@@ -160,8 +168,17 @@ function battleTick(battle) {
       const target = foe[Math.floor(Math.random()*foe.length)];
       const dmg = Math.max(1, u.atk - target.def);
       applyDamage(target, dmg, battle, '#fbbf24', true);
+      // 연속 공격 (콤보)
+      if (BONUSES.comboChance > 0 && Math.random() < BONUSES.comboChance) {
+        const foe2 = battle.enemyTeam.filter(u => !u.dead && u.drawX <= BATTLE_ENEMY_X + 10);
+        if (foe2.length) {
+          const t2 = foe2[Math.floor(Math.random()*foe2.length)];
+          applyDamage(t2, Math.max(1, u.atk - t2.def), battle, '#fb923c', true);
+        }
+      }
     }
     u.mp = Math.min(u.maxMp, u.mp + MP_REGEN_TICK);
+    // 영웅 오라: 영웅이 살아있으면 아군 방어력 보너스는 makeUnit 시 적용됨
   }
 
   // 적 공격
@@ -198,13 +215,27 @@ function applyDamage(target, dmg, battle, color, isMobTarget) {
   addFloaty(battle, `-${dmg}`, x, y, color);
 
   if (target.hp <= 0) {
+    // 불굴의 의지: 최초 사망 시 HP 1로 생존
+    if (!isMobTarget && BONUSES.undying && !target.undyingUsed) {
+      target.undyingUsed = true;
+      target.hp = 1;
+      addFloaty(battle, '불굴!', x, y - 22, '#fbbf24');
+      return;
+    }
     target.dead = true; target.hp = 0;
     if (isMobTarget) {
       battle.killCount++;
       if (target.goldReward) {
-        battle.goldEarned      += target.goldReward;
-        battle.totalGoldEarned += target.goldReward;
-        addFloaty(battle, `+${target.goldReward}💰`, x, y - 22, COLORS.gold);
+        const reward = Math.round(target.goldReward * BONUSES.battleGoldMult);
+        battle.goldEarned      += reward;
+        battle.totalGoldEarned += reward;
+        addFloaty(battle, `+${reward}💰`, x, y - 22, COLORS.gold);
+      }
+      // 처치 시 아군 회복
+      if (BONUSES.killHeal > 0) {
+        for (const u of battle.ourTeam.filter(u => !u.dead)) {
+          u.hp = Math.min(u.maxHp, u.hp + BONUSES.killHeal);
+        }
       }
     }
   }
@@ -246,6 +277,12 @@ function updateBattle(battle, dt) {
     battle.playerDrift = Math.min(55, battle.playerDrift + 75 * dt);
   } else if (hasLiveEnemies) {
     battle.playerDrift = Math.max(0, battle.playerDrift - 250 * dt);
+  }
+
+  // 영웅 유닛 HP 재생
+  if (BONUSES.heroRegen > 0) {
+    const heroUnit = battle.ourTeam.find(u => u.isHero && !u.dead);
+    if (heroUnit) heroUnit.hp = Math.min(heroUnit.maxHp, heroUnit.hp + BONUSES.heroRegen * dt);
   }
 
   // 전투 틱

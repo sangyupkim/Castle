@@ -5,7 +5,9 @@ function makeTower(col, row, typeId) {
   const tpl = TOWER_TYPES[typeId];
   return {
     col, row, typeId,
-    dmg: tpl.dmg, spd: tpl.spd, range: tpl.range,
+    dmg:   tpl.dmg,
+    spd:   tpl.spd   * BONUSES.towerSpdMult,
+    range: tpl.range  * BONUSES.towerRangeMult,
     cooldown: 0,
     totalKills: 0
   };
@@ -75,7 +77,10 @@ function updateTowers(towers, enemies, projectiles, dt) {
 
     tower.cooldown = 1 / tower.spd;
     const tpl = TOWER_TYPES[tower.typeId];
-    projectiles.push(makeProjectile(center.x, center.y, best, tower.dmg, tpl.projColor));
+    const dmg = tower.dmg + BONUSES.towerDmg;
+    const proj = makeProjectile(center.x, center.y, best, dmg, tpl.projColor);
+    proj._enemies = enemies; // 범위 피해용
+    projectiles.push(proj);
   }
 }
 
@@ -96,6 +101,18 @@ function updateProjectiles(projectiles, onKill, dt) {
       // Hit
       tgt.hp -= p.dmg;
       if (tgt.hp <= 0) { tgt.dead = true; onKill(tgt); }
+      // 범위 피해 (천둥 화살)
+      if (BONUSES.towerSplash && !p._heroShot) {
+        for (const e of (p._enemies || [])) {
+          if (e !== tgt && !e.dead && !e.reached) {
+            const dx2 = e.x - tgt.x, dy2 = e.y - tgt.y;
+            if (Math.hypot(dx2, dy2) < 40) {
+              e.hp -= Math.ceil(p.dmg * 0.5);
+              if (e.hp <= 0) { e.dead = true; onKill(e); }
+            }
+          }
+        }
+      }
       projectiles.splice(i, 1);
     } else {
       p.x += (dx / dist) * step;
