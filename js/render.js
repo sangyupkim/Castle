@@ -1205,7 +1205,7 @@ function renderTitleScreen(ctx, alpha) {
   ctx.fillStyle = 'rgba(255,255,255,0.35)';
   ctx.font = '9px monospace';
   ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
-  ctx.fillText('v0.1.1.3', CW - 8, by - 6);
+  ctx.fillText('v0.1.1.4', CW - 8, by - 6);
 
   ctx.restore();
 }
