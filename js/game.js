@@ -14,7 +14,8 @@ function getViewport() {
 }
 
 function resize() {
-  const dpr = window.devicePixelRatio || 1;
+  // 최소 DPR 2 강제: PC(DPR=1)에서도 2배 고해상도 렌더링으로 텍스트 선명도 확보
+  const dpr = Math.max(2, window.devicePixelRatio || 1);
   const vp  = getViewport();
   const s   = Math.min(vp.w / CW, vp.h / CH);
   canvas.width  = Math.round(CW * dpr);
