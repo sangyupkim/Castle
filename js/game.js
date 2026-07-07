@@ -45,6 +45,7 @@ let _metaUpgrades = {};
 function newState() {
   return {
     phase:1, wave:0,
+    page:'battle',
     gold:10, baseHP:BASE_HP_MAX,
     caveLevel:1,
     towers:[], defenseEnemies:[], projectiles:[],
@@ -155,6 +156,14 @@ function tap({x,y}) {
     return;
   }
 
+  // 기지 탭 → 마을 진입 (idle 상태에서만)
+  if (wm.phase==='idle' && y<UIBAR_Y) {
+    const cell=screenToCell(x,y);
+    if (cell && cell.c===4 && cell.r===6) { gs.page='town'; return; }
+  }
+  // 마을 페이지에서는 전투 화면 탭 막기
+  if (gs.page==='town') { handleTownTap(x,y); return; }
+
   // Defense grid: always tappable when not in active wave
   if (y<UIBAR_Y && wm.phase==='idle') {
     const cell=screenToCell(x,y);
@@ -196,11 +205,12 @@ function tap({x,y}) {
 function handleTownTap(x,y) {
   const t=gs.town;
 
+  // Back to battle page
+  if (hitTest(x,y,gs.ui.townPageBackBtn||{})) { gs.page='battle'; return; }
+
   // Building sub-screen
   if (t.screen!=='main') {
-    // Back button
     if (hitTest(x,y,gs.ui.townBackBtn||{})) { t.screen='main'; return; }
-    // Hero shop items
     if (t.screen==='heroShop') {
       for (const btn of gs.ui.shopItemBtns||[]) {
         if (hitTest(x,y,btn)) {
@@ -211,13 +221,11 @@ function handleTownTap(x,y) {
       }
       return;
     }
-    // Level up building button
     if (hitTest(x,y,gs.ui.buildingLvUpBtn||{})) {
       if (levelUpBuilding(t.screen,gs)) spawnFloaty('건물 레벨업!',x,y,'#f59e0b');
       else spawnFloaty('골드 부족!',x,y,'#ef4444');
       return;
     }
-    // Upgrade buttons
     for (const btn of gs.ui.upgradeBtns||[]) {
       if (hitTest(x,y,btn)) {
         if (!buyTownUpgrade(t.screen,btn.id,gs)) spawnFloaty('골드 부족!',x,y,'#ef4444');
@@ -228,36 +236,92 @@ function handleTownTap(x,y) {
     return;
   }
 
-  // Main town - tabs
+  // Tab switching
   if (hitTest(x,y,gs.ui.tabTownBtn||{})) { t.tab='town'; return; }
   if (hitTest(x,y,gs.ui.tabArmyBtn||{})) { t.tab='army'; return; }
+  if (hitTest(x,y,gs.ui.tabTowersBtn||{})) { t.tab='towers'; gs.ui.towerAction=null; return; }
 
-  if (t.tab==='town') {
-    // Building cards
-    for (const card of gs.ui.buildingCards||[]) {
-      if (hitTest(x,y,card)) {
-        if (!card.built) { if (!buildBuilding(card.id,gs)) spawnFloaty('골드 부족!',x,y,'#ef4444'); else spawnFloaty('건설 완료!',x,y,'#22c55e'); }
-        else t.screen=card.id;
+  // Towers tab
+  if (t.tab==='towers') {
+    if (hitTest(x,y,gs.ui.towerUpgradeBtn||{})) {
+      const ta=gs.ui.towerAction;
+      if (ta) {
+        const tower=gs.towers.find(tw=>tw.col===ta.col&&tw.row===ta.row);
+        if (tower) {
+          const lv=tower.level||1;
+          if (lv<3) {
+            const cost=lv*15;
+            if (gs.gold>=cost) { gs.gold-=cost; tower.level=lv+1; tower.dmg+=5; spawnFloaty(`타워 Lv.${tower.level}!`,x,y,'#f59e0b'); }
+            else spawnFloaty('골드 부족!',x,y,'#ef4444');
+          }
+          gs.ui.towerAction=null;
+        }
+      }
+      return;
+    }
+    if (hitTest(x,y,gs.ui.towerRemoveBtn||{})) {
+      if (gs.ui.towerAction) {
+        gs.towers=gs.towers.filter(tw=>!(tw.col===gs.ui.towerAction.col&&tw.row===gs.ui.towerAction.row));
+        gs.gold+=Math.floor(TOWER_TYPES.arrow.cost/2);
+        spawnFloaty(`+${Math.floor(TOWER_TYPES.arrow.cost/2)}💰`,x,y,COLORS.gold);
+        gs.ui.towerAction=null;
+      }
+      return;
+    }
+    if (gs.ui.towerMiniGrid) {
+      const mg=gs.ui.towerMiniGrid;
+      if (x>=mg.x && x<mg.x+GRID_COLS*mg.cellW && y>=mg.y && y<mg.y+GRID_ROWS*mg.cellH) {
+        const c=Math.floor((x-mg.x)/mg.cellW);
+        const r=Math.floor((y-mg.y)/mg.cellH);
+        if (c<0||c>=GRID_COLS||r<0||r>=GRID_ROWS) return;
+        const existing=gs.towers.find(tw=>tw.col===c&&tw.row===r);
+        if (existing) {
+          gs.ui.towerAction=(gs.ui.towerAction?.col===c&&gs.ui.towerAction?.row===r)?null:{col:c,row:r,tower:existing};
+        } else {
+          if (PATH_CELLS.has(`${c},${r}`)) return;
+          if (c===4&&(r===0||r===6)) return;
+          const cost=Math.max(1,TOWER_TYPES.arrow.cost-BONUSES.towerCostDiscount);
+          if (gs.gold>=cost) {
+            gs.gold-=cost; gs.towers.push(makeTower(c,r,'arrow')); gs.ui.towerAction=null;
+            spawnFloaty(`-${cost}💰`,x,y,COLORS.gold);
+          } else { spawnFloaty('골드 부족!',x,y,'#ef4444'); }
+        }
         return;
       }
     }
-    // Cave level up
+    return;
+  }
+
+  if (t.tab==='town') {
+    for (const card of gs.ui.buildingCards||[]) {
+      if (hitTest(x,y,card)) {
+        if (!card.built) {
+          if (!buildBuilding(card.id,gs)) spawnFloaty('골드 부족!',x,y,'#ef4444');
+          else spawnFloaty('건설 완료!',x,y,'#22c55e');
+        } else if (card.id!=='cave') {
+          t.screen=card.id;
+        }
+        return;
+      }
+    }
     if (hitTest(x,y,gs.ui.caveBtn||{})) {
       const nextLv=gs.caveLevel+1;
-      if (nextLv<=5) { const cost=CAVE_LEVELS[nextLv].upgradeCost; if (gs.gold>=cost) { gs.gold-=cost; gs.caveLevel=nextLv; spawnFloaty(`🗿 케이브 Lv.${nextLv}!`,CW/2,BATTLE_Y+40,'#a78bfa'); } else spawnFloaty('골드 부족!',x,y,'#ef4444'); }
+      if (nextLv<=5) {
+        const cost=CAVE_LEVELS[nextLv].upgradeCost;
+        if (gs.gold>=cost) { gs.gold-=cost; gs.caveLevel=nextLv; spawnFloaty(`🗿 케이브 Lv.${nextLv}!`,CW/2,300,'#a78bfa'); }
+        else spawnFloaty('골드 부족!',x,y,'#ef4444');
+      }
       return;
     }
   }
 
   if (t.tab==='army') {
-    // Hero placement
     if (hitTest(x,y,gs.ui.heroDefBtn||{})) { gs.hero.placement=gs.hero.placement==='defense'?'none':'defense'; if (gs.hero.placement==='defense') gs.battle.ourTeam=gs.battle.ourTeam.filter(u=>!u.isHero); return; }
     if (hitTest(x,y,gs.ui.heroBatBtn||{})) {
       if (gs.hero.placement==='battle') { gs.hero.placement='none'; gs.battle.ourTeam=gs.battle.ourTeam.filter(u=>!u.isHero); }
       else { gs.hero.placement='battle'; if (!gs.battle.ourTeam.some(u=>u.isHero)) gs.battle.ourTeam.unshift(makeHeroUnit(gs.hero)); }
       return;
     }
-    // Hire unit cards
     for (const card of gs.ui.hireCards||[]) {
       if (hitTest(x,y,card)) {
         const prev=gs.gold; gs.gold=hireUnit(gs.battle,card.typeId,gs.gold);
@@ -266,7 +330,6 @@ function handleTownTap(x,y) {
         return;
       }
     }
-    // Fire unit slots
     for (const slot of gs.ui.hiredSlots||[]) {
       if (hitTest(x,y,slot)) {
         const units=gs.battle.ourTeam.filter(u=>!u.isHero);
@@ -274,10 +337,9 @@ function handleTownTap(x,y) {
         return;
       }
     }
-    // Deploy button
     if (hitTest(x,y,gs.ui.deployBtn||{})) {
-      if (gs.battle.ourTeam.length>0) { wm.startWave(gs); gs.waveActive=true; }
-      else spawnFloaty('병력 필요!',CW/2,BATTLE_Y+200,'#ef4444');
+      if (gs.battle.ourTeam.length>0) { gs.page='battle'; wm.startWave(gs); gs.waveActive=true; }
+      else spawnFloaty('병력 필요!',CW/2,400,'#ef4444');
       return;
     }
   }
@@ -432,10 +494,14 @@ let _last=0;
 function loop(ts) {
   const dt=Math.min((ts-_last)/1000,0.05); _last=ts;
   ctx.clearRect(0,0,CW,CH);
-  renderDefense(ctx,gs);
-  renderUIBar(ctx,gs,wm);
-  renderBattle(ctx,gs);
-  renderHUD(ctx,gs);
+  if (gs.page==='town') {
+    renderTownPage(ctx,gs);
+  } else {
+    renderDefense(ctx,gs);
+    renderUIBar(ctx,gs,wm);
+    renderBattle(ctx,gs);
+    renderHUD(ctx,gs);
+  }
   if (gs.upgradePick.active) renderUpgradePick(ctx,gs);
   if (gs.showMeta) renderMetaScreen(ctx,gs);
   drawFloaties(ctx);
@@ -462,6 +528,7 @@ function resetGame(fromMeta) {
     SaveManager.clear();
   }
 
+  gs.page = 'battle';
   gs.town = createTown();
   refreshHeroShop(gs);
   reapplyAllBonuses(gs);

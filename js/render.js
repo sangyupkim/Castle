@@ -67,6 +67,16 @@ function renderDefense(ctx, gs) {
 
   drawPathFlow(ctx, THE_PATH, 'rgba(239,68,68,0.4)');
 
+  // 기지 셀 - idle 상태에서 마을 입장 힌트
+  if (wm && wm.phase==='idle') {
+    const bx2=GRID_OX+4*CELL_W+1, by2=GRID_OY+6*CELL_H+1;
+    ctx.fillStyle='rgba(99,102,241,0.35)'; ctx.fillRect(bx2,by2,CELL_W-2,CELL_H-2);
+    ctx.fillStyle='#a5b4fc'; ctx.font='bold 9px sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('🏰',GRID_OX+4*CELL_W+CELL_W/2,GRID_OY+6*CELL_H+CELL_H/2-5);
+    ctx.fillText('마을',GRID_OX+4*CELL_W+CELL_W/2,GRID_OY+6*CELL_H+CELL_H/2+7);
+  }
+
   // 사거리 미리보기
   if (gs.hoveredCell) {
     const {c,r} = gs.hoveredCell;
@@ -266,8 +276,16 @@ function renderUIBar(ctx, gs, wm) {
 function renderBattle(ctx, gs) {
   ctx.fillStyle='#0a1520'; ctx.fillRect(0,BATTLE_Y,CW,BATTLE_H);
 
-  if (wm.phase==='idle' || wm.phase==='upgradePick') {
-    renderTownScreen(ctx,gs);
+  if (wm.phase==='idle') {
+    // Town is now a separate full-screen page; just show navigation hint
+    ctx.fillStyle='#1e293b'; ctx.fillRect(0,BATTLE_Y,CW,BATTLE_H);
+    ctx.fillStyle='#475569'; ctx.font='bold 13px sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('기지(🏰)를 탭하여 마을로 이동',CW/2,BATTLE_Y+BATTLE_H/2-12);
+    ctx.fillStyle='#334155'; ctx.font='10px sans-serif';
+    ctx.fillText('병력 고용 · 건물 건설 · 타워 배치',CW/2,BATTLE_Y+BATTLE_H/2+12);
+  } else if (wm.phase==='upgradePick') {
+    ctx.fillStyle='#080d18'; ctx.fillRect(0,BATTLE_Y,CW,BATTLE_H);
   } else {
     renderFightPhase(ctx,gs);
   }
@@ -1119,6 +1137,295 @@ function renderArmyScreen(ctx, gs, startY) {
   gs.ui.deployBtn={x:6,y:dbY,w:dbW,h:dbH};
 }
 
+// ─── 마을 페이지 (full-screen) ────────────────────────────────────────────────
+function renderTownPage(ctx, gs) {
+  ctx.fillStyle='#080d18'; ctx.fillRect(0,0,CW,CH);
+  ctx.strokeStyle='rgba(255,255,255,0.03)'; ctx.lineWidth=1;
+  for (let yy=0;yy<CH;yy+=30){ ctx.beginPath(); ctx.moveTo(0,yy); ctx.lineTo(CW,yy); ctx.stroke(); }
+
+  // Header
+  ctx.fillStyle='#0c1220'; ctx.fillRect(0,0,CW,50);
+  ctx.strokeStyle='#1e293b'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(0,50); ctx.lineTo(CW,50); ctx.stroke();
+
+  // Back button
+  roundRect(ctx,8,10,60,30,6); ctx.fillStyle='#1e293b'; ctx.fill();
+  ctx.strokeStyle='#475569'; ctx.lineWidth=1; ctx.stroke();
+  ctx.fillStyle='#94a3b8'; ctx.font='bold 11px sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('← 전투',38,25);
+  gs.ui.townPageBackBtn={x:8,y:10,w:60,h:30};
+
+  // Title
+  ctx.fillStyle='#fbbf24'; ctx.font='bold 16px sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('🏰 마을',CW/2,25);
+
+  // Gold
+  ctx.fillStyle=COLORS.gold; ctx.font='bold 14px sans-serif';
+  ctx.textAlign='right'; ctx.textBaseline='middle'; ctx.fillText(`💰 ${gs.gold}`,CW-10,25);
+
+  // Tab bar
+  const tabs=[{id:'town',label:'🏰 마을'},{id:'army',label:'⚔️ 출전준비'},{id:'towers',label:'🗼 타워배치'}];
+  const tabW=(CW-8)/3;
+  gs.ui.tabTownBtn=null; gs.ui.tabArmyBtn=null; gs.ui.tabTowersBtn=null;
+  tabs.forEach((tab,i)=>{
+    const tx=4+i*tabW,ty=54,th=34;
+    const active=gs.town.tab===tab.id;
+    roundRect(ctx,tx,ty,tabW-4,th,5);
+    ctx.fillStyle=active?'#1e3a5f':'#0f172a'; ctx.fill();
+    ctx.strokeStyle=active?'#60a5fa':'#1e293b'; ctx.lineWidth=1.5; ctx.stroke();
+    ctx.fillStyle=active?'#e2e8f0':'#64748b'; ctx.font='bold 11px sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(tab.label,tx+(tabW-4)/2,ty+th/2);
+    if (tab.id==='town') gs.ui.tabTownBtn={x:tx,y:ty,w:tabW-4,h:th};
+    else if (tab.id==='army') gs.ui.tabArmyBtn={x:tx,y:ty,w:tabW-4,h:th};
+    else gs.ui.tabTowersBtn={x:tx,y:ty,w:tabW-4,h:th};
+  });
+
+  const contentY=92;
+  if (gs.town.screen!=='main') {
+    renderBuildingScreen(ctx,gs,gs.town.screen);
+  } else if (gs.town.tab==='town') {
+    renderTownPageBuildingGrid(ctx,gs,contentY);
+  } else if (gs.town.tab==='army') {
+    renderTownPageArmy(ctx,gs,contentY);
+  } else if (gs.town.tab==='towers') {
+    renderTownPageTowers(ctx,gs,contentY);
+  }
+}
+
+function renderTownPageBuildingGrid(ctx, gs, startY) {
+  const bw=228,bh=118,gap=8,ml=6;
+  gs.ui.buildingCards=[];
+
+  TOWN_BUILDINGS.forEach((def,i)=>{
+    const col=i%2,row=Math.floor(i/2);
+    const bx=ml+col*(bw+gap),by=startY+row*(bh+gap);
+    const bs=gs.town.buildings[def.id];
+    const built=bs&&(bs.built||def.alwaysBuilt);
+
+    roundRect(ctx,bx,by,bw,bh,8);
+    ctx.fillStyle=built?'#0d1929':'#080d18'; ctx.fill();
+    ctx.strokeStyle=built?def.color:'#334155'; ctx.lineWidth=built?2:1; ctx.stroke();
+
+    ctx.font='32px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.fillText(def.icon,bx+10,by+10);
+    ctx.fillStyle=built?def.color:'#64748b'; ctx.font='bold 12px sans-serif'; ctx.fillText(def.name,bx+50,by+10);
+
+    if (built&&def.id!=='cave') {
+      const curLv=bs.level||0;
+      const lvLabel=def.levels[curLv]?def.levels[curLv].levelName:`Lv.${curLv+1}`;
+      ctx.fillStyle='#60a5fa'; ctx.font='bold 9px sans-serif'; ctx.fillText(lvLabel,bx+50,by+26);
+    } else if (def.id==='cave') {
+      ctx.fillStyle=def.color; ctx.font='bold 9px sans-serif'; ctx.textBaseline='top';
+      ctx.fillText(`Lv.${gs.caveLevel}/5`,bx+50,by+26);
+    }
+
+    ctx.fillStyle='#94a3b8'; ctx.font='bold 10px sans-serif'; ctx.textBaseline='top'; ctx.fillText(def.desc,bx+10,by+52);
+
+    if (built&&def.id!=='cave') {
+      const curLv=bs.level||0;
+      const totalUpgs=def.levels.slice(0,curLv+1).reduce((s,l)=>s+l.upgrades.length,0);
+      const boughtUpgs=Object.keys(bs.upgrades||{}).length;
+      ctx.fillStyle=boughtUpgs===totalUpgs?'#22c55e':'#94a3b8'; ctx.font='bold 9px sans-serif';
+      ctx.fillText(`업그레이드 ${boughtUpgs}/${totalUpgs}`,bx+10,by+68);
+    }
+
+    const btnY=by+bh-28,btnH=22,btnW=bw-20;
+    roundRect(ctx,bx+10,btnY,btnW,btnH,5);
+    if (def.id==='cave') {
+      const nextCv=CAVE_LEVELS[gs.caveLevel+1];
+      if (nextCv) {
+        const canAff=gs.gold>=nextCv.upgradeCost;
+        ctx.fillStyle=canAff?'#1e3a5f':'#1a1a2e'; ctx.fill();
+        ctx.strokeStyle=canAff?'#60a5fa':'#334155'; ctx.lineWidth=1; ctx.stroke();
+        ctx.fillStyle=canAff?'#60a5fa':'#64748b'; ctx.font='bold 10px sans-serif';
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(`케이브 업그레이드 ${nextCv.upgradeCost}💰`,bx+10+btnW/2,btnY+btnH/2);
+        gs.ui.caveBtn={x:bx+10,y:btnY,w:btnW,h:btnH};
+      } else {
+        ctx.fillStyle='#0f2040'; ctx.fill(); ctx.strokeStyle='#f59e0b'; ctx.lineWidth=1; ctx.stroke();
+        ctx.fillStyle='#f59e0b'; ctx.font='bold 10px sans-serif';
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText('★ 케이브 최고 레벨',bx+10+btnW/2,btnY+btnH/2);
+        gs.ui.caveBtn=null;
+      }
+    } else if (!built) {
+      const canAff=gs.gold>=def.buildCost;
+      ctx.fillStyle=canAff?'#1e3a5f':'#1a1a2e'; ctx.fill();
+      ctx.strokeStyle=canAff?'#22c55e':'#334155'; ctx.lineWidth=1; ctx.stroke();
+      ctx.fillStyle=canAff?'#22c55e':'#64748b'; ctx.font='bold 10px sans-serif';
+      ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(`건설 ${def.buildCost}💰`,bx+10+btnW/2,btnY+btnH/2);
+    } else {
+      ctx.fillStyle='#0f2040'; ctx.fill(); ctx.strokeStyle=def.color; ctx.lineWidth=1; ctx.stroke();
+      ctx.fillStyle=def.color; ctx.font='bold 10px sans-serif';
+      ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('입장 →',bx+10+btnW/2,btnY+btnH/2);
+    }
+    gs.ui.buildingCards.push({x:bx,y:by,w:bw,h:bh,id:def.id,built});
+  });
+
+  const stripY=startY+2*(bh+gap)+4;
+  roundRect(ctx,6,stripY,CW-12,44,6);
+  ctx.fillStyle='#0a0d1a'; ctx.fill(); ctx.strokeStyle='#1e293b'; ctx.lineWidth=1; ctx.stroke();
+  const groups=WAVE_DEFS[gs.wave]?.battleGroups||[];
+  const uniqueTypes=[...new Set(groups.flatMap(g=>g.types))];
+  ctx.fillStyle='#64748b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
+  ctx.fillText(`웨이브 ${gs.wave+1} 등장 몬스터:`,12,stripY+14);
+  uniqueTypes.forEach((type,i)=>{
+    const mt=BATTLE_MOB_TYPES[type]; if (!mt) return;
+    ctx.font='16px sans-serif'; ctx.textAlign='left'; ctx.fillText(mt.icon,12+i*36,stripY+30);
+  });
+  ctx.fillStyle='#475569'; ctx.font='10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
+  ctx.fillText(`${groups.length}그룹`,12+uniqueTypes.length*36+4,stripY+30);
+}
+
+function renderTownPageArmy(ctx, gs, startY) {
+  const {battle,hero}=gs;
+  const lv=HERO_LEVELS[hero.level];
+  let y=startY;
+
+  roundRect(ctx,6,y,CW-12,58,7);
+  ctx.fillStyle='#1a2535'; ctx.fill(); ctx.strokeStyle=COLORS.hero; ctx.lineWidth=2; ctx.stroke();
+  ctx.font='24px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.fillText('👑',12,y+6);
+  ctx.fillStyle=COLORS.hero; ctx.font='bold 12px sans-serif'; ctx.fillText(`영웅  Lv.${hero.level}`,44,y+6);
+  ctx.fillStyle='#cbd5e1'; ctx.font='bold 10px sans-serif';
+  ctx.fillText(`ATK: ${lv.atk+BONUSES.heroAtk}   HP: ${hero.hp}/${lv.hp}   DEF: ${lv.def}`,44,y+22);
+  const expR=hero.exp/lv.expNeeded;
+  ctx.fillStyle='#1e293b'; ctx.fillRect(12,y+42,CW-28,8);
+  ctx.fillStyle='#f59e0b'; ctx.fillRect(12,y+42,(CW-28)*Math.min(1,expR),8);
+  ctx.fillStyle='#94a3b8'; ctx.font='8px sans-serif'; ctx.textAlign='right'; ctx.textBaseline='middle';
+  ctx.fillText(`EXP ${hero.exp}/${lv.expNeeded}`,CW-12,y+46);
+  y+=66;
+
+  ctx.fillStyle='#64748b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText('영웅 배치',6,y); y+=14;
+  const btnW2=(CW-20)/2,btnH2=36;
+  const pDef=hero.placement==='defense',pBat=hero.placement==='battle';
+  drawBtn(ctx,6,y,btnW2,btnH2,pDef?'✅ 상단 방어 배치':'상단 방어 배치',pDef?'#064e3b':'#1e293b',pDef?'#34d399':'#60a5fa');
+  drawBtn(ctx,6+btnW2+8,y,btnW2,btnH2,pBat?'✅ 하단 전투 배치':'하단 전투 배치',pBat?'#4c1d95':'#1e293b',pBat?'#a78bfa':'#f87171');
+  gs.ui.heroDefBtn={x:6,y,w:btnW2,h:btnH2};
+  gs.ui.heroBatBtn={x:6+btnW2+8,y,w:btnW2,h:btnH2};
+  y+=btnH2+10;
+
+  ctx.fillStyle='#64748b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText('병력 고용',6,y); y+=14;
+  const units=Object.values(UNIT_TYPES),cardW=138,cardH=72;
+  gs.ui.hireCards=[];
+  units.forEach((ut,i)=>{
+    const cx=6+i*(cardW+8);
+    const cost=Math.max(1,ut.cost-BONUSES.hireCostDiscount),canAff=gs.gold>=cost;
+    roundRect(ctx,cx,y,cardW,cardH,6);
+    ctx.fillStyle=canAff?'#1e293b':'#111827'; ctx.fill();
+    ctx.strokeStyle=canAff?ut.color:'#374151'; ctx.lineWidth=1.5; ctx.stroke();
+    ctx.font='24px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillText(ut.icon,cx+cardW/2,y+4);
+    ctx.fillStyle=canAff?'#f1f5f9':'#64748b'; ctx.font='bold 11px sans-serif'; ctx.textBaseline='top'; ctx.fillText(ut.name,cx+cardW/2,y+34);
+    ctx.fillStyle='#94a3b8'; ctx.font='bold 9px sans-serif'; ctx.fillText(`ATK:${ut.atk+BONUSES.unitAtk} HP:${ut.hp+BONUSES.unitHp}`,cx+cardW/2,y+48);
+    ctx.fillStyle=canAff?COLORS.gold:'#64748b'; ctx.font='bold 10px sans-serif'; ctx.fillText(`💰 ${cost}`,cx+cardW/2,y+60);
+    gs.ui.hireCards.push({x:cx,y,w:cardW,h:cardH,typeId:ut.id});
+  });
+  y+=cardH+8;
+
+  ctx.fillStyle='#64748b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText(`편성된 병력 (${battle.ourTeam.filter(u=>!u.isHero).length}/${battle.maxSlots})`,6,y); y+=14;
+  const slotW=82,slotH=60,slotGap=8; gs.ui.hiredSlots=[];
+  for (let i=0;i<battle.maxSlots;i++) {
+    const sx=6+i*(slotW+slotGap),sy=y;
+    const unit=battle.ourTeam.filter(u=>!u.isHero)[i];
+    roundRect(ctx,sx,sy,slotW,slotH,6);
+    ctx.fillStyle=unit?'#1e3a5f':'#0f172a'; ctx.fill();
+    ctx.strokeStyle=unit?(unit.color||'#60a5fa'):'#334155'; ctx.lineWidth=1.5; ctx.stroke();
+    if (unit) {
+      ctx.font='22px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(unit.icon,sx+slotW/2,sy+slotH/2-8);
+      ctx.fillStyle='#f1f5f9'; ctx.font='bold 9px sans-serif'; ctx.textBaseline='bottom'; ctx.fillText(unit.name,sx+slotW/2,sy+slotH-4);
+      ctx.fillStyle='#ef4444'; ctx.font='bold 11px sans-serif'; ctx.textBaseline='top'; ctx.fillText('✕',sx+slotW-14,sy+4);
+    } else {
+      ctx.fillStyle='#334155'; ctx.font='24px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('+',sx+slotW/2,sy+slotH/2);
+    }
+    gs.ui.hiredSlots.push({x:sx,y:sy,w:slotW,h:slotH,idx:i});
+  }
+  y+=slotH+10;
+
+  const hasUnit=battle.ourTeam.some(u=>!u.isHero);
+  roundRect(ctx,6,y,CW-12,44,8);
+  ctx.fillStyle=hasUnit?'#15803d':'#1e293b'; ctx.fill();
+  ctx.strokeStyle=hasUnit?'#22c55e':'#374151'; ctx.lineWidth=2; ctx.stroke();
+  ctx.fillStyle=hasUnit?'#fff':'#64748b'; ctx.font='bold 15px sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(hasUnit?'▶ 출전! 웨이브 시작':'⚠️ 병력을 먼저 고용하세요',6+(CW-12)/2,y+22);
+  gs.ui.deployBtn={x:6,y,w:CW-12,h:44};
+}
+
+function renderTownPageTowers(ctx, gs, startY) {
+  const scale=0.62;
+  const mCW=Math.floor(CELL_W*scale),mCH=Math.floor(CELL_H*scale);
+  const gridW=GRID_COLS*mCW,gridH=GRID_ROWS*mCH;
+  const offX=Math.floor((CW-gridW)/2),offY=startY+14;
+
+  ctx.fillStyle='#60a5fa'; ctx.font='bold 11px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
+  ctx.fillText('방어 그리드 — 셀을 탭하여 타워 건설 / 선택된 타워 강화·철거',CW/2,startY);
+
+  for (let r=0;r<GRID_ROWS;r++) {
+    for (let c=0;c<GRID_COLS;c++) {
+      const x=offX+c*mCW,y=offY+r*mCH;
+      const isPath=PATH_CELLS.has(`${c},${r}`);
+      const isBase=c===4&&r===6,isStart=c===4&&r===0;
+      ctx.fillStyle=isBase?'#3f1515':isStart?'#1e3a5f':isPath?COLORS.pathCell:COLORS.defenseGrid;
+      ctx.fillRect(x+1,y+1,mCW-2,mCH-2);
+      const tower=gs.towers.find(tw=>tw.col===c&&tw.row===r);
+      if (tower) {
+        const selected=gs.ui.towerAction&&gs.ui.towerAction.col===c&&gs.ui.towerAction.row===r;
+        ctx.fillStyle=selected?'rgba(99,102,241,0.5)':'rgba(34,197,94,0.3)'; ctx.fillRect(x+1,y+1,mCW-2,mCH-2);
+        ctx.font=`${Math.floor(mCW*0.55)}px sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(TOWER_TYPES[tower.typeId].icon,x+mCW/2,y+mCH/2);
+        if (selected) { ctx.strokeStyle='#6366f1'; ctx.lineWidth=2; ctx.strokeRect(x+1,y+1,mCW-2,mCH-2); }
+      }
+      if (isBase) {
+        ctx.fillStyle='#fca5a5'; ctx.font=`${Math.floor(mCW*0.35)}px sans-serif`;
+        ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('기지',x+mCW/2,y+mCH/2);
+      }
+    }
+  }
+  gs.ui.towerMiniGrid={x:offX,y:offY,cellW:mCW,cellH:mCH,scale};
+
+  const panelY=offY+gridH+8;
+  if (gs.ui.towerAction) {
+    const ta=gs.ui.towerAction;
+    const tower=gs.towers.find(tw=>tw.col===ta.col&&tw.row===ta.row);
+    if (tower) {
+      const lv=tower.level||1;
+      roundRect(ctx,6,panelY,CW-12,68,7);
+      ctx.fillStyle='#0d1929'; ctx.fill(); ctx.strokeStyle='#60a5fa'; ctx.lineWidth=1.5; ctx.stroke();
+      ctx.font='20px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
+      ctx.fillText(TOWER_TYPES[tower.typeId].icon,14,panelY+22);
+      ctx.fillStyle='#f1f5f9'; ctx.font='bold 12px sans-serif'; ctx.fillText(`화살 타워  Lv.${lv}/3`,42,panelY+14);
+      ctx.fillStyle='#94a3b8'; ctx.font='bold 10px sans-serif';
+      ctx.fillText(`ATK: ${tower.dmg+BONUSES.towerDmg}   SPD: ${tower.spd.toFixed(1)}/s   사거리: ${Math.round(tower.range)}px`,42,panelY+30);
+      if (lv<3) {
+        const upgCost=lv*15,canAff=gs.gold>=upgCost,bw2=140,bh2=26;
+        drawBtn(ctx,10,panelY+38,bw2,bh2,`강화 Lv.${lv+1}  ${upgCost}💰`,canAff?'#1e3a5f':'#1e293b',canAff?'#60a5fa':'#64748b',canAff);
+        gs.ui.towerUpgradeBtn={x:10,y:panelY+38,w:bw2,h:bh2};
+      } else {
+        gs.ui.towerUpgradeBtn=null;
+        ctx.fillStyle='#f59e0b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
+        ctx.fillText('★ 최고 레벨',10,panelY+52);
+      }
+      const rbw=80,rbh=26,rbx=CW-10-rbw;
+      drawBtn(ctx,rbx,panelY+38,rbw,rbh,'🗑 철거','#3f1515','#ef4444');
+      gs.ui.towerRemoveBtn={x:rbx,y:panelY+38,w:rbw,h:rbh};
+    }
+  } else {
+    roundRect(ctx,6,panelY,CW-12,68,7);
+    ctx.fillStyle='#080d18'; ctx.fill(); ctx.strokeStyle='#1e293b'; ctx.lineWidth=1; ctx.stroke();
+    const cost=Math.max(1,TOWER_TYPES.arrow.cost-BONUSES.towerCostDiscount);
+    ctx.fillStyle='#64748b'; ctx.font='bold 11px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(`빈 셀을 탭하여 화살 타워 건설 (${cost}💰)`,CW/2,panelY+22);
+    ctx.fillStyle='#475569'; ctx.font='10px sans-serif';
+    ctx.fillText('타워를 탭하면 강화/철거 패널이 표시됩니다',CW/2,panelY+42);
+    gs.ui.towerUpgradeBtn=null; gs.ui.towerRemoveBtn=null;
+  }
+
+  const infoY=panelY+76,towerCost=Math.max(1,TOWER_TYPES.arrow.cost-BONUSES.towerCostDiscount);
+  ctx.fillStyle='#475569'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText(`배치된 타워: ${gs.towers.length}개   건설 비용: ${towerCost}💰`,8,infoY);
+}
+
 // ─── Tutorial ─────────────────────────────────────────────────────────────────
 function renderTutorial(ctx, tut) {
   if (!tut.active) return;
@@ -1205,7 +1512,7 @@ function renderTitleScreen(ctx, alpha) {
   ctx.fillStyle = 'rgba(255,255,255,0.35)';
   ctx.font = '9px monospace';
   ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
-  ctx.fillText('v0.1.1.6', CW - 8, by - 6);
+  ctx.fillText('v0.1.2.0', CW - 8, by - 6);
 
   ctx.restore();
 }
