@@ -239,11 +239,11 @@ function renderUIBar(ctx, gs, wm) {
                : '';
   ctx.fillStyle = bp==='fighting'||bp==='won' ? '#22c55e'
                 : bp.includes('defeat')||bp==='lost' ? '#ef4444' : COLORS.textDim;
-  ctx.font='10px sans-serif'; ctx.textAlign='center';
+  ctx.font='bold 10px sans-serif'; ctx.textAlign='center';
   ctx.fillText(bLabel, CW/2, cy+8);
 
   // 누적 획득 골드 (좌하)
-  ctx.fillStyle=COLORS.textDim; ctx.font='9px sans-serif';
+  ctx.fillStyle='#94a3b8'; ctx.font='bold 9px sans-serif';
   ctx.textAlign='left';
   ctx.fillText(`누적: ${gs.battle.totalGoldEarned}💰`, 8, cy+22);
 
@@ -520,9 +520,9 @@ function renderFightPhase(ctx, gs) {
   ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(0, logY - 2, CW, 67);
   battle.log.slice(0, 4).forEach((e, i) => {
     ctx.globalAlpha = Math.min(1, e.timer / 0.8);
-    ctx.fillStyle = e.color; ctx.font = '9px sans-serif';
+    ctx.fillStyle = e.color; ctx.font = 'bold 10px sans-serif';
     ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-    ctx.fillText(e.text, 6, logY + 2 + i * 14);
+    ctx.fillText(e.text, 6, logY + 2 + i * 15);
   });
   ctx.globalAlpha = 1;
 
@@ -583,7 +583,7 @@ function renderBattleUnit(ctx, u, idx, x, y, alpha) {
   if (!u.isPlayer || u.maxMp > 0) {
     drawMPBar(ctx, x - bw/2, y + r + 10, bw, 3, u.mp / u.maxMp);
   }
-  ctx.fillStyle = '#cbd5e1'; ctx.font = '8px sans-serif';
+  ctx.fillStyle = '#f1f5f9'; ctx.font = 'bold 9px sans-serif';
   ctx.textAlign = 'center'; ctx.textBaseline = 'top';
   ctx.fillText(`${u.name} ${u.hp}`, x, y + r + 16);
 
@@ -828,7 +828,7 @@ function renderTownBuildingGrid(ctx, gs, startY) {
     }
 
     // Desc
-    ctx.fillStyle='#64748b'; ctx.font='8px sans-serif'; ctx.textBaseline='top';
+    ctx.fillStyle='#94a3b8'; ctx.font='bold 10px sans-serif'; ctx.textBaseline='top';
     ctx.fillText(def.desc,bx+8,by+38);
 
     // Status/button
@@ -927,23 +927,23 @@ function renderBuildingScreen(ctx, gs, buildingId) {
   for (let lv=0;lv<=curLv&&lv<def.levels.length;lv++) {
     const lvDef=def.levels[lv];
     if (lv>0) { ctx.fillStyle='#1e293b'; ctx.fillRect(6,uy,CW-12,1); uy+=6; }
-    ctx.fillStyle='#64748b'; ctx.font='bold 8px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
-    ctx.fillText(lvDef.levelName+' 업그레이드',8,uy); uy+=12;
+    ctx.fillStyle='#a5b4fc'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillText(lvDef.levelName+' 업그레이드',8,uy); uy+=14;
 
     for (const upg of lvDef.upgrades) {
       const curUpgLv=bs.upgrades[upg.id]||0;
       const maxed=curUpgLv>=upg.maxLv;
       const canAff=!maxed&&gs.gold>=upg.cost;
-      const uh=32;
+      const uh=36;
       roundRect(ctx,6,uy,CW-12,uh,5);
       ctx.fillStyle=maxed?'#0f1a0f':canAff?'#0d1929':'#0f0f1a'; ctx.fill();
       ctx.strokeStyle=maxed?'#22c55e':canAff?def.color:'#334155'; ctx.lineWidth=1; ctx.stroke();
-      ctx.font='12px sans-serif'; ctx.textBaseline='middle';
+      ctx.font='13px sans-serif'; ctx.textBaseline='middle';
       ctx.fillText(upg.icon,12,uy+uh/2);
-      ctx.fillStyle='#e2e8f0'; ctx.font='bold 9px sans-serif'; ctx.textAlign='left';
-      ctx.fillText(upg.name,28,uy+uh/2-6);
-      ctx.fillStyle='#94a3b8'; ctx.font='8px sans-serif';
-      ctx.fillText(upg.desc(curUpgLv>0?curUpgLv:1),28,uy+uh/2+5);
+      ctx.fillStyle='#f1f5f9'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left';
+      ctx.fillText(upg.name,30,uy+uh/2-7);
+      ctx.fillStyle='#cbd5e1'; ctx.font='bold 9px sans-serif';
+      ctx.fillText(upg.desc(curUpgLv>0?curUpgLv:1),30,uy+uh/2+6);
       // level dots
       for (let d=0;d<upg.maxLv;d++) {
         ctx.beginPath(); ctx.arc(CW-100+d*10,uy+uh/2,3.5,0,Math.PI*2);
@@ -971,7 +971,7 @@ function renderBuildingScreen(ctx, gs, buildingId) {
     roundRect(ctx,6,uy,CW-12,30,5);
     ctx.fillStyle='#080d18'; ctx.fill();
     ctx.strokeStyle='#374151'; ctx.lineWidth=1; ctx.stroke();
-    ctx.fillStyle='#374151'; ctx.font='9px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle='#64748b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(`🔒 ${lvDef.levelName} (건물 레벨업 필요 ${lvDef.upgradeCost}💰)`,CW/2,uy+15);
     uy+=34;
   }
@@ -991,15 +991,15 @@ function renderHeroShopScreen(ctx, gs) {
 
   let sy=BATTLE_Y+34;
   // Fixed items
-  ctx.fillStyle='#64748b'; ctx.font='bold 8px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText('소비 아이템',8,sy); sy+=12;
+  ctx.fillStyle='#a5b4fc'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText('소비 아이템',8,sy); sy+=14;
   for (const item of HERO_SHOP_FIXED) {
-    const ih=34;
+    const ih=38;
     const gc=item.grade==='rare'?'#60a5fa':'#94a3b8';
     roundRect(ctx,6,sy,CW-12,ih,5); ctx.fillStyle='#0d1929'; ctx.fill(); ctx.strokeStyle=gc; ctx.lineWidth=1; ctx.stroke();
     ctx.font='16px sans-serif'; ctx.textBaseline='middle'; ctx.fillText(item.icon,12,sy+ih/2);
-    ctx.fillStyle='#e2e8f0'; ctx.font='bold 9px sans-serif'; ctx.textAlign='left'; ctx.fillText(item.name,30,sy+ih/2-6);
-    ctx.fillStyle='#94a3b8'; ctx.font='8px sans-serif'; ctx.fillText(item.desc,30,sy+ih/2+5);
+    ctx.fillStyle='#f1f5f9'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.fillText(item.name,30,sy+ih/2-7);
+    ctx.fillStyle='#cbd5e1'; ctx.font='bold 9px sans-serif'; ctx.fillText(item.desc,30,sy+ih/2+6);
     const canAff=gs.gold>=item.cost;
     const bw=60,bh=20,bx=CW-8-bw,by2=sy+(ih-bh)/2;
     roundRect(ctx,bx,by2,bw,bh,4); ctx.fillStyle=canAff?'#4c1d95':'#1e293b'; ctx.fill();
@@ -1010,8 +1010,8 @@ function renderHeroShopScreen(ctx, gs) {
   }
 
   sy+=4;
-  ctx.fillStyle='#64748b'; ctx.font='bold 8px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText('영웅 장비 (웨이브마다 갱신)',8,sy); sy+=12;
+  ctx.fillStyle='#a5b4fc'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText('영웅 장비 (웨이브마다 갱신)',8,sy); sy+=14;
   const shopItems=gs.town.buildings.heroShop.built?gs.town.shopItems:[];
   if (!gs.town.buildings.heroShop.built) {
     ctx.fillStyle='#374151'; ctx.font='9px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
@@ -1023,9 +1023,9 @@ function renderHeroShopScreen(ctx, gs) {
     const owned=gs.town.equippedItems.includes(item.id);
     roundRect(ctx,6,sy,CW-12,ih,5); ctx.fillStyle=owned?'#141e0d':'#0d1929'; ctx.fill(); ctx.strokeStyle=gc; ctx.lineWidth=owned?2:1; ctx.stroke();
     ctx.font='18px sans-serif'; ctx.textBaseline='middle'; ctx.fillText(item.icon,12,sy+ih/2);
-    ctx.fillStyle=gc; ctx.font='bold 9px sans-serif'; ctx.textAlign='left'; ctx.fillText(`[${item.slot}] ${item.name}`,32,sy+ih/2-8);
-    ctx.fillStyle='#94a3b8'; ctx.font='8px sans-serif'; ctx.fillText(item.desc,32,sy+ih/2+4);
-    if (owned) { ctx.fillStyle='#22c55e'; ctx.font='bold 8px sans-serif'; ctx.textAlign='right'; ctx.textBaseline='middle'; ctx.fillText('장착중',CW-10,sy+ih/2); }
+    ctx.fillStyle=gc; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.fillText(`[${item.slot}] ${item.name}`,32,sy+ih/2-8);
+    ctx.fillStyle='#cbd5e1'; ctx.font='bold 9px sans-serif'; ctx.fillText(item.desc,32,sy+ih/2+5);
+    if (owned) { ctx.fillStyle='#22c55e'; ctx.font='bold 9px sans-serif'; ctx.textAlign='right'; ctx.textBaseline='middle'; ctx.fillText('장착중',CW-10,sy+ih/2); }
     else {
       const canAff=gs.gold>=item.cost;
       const bw=60,bh=22,bx=CW-8-bw,by2=sy+(ih-bh)/2;
@@ -1039,7 +1039,7 @@ function renderHeroShopScreen(ctx, gs) {
 
   // Equipped items display
   if (gs.town.equippedItems.length>0) {
-    sy+=4; ctx.fillStyle='#64748b'; ctx.font='bold 8px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+    sy+=4; ctx.fillStyle='#a5b4fc'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
     ctx.fillText('장착 중인 아이템:',8,sy); sy+=11;
     const icons=gs.town.equippedItems.map(id=>HERO_EQUIPMENT_POOL.find(e=>e.id===id)).filter(Boolean);
     ctx.font='14px sans-serif'; ctx.textBaseline='top';
@@ -1205,7 +1205,7 @@ function renderTitleScreen(ctx, alpha) {
   ctx.fillStyle = 'rgba(255,255,255,0.35)';
   ctx.font = '9px monospace';
   ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
-  ctx.fillText('v0.1.1.5', CW - 8, by - 6);
+  ctx.fillText('v0.1.1.6', CW - 8, by - 6);
 
   ctx.restore();
 }
