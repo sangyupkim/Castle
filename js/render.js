@@ -469,13 +469,9 @@ function renderHirePhase(ctx, gs) {
   }
 
   // 경고 / 안내
-  const hasUnit = battle.ourTeam.length > 0;
   const hasHero = gs.hero.placement !== 'none';
   ctx.font='9px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='bottom';
-  if (!hasUnit) {
-    ctx.fillStyle='#f87171';
-    ctx.fillText('⚠️ 병력을 최소 1명 고용해야 웨이브 시작 가능', CW/2, BATTLE_Y+BATTLE_H-6);
-  } else if (!hasHero) {
+  if (!hasHero) {
     ctx.fillStyle='#fbbf24';
     ctx.fillText('💡 영웅 배치를 선택하세요 (상단/하단)', CW/2, BATTLE_Y+BATTLE_H-6);
   } else {
@@ -1127,13 +1123,12 @@ function renderArmyScreen(ctx, gs, startY) {
   }
 
   // Deploy button
-  const hasUnit=battle.ourTeam.length>0;
   const dbY=ay+slotH+8, dbW=CW-12, dbH=36;
   roundRect(ctx,6,dbY,dbW,dbH,8);
-  ctx.fillStyle=hasUnit?'#166534':'#1e293b'; ctx.fill();
-  ctx.strokeStyle=hasUnit?'#22c55e':'#374151'; ctx.lineWidth=2; ctx.stroke();
-  ctx.fillStyle=hasUnit?'#ffffff':'#475569'; ctx.font='bold 14px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText(hasUnit?'▶ 웨이브 시작!':'병력 필요 (최소 1명)',6+dbW/2,dbY+dbH/2);
+  ctx.fillStyle='#166534'; ctx.fill();
+  ctx.strokeStyle='#22c55e'; ctx.lineWidth=2; ctx.stroke();
+  ctx.fillStyle='#ffffff'; ctx.font='bold 14px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('▶ 웨이브 시작!',6+dbW/2,dbY+dbH/2);
   gs.ui.deployBtn={x:6,y:dbY,w:dbW,h:dbH};
 }
 
@@ -1342,13 +1337,12 @@ function renderTownPageArmy(ctx, gs, startY) {
   }
   y+=slotH+10;
 
-  const hasUnit=battle.ourTeam.some(u=>!u.isHero);
   roundRect(ctx,6,y,CW-12,44,8);
-  ctx.fillStyle=hasUnit?'#15803d':'#1e293b'; ctx.fill();
-  ctx.strokeStyle=hasUnit?'#22c55e':'#374151'; ctx.lineWidth=2; ctx.stroke();
-  ctx.fillStyle=hasUnit?'#fff':'#64748b'; ctx.font='bold 15px sans-serif';
+  ctx.fillStyle='#15803d'; ctx.fill();
+  ctx.strokeStyle='#22c55e'; ctx.lineWidth=2; ctx.stroke();
+  ctx.fillStyle='#fff'; ctx.font='bold 15px sans-serif';
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText(hasUnit?'▶ 출전! 웨이브 시작':'⚠️ 병력을 먼저 고용하세요',6+(CW-12)/2,y+22);
+  ctx.fillText('▶ 출전! 웨이브 시작',6+(CW-12)/2,y+22);
   gs.ui.deployBtn={x:6,y,w:CW-12,h:44};
 }
 

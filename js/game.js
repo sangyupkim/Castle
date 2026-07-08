@@ -338,8 +338,7 @@ function handleTownTap(x,y) {
       }
     }
     if (hitTest(x,y,gs.ui.deployBtn||{})) {
-      if (gs.battle.ourTeam.length>0) { gs.page='battle'; wm.startWave(gs); gs.waveActive=true; }
-      else spawnFloaty('병력 필요!',CW/2,400,'#ef4444');
+      gs.page='battle'; wm.startWave(gs); gs.waveActive=true;
       return;
     }
   }

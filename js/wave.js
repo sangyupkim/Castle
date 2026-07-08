@@ -34,7 +34,6 @@ function createWaveManager() {
 
     startWave(gs) {
       if (this.phase !== 'idle') return;
-      if (!gs.battle.ourTeam.length) return;
 
       this.phase      = 'active';
       this.elapsed    = 0;
