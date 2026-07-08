@@ -189,7 +189,7 @@ function createWaveManager() {
         gs.upgradePick = { active: true, cards: rollUpgradeCards() };
       } else {
         this.phase = 'intermission';
-        this.intermissionTimer = INTERMISSION;
+        this.intermissionTimer = 0;
       }
 
       gs.town.waveBuffs = [];
@@ -200,7 +200,7 @@ function createWaveManager() {
     confirmPick(gs) {
       gs.upgradePick = { active: false, cards: [] };
       this.phase = 'intermission';
-      this.intermissionTimer = INTERMISSION;
+      this.intermissionTimer = 0;
     },
 
     updateIntermission(gs, dt) {
