@@ -195,8 +195,12 @@ function tap({x,y}) {
     }
   }
 
-  // Idle phase: town screen
+  // Idle phase: wave start buttons (UIBar or battle area)
   if (wm.phase==='idle') {
+    if (hitTest(x,y,gs.ui.waveBtn||{}) || hitTest(x,y,gs.ui.battleWaveStartBtn||{})) {
+      wm.startWave(gs); gs.waveActive=true;
+      return;
+    }
     handleTownTap(x,y);
     return;
   }
@@ -210,6 +214,10 @@ function handleTownTap(x,y) {
 
   // Building sub-screen
   if (t.screen!=='main') {
+    // Tab buttons work even inside sub-screen
+    if (hitTest(x,y,gs.ui.tabTownBtn||{}))   { t.screen='main'; t.tab='town'; return; }
+    if (hitTest(x,y,gs.ui.tabArmyBtn||{}))   { t.screen='main'; t.tab='army'; return; }
+    if (hitTest(x,y,gs.ui.tabTowersBtn||{})) { t.screen='main'; t.tab='towers'; gs.ui.towerAction=null; return; }
     if (hitTest(x,y,gs.ui.townBackBtn||{})) { t.screen='main'; return; }
     if (t.screen==='heroShop') {
       for (const btn of gs.ui.shopItemBtns||[]) {

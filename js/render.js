@@ -266,8 +266,7 @@ function renderUIBar(ctx, gs, wm) {
   } else if (wm.phase==='intermission') {
     drawBtn(ctx,bx,by2,bw,bh,`인터미션 ${Math.ceil(wm.intermissionTimer)}s`,'#1e293b','#475569',false);
   } else {
-    // idle - deploy button is in town army tab
-    drawBtn(ctx,bx,by2,bw,bh,'🏰 마을 준비 중','#0f172a','#334155',false);
+    drawBtn(ctx,bx,by2,bw,bh,'▶ 웨이브 시작','#15803d','#22c55e',true);
   }
   gs.ui.waveBtn={x:bx,y:by2,w:bw,h:bh};
 }
@@ -277,13 +276,22 @@ function renderBattle(ctx, gs) {
   ctx.fillStyle='#0a1520'; ctx.fillRect(0,BATTLE_Y,CW,BATTLE_H);
 
   if (wm.phase==='idle') {
-    // Town is now a separate full-screen page; just show navigation hint
     ctx.fillStyle='#1e293b'; ctx.fillRect(0,BATTLE_Y,CW,BATTLE_H);
-    ctx.fillStyle='#475569'; ctx.font='bold 13px sans-serif';
+    // 웨이브 시작 큰 버튼
+    const wsbW=CW-40, wsbH=54, wsbX=20, wsbY=BATTLE_Y+20;
+    roundRect(ctx,wsbX,wsbY,wsbW,wsbH,10);
+    ctx.fillStyle='#14532d'; ctx.fill();
+    ctx.strokeStyle='#22c55e'; ctx.lineWidth=2; ctx.stroke();
+    ctx.fillStyle='#fff'; ctx.font='bold 18px sans-serif';
     ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText('기지(🏰)를 탭하여 마을로 이동',CW/2,BATTLE_Y+BATTLE_H/2-12);
+    ctx.fillText('▶ 웨이브 시작',CW/2,wsbY+wsbH/2);
+    gs.ui.battleWaveStartBtn={x:wsbX,y:wsbY,w:wsbW,h:wsbH};
+    // 마을 이동 안내
+    ctx.fillStyle='#475569'; ctx.font='11px sans-serif';
+    ctx.textBaseline='top';
+    ctx.fillText('기지(🏰)를 탭하면 마을에서 준비할 수 있어요',CW/2,wsbY+wsbH+14);
     ctx.fillStyle='#334155'; ctx.font='10px sans-serif';
-    ctx.fillText('병력 고용 · 건물 건설 · 타워 배치',CW/2,BATTLE_Y+BATTLE_H/2+12);
+    ctx.fillText('병력 고용 · 건물 건설 · 타워 배치',CW/2,wsbY+wsbH+32);
   } else if (wm.phase==='upgradePick') {
     ctx.fillStyle='#080d18'; ctx.fillRect(0,BATTLE_Y,CW,BATTLE_H);
   } else {
