@@ -218,10 +218,13 @@ function renderUIBar(ctx, gs, wm) {
 
   const cy=UIBAR_Y+UIBAR_H/2;
 
-  // 웨이브
-  ctx.fillStyle=COLORS.text; ctx.font='bold 11px sans-serif';
+  // 스테이지 / 웨이브
+  const si = getStageInfo(gs.wave);
+  ctx.fillStyle=COLORS.text; ctx.font='bold 12px sans-serif';
   ctx.textAlign='left'; ctx.textBaseline='middle';
-  ctx.fillText(`웨이브 ${gs.wave+1}/${WAVE_DEFS.length}`, 8, cy-8);
+  ctx.fillText(`스테이지 ${si.stageLabel}`, 8, cy-8);
+  ctx.fillStyle='#94a3b8'; ctx.font='10px sans-serif';
+  ctx.fillText(`웨이브 ${si.waveInStage+1}/3`, 8, cy+5);
 
   // 타이머
   const tv = wm.phase==='active'       ? Math.ceil(wm.timer)
@@ -716,79 +719,129 @@ function renderUpgradePick(ctx, gs) {
   });
 }
 
-// ─── 메타 업그레이드 화면 ────────────────────────────────────────────────────
+// ─── 스킬 트리 화면 ──────────────────────────────────────────────────────────
 function renderMetaScreen(ctx, gs) {
-  ctx.fillStyle='rgba(5,5,20,0.96)'; ctx.fillRect(0,0,CW,CH);
+  ctx.fillStyle='rgba(4,8,20,0.97)'; ctx.fillRect(0,0,CW,CH);
 
-  // 헤더
-  ctx.fillStyle='#a78bfa'; ctx.font='bold 18px sans-serif';
+  // Header
+  ctx.fillStyle='#a78bfa'; ctx.font='bold 16px sans-serif';
   ctx.textAlign='center'; ctx.textBaseline='top';
-  ctx.fillText('💎 영구 강화', CW/2, 12);
-  ctx.fillStyle='#c4b5fd'; ctx.font='12px sans-serif';
-  ctx.fillText(`보유 영혼석: ${gs.soulStones}`, CW/2, 36);
+  ctx.fillText('💎 스킬 트리', CW/2, 10);
+  ctx.fillStyle='#f59e0b'; ctx.font='bold 12px sans-serif';
+  ctx.fillText(`보석: ${gs.soulStones}`, CW/2, 32);
 
-  const upgs = META_UPGRADES;
-  const cw2=210, ch2=48, cols=2, gap=6;
-  const gridW = cols*cw2+(cols-1)*gap;
-  const startX = (CW-gridW)/2;
-  const startY = 60;
-
-  gs.ui.metaCards = [];
-
-  upgs.forEach((upg, i) => {
-    const col = i % cols, row = Math.floor(i / cols);
-    const cx = startX + col*(cw2+gap);
-    const cy = startY + row*(ch2+gap);
-    const curLv = gs.metaUpgrades[upg.id] || 0;
-    const maxed = curLv >= upg.maxLv;
-    const cost  = upg.cost * (curLv+1);
-    const canBuy= !maxed && gs.soulStones >= cost;
-
-    roundRect(ctx, cx, cy, cw2, ch2, 6);
-    ctx.fillStyle = maxed ? '#14120a' : canBuy ? '#0d1a2e' : '#0f0f1a';
-    ctx.fill();
-    ctx.strokeStyle = maxed ? '#f59e0b' : canBuy ? '#6366f1' : '#374151';
-    ctx.lineWidth=1.5; ctx.stroke();
-
-    ctx.font='14px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
-    ctx.fillText(upg.icon, cx+6, cy+8);
-
-    ctx.fillStyle='#e2e8f0'; ctx.font='bold 9px sans-serif';
-    ctx.fillText(upg.name, cx+24, cy+8);
-
-    ctx.fillStyle='#64748b'; ctx.font='8px sans-serif';
-    ctx.fillText(curLv>0 ? upg.desc(curLv) : '미구매', cx+24, cy+22);
-
-    // 레벨 점
-    for (let l=0; l<upg.maxLv; l++) {
-      ctx.beginPath(); ctx.arc(cx+24+l*10, cy+36, 3.5, 0, Math.PI*2);
-      ctx.fillStyle = l<curLv ? '#f59e0b' : '#334155'; ctx.fill();
-    }
-
-    if (!maxed) {
-      const bw=52, bh=18;
-      roundRect(ctx, cx+cw2-bw-4, cy+(ch2-bh)/2, bw, bh, 4);
-      ctx.fillStyle = canBuy ? '#4f46e5' : '#1e293b'; ctx.fill();
-      ctx.fillStyle = canBuy ? '#a5b4fc' : '#475569';
-      ctx.font='8px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText(`${cost}💎`, cx+cw2-bw/2-4, cy+ch2/2);
-      gs.ui.metaCards.push({x:cx, y:cy, w:cw2, h:ch2, upg});
-    } else {
-      ctx.fillStyle='#f59e0b'; ctx.font='bold 8px sans-serif';
-      ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText('MAX', cx+cw2-30, cy+ch2/2);
-    }
+  // 3 tree tabs
+  const tabs = [
+    { id:'tower',   label:'🏹 타워', color:'#22c55e' },
+    { id:'hero',    label:'👑 영웅', color:'#f59e0b' },
+    { id:'support', label:'⚙️ 보조', color:'#60a5fa' },
+  ];
+  const tabW = (CW-16)/3, tabH = 32, tabY = 52;
+  if (!gs.ui.metaTab) gs.ui.metaTab = 'tower';
+  tabs.forEach((tab, i) => {
+    const tx = 8 + i*(tabW+4);
+    const active = gs.ui.metaTab === tab.id;
+    roundRect(ctx, tx, tabY, tabW, tabH, 5);
+    ctx.fillStyle = active ? '#1e293b' : '#0a0d18'; ctx.fill();
+    ctx.strokeStyle = active ? tab.color : '#334155'; ctx.lineWidth = active ? 2 : 1; ctx.stroke();
+    ctx.fillStyle = active ? tab.color : '#64748b'; ctx.font='bold 11px sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(tab.label, tx+tabW/2, tabY+tabH/2);
+    if (tab.id==='tower') gs.ui.towerTabBtn = {x:tx,y:tabY,w:tabW,h:tabH};
+    else if (tab.id==='hero') gs.ui.heroTabBtn = {x:tx,y:tabY,w:tabW,h:tabH};
+    else gs.ui.supportTabBtn = {x:tx,y:tabY,w:tabW,h:tabH};
   });
 
-  // 시작 버튼
-  const btnY = startY + Math.ceil(upgs.length/cols)*(ch2+gap) + 8;
-  const bw=200, bh=38, bx=(CW-bw)/2;
-  roundRect(ctx, bx, btnY, bw, bh, 8);
+  // Draw the active tree
+  const treeKey = gs.ui.metaTab || 'tower';
+  const tree = SKILL_TREES[treeKey];
+  gs.ui.metaCards = [];
+  _renderSkillTree(ctx, gs, tree, 92);
+
+  // Start button at bottom
+  const bw=200, bh=40, bx=(CW-bw)/2, btnY=CH-52;
+  roundRect(ctx,bx,btnY,bw,bh,8);
   ctx.fillStyle='#22c55e'; ctx.fill();
   ctx.fillStyle='#0f172a'; ctx.font='bold 14px sans-serif';
   ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.fillText('▶ 새 게임 시작', bx+bw/2, btnY+bh/2);
-  gs.ui.metaStartBtn = {x:bx, y:btnY, w:bw, h:bh};
+  gs.ui.metaStartBtn={x:bx,y:btnY,w:bw,h:bh};
+}
+
+function _renderSkillTree(ctx, gs, tree, startY) {
+  const nodeW=110, nodeH=68, hGap=15, vGap=40;
+  const totalW = 3*nodeW + 2*hGap;
+  const offX = (CW - totalW) / 2;
+
+  const getPos = (row, col) => ({
+    x: offX + col*(nodeW+hGap),
+    y: startY + row*(nodeH+vGap)
+  });
+
+  const owned = gs.skillTreeOwned || [];
+
+  // Draw connection lines first
+  for (const skill of tree.skills) {
+    if (!skill.req) continue;
+    const parent = tree.skills.find(s => s.id === skill.req);
+    if (!parent) continue;
+    const pp = getPos(parent.row, parent.col);
+    const cp = getPos(skill.row, skill.col);
+    const canReach = owned.includes(skill.req);
+    ctx.strokeStyle = canReach ? (owned.includes(skill.id) ? '#22c55e' : '#334155') : '#1e293b';
+    ctx.lineWidth = 2;
+    ctx.setLineDash(canReach ? [] : [4,4]);
+    ctx.beginPath();
+    ctx.moveTo(pp.x+nodeW/2, pp.y+nodeH);
+    ctx.lineTo(cp.x+nodeW/2, cp.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Draw nodes
+  for (const skill of tree.skills) {
+    const {x,y} = getPos(skill.row, skill.col);
+    const isOwned = owned.includes(skill.id);
+    const reqMet = !skill.req || owned.includes(skill.req);
+    const canBuy = !isOwned && reqMet && gs.soulStones >= skill.cost;
+
+    roundRect(ctx,x,y,nodeW,nodeH,8);
+    ctx.fillStyle = isOwned ? '#0d2a1a' : canBuy ? '#0d1929' : '#080d18'; ctx.fill();
+    ctx.strokeStyle = isOwned ? tree.color : canBuy ? '#4b6cb7' : '#1e293b';
+    ctx.lineWidth = isOwned ? 2.5 : canBuy ? 2 : 1; ctx.stroke();
+
+    ctx.font='22px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.globalAlpha = reqMet ? 1.0 : 0.35;
+    ctx.fillText(skill.icon, x+nodeW/2, y+5);
+
+    ctx.fillStyle = isOwned ? tree.color : reqMet ? '#e2e8f0' : '#475569';
+    ctx.font='bold 9px sans-serif'; ctx.textBaseline='top';
+    ctx.fillText(skill.name, x+nodeW/2, y+30);
+
+    ctx.fillStyle = isOwned ? '#86efac' : reqMet ? '#94a3b8' : '#374151';
+    ctx.font='8px sans-serif';
+    const descWords = skill.desc.split(',');
+    if (descWords.length > 1) {
+      ctx.fillText(descWords[0]+',', x+nodeW/2, y+42);
+      ctx.fillText(descWords[1].trim(), x+nodeW/2, y+52);
+    } else {
+      ctx.fillText(skill.desc, x+nodeW/2, y+44);
+    }
+
+    if (isOwned) {
+      ctx.fillStyle='#22c55e'; ctx.font='bold 9px sans-serif';
+      ctx.fillText('✓ 습득', x+nodeW/2, y+nodeH-8);
+    } else if (reqMet) {
+      const costColor = canBuy ? '#f59e0b' : '#64748b';
+      ctx.fillStyle=costColor; ctx.font='bold 9px sans-serif';
+      ctx.fillText(`💎 ${skill.cost}`, x+nodeW/2, y+nodeH-8);
+      gs.ui.metaCards.push({x,y,w:nodeW,h:nodeH,skillId:skill.id,icon:skill.icon});
+    } else {
+      ctx.fillStyle='#374151'; ctx.font='8px sans-serif';
+      ctx.fillText('🔒 선행 필요', x+nodeW/2, y+nodeH-8);
+    }
+    ctx.globalAlpha = 1.0;
+  }
 }
 
 // ─── 마을 화면 라우터 ────────────────────────────────────────────────────────────
@@ -1514,7 +1567,7 @@ function renderTitleScreen(ctx, alpha) {
   ctx.fillStyle = 'rgba(255,255,255,0.35)';
   ctx.font = '9px monospace';
   ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
-  ctx.fillText('v0.1.2.0', CW - 8, by - 6);
+  ctx.fillText('v0.2.0.0', CW - 8, by - 6);
 
   ctx.restore();
 }

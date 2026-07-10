@@ -183,7 +183,7 @@ function applyTownUpgrades(gs) {
 
 function reapplyAllBonuses(gs) {
   resetBonuses();
-  applyMetaUpgrades(gs);
+  applySkillTree(gs);
   applyTownUpgrades(gs);
   if (gs.battle) gs.battle.maxSlots=4+BONUSES.maxSlotBonus;
 }

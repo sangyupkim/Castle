@@ -194,6 +194,21 @@ function createWaveManager() {
 
       gs.town.waveBuffs = [];
       reapplyAllBonuses(gs);
+
+      // Stage completion gem reward
+      const stageIdx = Math.floor(this.waveIndex / 3);
+      const isLastWaveOfStage = ((this.waveIndex + 1) % 3 === 0);
+      if (isLastWaveOfStage) {
+        if (!gs.clearedStages) gs.clearedStages = new Array(10).fill(false);
+        if (!gs.clearedStages[stageIdx]) {
+          gs.clearedStages[stageIdx] = true;
+          const isBoss = stageIdx === 9;
+          const gems = isBoss ? 2 : 1;
+          gs.soulStones += gems;
+          addLog(gs.battle, `★ 1-${stageIdx+1} 클리어! 보석 +${gems}`, '#a78bfa');
+        }
+      }
+
       SaveManager.save(gs);
     },
 

@@ -109,39 +109,51 @@ const UPGRADE_CARDS = [
     apply: b => { b.hireCostDiscount += 1; } },
 ];
 
-// ─── 메타 업그레이드 정의 ──────────────────────────────────────────────────────
-const META_UPGRADES = [
-  { id:'m_base_hp',    name:'기지 증축',    icon:'🏰', cat:'base',     maxLv:5, cost:10,
-    desc: lv => `기지 최대 HP +${lv*20}` },
-  { id:'m_base_def',   name:'철벽 방어구',  icon:'🏰', cat:'base',     maxLv:4, cost:15,
-    desc: lv => `기지 피해 -${lv*5}%` },
-  { id:'m_base_regen', name:'긴급 수리',    icon:'🏰', cat:'base',     maxLv:3, cost:25,
-    desc: lv => `웨이브 시작 HP +${lv*10}` },
-  { id:'m_slot',       name:'훈련소 확장',  icon:'⚔️', cat:'unit',     maxLv:2, cost:20,
-    desc: lv => `병력 슬롯 +${lv}` },
-  { id:'m_unit_atk',   name:'전투 훈련',    icon:'⚔️', cat:'unit',     maxLv:5, cost:12,
-    desc: lv => `아군 공격력 +${lv*2}` },
-  { id:'m_unit_hp',    name:'체력 강화',    icon:'⚔️', cat:'unit',     maxLv:5, cost:12,
-    desc: lv => `아군 HP +${lv*10}` },
-  { id:'m_hire_cost',  name:'고용 할인',    icon:'⚔️', cat:'unit',     maxLv:3, cost:20,
-    desc: lv => `고용 비용 -${lv}` },
-  { id:'m_tower_dmg',  name:'정밀 조준',    icon:'🏹', cat:'tower',    maxLv:5, cost:10,
-    desc: lv => `타워 공격력 +${lv*2}` },
-  { id:'m_tower_spd',  name:'연사 기계',    icon:'🏹', cat:'tower',    maxLv:4, cost:15,
-    desc: lv => `타워 공속 +${lv*15}%` },
-  { id:'m_tower_cost', name:'요새화',       icon:'🏹', cat:'tower',    maxLv:3, cost:20,
-    desc: lv => `타워 건설비용 -${lv}` },
-  { id:'m_hero_exp',   name:'영웅 훈련',    icon:'👑', cat:'hero',     maxLv:3, cost:10,
-    desc: lv => `영웅 시작 EXP +${lv*20}` },
-  { id:'m_hero_revive',name:'빠른 부활',    icon:'👑', cat:'hero',     maxLv:4, cost:15,
-    desc: lv => `부활 시간 -${lv*2}초` },
-  { id:'m_hero_stat',  name:'영웅의 유산',  icon:'👑', cat:'hero',     maxLv:3, cost:30,
-    desc: lv => `영웅 스탯 +${lv*10}%` },
-  { id:'m_start_gold', name:'시작 자금',    icon:'💰', cat:'resource', maxLv:5, cost:8,
-    desc: lv => `초기 골드 +${lv*5}` },
-  { id:'m_kill_gold',  name:'처치 보너스',  icon:'💰', cat:'resource', maxLv:4, cost:15,
-    desc: lv => `전투 골드 +${lv*10}%` },
-];
+// ─── 스킬 트리 정의 ────────────────────────────────────────────────────────────
+const SKILL_TREES = {
+  tower: {
+    name: '타워', icon: '🏹', color: '#22c55e',
+    skills: [
+      { id:'tw_s1', name:'정밀 조준',   icon:'🎯', cost:1, req:null,   row:0, col:1, desc:'타워 공격력 +6',        apply:b=>{ b.towerDmg+=6; } },
+      { id:'tw_s2', name:'강화 화살',   icon:'🏹', cost:1, req:'tw_s1', row:1, col:0, desc:'타워 공격력 +12',       apply:b=>{ b.towerDmg+=12; } },
+      { id:'tw_s3', name:'속사',        icon:'⚡', cost:1, req:'tw_s1', row:1, col:1, desc:'타워 공속 +25%',        apply:b=>{ b.towerSpdMult*=1.25; } },
+      { id:'tw_s4', name:'요새화',      icon:'🏗️', cost:1, req:'tw_s1', row:1, col:2, desc:'타워 건설 비용 -3',     apply:b=>{ b.towerCostDiscount+=3; } },
+      { id:'tw_s5', name:'저격 강화',   icon:'👁️', cost:2, req:'tw_s2', row:2, col:0, desc:'사거리 +25%, 공격력 +8',apply:b=>{ b.towerRangeMult*=1.25; b.towerDmg+=8; } },
+      { id:'tw_s6', name:'연사 기계',   icon:'⚡', cost:2, req:'tw_s3', row:2, col:1, desc:'타워 공속 +40%',        apply:b=>{ b.towerSpdMult*=1.40; } },
+      { id:'tw_s7', name:'비용 절감',   icon:'💰', cost:2, req:'tw_s4', row:2, col:2, desc:'타워 건설 비용 -4, 사거리+15%',apply:b=>{ b.towerCostDiscount+=4; b.towerRangeMult*=1.15; } },
+      { id:'tw_s8', name:'폭발 화살',   icon:'💥', cost:3, req:'tw_s5', row:3, col:0, desc:'타워 범위 피해 + 공격력+15', apply:b=>{ b.towerSplash=true; b.towerDmg+=15; } },
+      { id:'tw_s9', name:'타워 마스터', icon:'🌟', cost:3, req:'tw_s6', row:3, col:1, desc:'공속 +30%, 공격력 +20',  apply:b=>{ b.towerSpdMult*=1.30; b.towerDmg+=20; } },
+    ]
+  },
+  hero: {
+    name: '영웅', icon: '👑', color: '#f59e0b',
+    skills: [
+      { id:'hr_s1', name:'영웅 훈련',   icon:'⚔️', cost:1, req:null,   row:0, col:1, desc:'영웅 공격력 +8',         apply:b=>{ b.heroAtk+=8; } },
+      { id:'hr_s2', name:'투사',        icon:'🗡️', cost:1, req:'hr_s1', row:1, col:0, desc:'영웅 공격력 +15',        apply:b=>{ b.heroAtk+=15; } },
+      { id:'hr_s3', name:'재생',        icon:'💚', cost:1, req:'hr_s1', row:1, col:1, desc:'영웅 HP 재생 +5/틱',      apply:b=>{ b.heroRegen+=5; } },
+      { id:'hr_s4', name:'경험 축적',   icon:'📖', cost:1, req:'hr_s1', row:1, col:2, desc:'영웅 시작 EXP +40',       apply:b=>{ b.heroStartExp+=40; } },
+      { id:'hr_s5', name:'신의 강림',   icon:'👑', cost:2, req:'hr_s2', row:2, col:0, desc:'영웅 모든 스탯 +20%',     apply:b=>{ b.heroStatMult*=1.20; b.heroAtk+=10; } },
+      { id:'hr_s6', name:'영웅의 오라', icon:'✨', cost:2, req:'hr_s3', row:2, col:1, desc:'아군 방어력 오라 +5',      apply:b=>{ b.heroAura+=5; } },
+      { id:'hr_s7', name:'빠른 성장',   icon:'⬆️', cost:2, req:'hr_s4', row:2, col:2, desc:'영웅 EXP +80%, 시작EXP+30',apply:b=>{ b.heroExpMult*=1.80; b.heroStartExp+=30; } },
+      { id:'hr_s8', name:'불사의 영웅', icon:'🔮', cost:3, req:'hr_s5', row:3, col:0, desc:'영웅 즉시 부활',           apply:b=>{ b.heroInstantRevive=true; } },
+      { id:'hr_s9', name:'영웅 전설',   icon:'🌟', cost:3, req:'hr_s6', row:3, col:1, desc:'스탯 +25%, 오라 +8',       apply:b=>{ b.heroStatMult*=1.25; b.heroAura+=8; } },
+    ]
+  },
+  support: {
+    name: '보조', icon: '⚙️', color: '#60a5fa',
+    skills: [
+      { id:'sp_s1', name:'기지 강화',   icon:'🏰', cost:1, req:null,   row:0, col:1, desc:'기지 최대HP +30',         apply:b=>{ b.baseHpMax+=30; } },
+      { id:'sp_s2', name:'철옹성',      icon:'🛡️', cost:1, req:'sp_s1', row:1, col:0, desc:'기지 피해 -15%',          apply:b=>{ b.baseDefPct+=0.15; } },
+      { id:'sp_s3', name:'병력 강화',   icon:'⚔️', cost:1, req:'sp_s1', row:1, col:1, desc:'아군 공격력 +5, HP +20',   apply:b=>{ b.unitAtk+=5; b.unitHp+=20; } },
+      { id:'sp_s4', name:'황금 광맥',   icon:'💰', cost:1, req:'sp_s1', row:1, col:2, desc:'전투 골드 +25%',           apply:b=>{ b.battleGoldMult*=1.25; } },
+      { id:'sp_s5', name:'난공불락',    icon:'🏰', cost:2, req:'sp_s2', row:2, col:0, desc:'기지 피해 -20%, HP +40',    apply:b=>{ b.baseDefPct+=0.20; b.baseHpMax+=40; } },
+      { id:'sp_s6', name:'정예 부대',   icon:'🔥', cost:2, req:'sp_s3', row:2, col:1, desc:'아군 공격력+10, 슬롯+1',    apply:b=>{ b.unitAtk+=10; b.maxSlotBonus+=1; } },
+      { id:'sp_s7', name:'엘도라도',    icon:'🌟', cost:2, req:'sp_s4', row:2, col:2, desc:'전투 골드 +40%, 초기골드+25',apply:b=>{ b.battleGoldMult*=1.40; b.startGoldBonus+=25; } },
+      { id:'sp_s8', name:'성채',        icon:'🏯', cost:3, req:'sp_s5', row:3, col:0, desc:'기지 피해 -30%, 최대HP+50', apply:b=>{ b.baseDefPct+=0.30; b.baseHpMax+=50; } },
+      { id:'sp_s9', name:'병력 만개',   icon:'⚔️', cost:3, req:'sp_s6', row:3, col:1, desc:'아군 ATK+15, HP+30, 슬롯+1',apply:b=>{ b.unitAtk+=15; b.unitHp+=30; b.maxSlotBonus+=1; } },
+    ]
+  }
+};
 
 // ─── 랜덤 카드 3장 뽑기 ──────────────────────────────────────────────────────
 function rollUpgradeCards() {
@@ -170,27 +182,31 @@ function applyUpgradeCard(card, gs) {
   gs.battle.maxSlots = 4 + BONUSES.maxSlotBonus;
 }
 
-// ─── 메타 업그레이드를 BONUSES에 반영 ────────────────────────────────────────
-function applyMetaUpgrades(gs) {
-  const mu = gs.metaUpgrades;
-  const b  = BONUSES;
-  const lv = id => mu[id] || 0;
+// ─── 스킬 트리를 BONUSES에 반영 ──────────────────────────────────────────────
+function applySkillTree(gs) {
+  const owned = gs.skillTreeOwned || [];
+  for (const tree of Object.values(SKILL_TREES)) {
+    for (const skill of tree.skills) {
+      if (owned.includes(skill.id)) skill.apply(BONUSES);
+    }
+  }
+}
 
-  b.baseHpMax          += lv('m_base_hp') * 20;
-  b.baseDefPct         += lv('m_base_def') * 0.05;
-  b.baseRegen          += lv('m_base_regen') * 10;
-  b.maxSlotBonus       += lv('m_slot');
-  b.unitAtk            += lv('m_unit_atk') * 2;
-  b.unitHp             += lv('m_unit_hp') * 10;
-  b.hireCostDiscount   += lv('m_hire_cost');
-  b.towerDmg           += lv('m_tower_dmg') * 2;
-  b.towerSpdMult       *= (1 + lv('m_tower_spd') * 0.15);
-  b.towerCostDiscount  += lv('m_tower_cost');
-  b.heroStartExp       += lv('m_hero_exp') * 20;
-  b.heroReviveReduction += lv('m_hero_revive') * 2;
-  b.heroStatMult       *= (1 + lv('m_hero_stat') * 0.10);
-  b.startGoldBonus     += lv('m_start_gold') * 5;
-  b.battleGoldMult     *= (1 + lv('m_kill_gold') * 0.10);
+function buySkillNode(skillId, gs) {
+  let found = null;
+  for (const tree of Object.values(SKILL_TREES)) {
+    const s = tree.skills.find(sk => sk.id === skillId);
+    if (s) { found = s; break; }
+  }
+  if (!found) return false;
+  if ((gs.skillTreeOwned||[]).includes(skillId)) return false;
+  if (found.req && !(gs.skillTreeOwned||[]).includes(found.req)) return false;
+  if (gs.soulStones < found.cost) return false;
+  gs.soulStones -= found.cost;
+  if (!gs.skillTreeOwned) gs.skillTreeOwned = [];
+  gs.skillTreeOwned.push(skillId);
+  reapplyAllBonuses(gs);
+  return true;
 }
 
 // ─── 영혼석 계산 ──────────────────────────────────────────────────────────────
@@ -201,13 +217,3 @@ function calcSoulStones(gs) {
   return Math.max(1, wavesCleared * 5 + hpBonus + caveBonus);
 }
 
-// ─── 메타 업그레이드 구매 ─────────────────────────────────────────────────────
-function buyMetaUpgrade(upg, gs) {
-  const curLv = gs.metaUpgrades[upg.id] || 0;
-  if (curLv >= upg.maxLv) return false;
-  const cost = upg.cost * (curLv + 1); // 단계마다 비용 증가
-  if (gs.soulStones < cost) return false;
-  gs.soulStones -= cost;
-  gs.metaUpgrades[upg.id] = curLv + 1;
-  return true;
-}

@@ -1,6 +1,6 @@
 'use strict';
 
-const SAVE_KEY = 'dualfrontier_v4';
+const SAVE_KEY = 'dualfrontier_v5';
 
 const SaveManager = {
   load() {
@@ -23,6 +23,8 @@ const SaveManager = {
       totalGoldEarned: gs.battle.totalGoldEarned,
       soulStones:  gs.soulStones  || 0,
       metaUpgrades: gs.metaUpgrades || {},
+      clearedStages: gs.clearedStages || new Array(10).fill(false),
+      skillTreeOwned: gs.skillTreeOwned || [],
       townBuildings: JSON.parse(JSON.stringify(gs.town?.buildings || {})),
       townEquipped:  gs.town?.equippedItems || [],
       timestamp:  Date.now()

@@ -38,8 +38,10 @@ let _titleScreen = true;  // 앱 시작 시 타이틀 화면 표시
 let _titleAlpha  = 1;     // 페이드아웃용
 
 // ─── 영구 데이터 (런 초기화 후에도 유지) ─────────────────────────────────────
-let _soulStones   = 0;
-let _metaUpgrades = {};
+let _soulStones    = 0;
+let _metaUpgrades  = {};
+let _clearedStages = new Array(10).fill(false);
+let _skillTreeOwned = [];
 
 // ─── 초기 상태 ────────────────────────────────────────────────────────────────
 function newState() {
@@ -67,12 +69,16 @@ function newState() {
     activeUpgrades: [],
     hoveredCell:null,
     floaties:[],
-    ui:{ waveBtn:{}, hireCards:[], hiredSlots:[], heroDefBtn:{}, heroBatBtn:{}, metaCards:[], metaStartBtn:{} },
+    ui:{ waveBtn:{}, hireCards:[], hiredSlots:[], heroDefBtn:{}, heroBatBtn:{}, metaCards:[], metaStartBtn:{}, metaTab:'tower', towerTabBtn:{}, heroTabBtn:{}, supportTabBtn:{} },
     // 영구 데이터 참조
-    get soulStones()   { return _soulStones; },
-    set soulStones(v)  { _soulStones = v; },
-    get metaUpgrades() { return _metaUpgrades; },
-    set metaUpgrades(v){ _metaUpgrades = v; },
+    get soulStones()    { return _soulStones; },
+    set soulStones(v)   { _soulStones = v; },
+    get metaUpgrades()  { return _metaUpgrades; },
+    set metaUpgrades(v) { _metaUpgrades = v; },
+    get clearedStages()  { return _clearedStages; },
+    set clearedStages(v) { _clearedStages = v; },
+    get skillTreeOwned()  { return _skillTreeOwned; },
+    set skillTreeOwned(v) { _skillTreeOwned = v; },
   };
 }
 
@@ -94,8 +100,10 @@ gs.battle = createBattle();
   gs.hero.hp    = HERO_LEVELS[gs.hero.level].hp;
   gs.battle.totalGoldEarned = sv.totalGoldEarned || 0;
   gs.caveLevel  = Math.max(1, Math.min(5, sv.caveLevel||1));
-  _soulStones   = sv.soulStones   || 0;
-  _metaUpgrades = sv.metaUpgrades || {};
+  _soulStones    = sv.soulStones   || 0;
+  _metaUpgrades  = sv.metaUpgrades || {};
+  _clearedStages = sv.clearedStages || new Array(10).fill(false);
+  _skillTreeOwned = sv.skillTreeOwned || [];
   if (sv.townBuildings) {
     for (const [k, v] of Object.entries(sv.townBuildings)) {
       if (gs.town.buildings[k]) gs.town.buildings[k] = v;
@@ -139,10 +147,15 @@ function tap({x,y}) {
   if (tut.active)   { tut.next(); return; }
   if (gs.showMeta)  {
     if (hitTest(x,y,gs.ui.metaStartBtn)) { gs.showMeta=false; resetGame(false); return; }
+    // Tab switching
+    if (hitTest(x,y,gs.ui.towerTabBtn||{}))   { gs.ui.metaTab='tower'; return; }
+    if (hitTest(x,y,gs.ui.heroTabBtn||{}))     { gs.ui.metaTab='hero'; return; }
+    if (hitTest(x,y,gs.ui.supportTabBtn||{}))  { gs.ui.metaTab='support'; return; }
+    // Skill purchase
     for (const card of gs.ui.metaCards||[]) {
       if (hitTest(x,y,card)) {
-        if (buyMetaUpgrade(card.upg,gs)) { SaveManager.save(gs); spawnFloaty(`${card.upg.icon} 구매!`,x,y,'#a78bfa'); }
-        else spawnFloaty('영혼석 부족!',x,y,'#ef4444');
+        if (buySkillNode(card.skillId, gs)) { SaveManager.save(gs); spawnFloaty(`${card.icon} 습득!`,x,y,'#a78bfa'); }
+        else spawnFloaty('보석 부족 또는 선행 필요!',x,y,'#ef4444');
         return;
       }
     }

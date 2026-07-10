@@ -54,7 +54,8 @@ const TOWER_TYPES = {
 // ─── Defense Enemy Types ─────────────────────────────────────────────────────
 const ENEMY_TYPES = {
   goblin: { id:'goblin', name:'고블린', hp:14, spd:1.1, dmg:2,  reward:3, color:'#4ade80', radius:9  },
-  orc:    { id:'orc',    name:'오크',   hp:40, spd:0.7, dmg:6,  reward:8, color:'#818cf8', radius:13 }
+  orc:    { id:'orc',    name:'오크',   hp:40, spd:0.7, dmg:6,  reward:8, color:'#818cf8', radius:13 },
+  boss:   { id:'boss',   name:'던전보스', hp:400, spd:0.4, dmg:20, reward:50, color:'#ef4444', radius:20 }
 };
 const ENEMY_CELL_SPD = CELL_W;
 
@@ -101,39 +102,56 @@ const BATTLE_MOB_TYPES = {
 // ─── 웨이브 정의 ─────────────────────────────────────────────────────────────
 // battleGroups: 하단 전투 그룹 배열. 한 그룹을 전멸시켜야 다음 그룹 등장.
 // 각 그룹은 types 배열 (동시 등장 몬스터 목록)
+// 10 스테이지 × 3 웨이브 = 30 웨이브
 const WAVE_DEFS = [
-  {
-    defenseEnemies: [{ type:'goblin', count:5, interval:1600 }],
-    battleGroups: [
-      { types:['goblin'] },
-      { types:['goblin'] },
-      { types:['goblin', 'goblin'] },
-      { types:['goblin', 'goblin'] },
-    ]
-  },
-  {
-    defenseEnemies: [{ type:'goblin', count:8, interval:1200 }],
-    battleGroups: [
-      { types:['goblin', 'goblin'] },
-      { types:['goblin', 'orc']   },
-      { types:['orc',    'orc']   },
-      { types:['goblin', 'goblin', 'orc'] },
-    ]
-  },
-  {
-    defenseEnemies: [
-      { type:'goblin', count:6, interval:1100 },
-      { type:'orc',    count:2, interval:3000 }
-    ],
-    battleGroups: [
-      { types:['goblin', 'goblin'] },
-      { types:['orc',    'goblin'] },
-      { types:['orc',    'orc']   },
-      { types:['goblin', 'orc',  'goblin'] },
-      { types:['boss'] },
-    ]
-  }
+  // Stage 1-1
+  { defenseEnemies:[{type:'goblin',count:4,interval:2000}], battleGroups:[{types:['goblin']},{types:['goblin']},{types:['goblin','goblin']}] },
+  { defenseEnemies:[{type:'goblin',count:5,interval:1800}], battleGroups:[{types:['goblin']},{types:['goblin','goblin']},{types:['goblin','goblin']}] },
+  { defenseEnemies:[{type:'goblin',count:6,interval:1600}], battleGroups:[{types:['goblin','goblin']},{types:['goblin','goblin']},{types:['goblin','goblin','goblin']}] },
+  // Stage 1-2
+  { defenseEnemies:[{type:'goblin',count:6,interval:1500}], battleGroups:[{types:['goblin','goblin']},{types:['goblin','orc']},{types:['goblin','goblin','goblin']}] },
+  { defenseEnemies:[{type:'goblin',count:7,interval:1400}], battleGroups:[{types:['goblin','orc']},{types:['orc','goblin']},{types:['orc','orc']}] },
+  { defenseEnemies:[{type:'goblin',count:8,interval:1300}], battleGroups:[{types:['orc','goblin']},{types:['orc','orc']},{types:['goblin','orc','goblin']}] },
+  // Stage 1-3
+  { defenseEnemies:[{type:'goblin',count:8,interval:1200},{type:'orc',count:1,interval:5000}], battleGroups:[{types:['orc','orc']},{types:['goblin','orc','goblin']},{types:['orc','orc','goblin']}] },
+  { defenseEnemies:[{type:'goblin',count:9,interval:1100},{type:'orc',count:2,interval:4000}], battleGroups:[{types:['orc','orc']},{types:['orc','orc','goblin']},{types:['boss']}] },
+  { defenseEnemies:[{type:'goblin',count:10,interval:1000},{type:'orc',count:2,interval:3500}], battleGroups:[{types:['goblin','orc','orc']},{types:['orc','orc']},{types:['boss']}] },
+  // Stage 1-4
+  { defenseEnemies:[{type:'goblin',count:8,interval:1000},{type:'orc',count:2,interval:3000}], battleGroups:[{types:['orc','orc']},{types:['boss']},{types:['boss','goblin']}] },
+  { defenseEnemies:[{type:'orc',count:4,interval:2500}], battleGroups:[{types:['orc','orc','goblin']},{types:['boss']},{types:['boss','orc']}] },
+  { defenseEnemies:[{type:'orc',count:5,interval:2200}], battleGroups:[{types:['boss']},{types:['boss','goblin']},{types:['boss','orc']}] },
+  // Stage 1-5
+  { defenseEnemies:[{type:'goblin',count:6,interval:900},{type:'orc',count:3,interval:2200}], battleGroups:[{types:['boss']},{types:['boss','goblin','goblin']},{types:['boss','boss']}] },
+  { defenseEnemies:[{type:'orc',count:5,interval:2000}], battleGroups:[{types:['boss','goblin']},{types:['boss','orc']},{types:['boss','boss']}] },
+  { defenseEnemies:[{type:'goblin',count:8,interval:800},{type:'orc',count:4,interval:2000}], battleGroups:[{types:['boss','boss']},{types:['boss','orc','goblin']},{types:['boss','boss','goblin']}] },
+  // Stage 1-6
+  { defenseEnemies:[{type:'orc',count:6,interval:1800}], battleGroups:[{types:['boss','boss']},{types:['boss','boss','goblin']},{types:['boss','boss','orc']}] },
+  { defenseEnemies:[{type:'goblin',count:10,interval:700},{type:'orc',count:5,interval:1800}], battleGroups:[{types:['boss','boss','goblin']},{types:['boss','boss']},{types:['boss','boss','boss']}] },
+  { defenseEnemies:[{type:'orc',count:7,interval:1600}], battleGroups:[{types:['boss','boss']},{types:['boss','boss','orc']},{types:['boss','boss','boss']}] },
+  // Stage 1-7
+  { defenseEnemies:[{type:'orc',count:7,interval:1500},{type:'goblin',count:8,interval:700}], battleGroups:[{types:['boss','boss','boss']},{types:['boss','boss','orc']},{types:['boss','boss','boss','goblin']}] },
+  { defenseEnemies:[{type:'orc',count:8,interval:1400}], battleGroups:[{types:['boss','boss']},{types:['boss','boss','boss']},{types:['boss','boss','boss','orc']}] },
+  { defenseEnemies:[{type:'orc',count:9,interval:1300}], battleGroups:[{types:['boss','boss','boss']},{types:['boss','boss','boss','goblin']},{types:['boss','boss','boss','boss']}] },
+  // Stage 1-8
+  { defenseEnemies:[{type:'orc',count:8,interval:1200},{type:'goblin',count:10,interval:600}], battleGroups:[{types:['boss','boss','boss']},{types:['boss','boss','boss','orc']},{types:['boss','boss','boss','boss']}] },
+  { defenseEnemies:[{type:'orc',count:10,interval:1100}], battleGroups:[{types:['boss','boss','boss','boss']},{types:['boss','boss','boss']},{types:['boss','boss','boss','boss','goblin']}] },
+  { defenseEnemies:[{type:'orc',count:12,interval:1000}], battleGroups:[{types:['boss','boss','boss','boss']},{types:['boss','boss','boss','boss']},{types:['boss','boss','boss','boss','boss']}] },
+  // Stage 1-9
+  { defenseEnemies:[{type:'orc',count:10,interval:900},{type:'boss',count:1,interval:8000}], battleGroups:[{types:['boss','boss','boss','boss']},{types:['boss','boss','boss','boss','orc']},{types:['boss','boss','boss','boss','boss']}] },
+  { defenseEnemies:[{type:'orc',count:12,interval:800},{type:'boss',count:2,interval:6000}], battleGroups:[{types:['boss','boss','boss','boss','boss']},{types:['boss','boss','boss','boss','boss']},{types:['boss','boss','boss','boss','boss','goblin']}] },
+  { defenseEnemies:[{type:'orc',count:12,interval:700},{type:'boss',count:3,interval:5000}], battleGroups:[{types:['boss','boss','boss','boss','boss']},{types:['boss','boss','boss','boss','boss','orc']},{types:['boss','boss','boss','boss','boss','boss']}] },
+  // Stage 1-10 (BOSS STAGE)
+  { defenseEnemies:[{type:'orc',count:8,interval:600},{type:'boss',count:3,interval:4000}], battleGroups:[{types:['boss','boss','boss','boss','boss']},{types:['boss','boss','boss','boss','boss','boss']},{types:['boss','boss','boss','boss','boss','boss','boss']}] },
+  { defenseEnemies:[{type:'boss',count:5,interval:3500}], battleGroups:[{types:['boss','boss','boss','boss','boss','boss']},{types:['boss','boss','boss','boss','boss','boss']},{types:['boss','boss','boss','boss','boss','boss','boss','boss']}] },
+  { defenseEnemies:[{type:'boss',count:8,interval:3000}], battleGroups:[{types:['boss','boss','boss','boss','boss','boss','boss']},{types:['boss','boss','boss','boss','boss','boss','boss']},{types:['boss','boss','boss','boss','boss','boss','boss','boss','boss']}] },
 ];
+
+function getStageInfo(waveIndex) {
+  const stageIdx = Math.floor(waveIndex / 3);
+  const waveInStage = waveIndex % 3;
+  const isBossStage = stageIdx === 9;
+  return { stageIdx, waveInStage, stageLabel: `1-${stageIdx+1}`, isBossStage };
+}
 
 // ─── 케이브 업그레이드 ────────────────────────────────────────────────────────
 // statMult: 몹 기본 스탯 배율, goldMult: 보상 배율, upgradeCost: 업그레이드 비용
