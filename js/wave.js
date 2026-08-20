@@ -54,8 +54,9 @@ function createWaveManager() {
     },
 
     // 비어 있는 전투 슬롯 번호를 찾는다 (겹쳐 그려지는 문제 방지)
+    // 사망 후 페이드아웃 중인 적이 남아 있는 슬롯도 비어 있지 않은 것으로 본다
     freeSlot(battle) {
-      const used = new Set(battle.enemyTeam.filter(e => !e.dead).map(e => e.slot));
+      const used = new Set(battle.enemyTeam.map(e => e.slot));
       for (let i = 0; i < this.maxLive; i++) if (!used.has(i)) return i;
       return -1;
     },
