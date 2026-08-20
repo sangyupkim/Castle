@@ -8,7 +8,8 @@ function createWaveManager() {
     elapsed: 0,
     intermissionTimer: 0,
     defenseQueues: [],
-    battleSpawnQueues: [],   // 연속 스폰 큐
+    battleSpawnQueues: [],
+    maxLive: 2,
 
     init(idx) {
       this.waveIndex = idx;
@@ -17,6 +18,7 @@ function createWaveManager() {
       this.elapsed = 0;
       this.defenseQueues = [];
       this.battleSpawnQueues = [];
+      this.maxLive = maxLiveEnemies(idx);
     },
 
     startWave(gs) {
@@ -26,25 +28,36 @@ function createWaveManager() {
       this.phase   = 'active';
       this.elapsed = 0;
       this.timer   = WAVE_DURATION;
+      this.maxLive = maxLiveEnemies(this.waveIndex);
 
-      const def = WAVE_DEFS[this.waveIndex];
+      const def = getWaveDef(this.waveIndex);
+      const spawnMult = BONUSES.spawnSpeedMult || 1;
 
       // 상단 스폰 큐
+      // 웨이브가 오를수록 상단 물량도 늘어난다
+      const countMult = 1 + this.waveIndex * DEF_WAVE_COUNT_SCALE;
       this.defenseQueues = def.defenseEnemies.map(d => ({
-        type:d.type, remaining:d.count,
-        interval:d.interval/1000, nextSpawn:0.5
+        type:d.type, remaining: Math.max(1, Math.round(d.count * countMult)),
+        interval:d.interval / 1000, nextSpawn:0.5
       }));
 
       // 하단 연속 스폰 큐
       this.battleSpawnQueues = def.battleSpawns.map(b => ({
         type:b.type,
-        interval:b.interval,
-        nextSpawn:b.offset   // 첫 스폰 시각
+        interval: b.interval / spawnMult,
+        nextSpawn: b.offset / spawnMult
       }));
 
-      // 적팀 클린 스타트 (이월 없음)
       gs.battle.enemyTeam = [];
       startFighting(gs.battle);
+      if (typeof SFX !== 'undefined') SFX.waveStart();
+    },
+
+    // 비어 있는 전투 슬롯 번호를 찾는다 (겹쳐 그려지는 문제 방지)
+    freeSlot(battle) {
+      const used = new Set(battle.enemyTeam.filter(e => !e.dead).map(e => e.slot));
+      for (let i = 0; i < this.maxLive; i++) if (!used.has(i)) return i;
+      return -1;
     },
 
     update(gs, dt) {
@@ -58,24 +71,29 @@ function createWaveManager() {
         if (q.remaining <= 0) continue;
         q.nextSpawn -= dt;
         if (q.nextSpawn <= 0) {
-          gs.defenseEnemies.push(makeDefenseEnemy(q.type, 'A'));
+          gs.defenseEnemies.push(makeDefenseEnemy(q.type, this.waveIndex));
           q.remaining--;
           q.nextSpawn = q.interval;
         }
       }
 
-      // 하단 연속 스폰 (전투 중일 때만, 최대 생존 적 수 제한)
+      // 하단 연속 스폰 (전투 중일 때만, 빈 슬롯이 있을 때만)
       if (gs.battle.phase === 'fighting') {
-        const liveEnemies = gs.battle.enemyTeam.filter(e => !e.dead).length;
         for (const q of this.battleSpawnQueues) {
           q.nextSpawn -= dt;
-          if (q.nextSpawn <= 0) {
-            if (this.elapsed <= WAVE_DURATION && liveEnemies < BATTLE_MAX_LIVE_ENEMIES) {
+          if (q.nextSpawn > 0) continue;
+          if (this.elapsed <= WAVE_DURATION) {
+            const slot = this.freeSlot(gs.battle);
+            if (slot >= 0) {
               const mob = makeScaledMob(q.type, gs.battle.killCount, gs.caveLevel);
-              // drawY: 슬롯 위치 (0 or 1번째 줄)
-              mob.drawY = unitY(liveEnemies);
+              mob.slot  = slot;
+              mob.drawY = unitY(slot);
               gs.battle.enemyTeam.push(mob);
+              q.nextSpawn = q.interval;
+            } else {
+              q.nextSpawn = 0.4;   // 슬롯이 빌 때까지 짧게 재시도
             }
+          } else {
             q.nextSpawn = q.interval;
           }
         }
@@ -87,9 +105,9 @@ function createWaveManager() {
       }
 
       // 종료 조건: 타이머 종료 or (상단 클리어 + 아군 전멸)
-      const defDone = this.defenseQueues.every(q=>q.remaining<=0) &&
-                      gs.defenseEnemies.every(e=>e.dead||e.reached);
-      const batDone = gs.battle.phase==='idle_defeated';
+      const defDone = this.defenseQueues.every(q => q.remaining <= 0) &&
+                      gs.defenseEnemies.every(e => e.dead || e.reached);
+      const batDone = gs.battle.phase === 'idle_defeated';
       if (this.timer <= 0 || (defDone && batDone)) {
         this.endWave(gs);
       }
@@ -104,8 +122,8 @@ function createWaveManager() {
 
       // 자원 지급
       const earned    = gs.battle.goldEarned;
-      const killBonus = gs.battle.killCount * (this.waveIndex + 1);
-      const winBonus  = (gs.battle.result === 'won') ? (20 + this.waveIndex * 15) : 0;
+      const killBonus = Math.round(gs.battle.killCount * (1 + this.waveIndex * 0.25));
+      const winBonus  = (gs.battle.result === 'won') ? (12 + this.waveIndex * 6) : 0;
       const total     = earned + killBonus + winBonus;
       gs.gold += total;
 
@@ -113,29 +131,43 @@ function createWaveManager() {
       if (earned > 0)    parts.push(`처치 +${earned}💰`);
       if (killBonus > 0) parts.push(`처치보너스 +${killBonus}💰`);
       if (winBonus > 0)  parts.push(`승리 +${winBonus}💰`);
-      addLog(gs.battle, `웨이브${this.waveIndex+1}: ${parts.join(' ')}`, COLORS.gold);
+      addLog(gs.battle, `웨이브${this.waveIndex + 1}: ${parts.join(' ')}`, COLORS.gold);
+
+      if (typeof SFX !== 'undefined') {
+        if (gs.battle.result === 'won') SFX.win(); else SFX.lose();
+      }
+
+      // 영웅을 하단에 배치했다면 상태를 되돌려 받는다
+      const heroUnit = gs.battle.ourTeam.find(u => u.isHero);
+      if (heroUnit) {
+        if (heroUnit.dead) killHero(gs);
+        else gs.hero.hp = Math.max(1, Math.round(heroUnit.hp));
+      }
 
       // 정리
       gs.defenseEnemies    = [];
       gs.projectiles       = [];
       gs.battle.enemyTeam  = [];
-      gs.battle.ourTeam    = gs.battle.ourTeam.filter(u => !u.dead);
+      gs.battle.ourTeam    = gs.battle.ourTeam.filter(u => !u.dead && !u.isHero);
       gs.battle.phase      = 'hire';
       gs.battle.result     = null;
       gs.battle.goldEarned = 0;
       gs.battle.floaties   = [];
       gs.battle.maxSlots   = 4 + BONUSES.maxSlotBonus;
+      setBattleSlotCount(gs.battle.maxSlots);
+      gs.hero.placement    = 'none';
 
-      if (gs.hero.placement === 'battle') {
-        gs.battle.ourTeam = gs.battle.ourTeam.filter(u => !u.isHero);
-      }
-      gs.hero.placement = 'none';
+      // 생존 병력 휴식 회복
+      restHealTeam(gs.battle);
 
-      // 웨이브 클리어 강화 픽 (마지막 웨이브 이전)
-      const isLast = (this.waveIndex + 1 >= WAVE_DEFS.length);
-      if (!isLast) {
+      // 기록 갱신
+      gs.stats.wavesCleared = Math.max(gs.stats.wavesCleared, this.waveIndex + 1);
+
+      // 웨이브 클리어 강화 픽 (스테이지 최종 웨이브 제외)
+      const isFinal = !gs.endless && (this.waveIndex + 1 >= STAGE_WAVES);
+      if (!isFinal) {
         this.phase = 'upgradePick';
-        gs.upgradePick = { active: true, cards: rollUpgradeCards() };
+        gs.upgradePick = { active: true, cards: rollUpgradeCards(gs.activeUpgrades) };
       } else {
         this.phase = 'intermission';
         this.intermissionTimer = INTERMISSION;
@@ -145,10 +177,14 @@ function createWaveManager() {
     },
 
     confirmPick(gs) {
-      // 업그레이드 픽 확인 후 인터미션 시작
       gs.upgradePick = { active: false, cards: [] };
       this.phase = 'intermission';
       this.intermissionTimer = INTERMISSION;
+    },
+
+    // 인터미션을 즉시 건너뛴다 (준비가 끝났을 때)
+    skipIntermission() {
+      if (this.phase === 'intermission') this.intermissionTimer = 0;
     },
 
     updateIntermission(gs, dt) {
@@ -157,7 +193,7 @@ function createWaveManager() {
 
       if (this.intermissionTimer <= 0) {
         const next = this.waveIndex + 1;
-        if (next >= WAVE_DEFS.length) {
+        if (!gs.endless && next >= STAGE_WAVES) {
           gs.stageCleared = true;
           SaveManager.save(gs);
         } else {
