@@ -112,9 +112,9 @@ const ENEMY_TYPES = {
 };
 const ENEMY_CELL_SPD = CELL_W;
 // 웨이브가 오를수록 상단 적도 강해진다
-const DEF_WAVE_HP_SCALE    = 0.10;
-const DEF_WAVE_ARMOR_EVERY = 8;
-const DEF_WAVE_COUNT_SCALE = 0.04;
+const DEF_WAVE_HP_SCALE    = 0.22;
+const DEF_WAVE_ARMOR_EVERY = 5;
+const DEF_WAVE_COUNT_SCALE = 0.07;
 
 // ─── Battle Layout ────────────────────────────────────────────────────────────
 const BATTLE_TEAM_X        = 110;   // 아군 x (렌더 기준)
@@ -193,6 +193,11 @@ const BATTLE_MOB_TYPES = {
   boss:    { id:'boss',    name:'보스',   hp:200, atk:25, def:8,  mp:30, maxMp:30, skillAtk:50, skillCost:20, color:'#ef4444', icon:'💀', goldReward:60,  isBoss:true },
   warlord: { id:'warlord', name:'마왕',   hp:520, atk:40, def:14, mp:36, maxMp:36, skillAtk:88, skillCost:22, color:'#db2777', icon:'🐲', goldReward:180, isBoss:true }
 };
+// 아군이 전멸하면 남은 몬스터가 기지로 돌파해 초당 피해를 준다.
+// 두 전선을 연결해, 하단에서 지는 것도 실제 패배로 이어지게 만든다.
+const BREAKTHROUGH_DPS = 0.03;   // 몹 공격력 1당 초당 기지 피해
+const BREAKTHROUGH_MAX = 2.5;    // 초당 상한 — 한 웨이브 전멸이 즉사가 되지 않도록
+
 // 엘리트: 케이브 업그레이드로 확률 상승. 스탯 강화 + 보상 증가
 const ELITE_STAT_MULT = 1.8;
 const ELITE_GOLD_MULT = 2.5;
@@ -258,10 +263,10 @@ function getStageInfo(waveIndex) {
 const CAVE_LEVELS = [
   null,
   { label:'자연 동굴', statMult:1.0, goldMult:1.0, upgradeCost:  0 },
-  { label:'강화 동굴', statMult:1.4, goldMult:1.5, upgradeCost: 20 },
-  { label:'위험 동굴', statMult:1.9, goldMult:2.2, upgradeCost: 35 },
-  { label:'심연 동굴', statMult:2.6, goldMult:3.2, upgradeCost: 55 },
-  { label:'지옥 동굴', statMult:3.5, goldMult:4.5, upgradeCost: 80 }
+  { label:'강화 동굴', statMult:1.4, goldMult:1.5, upgradeCost: 45 },
+  { label:'위험 동굴', statMult:1.9, goldMult:2.2, upgradeCost: 110 },
+  { label:'심연 동굴', statMult:2.6, goldMult:3.2, upgradeCost: 240 },
+  { label:'지옥 동굴', statMult:3.5, goldMult:4.5, upgradeCost: 480 }
 ];
 const CAVE_MAX_LEVEL = CAVE_LEVELS.length - 1;
 // 처치 1회마다 다음 몹 스탯/보상 8% 증가

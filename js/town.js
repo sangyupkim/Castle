@@ -49,13 +49,13 @@ const TOWN_BUILDINGS = [
     desc:'몬스터 던전을 관리합니다', alwaysBuilt:true,
     levels:[
       { levelName:'Lv.1', upgradeCost:0, upgrades:[
-        { id:'cave_gold1',name:'금맥 개발',    icon:'💰', cost:20, maxLv:3, desc:lv=>`전투 골드 +${lv*15}%`,     apply:(b,lv)=>{ b.battleGoldMult *= Math.pow(1.15,lv); } },
+        { id:'cave_gold1',name:'금맥 개발',    icon:'💰', cost:20, maxLv:3, desc:lv=>`전투 골드 +${lv*8}%`,      apply:(b,lv)=>{ b.battleGoldMult *= Math.pow(1.08,lv); } },
         { id:'cave_weak', name:'몬스터 약화',  icon:'⬇️', cost:25, maxLv:2, desc:lv=>`몬스터 HP -${lv*10}%`,    apply:(b,lv)=>{ b.mobHpMult *= Math.pow(0.90,lv); } },
       ]},
       { levelName:'Lv.2', upgradeCost:55, upgrades:[
         { id:'cave_elite',name:'엘리트 소환',  icon:'👹', cost:30, maxLv:2, desc:lv=>`엘리트 확률 +${lv*10}%`,  apply:(b,lv)=>{ b.eliteChance=(b.eliteChance||0)+lv*0.10; } },
         { id:'cave_drop', name:'아이템 발굴',  icon:'💎', cost:35, maxLv:2, desc:lv=>`아이템 드랍 +${lv*15}%`,  apply:(b,lv)=>{ b.dropChance=(b.dropChance||0)+lv*0.15; } },
-        { id:'cave_gold2',name:'보물 창고',    icon:'🌟', cost:40, maxLv:2, desc:lv=>`전투 골드 +${lv*25}%`,    apply:(b,lv)=>{ b.battleGoldMult *= Math.pow(1.25,lv); } },
+        { id:'cave_gold2',name:'보물 창고',    icon:'🌟', cost:40, maxLv:2, desc:lv=>`전투 골드 +${lv*12}%`,    apply:(b,lv)=>{ b.battleGoldMult *= Math.pow(1.12,lv); } },
       ]},
     ]
   },
@@ -131,6 +131,11 @@ function levelUpBuilding(id, gs) {
   return true;
 }
 
+// 같은 강화를 반복 구매할수록 비용이 오른다
+function townUpgradeCost(upg, curLv) {
+  return Math.round(upg.cost * (1 + curLv * 0.8));
+}
+
 function buyTownUpgrade(buildingId, upgradeId, gs) {
   const def=TOWN_BUILDINGS.find(b=>b.id===buildingId);
   const bs=gs.town.buildings[buildingId];
@@ -138,8 +143,9 @@ function buyTownUpgrade(buildingId, upgradeId, gs) {
   const upg=def.levels.slice(0,(bs.level||0)+1).flatMap(l=>l.upgrades).find(u=>u.id===upgradeId);
   if (!upg) return false;
   const curLv=bs.upgrades[upgradeId]||0;
-  if (curLv>=upg.maxLv||gs.gold<upg.cost) return false;
-  gs.gold-=upg.cost; bs.upgrades[upgradeId]=curLv+1;
+  const cost=townUpgradeCost(upg, curLv);
+  if (curLv>=upg.maxLv||gs.gold<cost) return false;
+  gs.gold-=cost; bs.upgrades[upgradeId]=curLv+1;
   reapplyAllBonuses(gs);
   return true;
 }

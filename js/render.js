@@ -537,6 +537,11 @@ function renderFightPhase(ctx, gs) {
     ctx.fillStyle = '#ef4444'; ctx.font = 'bold 22px sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(`병력 전멸  획득: ${battle.goldEarned}💰`, CW / 2, BATTLE_Y + (BATTLE_H - 65) / 2);
+    const live = battle.enemyTeam.filter(e => !e.dead).length;
+    if (live > 0) {
+      ctx.fillStyle = '#fca5a5'; ctx.font = 'bold 13px sans-serif';
+      ctx.fillText(`⚠️ 몬스터 ${live}마리가 기지로 돌파 중!`, CW / 2, BATTLE_Y + (BATTLE_H - 65) / 2 + 28);
+    }
   }
 }
 
@@ -564,23 +569,43 @@ function renderBattleUnit(ctx, u, idx, x, y, alpha) {
     ctx.fillStyle = u.flashColor; ctx.fill();
   }
 
+  // 보호막 링
+  if (u.shield > 0) {
+    ctx.beginPath(); ctx.arc(x, y, r + 3.5, 0, Math.PI * 2);
+    ctx.strokeStyle = COLORS.shield; ctx.lineWidth = 2.5; ctx.stroke();
+  }
+
   ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
   ctx.fillStyle = u.isHero ? COLORS.hero : u.color; ctx.fill();
-  ctx.strokeStyle = u.isHero ? '#fef08a' : '#fff';
-  ctx.lineWidth = u.isHero ? 2.5 : 1.5; ctx.stroke();
+  ctx.strokeStyle = u.isBoss ? '#fbbf24' : u.isHero ? '#fef08a' : '#fff';
+  ctx.lineWidth = (u.isHero || u.isBoss) ? 2.5 : 1.5; ctx.stroke();
 
+  // 아이콘은 원 색을 물려받지 않도록 명시적으로 칠한다 ('✚' 같은 문자 아이콘 대응)
+  ctx.fillStyle = '#0f172a';
   ctx.font = `${Math.floor(r * 0.85)}px sans-serif`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(u.icon, x, y + 1);
 
   const bw = r * 2 + 8;
-  drawHPBar(ctx, x - bw/2, y + r + 3, bw, 5, u.hp / u.maxHp);
-  if (!u.isPlayer || u.maxMp > 0) {
-    drawMPBar(ctx, x - bw/2, y + r + 10, bw, 3, u.mp / u.maxMp);
+  drawHPBar(ctx, x - bw/2, y + r + 3, bw, 4, u.hp / u.maxHp);
+  if (BATTLE_UNIT_GAP >= 40 && u.maxMp > 0) {
+    drawMPBar(ctx, x - bw/2, y + r + 9, bw, 3, u.mp / u.maxMp);
   }
-  ctx.fillStyle = '#f1f5f9'; ctx.font = 'bold 9px sans-serif';
-  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-  ctx.fillText(`${u.name} ${u.hp}`, x, y + r + 16);
+
+  // 이름/HP는 원 옆에 — 슬롯이 촘촘해져도 아래 유닛과 겹치지 않는다
+  ctx.font = 'bold 9px sans-serif'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#f1f5f9';
+  if (u.isPlayer) {
+    ctx.textAlign = 'left';
+    ctx.fillText(`${u.name} ${Math.ceil(u.hp)}`, x + r + 7, y - 4);
+  } else {
+    ctx.textAlign = 'right';
+    ctx.fillText(`${u.name} ${Math.ceil(u.hp)}`, x - r - 7, y - 4);
+  }
+  if (u.shield > 0) {
+    ctx.fillStyle = COLORS.shield; ctx.font = 'bold 8px sans-serif';
+    ctx.fillText(`🛡${Math.ceil(u.shield)}`, u.isPlayer ? x + r + 7 : x - r - 7, y + 7);
+  }
 
   ctx.globalAlpha = 1;
 }
@@ -869,11 +894,13 @@ function renderBuildingScreen(ctx, gs, buildingId) {
     for (const upg of lvDef.upgrades) {
       const curUpgLv=bs.upgrades[upg.id]||0;
       const maxed=curUpgLv>=upg.maxLv;
-      const canAff=!maxed&&gs.gold>=upg.cost;
+      const upgCost=townUpgradeCost(upg,curUpgLv);
+      const canAff=!maxed&&gs.gold>=upgCost;
       const uh=36;
       roundRect(ctx,6,uy,CW-12,uh,5);
       ctx.fillStyle=maxed?'#0f1a0f':canAff?'#0d1929':'#0f0f1a'; ctx.fill();
       ctx.strokeStyle=maxed?'#22c55e':canAff?def.color:'#334155'; ctx.lineWidth=1; ctx.stroke();
+      ctx.fillStyle='#e2e8f0';
       ctx.font='13px sans-serif'; ctx.textBaseline='middle';
       ctx.fillText(upg.icon,12,uy+uh/2);
       ctx.fillStyle='#f1f5f9'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left';
@@ -891,7 +918,7 @@ function renderBuildingScreen(ctx, gs, buildingId) {
         ctx.fillStyle=canAff?def.color:'#1e293b'; ctx.fill();
         ctx.fillStyle=canAff?'#fff':'#475569'; ctx.font='bold 8px sans-serif';
         ctx.textAlign='center'; ctx.textBaseline='middle';
-        ctx.fillText(`${upg.cost}💰`,bx2+bw2/2,by2+bh2/2);
+        ctx.fillText(`${upgCost}💰`,bx2+bw2/2,by2+bh2/2);
         gs.ui.upgradeBtns.push({x:bx2,y:by2,w:bw2,h:bh2,id:upg.id});
       } else {
         ctx.fillStyle='#22c55e'; ctx.font='bold 8px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';

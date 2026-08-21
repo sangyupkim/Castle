@@ -613,10 +613,34 @@ function update(dt) {
 
   updateHeroDefense(dt);
   updateBattle(gs.battle, dt, wm.groupPhase === 'advancing');
+  updateBreakthrough(dt);
 
   if (wm.phase==='intermission') gs.waveActive=false;
 
   updateFloaties(dt);
+}
+
+// ─── 돌파: 아군 전멸 시 남은 몬스터가 기지를 때린다 ──────────────────────────
+let _breachAccum = 0;
+function updateBreakthrough(dt) {
+  const b = gs.battle;
+  if (b.phase !== 'idle_defeated' && b.phase !== 'lost') { _breachAccum = 0; return; }
+
+  const live = b.enemyTeam.filter(e => !e.dead);
+  if (!live.length) { _breachAccum = 0; return; }
+
+  const atkSum = live.reduce((a, e) => a + e.atk, 0);
+  const dps    = Math.min(atkSum * BREAKTHROUGH_DPS, BREAKTHROUGH_MAX);
+  _breachAccum += dps * dt * (1 - BONUSES.baseDefPct);
+
+  if (_breachAccum >= 1) {
+    const dmg = Math.floor(_breachAccum);
+    _breachAccum -= dmg;
+    gs.baseHP = Math.max(0, gs.baseHP - dmg);
+    spawnFloaty(`돌파! -${dmg}HP`, CW/2, DEFENSE_H - 40, '#ef4444');
+    FX.shake(4, 0.2);
+    if (gs.baseHP <= 0) { gs.gameOver = true; bankRunResult(); }
+  }
 }
 
 // ─── 런 종료 정산 ────────────────────────────────────────────────────────────
