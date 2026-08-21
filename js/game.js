@@ -37,16 +37,24 @@ _titleImg.src = 'assets/images/mainpage.png';
 let _titleScreen = true;  // 앱 시작 시 타이틀 화면 표시
 let _titleAlpha  = 1;     // 페이드아웃용
 
+// ─── 세션 설정 (런 리셋과 무관) ──────────────────────────────────────────────
+let _paused   = false;
+let _speedIdx = 0;
+function gameSpeed() { return SPEED_STEPS[_speedIdx]; }
+function togglePause() { _paused = !_paused; SFX.click(); }
+function cycleSpeed()  { _speedIdx = (_speedIdx + 1) % SPEED_STEPS.length; SFX.click(); }
+
 // ─── 영구 데이터 (런 초기화 후에도 유지) ─────────────────────────────────────
 let _soulStones    = 0;
 let _metaUpgrades  = {};
 let _clearedStages = new Array(10).fill(false);
 let _skillTreeOwned = [];
+let _stats          = createStats();
 
 // ─── 초기 상태 ────────────────────────────────────────────────────────────────
 function newState() {
   return {
-    phase:1, wave:0,
+    wave:0,
     page:'battle',
     gold:10, baseHP:BASE_HP_MAX,
     caveLevel:1,
@@ -68,6 +76,8 @@ function newState() {
     upgradePick: { active:false, cards:[] },
     activeUpgrades: [],
     hoveredCell:null,
+    selectedTowerType:'arrow',
+    resultBanked:false,
     floaties:[],
     ui:{ waveBtn:{}, hireCards:[], hiredSlots:[], heroDefBtn:{}, heroBatBtn:{}, metaCards:[], metaStartBtn:{}, metaTab:'tower', towerTabBtn:{}, heroTabBtn:{}, supportTabBtn:{} },
     // 영구 데이터 참조
@@ -79,6 +89,8 @@ function newState() {
     set clearedStages(v) { _clearedStages = v; },
     get skillTreeOwned()  { return _skillTreeOwned; },
     set skillTreeOwned(v) { _skillTreeOwned = v; },
+    get stats()  { return _stats; },
+    set stats(v) { _stats = v; },
   };
 }
 
@@ -95,7 +107,7 @@ gs.battle = createBattle();
   gs.gold       = sv.gold   || 10;
   gs.baseHP     = sv.baseHP || BASE_HP_MAX;
   gs.wave       = sv.wave   || 0;
-  gs.hero.level = Math.max(1, Math.min(5, sv.heroLevel||1));
+  gs.hero.level = Math.max(1, Math.min(HERO_MAX_LEVEL, sv.heroLevel||1));
   gs.hero.exp   = sv.heroExp || 0;
   gs.hero.hp    = HERO_LEVELS[gs.hero.level].hp;
   gs.battle.totalGoldEarned = sv.totalGoldEarned || 0;
@@ -104,6 +116,7 @@ gs.battle = createBattle();
   _metaUpgrades  = sv.metaUpgrades || {};
   _clearedStages = sv.clearedStages || new Array(10).fill(false);
   _skillTreeOwned = sv.skillTreeOwned || [];
+  _stats          = Object.assign(createStats(), sv.stats || {});
   if (sv.townBuildings) {
     for (const [k, v] of Object.entries(sv.townBuildings)) {
       if (gs.town.buildings[k]) gs.town.buildings[k] = v;
@@ -125,6 +138,10 @@ function _applyStartBonuses() {
   gs.battle.maxSlots = 4 + BONUSES.maxSlotBonus;
 }
 
+function baseHpMax()     { return BASE_HP_MAX + BONUSES.baseHpMax; }
+function heroMaxHp()     { return Math.round(HERO_LEVELS[gs.hero.level].hp * BONUSES.heroStatMult); }
+function heroReviveDur() { return Math.max(5, HERO_REVIVE_TIME - BONUSES.heroReviveReduction); }
+
 tut.start();
 
 // ─── 입력 ────────────────────────────────────────────────────────────────────
@@ -142,9 +159,31 @@ canvas.addEventListener('mouseleave', ()=>{ gs.hoveredCell=null; });
 canvas.addEventListener('click', e=>tap(pt(e)));
 canvas.addEventListener('touchstart', e=>{ e.preventDefault(); tap(pt(e)); },{passive:false});
 
-function tap({x,y}) {
+window.addEventListener('keydown', e => {
   if (_titleScreen) { _startFadeOut(); return; }
   if (tut.active)   { tut.next(); return; }
+  switch (e.key) {
+    case '1': case '2': case '3': case '4': {
+      const id = TOWER_ORDER[Number(e.key) - 1];
+      if (id) { gs.selectedTowerType = id; gs.ui.towerAction = null; SFX.click(); }
+      break;
+    }
+    case ' ':
+      e.preventDefault();
+      if (wm.phase === 'idle' && gs.page === 'battle') { wm.startWave(gs); gs.waveActive = true; }
+      else togglePause();
+      break;
+    case 'p': case 'P': togglePause(); break;
+    case 's': case 'S': cycleSpeed(); break;
+    case 'm': case 'M': SFX.toggleMute(); break;
+    case 't': case 'T': gs.page = (gs.page === 'town' ? 'battle' : 'town'); SFX.click(); break;
+    case 'Escape': gs.ui.towerAction = null; break;
+  }
+});
+
+function tap({x,y}) {
+  if (_titleScreen) { SFX.unlock(); _startFadeOut(); return; }
+  if (tut.active)   { tut.next(); SFX.click(); return; }
   if (gs.showMeta)  {
     if (hitTest(x,y,gs.ui.metaStartBtn)) { gs.showMeta=false; resetGame(false); return; }
     // Tab switching
@@ -186,26 +225,15 @@ function tap({x,y}) {
       gs.ui.towerAction = (gs.ui.towerAction?.col===cell.c&&gs.ui.towerAction?.row===cell.r) ? null : {col:cell.c,row:cell.r,tower};
       return;
     }
-    if (PATH_CELLS.has(`${cell.c},${cell.r}`)) return;
-    if (cell.c===4&&(cell.r===0||cell.r===6)) return;
-    const cost=Math.max(1,TOWER_TYPES.arrow.cost-BONUSES.towerCostDiscount);
-    if (gs.gold>=cost) { gs.gold-=cost; gs.towers.push(makeTower(cell.c,cell.r,'arrow')); gs.ui.towerAction=null; spawnFloaty(`-${cost}💰`,x,y,COLORS.gold); }
-    else spawnFloaty('골드 부족!',x,y,'#ef4444');
+    if (isBlockedCell(cell.c, cell.r)) return;
+    buildTowerAt(cell.c, cell.r, x, y);
     return;
   }
 
   // Tower action buttons (rendered near tower in defense area)
   if (gs.ui.towerAction && y<UIBAR_Y) {
-    if (hitTest(x,y,gs.ui.towerUpgradeBtn||{})) {
-      const ta=gs.ui.towerAction, tower=ta.tower;
-      const lv=tower.level||1;
-      if (lv<3) { const cost=lv*15; if (gs.gold>=cost) { gs.gold-=cost; tower.level=(lv+1); tower.dmg+=5; spawnFloaty(`타워 Lv.${tower.level}!`,x,y,'#f59e0b'); } else spawnFloaty('골드 부족!',x,y,'#ef4444'); }
-      gs.ui.towerAction=null; return;
-    }
-    if (hitTest(x,y,gs.ui.towerRemoveBtn||{})) {
-      gs.towers=gs.towers.filter(t=>!(t.col===gs.ui.towerAction.col&&t.row===gs.ui.towerAction.row));
-      gs.gold+=Math.floor(TOWER_TYPES.arrow.cost/2); gs.ui.towerAction=null; return;
-    }
+    if (hitTest(x,y,gs.ui.towerUpgradeBtn||{})) { upgradeSelectedTower(x,y); return; }
+    if (hitTest(x,y,gs.ui.towerRemoveBtn||{}))  { sellSelectedTower(x,y);    return; }
   }
 
   // Idle phase: wave start buttons (UIBar or battle area)
@@ -264,30 +292,10 @@ function handleTownTap(x,y) {
 
   // Towers tab
   if (t.tab==='towers') {
-    if (hitTest(x,y,gs.ui.towerUpgradeBtn||{})) {
-      const ta=gs.ui.towerAction;
-      if (ta) {
-        const tower=gs.towers.find(tw=>tw.col===ta.col&&tw.row===ta.row);
-        if (tower) {
-          const lv=tower.level||1;
-          if (lv<3) {
-            const cost=lv*15;
-            if (gs.gold>=cost) { gs.gold-=cost; tower.level=lv+1; tower.dmg+=5; spawnFloaty(`타워 Lv.${tower.level}!`,x,y,'#f59e0b'); }
-            else spawnFloaty('골드 부족!',x,y,'#ef4444');
-          }
-          gs.ui.towerAction=null;
-        }
-      }
-      return;
-    }
-    if (hitTest(x,y,gs.ui.towerRemoveBtn||{})) {
-      if (gs.ui.towerAction) {
-        gs.towers=gs.towers.filter(tw=>!(tw.col===gs.ui.towerAction.col&&tw.row===gs.ui.towerAction.row));
-        gs.gold+=Math.floor(TOWER_TYPES.arrow.cost/2);
-        spawnFloaty(`+${Math.floor(TOWER_TYPES.arrow.cost/2)}💰`,x,y,COLORS.gold);
-        gs.ui.towerAction=null;
-      }
-      return;
+    if (hitTest(x,y,gs.ui.towerUpgradeBtn||{})) { upgradeSelectedTower(x,y); return; }
+    if (hitTest(x,y,gs.ui.towerRemoveBtn||{}))  { sellSelectedTower(x,y);    return; }
+    for (const b of gs.ui.towerTypeBtns||[]) {
+      if (hitTest(x,y,b)) { gs.selectedTowerType=b.typeId; gs.ui.towerAction=null; SFX.click(); return; }
     }
     if (gs.ui.towerMiniGrid) {
       const mg=gs.ui.towerMiniGrid;
@@ -299,13 +307,8 @@ function handleTownTap(x,y) {
         if (existing) {
           gs.ui.towerAction=(gs.ui.towerAction?.col===c&&gs.ui.towerAction?.row===r)?null:{col:c,row:r,tower:existing};
         } else {
-          if (PATH_CELLS.has(`${c},${r}`)) return;
-          if (c===4&&(r===0||r===6)) return;
-          const cost=Math.max(1,TOWER_TYPES.arrow.cost-BONUSES.towerCostDiscount);
-          if (gs.gold>=cost) {
-            gs.gold-=cost; gs.towers.push(makeTower(c,r,'arrow')); gs.ui.towerAction=null;
-            spawnFloaty(`-${cost}💰`,x,y,COLORS.gold);
-          } else { spawnFloaty('골드 부족!',x,y,'#ef4444'); }
+          if (isBlockedCell(c, r)) return;
+          buildTowerAt(c, r, x, y);
         }
         return;
       }
@@ -327,7 +330,7 @@ function handleTownTap(x,y) {
     }
     if (hitTest(x,y,gs.ui.caveBtn||{})) {
       const nextLv=gs.caveLevel+1;
-      if (nextLv<=5) {
+      if (nextLv<=CAVE_MAX_LEVEL) {
         const cost=CAVE_LEVELS[nextLv].upgradeCost;
         if (gs.gold>=cost) { gs.gold-=cost; gs.caveLevel=nextLv; spawnFloaty(`🗿 케이브 Lv.${nextLv}!`,CW/2,300,'#a78bfa'); }
         else spawnFloaty('골드 부족!',x,y,'#ef4444');
@@ -365,6 +368,53 @@ function handleTownTap(x,y) {
   }
 }
 
+// ─── 타워 건설 / 강화 / 판매 ─────────────────────────────────────────────────
+function buildTowerAt(c, r, fx, fy) {
+  const typeId = gs.selectedTowerType || 'arrow';
+  const cost   = towerBuildCost(typeId, gs.towers);
+  if (gs.gold < cost) { spawnFloaty('골드 부족!', fx, fy, '#ef4444'); SFX.denied(); return false; }
+  gs.gold -= cost;
+  const t = makeTower(c, r, typeId);
+  t.invested = cost;
+  gs.towers.push(t);
+  gs.ui.towerAction = null;
+  spawnFloaty(`-${cost}💰`, fx, fy, COLORS.gold);
+  const ctr = cellCenter(c, r);
+  FX.ring(ctr.x, ctr.y, TOWER_TYPES[typeId].color, 8);
+  SFX.build();
+  return true;
+}
+
+function upgradeSelectedTower(x, y) {
+  const ta = gs.ui.towerAction;
+  if (!ta) return;
+  const tower = gs.towers.find(tw => tw.col === ta.col && tw.row === ta.row);
+  if (!tower) { gs.ui.towerAction = null; return; }
+  const cost = towerUpgradeCost(tower);
+  if (cost === null) { spawnFloaty('최대 레벨!', x, y, '#f59e0b'); SFX.denied(); return; }
+  if (gs.gold < cost) { spawnFloaty('골드 부족!', x, y, '#ef4444'); SFX.denied(); return; }
+  gs.gold -= cost;
+  tower.invested = (tower.invested || 0) + cost;
+  tower.level = (tower.level || 1) + 1;
+  spawnFloaty(`타워 Lv.${tower.level}!`, x, y, '#f59e0b');
+  const ctr = cellCenter(tower.col, tower.row);
+  FX.ring(ctr.x, ctr.y, '#22c55e', 9);
+  SFX.upgrade();
+}
+
+function sellSelectedTower(x, y) {
+  const ta = gs.ui.towerAction;
+  if (!ta) return;
+  const tower = gs.towers.find(tw => tw.col === ta.col && tw.row === ta.row);
+  if (!tower) { gs.ui.towerAction = null; return; }
+  const value = towerSellValue(tower);
+  gs.gold += value;
+  gs.towers = gs.towers.filter(tw => tw !== tower);
+  gs.ui.towerAction = null;
+  spawnFloaty(`+${value}💰`, x, y, COLORS.gold);
+  SFX.sell();
+}
+
 function hitTest(x,y,r){ return r&&x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.h; }
 
 function screenToCell(x,y) {
@@ -393,47 +443,95 @@ function drawFloaties(ctx) {
   ctx.globalAlpha=1;
 }
 
-// ─── 영웅 방어 구역 공격 ─────────────────────────────────────────────────────
+// ─── 상단 처치 보상 ──────────────────────────────────────────────────────────
+function onDefenseKill(e, byHero) {
+  const tpl  = ENEMY_TYPES[e.typeId] || {};
+  const gold = Math.max(1, Math.round((e.reward || 1) * BONUSES.defenseGoldMult));
+  gs.gold += gold;
+  gs.battle.totalGoldEarned += gold;
+  gs.battle.runKills = (gs.battle.runKills || 0) + 1;
+  gs.stats.totalKills++;
+  spawnFloaty(`+${gold}💰`, e.x, e.y - 14, COLORS.gold);
+  FX.burst(e.x, e.y, tpl.color || '#fff', 12, 14);
+  SFX.kill();
+
+  // 영웅이 상단에 있으면 EXP. 직접 처치는 전액, 타워 처치는 40%
+  if (gs.hero.placement === 'defense' && !gs.hero.dead) {
+    const exp = (tpl.reward || 2) * BONUSES.heroExpMult * (byHero ? 1 : 0.4);
+    if (exp >= 1) {
+      heroGainExp(exp);
+      spawnFloaty(`EXP+${Math.floor(exp)}`, gs.hero.defX, gs.hero.defY - 26, '#f59e0b');
+    }
+  }
+}
+
+// ─── 영웅 방어 구역 전투 ─────────────────────────────────────────────────────
 function updateHeroDefense(dt) {
-  const hero=gs.hero;
-  if (hero.placement!=='defense'||hero.dead) return;
-  const lv=HERO_LEVELS[hero.level];
+  const hero = gs.hero;
+  if (hero.placement !== 'defense' || hero.dead) return;
+  const lv = HERO_LEVELS[hero.level];
 
-  hero.atkCooldown=Math.max(0,hero.atkCooldown-dt);
-  if (hero.atkCooldown>0) return;
-
-  let best=null, bestD=Infinity;
-  for (const e of gs.defenseEnemies) {
-    if (e.dead||e.reached) continue;
-    const d=Math.hypot(e.x-hero.defX, e.y-hero.defY);
-    if (d<=lv.range&&d<bestD) { best=e; bestD=d; }
+  // 공격
+  hero.atkCooldown = Math.max(0, hero.atkCooldown - dt);
+  if (hero.atkCooldown <= 0) {
+    const best = pickTarget(gs.defenseEnemies, { x: hero.defX, y: hero.defY }, lv.range, 'nearest');
+    if (best) {
+      hero.atkCooldown = 1.0;
+      const atk = Math.round((lv.atk + BONUSES.heroAtk) * BONUSES.heroStatMult);
+      hurtDefenseEnemy(best, atk, false, e => onDefenseKill(e, true));
+      gs.projectiles.push({
+        x: hero.defX, y: hero.defY, tx: best.x, ty: best.y,
+        target: best, dmg: 0, color: '#f59e0b', spd: 420, visual: true
+      });
+      SFX.shoot();
+    }
   }
-  if (!best) return;
 
-  hero.atkCooldown=1.0;
-  best.hp-=lv.atk;
-  if (best.hp<=0) {
-    best.dead=true;
-    const expGain = (ENEMY_TYPES[best.typeId]?.reward || 2) * BONUSES.heroExpMult;
-    heroGainExp(expGain);
-    spawnFloaty(`EXP+${Math.floor(expGain)}`,hero.defX,hero.defY-20,'#f59e0b');
+  // 근접한 적의 반격 — 영웅도 죽을 수 있다
+  hero.hitCooldown = Math.max(0, (hero.hitCooldown || 0) - dt);
+  if (hero.hitCooldown <= 0) {
+    let incoming = 0;
+    for (const e of gs.defenseEnemies) {
+      if (e.dead || e.reached) continue;
+      if (Math.hypot(e.x - hero.defX, e.y - hero.defY) < CELL_W * 0.75) incoming += e.dmg;
+    }
+    if (incoming > 0) {
+      hero.hitCooldown = 1.0;
+      const def  = Math.round(lv.def * BONUSES.heroStatMult);
+      const real = Math.max(1, incoming - def);
+      hero.hp -= real;
+      spawnFloaty(`-${real}`, hero.defX, hero.defY - 18, '#ef4444');
+      FX.burst(hero.defX, hero.defY, '#ef4444', 5, 10);
+      if (hero.hp <= 0) killHero(gs);
+    }
   }
-  gs.projectiles.push({
-    x:hero.defX, y:hero.defY, tx:best.x, ty:best.y,
-    target:best, dmg:0, color:'#f59e0b', spd:350, _heroShot:true
-  });
+}
+
+function killHero(state) {
+  const hero = state.hero;
+  if (hero.dead) return;
+  hero.dead = true;
+  hero.hp = 0;
+  hero.placement = 'none';
+  hero.reviveTimer = BONUSES.heroInstantRevive ? 0 : heroReviveDur();
+  state.battle.ourTeam = state.battle.ourTeam.filter(u => !u.isHero);
+  spawnFloaty('👑 영웅 전사!', CW/2, DEFENSE_H/2, '#ef4444');
+  addLog(state.battle, '👑 영웅이 쓰러졌습니다', '#ef4444');
+  FX.shake(7, 0.4);
+  SFX.lose();
 }
 
 function heroGainExp(amount) {
-  const hero=gs.hero;
-  hero.exp+=amount;
-  const lv=HERO_LEVELS[hero.level];
-  if (hero.level<5&&hero.exp>=lv.expNeeded) {
-    hero.exp-=lv.expNeeded;
+  const hero = gs.hero;
+  hero.exp += amount;
+  while (hero.level < HERO_MAX_LEVEL && hero.exp >= HERO_LEVELS[hero.level].expNeeded) {
+    hero.exp -= HERO_LEVELS[hero.level].expNeeded;
     hero.level++;
-    hero.hp=HERO_LEVELS[hero.level].hp;
-    spawnFloaty(`영웅 레벨업! Lv.${hero.level}`,CW/2,DEFENSE_H/2,'#f59e0b');
-    addLog(gs.battle,`👑 영웅이 Lv.${hero.level}로 성장!`,COLORS.hero);
+    hero.hp = heroMaxHp();
+    spawnFloaty(`영웅 레벨업! Lv.${hero.level}`, CW/2, DEFENSE_H/2, '#f59e0b');
+    addLog(gs.battle, `👑 영웅이 Lv.${hero.level}로 성장!`, COLORS.hero);
+    FX.ring(CW/2, DEFENSE_H/2, COLORS.hero, 18);
+    SFX.levelUp();
   }
 }
 
@@ -454,19 +552,20 @@ function update(dt) {
   }
   if (_titleScreen) return;
 
-  if (gs.gameOver||gs.stageCleared||gs.showMeta) return;
+  FX.update(dt);
+
+  if (gs.gameOver||gs.stageCleared) { bankRunResult(); updateFloaties(dt); return; }
+  if (gs.showMeta) { updateFloaties(dt); return; }
   if (gs.upgradePick.active) { updateFloaties(dt); return; }
 
-  // 영웅 부활
+  // 영웅 부활 카운트다운
   if (gs.hero.dead) {
-    const revTime = Math.max(5, 30 - BONUSES.heroReviveReduction);
-    gs.hero.reviveTimer-=dt;
-    if (gs.hero.reviveTimer<=0) {
-      if (BONUSES.heroInstantRevive || gs.hero.reviveTimer <= -revTime) {
-        gs.hero.dead=false;
-        gs.hero.hp=HERO_LEVELS[gs.hero.level].hp;
-        spawnFloaty('영웅 부활!',CW/2,DEFENSE_H/2,'#22c55e');
-      }
+    gs.hero.reviveTimer = Math.max(0, gs.hero.reviveTimer - dt);
+    if (gs.hero.reviveTimer <= 0) {
+      gs.hero.dead = false;
+      gs.hero.hp = heroMaxHp();
+      spawnFloaty('👑 영웅 부활!', CW/2, DEFENSE_H/2, '#22c55e');
+      SFX.levelUp();
     }
   }
 
@@ -482,23 +581,19 @@ function update(dt) {
       const dmg = Math.max(1, Math.round(e.dmg * (1 - BONUSES.baseDefPct)));
       gs.baseHP=Math.max(0,gs.baseHP-dmg);
       spawnFloaty(`-${dmg}HP`,CW/2,DEFENSE_H-25,'#ef4444');
-      if (gs.baseHP<=0) {
-        gs.gameOver=true;
-        const earned = calcSoulStones(gs);
-        _soulStones += earned;
-        SaveManager.save(gs);
-        return;
-      }
+      FX.shake(Math.min(8, 2 + dmg * 0.2), 0.3);
+      SFX.baseHit();
+      if (gs.baseHP<=0) { gs.gameOver=true; bankRunResult(); return; }
     }
   }
 
   // 기지 재생
   if (BONUSES.baseRegen > 0) {
-    gs.baseHP = Math.min(BASE_HP_MAX + BONUSES.baseHpMax, gs.baseHP + BONUSES.baseRegen * dt);
+    gs.baseHP = Math.min(baseHpMax(), gs.baseHP + BONUSES.baseRegen * dt);
   }
 
   updateTowers(gs.towers,gs.defenseEnemies,gs.projectiles,dt);
-  updateProjectiles(gs.projectiles,()=>{},dt);
+  updateProjectiles(gs.projectiles, e => onDefenseKill(e, false), dt);
   gs.defenseEnemies=gs.defenseEnemies.filter(e=>!e.dead&&!e.reached);
 
   updateHeroDefense(dt);
@@ -509,25 +604,52 @@ function update(dt) {
   updateFloaties(dt);
 }
 
+// ─── 런 종료 정산 ────────────────────────────────────────────────────────────
+function bankRunResult() {
+  if (gs.resultBanked) return;
+  gs.resultBanked = true;
+  const earned = calcSoulStones(gs);
+  _soulStones += earned;
+  gs.lastSoulEarned = earned;
+  gs.stats.runs++;
+  gs.stats.bestWave  = Math.max(gs.stats.bestWave, gs.wave + (gs.stageCleared ? 1 : 0));
+  gs.stats.totalGold += gs.battle.totalGoldEarned;
+  SaveManager.save(gs);
+}
+
 // ─── 렌더 루프 ────────────────────────────────────────────────────────────────
 let _last=0;
 function loop(ts) {
   const dt=Math.min((ts-_last)/1000,0.05); _last=ts;
   ctx.clearRect(0,0,CW,CH);
+
+  const [shx, shy] = FX.shakeOffset();
+  ctx.save();
+  ctx.translate(shx, shy);
   if (gs.page==='town') {
     renderTownPage(ctx,gs);
   } else {
     renderDefense(ctx,gs);
     renderUIBar(ctx,gs,wm);
     renderBattle(ctx,gs);
-    renderHUD(ctx,gs);
+    FX.draw(ctx);
   }
+  ctx.restore();
+
+  if (gs.page!=='town') renderHUD(ctx,gs);
   if (gs.upgradePick.active) renderUpgradePick(ctx,gs);
   if (gs.showMeta) renderMetaScreen(ctx,gs);
   drawFloaties(ctx);
+  if (_paused && !_titleScreen && !tut.active) renderPauseOverlay(ctx);
   renderTutorial(ctx,tut);
   if (_titleScreen || _fadingOut) renderTitleScreen(ctx, _titleAlpha);
-  update(dt);
+
+  if (_paused && !_titleScreen && !_fadingOut) {
+    FX.update(dt); updateFloaties(dt);
+  } else {
+    const steps = (_titleScreen || _fadingOut) ? 1 : gameSpeed();
+    for (let i = 0; i < steps; i++) update(dt);
+  }
   requestAnimationFrame(loop);
 }
 
@@ -550,6 +672,8 @@ function resetGame(fromMeta) {
 
   gs.page = 'battle';
   gs.town = createTown();
+  FX.clear();
+  _paused = false;
   refreshHeroShop(gs);
   reapplyAllBonuses(gs);
   _applyStartBonuses();

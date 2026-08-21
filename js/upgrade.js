@@ -9,8 +9,9 @@ function createDefaultBonuses() {
     // 유닛
     unitAtk: 0, unitHp: 0, unitDef: 0,
     hireCostDiscount: 0, maxSlotBonus: 0,
-    killHeal: 0, comboChance: 0,
-    undying: false, undyingUsed: false,
+    killHeal: 0, comboChance: 0, critChance: 0,
+    healBonus: 0, shieldBonus: 0, mpRegenBonus: 0, restHealBonus: 0,
+    undying: false,
     // 케이브/전투
     battleGoldMult: 1.0, mobHpMult: 1.0, spawnSpeedMult: 1.0,
     eliteChance: 0, dropChance: 0,
@@ -21,7 +22,7 @@ function createDefaultBonuses() {
     // 기지
     baseHpMax: 0, baseDefPct: 0, baseRegen: 0,
     // 자원
-    startGoldBonus: 0,
+    startGoldBonus: 0, defenseGoldMult: 1.0,
   };
 }
 
@@ -156,19 +157,26 @@ const SKILL_TREES = {
 };
 
 // ─── 랜덤 카드 3장 뽑기 ──────────────────────────────────────────────────────
-function rollUpgradeCards() {
-  const weights = UPGRADE_CARDS.map(c =>
+function rollUpgradeCards(taken) {
+  const owned = new Set(taken || []);
+  // 불린/일회성 효과 카드는 이미 뽑았으면 후보에서 제외
+  const uniqueOnly = new Set(['t_thunder', 'u_undying', 'h_immortal', 'b_wall', 'c_eldorado']);
+  const pool = UPGRADE_CARDS.filter(c => !(uniqueOnly.has(c.id) && owned.has(c.id)));
+
+  const weights = pool.map(c =>
     c.grade === 'common' ? 60 : c.grade === 'rare' ? 28 : 12
   );
-  const total = weights.reduce((a, b) => a + b, 0);
   const picked = [], used = new Set();
 
-  while (picked.length < 3 && used.size < UPGRADE_CARDS.length) {
+  while (picked.length < 3 && used.size < pool.length) {
+    let total = 0;
+    for (let i = 0; i < pool.length; i++) if (!used.has(i)) total += weights[i];
+    if (total <= 0) break;
     let r = Math.random() * total;
-    for (let i = 0; i < UPGRADE_CARDS.length; i++) {
+    for (let i = 0; i < pool.length; i++) {
       if (used.has(i)) continue;
       r -= weights[i];
-      if (r <= 0) { picked.push(UPGRADE_CARDS[i]); used.add(i); break; }
+      if (r <= 0) { picked.push(pool[i]); used.add(i); break; }
     }
   }
   return picked;
@@ -178,8 +186,9 @@ function rollUpgradeCards() {
 function applyUpgradeCard(card, gs) {
   card.apply(BONUSES, gs);
   gs.activeUpgrades.push(card.id);
-  // 슬롯 추가는 즉시 battle.maxSlots에 반영
   gs.battle.maxSlots = 4 + BONUSES.maxSlotBonus;
+  refreshTeamStats(gs.battle);   // 이미 고용한 병력에도 즉시 적용
+  syncBattleLayout(gs.battle);
 }
 
 // ─── 스킬 트리를 BONUSES에 반영 ──────────────────────────────────────────────
@@ -214,6 +223,7 @@ function calcSoulStones(gs) {
   const wavesCleared = gs.wave;
   const hpBonus   = Math.floor(gs.baseHP * 0.2);
   const caveBonus = gs.caveLevel * 3;
-  return Math.max(1, wavesCleared * 5 + hpBonus + caveBonus);
+  const killBonus = Math.floor((gs.battle.runKills || 0) * 0.3);
+  return Math.max(1, wavesCleared * 5 + hpBonus + caveBonus + killBonus);
 }
 

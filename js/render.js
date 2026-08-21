@@ -168,24 +168,48 @@ function drawArrow(ctx,x1,y1,x2,y2,color) {
 
 function renderTower(ctx, t) {
   const {x,y}=cellCenter(t.col,t.row);
+  const tpl=TOWER_TYPES[t.typeId];
+  const kick=t.muzzle>0?1.5:0;
   ctx.fillStyle='#0f2540';
   roundRect(ctx,x-CELL_W/2+3,y-CELL_H/2+3,CELL_W-6,CELL_H-6,4); ctx.fill();
-  ctx.fillStyle=TOWER_TYPES[t.typeId].color;
-  ctx.fillRect(x-9,y-9,18,18);
+  ctx.fillStyle=tpl.color;
+  ctx.fillRect(x-9-kick,y-9-kick,18+kick*2,18+kick*2);
+  ctx.fillStyle='#0f172a';
   ctx.font='13px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText(TOWER_TYPES[t.typeId].icon,x,y+1);
-  ctx.strokeStyle='#86efac'; ctx.lineWidth=1; ctx.strokeRect(x-9,y-9,18,18);
+  ctx.fillText(tpl.icon,x,y+1);
+  ctx.strokeStyle=tpl.color; ctx.lineWidth=1; ctx.strokeRect(x-9,y-9,18,18);
+  if ((t.level||1)>1) {
+    ctx.fillStyle='#fbbf24'; ctx.font='bold 7px sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.fillText('★'.repeat((t.level||1)-1), x, y+9);
+  }
 }
 
 function renderDefEnemy(ctx, e) {
+  const slowed = e.slowTimer > 0;
+  if (slowed) {
+    ctx.beginPath(); ctx.arc(e.x,e.y,e.radius+3,0,Math.PI*2);
+    ctx.fillStyle='rgba(56,189,248,0.30)'; ctx.fill();
+  }
   ctx.beginPath(); ctx.arc(e.x,e.y,e.radius,0,Math.PI*2);
-  ctx.fillStyle=ENEMY_TYPES[e.typeId].color; ctx.fill();
-  ctx.strokeStyle='#fff'; ctx.lineWidth=1; ctx.stroke();
+  ctx.fillStyle = e.hitFlash>0 ? '#ffffff' : (slowed ? '#7dd3fc' : ENEMY_TYPES[e.typeId].color);
+  ctx.fill();
+  ctx.strokeStyle = (e.armor||0)>0 ? '#cbd5e1' : '#fff';
+  ctx.lineWidth = (e.armor||0)>0 ? 2 : 1;
+  ctx.stroke();
   drawHPBar(ctx, e.x-e.radius, e.y-e.radius-7, e.radius*2, 4, e.hp/e.maxHp);
 }
 
 function renderHeroInDefense(ctx, hero) {
-  if (hero.dead) return;
+  if (hero.dead) {
+    ctx.globalAlpha=0.4;
+    ctx.font='18px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('💀', hero.defX, hero.defY);
+    ctx.globalAlpha=1;
+    ctx.fillStyle='#f87171'; ctx.font='bold 8px sans-serif'; ctx.textBaseline='top';
+    ctx.fillText(`부활 ${Math.ceil(hero.reviveTimer)}s`, hero.defX, hero.defY+12);
+    return;
+  }
   const lv = HERO_LEVELS[hero.level];
   const r  = 14;
   // 방어 구역 중앙 좌표
@@ -203,10 +227,22 @@ function renderHeroInDefense(ctx, hero) {
   ctx.font=`${r}px sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.fillText('👑', hx, hy+1);
 
-  // 레벨 뱃지
-  ctx.fillStyle='#1e293b'; ctx.font='bold 8px sans-serif';
-  ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText(`Lv.${hero.level}`, hx+r-2, hy-r-1);
+  // HP 바 + 레벨 뱃지
+  const hMax = Math.round(lv.hp * BONUSES.heroStatMult);
+  drawHPBar(ctx, hx-16, hy+r+2, 32, 4, hero.hp/hMax);
+  ctx.fillStyle=COLORS.hero; ctx.font='bold 8px sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  ctx.fillText(`Lv.${hero.level}`, hx, hy+r+8);
+}
+
+// ─── 일시정지 오버레이 ───────────────────────────────────────────────────────
+function renderPauseOverlay(ctx) {
+  ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(0,0,CW,CH);
+  ctx.fillStyle='#e2e8f0'; ctx.font='bold 30px sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('⏸ 일시정지', CW/2, CH/2-12);
+  ctx.fillStyle='#94a3b8'; ctx.font='12px sans-serif';
+  ctx.fillText('P 키 또는 ⏸ 버튼으로 재개', CW/2, CH/2+18);
 }
 
 // ─── UI Bar ──────────────────────────────────────────────────────────────────
@@ -1408,13 +1444,49 @@ function renderTownPageArmy(ctx, gs, startY) {
 }
 
 function renderTownPageTowers(ctx, gs, startY) {
+  // ── 타워 종류 팔레트 ─────────────────────────────────────────────────────
+  ctx.fillStyle='#60a5fa'; ctx.font='bold 11px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
+  ctx.fillText('타워 종류를 고른 뒤 빈 셀을 탭하세요 (키보드 1~4)', CW/2, startY);
+
+  const pw=112, ph=52, pgap=6;
+  const prow = TOWER_ORDER.length;
+  const totalW = prow*pw + (prow-1)*pgap;
+  const px0 = Math.max(4, (CW-totalW)/2);
+  const py0 = startY+16;
+  gs.ui.towerTypeBtns = [];
+  TOWER_ORDER.forEach((id,i) => {
+    const tpl=TOWER_TYPES[id];
+    const bx=px0+i*(pw+pgap);
+    const cost=towerBuildCost(id, gs.towers);
+    const sel=gs.selectedTowerType===id;
+    const afford=gs.gold>=cost;
+    roundRect(ctx,bx,py0,pw,ph,6);
+    ctx.fillStyle = sel?'#152b45' : afford?'#111c2e':'#0e1017'; ctx.fill();
+    ctx.strokeStyle = sel?tpl.color : afford?'#334155':'#252b38';
+    ctx.lineWidth = sel?2:1; ctx.stroke();
+
+    ctx.globalAlpha = afford?1:0.5;
+    ctx.fillStyle='#e2e8f0'; ctx.font='16px sans-serif';
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillText(tpl.icon, bx+7, py0+6);
+    ctx.fillStyle = sel?tpl.color:'#cbd5e1'; ctx.font='bold 11px sans-serif';
+    ctx.fillText(tpl.name, bx+29, py0+7);
+    ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif';
+    ctx.fillText(tpl.desc, bx+7, py0+26);
+    ctx.fillStyle = afford?COLORS.gold:'#64748b'; ctx.font='bold 10px sans-serif';
+    ctx.fillText(`${cost}💰`, bx+7, py0+38);
+    ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif'; ctx.textAlign='right';
+    ctx.fillText(`ATK ${Math.round(tpl.dmg+BONUSES.towerDmg)}`, bx+pw-7, py0+38);
+    ctx.globalAlpha=1;
+
+    gs.ui.towerTypeBtns.push({x:bx,y:py0,w:pw,h:ph,typeId:id});
+  });
+
+  // ── 미니 그리드 ──────────────────────────────────────────────────────────
   const scale=0.62;
   const mCW=Math.floor(CELL_W*scale),mCH=Math.floor(CELL_H*scale);
   const gridW=GRID_COLS*mCW,gridH=GRID_ROWS*mCH;
-  const offX=Math.floor((CW-gridW)/2),offY=startY+14;
-
-  ctx.fillStyle='#60a5fa'; ctx.font='bold 11px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
-  ctx.fillText('방어 그리드 — 셀을 탭하여 타워 건설 / 선택된 타워 강화·철거',CW/2,startY);
+  const offX=Math.floor((CW-gridW)/2),offY=py0+ph+12;
 
   for (let r=0;r<GRID_ROWS;r++) {
     for (let c=0;c<GRID_COLS;c++) {
@@ -1423,12 +1495,21 @@ function renderTownPageTowers(ctx, gs, startY) {
       const isBase=c===4&&r===6,isStart=c===4&&r===0;
       ctx.fillStyle=isBase?'#3f1515':isStart?'#1e3a5f':isPath?COLORS.pathCell:COLORS.defenseGrid;
       ctx.fillRect(x+1,y+1,mCW-2,mCH-2);
+      if (!isPath && !isBase && !isStart) {
+        ctx.strokeStyle='rgba(148,163,184,0.12)'; ctx.lineWidth=1;
+        ctx.strokeRect(x+1.5,y+1.5,mCW-3,mCH-3);
+      }
       const tower=gs.towers.find(tw=>tw.col===c&&tw.row===r);
       if (tower) {
         const selected=gs.ui.towerAction&&gs.ui.towerAction.col===c&&gs.ui.towerAction.row===r;
-        ctx.fillStyle=selected?'rgba(99,102,241,0.5)':'rgba(34,197,94,0.3)'; ctx.fillRect(x+1,y+1,mCW-2,mCH-2);
+        ctx.fillStyle=selected?'rgba(99,102,241,0.5)':'rgba(34,197,94,0.22)'; ctx.fillRect(x+1,y+1,mCW-2,mCH-2);
+        ctx.fillStyle='#e2e8f0';
         ctx.font=`${Math.floor(mCW*0.55)}px sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
         ctx.fillText(TOWER_TYPES[tower.typeId].icon,x+mCW/2,y+mCH/2);
+        if ((tower.level||1)>1) {
+          ctx.fillStyle='#fbbf24'; ctx.font='bold 7px sans-serif'; ctx.textBaseline='bottom';
+          ctx.fillText('★'.repeat((tower.level||1)-1), x+mCW/2, y+mCH-1);
+        }
         if (selected) { ctx.strokeStyle='#6366f1'; ctx.lineWidth=2; ctx.strokeRect(x+1,y+1,mCW-2,mCH-2); }
       }
       if (isBase) {
@@ -1439,46 +1520,87 @@ function renderTownPageTowers(ctx, gs, startY) {
   }
   gs.ui.towerMiniGrid={x:offX,y:offY,cellW:mCW,cellH:mCH,scale};
 
+  // ── 선택 타워 패널 ───────────────────────────────────────────────────────
   const panelY=offY+gridH+8;
   if (gs.ui.towerAction) {
     const ta=gs.ui.towerAction;
     const tower=gs.towers.find(tw=>tw.col===ta.col&&tw.row===ta.row);
     if (tower) {
       const lv=tower.level||1;
-      roundRect(ctx,6,panelY,CW-12,68,7);
-      ctx.fillStyle='#0d1929'; ctx.fill(); ctx.strokeStyle='#60a5fa'; ctx.lineWidth=1.5; ctx.stroke();
+      const tpl=TOWER_TYPES[tower.typeId];
+      const st=towerStats(tower);
+      roundRect(ctx,6,panelY,CW-12,72,7);
+      ctx.fillStyle='#0d1929'; ctx.fill(); ctx.strokeStyle=tpl.color; ctx.lineWidth=1.5; ctx.stroke();
+      ctx.fillStyle='#e2e8f0';
       ctx.font='20px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
-      ctx.fillText(TOWER_TYPES[tower.typeId].icon,14,panelY+22);
-      ctx.fillStyle='#f1f5f9'; ctx.font='bold 12px sans-serif'; ctx.fillText(`화살 타워  Lv.${lv}/3`,42,panelY+14);
+      ctx.fillText(tpl.icon,14,panelY+20);
+      ctx.fillStyle='#f1f5f9'; ctx.font='bold 12px sans-serif';
+      ctx.fillText(`${tpl.name}  Lv.${lv}/${TOWER_MAX_LEVEL}`,42,panelY+13);
       ctx.fillStyle='#94a3b8'; ctx.font='bold 10px sans-serif';
-      ctx.fillText(`ATK: ${tower.dmg+BONUSES.towerDmg}   SPD: ${tower.spd.toFixed(1)}/s   사거리: ${Math.round(tower.range)}px`,42,panelY+30);
-      if (lv<3) {
-        const upgCost=lv*15,canAff=gs.gold>=upgCost,bw2=140,bh2=26;
-        drawBtn(ctx,10,panelY+38,bw2,bh2,`강화 Lv.${lv+1}  ${upgCost}💰`,canAff?'#1e3a5f':'#1e293b',canAff?'#60a5fa':'#64748b',canAff);
-        gs.ui.towerUpgradeBtn={x:10,y:panelY+38,w:bw2,h:bh2};
+      ctx.fillText(`ATK ${st.dmg}   ${st.spd.toFixed(2)}/s   사거리 ${Math.round(st.range)}px   처치 ${tower.kills}`,42,panelY+29);
+
+      const upgCost=towerUpgradeCost(tower);
+      if (upgCost!==null) {
+        const canAff=gs.gold>=upgCost,bw2=150,bh2=26;
+        drawBtn(ctx,10,panelY+42,bw2,bh2,`강화 Lv.${lv+1}  ${upgCost}💰`,canAff?'#1e3a5f':'#1e293b',canAff?'#60a5fa':'#64748b',canAff);
+        gs.ui.towerUpgradeBtn={x:10,y:panelY+42,w:bw2,h:bh2};
       } else {
         gs.ui.towerUpgradeBtn=null;
         ctx.fillStyle='#f59e0b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
-        ctx.fillText('★ 최고 레벨',10,panelY+52);
+        ctx.fillText('★ 최고 레벨',12,panelY+55);
       }
-      const rbw=80,rbh=26,rbx=CW-10-rbw;
-      drawBtn(ctx,rbx,panelY+38,rbw,rbh,'🗑 철거','#3f1515','#ef4444');
-      gs.ui.towerRemoveBtn={x:rbx,y:panelY+38,w:rbw,h:rbh};
+      const rbw=110,rbh=26,rbx=CW-10-rbw;
+      drawBtn(ctx,rbx,panelY+42,rbw,rbh,`🗑 판매 +${towerSellValue(tower)}💰`,'#3f1515','#ef4444');
+      gs.ui.towerRemoveBtn={x:rbx,y:panelY+42,w:rbw,h:rbh};
     }
   } else {
-    roundRect(ctx,6,panelY,CW-12,68,7);
+    const tpl=TOWER_TYPES[gs.selectedTowerType]||TOWER_TYPES.arrow;
+    roundRect(ctx,6,panelY,CW-12,72,7);
     ctx.fillStyle='#080d18'; ctx.fill(); ctx.strokeStyle='#1e293b'; ctx.lineWidth=1; ctx.stroke();
-    const cost=Math.max(1,TOWER_TYPES.arrow.cost-BONUSES.towerCostDiscount);
-    ctx.fillStyle='#64748b'; ctx.font='bold 11px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(`빈 셀을 탭하여 화살 타워 건설 (${cost}💰)`,CW/2,panelY+22);
+    ctx.fillStyle='#94a3b8'; ctx.font='bold 11px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(`선택: ${tpl.icon} ${tpl.name} — ${towerBuildCost(gs.selectedTowerType, gs.towers)}💰`,CW/2,panelY+20);
+    ctx.fillStyle='#64748b'; ctx.font='bold 10px sans-serif';
+    ctx.fillText(tpl.desc,CW/2,panelY+38);
     ctx.fillStyle='#475569'; ctx.font='10px sans-serif';
-    ctx.fillText('타워를 탭하면 강화/철거 패널이 표시됩니다',CW/2,panelY+42);
+    ctx.fillText('빈 셀 탭 = 건설 / 세운 타워 탭 = 강화·판매',CW/2,panelY+56);
     gs.ui.towerUpgradeBtn=null; gs.ui.towerRemoveBtn=null;
   }
 
-  const infoY=panelY+76,towerCost=Math.max(1,TOWER_TYPES.arrow.cost-BONUSES.towerCostDiscount);
-  ctx.fillStyle='#475569'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText(`배치된 타워: ${gs.towers.length}개   건설 비용: ${towerCost}💰`,8,infoY);
+  // ── 배치 요약 (빈 공간 활용) ─────────────────────────────────────────────
+  const infoY=panelY+80;
+  roundRect(ctx,6,infoY,CW-12,CH-infoY-10,7);
+  ctx.fillStyle='#080d18'; ctx.fill(); ctx.strokeStyle='#161f30'; ctx.lineWidth=1; ctx.stroke();
+  ctx.fillStyle='#94a3b8'; ctx.font='bold 11px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText('배치 현황',14,infoY+9);
+
+  const counts={};
+  let totalKills=0, totalInvest=0;
+  for (const t of gs.towers) {
+    counts[t.typeId]=(counts[t.typeId]||0)+1;
+    totalKills+=t.kills||0; totalInvest+=t.invested||0;
+  }
+  let ry=infoY+28;
+  for (const id of TOWER_ORDER) {
+    const n=counts[id]||0;
+    const tpl=TOWER_TYPES[id];
+    ctx.fillStyle = n>0?'#e2e8f0':'#3f4a5c'; ctx.font='11px sans-serif'; ctx.textAlign='left';
+    ctx.fillText(`${tpl.icon} ${tpl.name}`,18,ry);
+    ctx.fillStyle = n>0?tpl.color:'#3f4a5c'; ctx.font='bold 11px sans-serif'; ctx.textAlign='right';
+    ctx.fillText(`${n}기`,CW-58,ry);
+    ctx.fillStyle='#475569'; ctx.font='9px sans-serif';
+    ctx.fillText(`다음 ${towerBuildCost(id, gs.towers)}💰`,CW-18,ry+1);
+    ry+=20;
+  }
+  ctx.strokeStyle='#1e293b'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(16,ry+4); ctx.lineTo(CW-16,ry+4); ctx.stroke();
+  ry+=16;
+  ctx.fillStyle='#64748b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left';
+  ctx.fillText(`총 ${gs.towers.length}기 · 누적 처치 ${totalKills} · 투자 ${totalInvest}💰`,18,ry);
+  ry+=18;
+  ctx.fillStyle='#475569'; ctx.font='9px sans-serif';
+  ctx.fillText('같은 종류를 많이 지을수록 건설비가 오릅니다.',18,ry);
+  ry+=13;
+  ctx.fillText('∞ 경로는 같은 칸을 두 번 지나므로 교차 지점이 가장 효율적입니다.',18,ry);
 }
 
 // ─── Tutorial ─────────────────────────────────────────────────────────────────

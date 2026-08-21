@@ -44,9 +44,13 @@ function createWaveManager() {
       const def = WAVE_DEFS[this.waveIndex];
 
       // 상단 스폰 큐
+      const countMult = 1 + this.waveIndex * DEF_WAVE_COUNT_SCALE;
+      const spawnMult = BONUSES.spawnSpeedMult || 1;
       this.defenseQueues = def.defenseEnemies.map(d => ({
-        type:d.type, remaining:d.count,
-        interval:d.interval/1000, nextSpawn:0.5
+        type:d.type,
+        remaining: Math.max(1, Math.round(d.count * countMult)),
+        interval: (d.interval / 1000) / spawnMult,
+        nextSpawn: 0.5
       }));
 
       // 하단 그룹 목록 복사
@@ -59,6 +63,7 @@ function createWaveManager() {
 
       // 첫 그룹 바로 스폰
       this._spawnGroup(gs);
+      if (typeof SFX !== 'undefined') SFX.waveStart();
     },
 
     _spawnGroup(gs) {
@@ -67,12 +72,16 @@ function createWaveManager() {
         return;
       }
       const group = this.battleGroups[this.groupIdx];
-      group.types.forEach((type, i) => {
+      const types = group.types.slice(0, MAX_GROUP_SIZE);
+      // 아군/적 중 큰 쪽에 맞춰 행 간격을 먼저 확정해야 drawY가 화면 안에 들어온다
+      setBattleRowCount(Math.max(4, gs.battle.ourTeam.length, types.length));
+      types.forEach((type, i) => {
         const mob = makeScaledMob(type, gs.battle.killCount, gs.caveLevel);
         mob.drawY = unitY(i);
         gs.battle.enemyTeam.push(mob);
       });
       this.groupPhase = 'fighting';
+      if (typeof SFX !== 'undefined' && this.groupIdx > 0) SFX.advance();
     },
 
     update(gs, dt) {
@@ -86,7 +95,7 @@ function createWaveManager() {
         if (q.remaining <= 0) continue;
         q.nextSpawn -= dt;
         if (q.nextSpawn <= 0) {
-          gs.defenseEnemies.push(makeDefenseEnemy(q.type, 'A'));
+          gs.defenseEnemies.push(makeDefenseEnemy(q.type, this.waveIndex));
           q.remaining--;
           q.nextSpawn = q.interval;
         }
@@ -168,25 +177,35 @@ function createWaveManager() {
       if (winBonus > 0)  parts.push(`승리 +${winBonus}💰`);
       addLog(gs.battle, `웨이브${this.waveIndex+1}: ${parts.join(' ')}`, COLORS.gold);
 
+      if (typeof SFX !== 'undefined') {
+        if (gs.battle.result === 'won') SFX.win(); else SFX.lose();
+      }
+
+      // 하단에 배치했던 영웅 상태를 되돌려 받는다
+      const heroUnit = gs.battle.ourTeam.find(u => u.isHero);
+      if (heroUnit) {
+        if (heroUnit.dead) killHero(gs);
+        else gs.hero.hp = Math.max(1, Math.round(heroUnit.hp));
+      }
+
       gs.defenseEnemies    = [];
       gs.projectiles       = [];
       gs.battle.enemyTeam  = [];
-      gs.battle.ourTeam    = gs.battle.ourTeam.filter(u => !u.dead);
+      gs.battle.ourTeam    = gs.battle.ourTeam.filter(u => !u.dead && !u.isHero);
       gs.battle.phase      = 'hire';
       gs.battle.result     = null;
       gs.battle.goldEarned = 0;
       gs.battle.floaties   = [];
       gs.battle.maxSlots   = 4 + BONUSES.maxSlotBonus;
 
-      if (gs.hero.placement === 'battle') {
-        gs.battle.ourTeam = gs.battle.ourTeam.filter(u => !u.isHero);
-      }
       gs.hero.placement = 'none';
+      restHealTeam(gs.battle);       // 생존 병력 휴식 회복
+      syncBattleLayout(gs.battle);
 
       const isLast = (this.waveIndex + 1 >= WAVE_DEFS.length);
       if (!isLast) {
         this.phase = 'upgradePick';
-        gs.upgradePick = { active: true, cards: rollUpgradeCards() };
+        gs.upgradePick = { active: true, cards: rollUpgradeCards(gs.activeUpgrades) };
       } else {
         this.phase = 'intermission';
         this.intermissionTimer = 0;
@@ -209,6 +228,7 @@ function createWaveManager() {
         }
       }
 
+      gs.stats.wavesCleared = Math.max(gs.stats.wavesCleared || 0, this.waveIndex + 1);
       SaveManager.save(gs);
     },
 

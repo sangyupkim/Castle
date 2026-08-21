@@ -1,6 +1,10 @@
 'use strict';
 
-const SAVE_KEY = 'dualfrontier_v5';
+const SAVE_KEY = 'dualfrontier_v6';
+
+function createStats() {
+  return { runs:0, bestWave:0, totalKills:0, totalGold:0, wavesCleared:0 };
+}
 
 const SaveManager = {
   load() {
@@ -12,14 +16,12 @@ const SaveManager = {
 
   save(gs) {
     const data = {
-      phase:      gs.phase,
       wave:       gs.wave,
       gold:       gs.gold,
       baseHP:     gs.baseHP,
       heroLevel:  gs.hero.level,
       heroExp:    gs.hero.exp,
       caveLevel:  gs.caveLevel,
-      persistedEnemies: serializeEnemies(gs.battle.enemyTeam),
       totalGoldEarned: gs.battle.totalGoldEarned,
       soulStones:  gs.soulStones  || 0,
       metaUpgrades: gs.metaUpgrades || {},
@@ -27,6 +29,7 @@ const SaveManager = {
       skillTreeOwned: gs.skillTreeOwned || [],
       townBuildings: JSON.parse(JSON.stringify(gs.town?.buildings || {})),
       townEquipped:  gs.town?.equippedItems || [],
+      stats:         gs.stats || createStats(),
       timestamp:  Date.now()
     };
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch(e) {}
