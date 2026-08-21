@@ -208,6 +208,14 @@ function tap({x,y}) {
     return;
   }
 
+  // 게임 컨트롤 (항상 최우선)
+  if (gs.page!=='town') {
+    if (hitTest(x,y,gs.ui.ctrlPause||{})) { togglePause(); return; }
+    if (hitTest(x,y,gs.ui.ctrlSpeed||{})) { cycleSpeed();  return; }
+    if (hitTest(x,y,gs.ui.ctrlMute ||{})) { SFX.toggleMute(); return; }
+    if (hitTest(x,y,gs.ui.briefTownBtn||{}) || hitTest(x,y,gs.ui.uibarTownBtn||{})) { gs.page='town'; SFX.click(); return; }
+  }
+
   // 기지 탭 → 마을 진입 (idle 상태에서만)
   if (wm.phase==='idle' && y<UIBAR_Y) {
     const cell=screenToCell(x,y);
@@ -239,7 +247,12 @@ function tap({x,y}) {
   // Idle phase: wave start buttons (UIBar or battle area)
   if (wm.phase==='idle') {
     if (hitTest(x,y,gs.ui.waveBtn||{}) || hitTest(x,y,gs.ui.battleWaveStartBtn||{})) {
-      wm.startWave(gs); gs.waveActive=true;
+      if (!gs.battle.ourTeam.length) {
+        spawnFloaty('병력을 먼저 고용하세요!', CW/2, BATTLE_Y+40, '#ef4444');
+        SFX.denied();
+      } else {
+        wm.startWave(gs); gs.waveActive=true;
+      }
       return;
     }
     handleTownTap(x,y);
@@ -349,19 +362,21 @@ function handleTownTap(x,y) {
     for (const card of gs.ui.hireCards||[]) {
       if (hitTest(x,y,card)) {
         const prev=gs.gold; gs.gold=hireUnit(gs.battle,card.typeId,gs.gold);
-        if (gs.gold<prev) spawnFloaty(`+${UNIT_TYPES[card.typeId].name}`,card.x+card.w/2,card.y,'#60a5fa');
-        else spawnFloaty('골드 부족!',x,y,'#ef4444');
+        if (gs.gold<prev) { spawnFloaty(`+${UNIT_TYPES[card.typeId].name}`,card.x+card.w/2,card.y,'#60a5fa'); SFX.hire(); }
+        else { const full=gs.battle.ourTeam.filter(u=>!u.isHero).length>=gs.battle.maxSlots;
+               spawnFloaty(full?'슬롯이 가득 참!':'골드 부족!',x,y,'#ef4444'); SFX.denied(); }
         return;
       }
     }
     for (const slot of gs.ui.hiredSlots||[]) {
       if (hitTest(x,y,slot)) {
         const units=gs.battle.ourTeam.filter(u=>!u.isHero);
-        if (units[slot.idx]) { const ref=fireUnit(gs.battle,gs.battle.ourTeam.indexOf(units[slot.idx])); gs.gold+=ref; if (ref>0) spawnFloaty(`+${ref}💰`,x,y,COLORS.gold); }
+        if (units[slot.idx]) { const ref=fireUnit(gs.battle,gs.battle.ourTeam.indexOf(units[slot.idx])); gs.gold+=ref; if (ref>0) { spawnFloaty(`+${ref}💰`,x,y,COLORS.gold); SFX.sell(); } }
         return;
       }
     }
     if (hitTest(x,y,gs.ui.deployBtn||{})) {
+      if (!gs.battle.ourTeam.length) { spawnFloaty('병력을 먼저 고용하세요!',x,y,'#ef4444'); SFX.denied(); return; }
       gs.page='battle'; wm.startWave(gs); gs.waveActive=true;
       return;
     }

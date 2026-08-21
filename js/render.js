@@ -55,7 +55,7 @@ function renderDefense(ctx, gs) {
         ctx.fillRect(x+1, y+1, CELL_W-2, CELL_H-2);
       }
       if (isStart) labelCell(ctx,'시작',x,y,'#93c5fd');
-      if (isEnd)   labelCell(ctx,'기지',x,y,'#fca5a5');
+      if (isEnd)   labelCell(ctx,'🏰마을',x,y,'#fca5a5');
 
       // Hover
       if (!isPath && gs.hoveredCell && gs.hoveredCell.c===c && gs.hoveredCell.r===r) {
@@ -215,9 +215,12 @@ function renderHeroInDefense(ctx, hero) {
   // 방어 구역 중앙 좌표
   const hx = hero.defX, hy = hero.defY;
 
-  // 사거리 표시
+  // 사거리 표시 (방어 구역 안쪽으로만)
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, DEFENSE_Y, CW, DEFENSE_H); ctx.clip();
   ctx.beginPath(); ctx.arc(hx, hy, lv.range, 0, Math.PI*2);
   ctx.strokeStyle='rgba(245,158,11,0.3)'; ctx.lineWidth=1; ctx.stroke();
+  ctx.restore();
 
   // 영웅 원
   ctx.beginPath(); ctx.arc(hx, hy, r, 0, Math.PI*2);
@@ -254,13 +257,13 @@ function renderUIBar(ctx, gs, wm) {
 
   const cy=UIBAR_Y+UIBAR_H/2;
 
-  // 스테이지 / 웨이브
+  // 스테이지 / 웨이브 (좌측 상·하 2줄)
   const si = getStageInfo(gs.wave);
   ctx.fillStyle=COLORS.text; ctx.font='bold 12px sans-serif';
   ctx.textAlign='left'; ctx.textBaseline='middle';
-  ctx.fillText(`스테이지 ${si.stageLabel}`, 8, cy-8);
-  ctx.fillStyle='#94a3b8'; ctx.font='10px sans-serif';
-  ctx.fillText(`웨이브 ${si.waveInStage+1}/3`, 8, cy+5);
+  ctx.fillText(`${si.stageLabel}`, 8, cy-13);
+  ctx.fillStyle='#94a3b8'; ctx.font='bold 9px sans-serif';
+  ctx.fillText(`웨이브 ${si.waveInStage+1}/3`, 30, cy-12);
 
   // 타이머
   const tv = wm.phase==='active'       ? Math.ceil(wm.timer)
@@ -268,14 +271,18 @@ function renderUIBar(ctx, gs, wm) {
            : WAVE_DURATION;
   const tlabel = wm.phase==='intermission'
     ? `준비 ${tv}s`
-    : `⏱ ${String(Math.floor(tv/60)).padStart(2,'0')}:${String(tv%60).padStart(2,'0')}`;
+    : `${String(Math.floor(tv/60)).padStart(2,'0')}:${String(tv%60).padStart(2,'0')}`;
   ctx.fillStyle = wm.phase==='active' && tv<=10 ? '#ef4444' : COLORS.gold;
-  ctx.font='bold 12px monospace'; ctx.fillText(tlabel, 8, cy+9);
+  ctx.font='bold 13px monospace'; ctx.textAlign='left';
+  ctx.fillText(`⏱ ${tlabel}`, 8, cy+4);
+
+  ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif';
+  ctx.fillText(`누적 ${gs.battle.totalGoldEarned}💰 · 💎${gs.soulStones}`, 8, cy+19);
 
   // 골드
   ctx.fillStyle=COLORS.gold; ctx.font='bold 14px sans-serif';
   ctx.textAlign='center';
-  ctx.fillText(`💰 ${gs.gold}`, CW/2, cy-7);
+  ctx.fillText(`💰 ${Math.floor(gs.gold)}`, CW/2, cy-7);
 
   // 전투 적립 골드
   const bp = gs.battle.phase;
@@ -291,11 +298,6 @@ function renderUIBar(ctx, gs, wm) {
   ctx.font='bold 10px sans-serif'; ctx.textAlign='center';
   ctx.fillText(bLabel, CW/2, cy+8);
 
-  // 누적 획득 골드 (좌하)
-  ctx.fillStyle='#94a3b8'; ctx.font='bold 9px sans-serif';
-  ctx.textAlign='left';
-  ctx.fillText(`누적: ${gs.battle.totalGoldEarned}💰`, 8, cy+22);
-
   // 웨이브 시작 버튼
   const bw=110, bh=38, bx=CW-bw-6, by2=UIBAR_Y+(UIBAR_H-bh)/2;
   if (wm.phase==='active') {
@@ -305,9 +307,10 @@ function renderUIBar(ctx, gs, wm) {
   } else if (wm.phase==='intermission') {
     drawBtn(ctx,bx,by2,bw,bh,`인터미션 ${Math.ceil(wm.intermissionTimer)}s`,'#1e293b','#475569',false);
   } else {
-    drawBtn(ctx,bx,by2,bw,bh,'▶ 웨이브 시작','#15803d','#22c55e',true);
+    drawBtn(ctx,bx,by2,bw,bh,'🏰 마을에서 준비','#1e293b','#a5b4fc',true);
   }
-  gs.ui.waveBtn={x:bx,y:by2,w:bw,h:bh};
+  gs.ui.waveBtn = (wm.phase==='idle') ? null : {x:bx,y:by2,w:bw,h:bh};
+  gs.ui.uibarTownBtn = (wm.phase==='idle') ? {x:bx,y:by2,w:bw,h:bh} : null;
 }
 
 // ─── Battle Zone ─────────────────────────────────────────────────────────────
@@ -315,216 +318,147 @@ function renderBattle(ctx, gs) {
   ctx.fillStyle='#0a1520'; ctx.fillRect(0,BATTLE_Y,CW,BATTLE_H);
 
   if (wm.phase==='idle') {
-    ctx.fillStyle='#1e293b'; ctx.fillRect(0,BATTLE_Y,CW,BATTLE_H);
-    // 웨이브 시작 큰 버튼
-    const wsbW=CW-40, wsbH=54, wsbX=20, wsbY=BATTLE_Y+20;
-    roundRect(ctx,wsbX,wsbY,wsbW,wsbH,10);
-    ctx.fillStyle='#14532d'; ctx.fill();
-    ctx.strokeStyle='#22c55e'; ctx.lineWidth=2; ctx.stroke();
-    ctx.fillStyle='#fff'; ctx.font='bold 18px sans-serif';
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText('▶ 웨이브 시작',CW/2,wsbY+wsbH/2);
-    gs.ui.battleWaveStartBtn={x:wsbX,y:wsbY,w:wsbW,h:wsbH};
-    // 마을 이동 안내
-    ctx.fillStyle='#475569'; ctx.font='11px sans-serif';
-    ctx.textBaseline='top';
-    ctx.fillText('기지(🏰)를 탭하면 마을에서 준비할 수 있어요',CW/2,wsbY+wsbH+14);
-    ctx.fillStyle='#334155'; ctx.font='10px sans-serif';
-    ctx.fillText('병력 고용 · 건물 건설 · 타워 배치',CW/2,wsbY+wsbH+32);
+    renderBriefing(ctx, gs);
   } else if (wm.phase==='upgradePick') {
     ctx.fillStyle='#080d18'; ctx.fillRect(0,BATTLE_Y,CW,BATTLE_H);
   } else {
     renderFightPhase(ctx,gs);
   }
+  renderBattleControls(ctx, gs);
 }
 
-// ─── 고용 화면 ────────────────────────────────────────────────────────────────
-function renderHirePhase(ctx, gs) {
-  const {battle, hero} = gs;
+// ─── 게임 컨트롤 (일시정지 / 배속 / 음소거) ──────────────────────────────────
+function renderBattleControls(ctx, gs) {
+  const bw=34, bh=24, gap=4, by=BATTLE_Y+6;
+  const x3=CW-6-bw, x2=x3-bw-gap, x1=x2-bw-gap;
+  drawBtn(ctx,x1,by,bw,bh,_paused?'▶':'⏸','#111c2e','#a5b4fc',true);
+  drawBtn(ctx,x2,by,bw,bh,`x${gameSpeed()}`,gameSpeed()>1?'#3b1d6e':'#111c2e',gameSpeed()>1?'#c4b5fd':'#94a3b8',true);
+  drawBtn(ctx,x3,by,bw,bh,SFX.isMuted()?'🔇':'🔊','#111c2e','#94a3b8',true);
+  gs.ui.ctrlPause={x:x1,y:by,w:bw,h:bh};
+  gs.ui.ctrlSpeed={x:x2,y:by,w:bw,h:bh};
+  gs.ui.ctrlMute ={x:x3,y:by,w:bw,h:bh};
+}
 
-  // 제목
+// ─── 출전 브리핑 (웨이브 대기 화면) ──────────────────────────────────────────
+function renderBriefing(ctx, gs) {
+  ctx.fillStyle='#0c1421'; ctx.fillRect(0,BATTLE_Y,CW,BATTLE_H);
+
+  const st  = getStageInfo(gs.wave);
+  const def = WAVE_DEFS[gs.wave] || { battleGroups:[], defenseEnemies:[] };
+
+  // ── 헤더 ─────────────────────────────────────────────────────────────────
   ctx.fillStyle='#a5b4fc'; ctx.font='bold 13px sans-serif';
-  ctx.textAlign='center'; ctx.textBaseline='top';
-  ctx.fillText('병력 고용 & 영웅 배치', CW/2, BATTLE_Y+6);
-
-  // ── 영웅 배치 선택 ──────────────────────────────────────────────────────
-  const hpanelY = BATTLE_Y + 24;
-  const lv = HERO_LEVELS[hero.level];
-
-  // 영웅 정보 박스
-  roundRect(ctx, 6, hpanelY, 180, 52, 6);
-  ctx.fillStyle='#1a2535'; ctx.fill();
-  ctx.strokeStyle=COLORS.hero; ctx.lineWidth=1.5; ctx.stroke();
-
-  ctx.font='18px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText('👑', 12, hpanelY+4);
-  ctx.fillStyle=COLORS.hero; ctx.font='bold 10px sans-serif';
-  ctx.fillText(`영웅  Lv.${hero.level}`, 34, hpanelY+4);
-  ctx.fillStyle='#94a3b8'; ctx.font='9px sans-serif';
-  ctx.fillText(`ATK:${lv.atk}  HP:${hero.hp}/${lv.hp}  DEF:${lv.def}`, 34, hpanelY+18);
-
-  // EXP 바
-  const expRatio = hero.exp / lv.expNeeded;
-  ctx.fillStyle='#1e293b'; ctx.fillRect(12, hpanelY+32, 168, 6);
-  ctx.fillStyle='#f59e0b'; ctx.fillRect(12, hpanelY+32, 168*Math.min(1,expRatio), 6);
-  ctx.fillStyle='#64748b'; ctx.font='8px sans-serif';
-  ctx.textAlign='right';
-  ctx.fillText(`EXP ${hero.exp}/${lv.expNeeded}`, 180, hpanelY+44);
-
-  // 배치 버튼
-  const btnY = hpanelY+56, btnW=82, btnH=28;
-  const pDef = hero.placement==='defense';
-  const pBat = hero.placement==='battle';
-
-  drawBtn(ctx, 6,   btnY, btnW, btnH, pDef?'✅ 상단 배치':'상단 배치',
-    pDef?'#064e3b':'#1e293b', pDef?'#34d399':'#60a5fa');
-  drawBtn(ctx, 6+btnW+4, btnY, btnW, btnH, pBat?'✅ 하단 배치':'하단 배치',
-    pBat?'#4c1d95':'#1e293b', pBat?'#a78bfa':'#f87171');
-
-  gs.ui.heroDefBtn = {x:6,    y:btnY, w:btnW, h:btnH};
-  gs.ui.heroBatBtn = {x:6+btnW+4, y:btnY, w:btnW, h:btnH};
-
-  // 배치 효과 설명
-  ctx.fillStyle='#475569'; ctx.font='8px sans-serif'; ctx.textAlign='left';
-  ctx.textBaseline='top';
-  ctx.fillText('상단: 경로 공격 + EXP 획득', 8, btnY+btnH+4);
-  ctx.fillText('하단: 전투 참여 + 보상 증가', 8, btnY+btnH+14);
-
-  // ── 병력 고용 카드 ──────────────────────────────────────────────────────
-  const units = Object.values(UNIT_TYPES);
-  const cardW=72, cardH=58, cardStartX=200, cardY=hpanelY;
-  gs.ui.hireCards = [];
-
-  units.forEach((ut,i) => {
-    const cx = cardStartX + i*(cardW+5);
-    const canAfford = gs.gold >= ut.cost;
-
-    roundRect(ctx, cx, cardY, cardW, cardH, 5);
-    ctx.fillStyle = canAfford?'#1e293b':'#111827'; ctx.fill();
-    ctx.strokeStyle = canAfford?ut.color:'#374151'; ctx.lineWidth=1.5; ctx.stroke();
-
-    ctx.font='20px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
-    ctx.fillText(ut.icon, cx+cardW/2, cardY+4);
-    ctx.fillStyle = canAfford?'#e2e8f0':'#64748b';
-    ctx.font='bold 9px sans-serif'; ctx.textBaseline='bottom';
-    ctx.fillText(ut.name, cx+cardW/2, cardY+cardH-16);
-    ctx.fillStyle = canAfford?COLORS.gold:'#64748b';
-    ctx.font='9px sans-serif';
-    ctx.fillText(`💰${ut.cost}`, cx+cardW/2, cardY+cardH-4);
-    gs.ui.hireCards.push({x:cx,y:cardY,w:cardW,h:cardH,typeId:ut.id});
-  });
-
-  // ── 고용된 병력 슬롯 ────────────────────────────────────────────────────
-  const lineY = hpanelY + 100;
-  ctx.fillStyle='#94a3b8'; ctx.font='bold 10px sans-serif';
   ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText(`고용 병력 (${battle.ourTeam.filter(u=>!u.isHero).length}/${battle.maxSlots})`, 6, lineY);
+  ctx.fillText(`출전 브리핑 — 스테이지 ${st.stageLabel}`, 10, BATTLE_Y+9);
+  ctx.fillStyle='#475569'; ctx.font='bold 10px sans-serif';
+  ctx.fillText(`웨이브 ${st.waveInStage+1}/3${st.isBossStage?'  ★보스 스테이지':''}`, 10, BATTLE_Y+26);
 
-  const slotW=50, slotH=50, slotGap=6;
-  gs.ui.hiredSlots = [];
+  let y = BATTLE_Y+44;
 
-  for (let i=0; i<battle.maxSlots; i++) {
-    const sx = 6 + i*(slotW+slotGap);
-    const sy = lineY+16;
-    const unit = battle.ourTeam.filter(u=>!u.isHero)[i];
+  // ── 하단 전투 그룹 ───────────────────────────────────────────────────────
+  const panelH = 74;
+  roundRect(ctx,6,y,CW-12,panelH,7);
+  ctx.fillStyle='#0a1019'; ctx.fill(); ctx.strokeStyle='#3f1d1d'; ctx.lineWidth=1; ctx.stroke();
+  ctx.fillStyle='#f87171'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText(`⚔️ 하단 전투 — ${def.battleGroups.length}개 그룹 (순차 등장)`, 12, y+7);
 
-    roundRect(ctx, sx, sy, slotW, slotH, 5);
-    ctx.fillStyle = unit?'#1e3a5f':'#0f172a'; ctx.fill();
-    ctx.strokeStyle = unit?(unit.color||'#60a5fa'):'#334155'; ctx.lineWidth=1.5; ctx.stroke();
+  const groups = def.battleGroups;
+  const gw = Math.floor((CW-24 - (groups.length-1)*5) / Math.max(1,groups.length));
+  groups.forEach((g,i) => {
+    const gx = 12 + i*(gw+5);
+    roundRect(ctx,gx,y+22,gw,44,4);
+    ctx.fillStyle='#140c0c'; ctx.fill();
+    ctx.strokeStyle='#5b2121'; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle='#64748b'; ctx.font='bold 8px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.fillText(`G${i+1}`, gx+gw/2, y+25);
+    // 몬스터 아이콘 나열
+    const icons = g.types.map(t=>BATTLE_MOB_TYPES[t]?BATTLE_MOB_TYPES[t].icon:'?').join('');
+    const fs = Math.max(9, Math.min(15, (gw-8) / Math.max(1,g.types.length) * 0.95));
+    ctx.fillStyle='#e2e8f0'; ctx.font=`${Math.floor(fs)}px sans-serif`; ctx.textBaseline='middle';
+    ctx.fillText(icons, gx+gw/2, y+48);
+  });
+  y += panelH + 6;
 
-    if (unit) {
-      ctx.font='18px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText(unit.icon, sx+slotW/2, sy+slotW/2-4);
-      ctx.fillStyle='#94a3b8'; ctx.font='8px sans-serif'; ctx.textBaseline='bottom';
-      ctx.fillText(unit.name, sx+slotW/2, sy+slotH-2);
-      ctx.fillStyle='#ef4444'; ctx.font='10px sans-serif'; ctx.textBaseline='top';
-      ctx.fillText('✕', sx+slotW-10, sy+2);
-    } else {
-      ctx.fillStyle='#334155'; ctx.font='22px sans-serif';
-      ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText('+', sx+slotW/2, sy+slotH/2);
+  // ── 상단 침입자 ──────────────────────────────────────────────────────────
+  const dh = 52;
+  roundRect(ctx,6,y,CW-12,dh,7);
+  ctx.fillStyle='#0a1019'; ctx.fill(); ctx.strokeStyle='#1e3a5f'; ctx.lineWidth=1; ctx.stroke();
+  ctx.fillStyle='#60a5fa'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText('🏰 상단 침입자 — 기지에 닿으면 HP 손실', 12, y+7);
+  let dx = 12;
+  const countMult = 1 + gs.wave * DEF_WAVE_COUNT_SCALE;
+  for (const d of def.defenseEnemies) {
+    const t = ENEMY_TYPES[d.type]; if (!t) continue;
+    const n = Math.max(1, Math.round(d.count * countMult));
+    ctx.fillStyle=t.color; ctx.font='bold 10px sans-serif';
+    ctx.fillText(`● ${t.name} ×${n}`, dx, y+26);
+    ctx.fillStyle='#475569'; ctx.font='9px sans-serif';
+    ctx.fillText(`피해 ${Math.round(t.dmg*(1+gs.wave*0.04))}`, dx, y+38);
+    dx += 108;
+  }
+  y += dh + 6;
+
+  // ── 내 편성 ──────────────────────────────────────────────────────────────
+  const mh = 78;
+  roundRect(ctx,6,y,CW-12,mh,7);
+  ctx.fillStyle='#0a1019'; ctx.fill(); ctx.strokeStyle='#1e3a2f'; ctx.lineWidth=1; ctx.stroke();
+  ctx.fillStyle='#34d399'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText('🛡 내 편성', 12, y+7);
+
+  const hired = gs.battle.ourTeam.filter(u=>!u.isHero);
+  if (hired.length) {
+    let ux = 12;
+    for (const u of hired) {
+      ctx.fillStyle='#e2e8f0'; ctx.font='15px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+      ctx.fillText(u.icon, ux, y+23);
+      ctx.fillStyle='#64748b'; ctx.font='bold 8px sans-serif';
+      ctx.fillText(`${Math.ceil(u.hp)}`, ux, y+41);
+      ux += 26;
     }
-    gs.ui.hiredSlots.push({x:sx,y:sy,w:slotW,h:slotH,idx:i});
-  }
-
-  // 영웅 하단 배치 시 영웅 슬롯 표시
-  if (gs.hero.placement === 'battle') {
-    const hsx = 6 + battle.maxSlots*(slotW+slotGap) + 10;
-    const hsy = lineY+16;
-    roundRect(ctx, hsx, hsy, slotW, slotH, 5);
-    ctx.fillStyle='#2a1e00'; ctx.fill();
-    ctx.strokeStyle=COLORS.hero; ctx.lineWidth=2; ctx.stroke();
-    ctx.font='18px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText('👑', hsx+slotW/2, hsy+slotW/2-4);
-    ctx.fillStyle=COLORS.hero; ctx.font='bold 8px sans-serif'; ctx.textBaseline='bottom';
-    ctx.fillText('영웅', hsx+slotW/2, hsy+slotH-2);
-  }
-
-  // 적 편성 미리보기 (그룹 기반)
-  const epY = lineY + 82;
-  ctx.fillStyle='#f87171'; ctx.font='bold 10px sans-serif';
-  ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText('이번 웨이브 등장 몬스터:', 6, epY);
-
-  const groups = WAVE_DEFS[gs.wave]?.battleGroups || [];
-  // 등장하는 고유 몬스터 타입만 표시
-  const uniqueTypes = [...new Set(groups.flatMap(g => g.types))];
-  uniqueTypes.forEach((type, i) => {
-    const t = BATTLE_MOB_TYPES[type];
-    if (!t) return;
-    const ex = 6 + i*52;
-    roundRect(ctx,ex,epY+14,46,40,4);
-    ctx.fillStyle='#1a0d0d'; ctx.fill();
-    ctx.strokeStyle=t.color; ctx.lineWidth=1; ctx.stroke();
-    ctx.font='16px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(t.icon, ex+23, epY+30);
-    ctx.fillStyle='#94a3b8'; ctx.font='8px sans-serif'; ctx.textBaseline='bottom';
-    ctx.fillText(t.name, ex+23, epY+52);
-  });
-  ctx.fillStyle='#64748b'; ctx.font='8px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText(`총 ${groups.length}그룹`, 6 + uniqueTypes.length*52 + 4, epY+22);
-
-  // ── 케이브 업그레이드 패널 ───────────────────────────────────────────
-  const caveY = epY + 62;
-  const cv    = CAVE_LEVELS[gs.caveLevel];
-  const nextCv= CAVE_LEVELS[gs.caveLevel + 1] || null;
-
-  roundRect(ctx, 6, caveY, CW-12, 56, 6);
-  ctx.fillStyle='#0a0d1a'; ctx.fill();
-  ctx.strokeStyle='#4c1d95'; ctx.lineWidth=1.5; ctx.stroke();
-
-  ctx.fillStyle='#a78bfa'; ctx.font='bold 10px sans-serif';
-  ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText(`🗿 몬스터 케이브  ${cv.label} (Lv.${gs.caveLevel}/5)`, 12, caveY+6);
-
-  ctx.fillStyle='#94a3b8'; ctx.font='9px sans-serif';
-  ctx.fillText(`현재: 몬스터 ${cv.statMult}배 강함  /  보상 ${cv.goldMult}배`, 12, caveY+20);
-
-  if (nextCv) {
-    ctx.fillText(`다음: 몬스터 ${nextCv.statMult}배  /  보상 ${nextCv.goldMult}배`, 12, caveY+32);
-    const canAfford = gs.gold >= nextCv.upgradeCost;
-    const bw=140, bh=24, bx=CW-12-bw, by=caveY+16;
-    drawBtn(ctx, bx, by, bw, bh,
-      `업그레이드  ${nextCv.upgradeCost}💰`,
-      canAfford?'#4c1d95':'#1e293b',
-      canAfford?'#a78bfa':'#6b7280', canAfford);
-    gs.ui.caveBtn = {x:bx, y:by, w:bw, h:bh};
   } else {
-    gs.ui.caveBtn = null;
-    ctx.fillStyle='#f59e0b'; ctx.font='bold 9px sans-serif';
-    ctx.fillText('★ 최고 등급 달성!', 12, caveY+32);
+    ctx.fillStyle='#f87171'; ctx.font='bold 10px sans-serif';
+    ctx.fillText('⚠️ 병력 없음 — 마을 › 출전준비에서 고용하세요', 12, y+27);
   }
 
-  // 경고 / 안내
-  const hasHero = gs.hero.placement !== 'none';
-  ctx.font='9px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='bottom';
-  if (!hasHero) {
-    ctx.fillStyle='#fbbf24';
-    ctx.fillText('💡 영웅 배치를 선택하세요 (상단/하단)', CW/2, BATTLE_Y+BATTLE_H-6);
-  } else {
-    ctx.fillStyle='#64748b';
-    ctx.fillText('준비 완료 → 우측 [웨이브 시작] 버튼', CW/2, BATTLE_Y+BATTLE_H-6);
-  }
+  const heroTxt = gs.hero.dead ? `💀 부활 ${Math.ceil(gs.hero.reviveTimer)}s`
+                : gs.hero.placement==='defense' ? '👑 상단 배치'
+                : gs.hero.placement==='battle'  ? '👑 하단 배치' : '👑 미배치';
+  ctx.fillStyle = gs.hero.dead ? '#f87171' : gs.hero.placement==='none' ? '#64748b' : COLORS.hero;
+  ctx.font='bold 10px sans-serif'; ctx.textAlign='right'; ctx.textBaseline='top';
+  ctx.fillText(`${heroTxt}  Lv.${gs.hero.level}`, CW-14, y+7);
+  ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif';
+  ctx.fillText(`🏹 타워 ${gs.towers.length}기`, CW-14, y+23);
+  ctx.fillText(`🗿 케이브 Lv.${gs.caveLevel}`, CW-14, y+36);
+
+  // 획득 강화 아이콘
+  ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText('강화', 12, y+56);
+  const icons = (gs.activeUpgrades||[]).map(id=>(UPGRADE_CARDS.find(c=>c.id===id)||{}).icon||'').join(' ');
+  ctx.fillStyle='#a5b4fc'; ctx.font='10px sans-serif';
+  ctx.fillText(icons ? icons.slice(0,64) : '— 웨이브를 클리어하면 강화를 고를 수 있습니다', 40, y+56);
+  y += mh + 8;
+
+  // ── 버튼 ─────────────────────────────────────────────────────────────────
+  const ready = gs.battle.ourTeam.length > 0;
+  const bw2 = CW-140, bh2 = 46;
+  roundRect(ctx,20,y,bw2,bh2,9);
+  ctx.fillStyle = ready ? '#14532d' : '#1f2937'; ctx.fill();
+  ctx.strokeStyle = ready ? '#22c55e' : '#374151'; ctx.lineWidth=2; ctx.stroke();
+  ctx.fillStyle = ready ? '#fff' : '#6b7280'; ctx.font='bold 17px sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('▶ 웨이브 시작', 20+bw2/2, y+bh2/2);
+  gs.ui.battleWaveStartBtn = ready ? {x:20,y:y,w:bw2,h:bh2} : null;
+
+  const tbx = 20+bw2+10, tbw = CW-tbx-20;
+  roundRect(ctx,tbx,y,tbw,bh2,9);
+  ctx.fillStyle='#1e293b'; ctx.fill(); ctx.strokeStyle='#475569'; ctx.lineWidth=1.5; ctx.stroke();
+  ctx.fillStyle='#cbd5e1'; ctx.font='bold 12px sans-serif';
+  ctx.fillText('🏰 마을', tbx+tbw/2, y+bh2/2);
+  gs.ui.briefTownBtn = {x:tbx,y:y,w:tbw,h:bh2};
+
+  y += bh2 + 6;
+  ctx.fillStyle='#3f4a5c'; ctx.font='9px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
+  ctx.fillText('Space 시작 · P 일시정지 · S 배속 · T 마을 · 1~4 타워 선택', CW/2, y);
 }
 
 // ─── 전투 화면 ────────────────────────────────────────────────────────────────
@@ -880,116 +814,7 @@ function _renderSkillTree(ctx, gs, tree, startY) {
   }
 }
 
-// ─── 마을 화면 라우터 ────────────────────────────────────────────────────────────
-function renderTownScreen(ctx, gs) {
-  const t=gs.town;
-  if (t.screen!=='main') { renderBuildingScreen(ctx,gs,t.screen); return; }
 
-  // Background
-  ctx.fillStyle='#0c0f1a'; ctx.fillRect(0,BATTLE_Y,CW,BATTLE_H);
-  ctx.strokeStyle='rgba(255,255,255,0.05)'; ctx.lineWidth=1;
-  for (let yy=BATTLE_Y;yy<BATTLE_Y+BATTLE_H;yy+=30) { ctx.beginPath(); ctx.moveTo(0,yy); ctx.lineTo(CW,yy); ctx.stroke(); }
-
-  // Tabs
-  const tabY=BATTLE_Y+4, tabH=26, tabW=130;
-  const tabs=[{id:'town',label:'🏰 마을'},{id:'army',label:'⚔️ 출전준비'}];
-  gs.ui.tabTownBtn=null; gs.ui.tabArmyBtn=null;
-  tabs.forEach((tab,i)=>{
-    const tx=8+i*(tabW+6), active=t.tab===tab.id;
-    roundRect(ctx,tx,tabY,tabW,tabH,5);
-    ctx.fillStyle=active?'#1e3a5f':'#0f172a'; ctx.fill();
-    ctx.strokeStyle=active?'#60a5fa':'#334155'; ctx.lineWidth=1.5; ctx.stroke();
-    ctx.fillStyle=active?'#e2e8f0':'#64748b'; ctx.font='bold 10px sans-serif';
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(tab.label,tx+tabW/2,tabY+tabH/2);
-    if (tab.id==='town') gs.ui.tabTownBtn={x:tx,y:tabY,w:tabW,h:tabH};
-    else gs.ui.tabArmyBtn={x:tx,y:tabY,w:tabW,h:tabH};
-  });
-
-  const contentY=tabY+tabH+6;
-  if (t.tab==='town') renderTownBuildingGrid(ctx,gs,contentY);
-  else renderArmyScreen(ctx,gs,contentY);
-}
-
-// ─── 건물 그리드 ─────────────────────────────────────────────────────────────
-function renderTownBuildingGrid(ctx, gs, startY) {
-  const bw=(CW-12)/2-4, bh=105, gap=8, ml=6;
-  gs.ui.buildingCards=[];
-
-  TOWN_BUILDINGS.forEach((def,i)=>{
-    const col=i%2, row=Math.floor(i/2);
-    const bx=ml+col*(bw+gap), by=startY+row*(bh+gap);
-    const bs=gs.town.buildings[def.id];
-    const built=bs&&bs.built;
-
-    roundRect(ctx,bx,by,bw,bh,7);
-    ctx.fillStyle=built?'#0d1929':'#080d18'; ctx.fill();
-    ctx.strokeStyle=built?def.color:'#334155'; ctx.lineWidth=built?2:1; ctx.stroke();
-
-    // Icon + name
-    ctx.font='26px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
-    ctx.fillText(def.icon,bx+8,by+7);
-    ctx.fillStyle=built?def.color:'#64748b'; ctx.font='bold 10px sans-serif';
-    ctx.fillText(def.name,bx+40,by+8);
-    if (built) {
-      const lvDef=TOWN_BUILDINGS.find(b=>b.id===def.id);
-      const maxLv=lvDef.levels.length-1;
-      ctx.fillStyle='#475569'; ctx.font='8px sans-serif';
-      ctx.fillText(`Lv.${(bs.level||0)+1}/${maxLv+1}`,bx+40,by+22);
-    }
-
-    // Desc
-    ctx.fillStyle='#94a3b8'; ctx.font='bold 10px sans-serif'; ctx.textBaseline='top';
-    ctx.fillText(def.desc,bx+8,by+38);
-
-    // Status/button
-    if (!built && def.id!=='cave') {
-      const canAfford=gs.gold>=def.buildCost;
-      roundRect(ctx,bx+8,by+bh-26,bw-16,20,4);
-      ctx.fillStyle=canAfford?'#1e3a5f':'#1a1a2e'; ctx.fill();
-      ctx.strokeStyle=canAfford?'#60a5fa':'#334155'; ctx.lineWidth=1; ctx.stroke();
-      ctx.fillStyle=canAfford?'#e2e8f0':'#475569'; ctx.font='bold 9px sans-serif';
-      ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText(`건설 ${def.buildCost}💰`,bx+bw/2,by+bh-16);
-    } else if (built) {
-      roundRect(ctx,bx+8,by+bh-26,bw-16,20,4);
-      ctx.fillStyle='#0f2040'; ctx.fill();
-      ctx.strokeStyle=def.color; ctx.lineWidth=1; ctx.stroke();
-      ctx.fillStyle=def.color; ctx.font='bold 9px sans-serif';
-      ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText('입장 →',bx+bw/2,by+bh-16);
-    } else {
-      // cave always built
-      roundRect(ctx,bx+8,by+bh-26,bw-16,20,4);
-      ctx.fillStyle='#0f2040'; ctx.fill();
-      ctx.strokeStyle=def.color; ctx.lineWidth=1; ctx.stroke();
-      ctx.fillStyle=def.color; ctx.font='bold 9px sans-serif';
-      ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText('입장 →',bx+bw/2,by+bh-16);
-    }
-
-    gs.ui.buildingCards.push({x:bx,y:by,w:bw,h:bh,id:def.id,built:built||def.alwaysBuilt});
-  });
-
-  // Cave level upgrade (separate from building enter)
-  const caveY=startY+2*(bh+gap)+4;
-  const cv=CAVE_LEVELS[gs.caveLevel], nextCv=CAVE_LEVELS[gs.caveLevel+1]||null;
-  roundRect(ctx,6,caveY,CW-12,38,5);
-  ctx.fillStyle='#0a0d1a'; ctx.fill();
-  ctx.strokeStyle='#4c1d95'; ctx.lineWidth=1; ctx.stroke();
-  ctx.fillStyle='#a78bfa'; ctx.font='bold 9px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
-  ctx.fillText(`🗿 케이브 ${cv.label} Lv.${gs.caveLevel}/5  │  몬스터 ×${cv.statMult}  보상 ×${cv.goldMult}`,14,caveY+12);
-  if (nextCv) {
-    const canAfford=gs.gold>=nextCv.upgradeCost;
-    const bw2=130, bh2=22, bx2=CW-12-bw2, by2=caveY+8;
-    roundRect(ctx,bx2,by2,bw2,bh2,4);
-    ctx.fillStyle=canAfford?'#4c1d95':'#1a1a2e'; ctx.fill();
-    ctx.fillStyle=canAfford?'#c4b5fd':'#6b7280'; ctx.font='bold 8px sans-serif';
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(`업그레이드 ${nextCv.upgradeCost}💰`,bx2+bw2/2,by2+bh2/2);
-    gs.ui.caveBtn={x:bx2,y:by2,w:bw2,h:bh2};
-  } else { gs.ui.caveBtn=null; }
-}
 
 // ─── 건물 서브 화면 ───────────────────────────────────────────────────────────
 function renderBuildingScreen(ctx, gs, buildingId) {
@@ -1158,76 +983,6 @@ function renderHeroShopScreen(ctx, gs) {
   }
 }
 
-// ─── 출전 준비 화면 ───────────────────────────────────────────────────────────
-function renderArmyScreen(ctx, gs, startY) {
-  const {battle,hero}=gs;
-  let ay=startY;
-
-  // 영웅 박스
-  const lv=HERO_LEVELS[hero.level];
-  roundRect(ctx,6,ay,200,54,5); ctx.fillStyle='#1a2535'; ctx.fill(); ctx.strokeStyle=COLORS.hero; ctx.lineWidth=1.5; ctx.stroke();
-  ctx.font='16px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.fillText('👑',10,ay+6);
-  ctx.fillStyle=COLORS.hero; ctx.font='bold 9px sans-serif'; ctx.fillText(`영웅 Lv.${hero.level}`,30,ay+6);
-  ctx.fillStyle='#94a3b8'; ctx.font='8px sans-serif'; ctx.fillText(`ATK:${lv.atk}  HP:${hero.hp}/${lv.hp}  DEF:${lv.def}`,30,ay+18);
-  const expRatio=hero.exp/lv.expNeeded;
-  ctx.fillStyle='#1e293b'; ctx.fillRect(10,ay+34,184,5);
-  ctx.fillStyle='#f59e0b'; ctx.fillRect(10,ay+34,184*Math.min(1,expRatio),5);
-  ctx.fillStyle='#64748b'; ctx.font='7px sans-serif'; ctx.textAlign='right'; ctx.fillText(`EXP ${hero.exp}/${lv.expNeeded}`,192,ay+46);
-
-  // Hero placement buttons
-  const pDef=hero.placement==='defense', pBat=hero.placement==='battle';
-  const btnW=86,btnH=24,btnY=ay+60;
-  drawBtn(ctx,6,btnY,btnW,btnH,pDef?'✅ 상단 배치':'상단 배치',pDef?'#064e3b':'#1e293b',pDef?'#34d399':'#60a5fa');
-  drawBtn(ctx,6+btnW+4,btnY,btnW,btnH,pBat?'✅ 하단 배치':'하단 배치',pBat?'#4c1d95':'#1e293b',pBat?'#a78bfa':'#f87171');
-  gs.ui.heroDefBtn={x:6,y:btnY,w:btnW,h:btnH};
-  gs.ui.heroBatBtn={x:6+btnW+4,y:btnY,w:btnW,h:btnH};
-
-  // Hire cards
-  ay=startY+90;
-  ctx.fillStyle='#94a3b8'; ctx.font='bold 9px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText('병력 고용',6,ay); ay+=12;
-  const units=Object.values(UNIT_TYPES), cardW=70,cardH=56,cgap=5;
-  gs.ui.hireCards=[];
-  units.forEach((ut,i)=>{
-    const cx=6+i*(cardW+cgap), canAff=gs.gold>=Math.max(1,ut.cost-BONUSES.hireCostDiscount);
-    roundRect(ctx,cx,ay,cardW,cardH,5);
-    ctx.fillStyle=canAff?'#1e293b':'#111827'; ctx.fill();
-    ctx.strokeStyle=canAff?ut.color:'#374151'; ctx.lineWidth=1.5; ctx.stroke();
-    ctx.font='18px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillText(ut.icon,cx+cardW/2,ay+4);
-    ctx.fillStyle=canAff?'#e2e8f0':'#64748b'; ctx.font='bold 8px sans-serif'; ctx.textBaseline='bottom';
-    ctx.fillText(ut.name,cx+cardW/2,ay+cardH-14);
-    ctx.fillStyle=canAff?COLORS.gold:'#64748b'; ctx.font='8px sans-serif';
-    ctx.fillText(`💰${Math.max(1,ut.cost-BONUSES.hireCostDiscount)}`,cx+cardW/2,ay+cardH-2);
-    gs.ui.hireCards.push({x:cx,y:ay,w:cardW,h:cardH,typeId:ut.id});
-  });
-
-  // Hired slots
-  ay+=cardH+8;
-  ctx.fillStyle='#94a3b8'; ctx.font='bold 9px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText(`고용 병력 (${battle.ourTeam.filter(u=>!u.isHero).length}/${battle.maxSlots})`,6,ay); ay+=12;
-  const slotW=48,slotH=48,sgap=5; gs.ui.hiredSlots=[];
-  for (let i=0;i<battle.maxSlots;i++) {
-    const sx=6+i*(slotW+sgap), unit=battle.ourTeam.filter(u=>!u.isHero)[i];
-    roundRect(ctx,sx,ay,slotW,slotH,5);
-    ctx.fillStyle=unit?'#1e3a5f':'#0f172a'; ctx.fill();
-    ctx.strokeStyle=unit?(unit.color||'#60a5fa'):'#334155'; ctx.lineWidth=1.5; ctx.stroke();
-    if (unit) {
-      ctx.font='16px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(unit.icon,sx+slotW/2,ay+slotW/2-4);
-      ctx.fillStyle='#94a3b8'; ctx.font='7px sans-serif'; ctx.textBaseline='bottom'; ctx.fillText(unit.name,sx+slotW/2,ay+slotH-2);
-      ctx.fillStyle='#ef4444'; ctx.font='10px sans-serif'; ctx.textBaseline='top'; ctx.fillText('✕',sx+slotW-10,ay+2);
-    } else { ctx.fillStyle='#334155'; ctx.font='20px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('+',sx+slotW/2,ay+slotH/2); }
-    gs.ui.hiredSlots.push({x:sx,y:ay,w:slotW,h:slotH,idx:i});
-  }
-
-  // Deploy button
-  const dbY=ay+slotH+8, dbW=CW-12, dbH=36;
-  roundRect(ctx,6,dbY,dbW,dbH,8);
-  ctx.fillStyle='#166534'; ctx.fill();
-  ctx.strokeStyle='#22c55e'; ctx.lineWidth=2; ctx.stroke();
-  ctx.fillStyle='#ffffff'; ctx.font='bold 14px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText('▶ 웨이브 시작!',6+dbW/2,dbY+dbH/2);
-  gs.ui.deployBtn={x:6,y:dbY,w:dbW,h:dbH};
-}
 
 // ─── 마을 페이지 (full-screen) ────────────────────────────────────────────────
 function renderTownPage(ctx, gs) {
@@ -1371,76 +1126,167 @@ function renderTownPageBuildingGrid(ctx, gs, startY) {
 function renderTownPageArmy(ctx, gs, startY) {
   const {battle,hero}=gs;
   const lv=HERO_LEVELS[hero.level];
+  const hMax=Math.round(lv.hp*BONUSES.heroStatMult);
   let y=startY;
 
+  // ── 영웅 ─────────────────────────────────────────────────────────────────
   roundRect(ctx,6,y,CW-12,58,7);
-  ctx.fillStyle='#1a2535'; ctx.fill(); ctx.strokeStyle=COLORS.hero; ctx.lineWidth=2; ctx.stroke();
-  ctx.font='24px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.fillText('👑',12,y+6);
-  ctx.fillStyle=COLORS.hero; ctx.font='bold 12px sans-serif'; ctx.fillText(`영웅  Lv.${hero.level}`,44,y+6);
+  ctx.fillStyle='#1a2535'; ctx.fill();
+  ctx.strokeStyle=hero.dead?'#7f1d1d':COLORS.hero; ctx.lineWidth=2; ctx.stroke();
+  ctx.fillStyle='#e2e8f0';
+  ctx.font='24px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText(hero.dead?'💀':'👑',12,y+6);
+  ctx.fillStyle=hero.dead?'#f87171':COLORS.hero; ctx.font='bold 12px sans-serif';
+  ctx.fillText(hero.dead?`전사 — 부활까지 ${Math.ceil(hero.reviveTimer)}s`:`영웅  Lv.${hero.level}`,44,y+6);
   ctx.fillStyle='#cbd5e1'; ctx.font='bold 10px sans-serif';
-  ctx.fillText(`ATK: ${lv.atk+BONUSES.heroAtk}   HP: ${hero.hp}/${lv.hp}   DEF: ${lv.def}`,44,y+22);
-  const expR=hero.exp/lv.expNeeded;
+  ctx.fillText(`ATK ${Math.round((lv.atk+BONUSES.heroAtk)*BONUSES.heroStatMult)}   HP ${Math.ceil(hero.hp)}/${hMax}   DEF ${Math.round((lv.def+BONUSES.heroAura)*BONUSES.heroStatMult)}`,44,y+22);
+  const maxed=hero.level>=HERO_MAX_LEVEL;
+  const expR=maxed?1:hero.exp/lv.expNeeded;
   ctx.fillStyle='#1e293b'; ctx.fillRect(12,y+42,CW-28,8);
   ctx.fillStyle='#f59e0b'; ctx.fillRect(12,y+42,(CW-28)*Math.min(1,expR),8);
   ctx.fillStyle='#94a3b8'; ctx.font='8px sans-serif'; ctx.textAlign='right'; ctx.textBaseline='middle';
-  ctx.fillText(`EXP ${hero.exp}/${lv.expNeeded}`,CW-12,y+46);
+  ctx.fillText(maxed?'MAX LEVEL':`EXP ${Math.floor(hero.exp)}/${lv.expNeeded}`,CW-12,y+46);
   y+=66;
 
+  // ── 영웅 배치 ────────────────────────────────────────────────────────────
   ctx.fillStyle='#64748b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillText('영웅 배치',6,y); y+=14;
-  const btnW2=(CW-20)/2,btnH2=36;
+  const btnW2=(CW-20)/2,btnH2=34;
   const pDef=hero.placement==='defense',pBat=hero.placement==='battle';
-  drawBtn(ctx,6,y,btnW2,btnH2,pDef?'✅ 상단 방어 배치':'상단 방어 배치',pDef?'#064e3b':'#1e293b',pDef?'#34d399':'#60a5fa');
-  drawBtn(ctx,6+btnW2+8,y,btnW2,btnH2,pBat?'✅ 하단 전투 배치':'하단 전투 배치',pBat?'#4c1d95':'#1e293b',pBat?'#a78bfa':'#f87171');
+  drawBtn(ctx,6,y,btnW2,btnH2,pDef?'✅ 상단 방어 배치':'상단 방어 배치',pDef?'#064e3b':'#1e293b',pDef?'#34d399':'#60a5fa',!hero.dead);
+  drawBtn(ctx,6+btnW2+8,y,btnW2,btnH2,pBat?'✅ 하단 전투 배치':'하단 전투 배치',pBat?'#4c1d95':'#1e293b',pBat?'#a78bfa':'#f87171',!hero.dead);
   gs.ui.heroDefBtn={x:6,y,w:btnW2,h:btnH2};
   gs.ui.heroBatBtn={x:6+btnW2+8,y,w:btnW2,h:btnH2};
   y+=btnH2+10;
 
+  // ── 병력 고용 (5종, 2열 그리드) ─────────────────────────────────────────
   ctx.fillStyle='#64748b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText('병력 고용',6,y); y+=14;
-  const units=Object.values(UNIT_TYPES),cardW=138,cardH=72;
+  ctx.fillText('병력 고용 — 탭하여 편성',6,y); y+=14;
+  const cols=3, cardW=(CW-12-(cols-1)*6)/cols, cardH=64;
   gs.ui.hireCards=[];
-  units.forEach((ut,i)=>{
-    const cx=6+i*(cardW+8);
-    const cost=Math.max(1,ut.cost-BONUSES.hireCostDiscount),canAff=gs.gold>=cost;
-    roundRect(ctx,cx,y,cardW,cardH,6);
+  UNIT_ORDER.forEach((id,i)=>{
+    const ut=UNIT_TYPES[id];
+    const col=i%cols, row=Math.floor(i/cols);
+    const cx=6+col*(cardW+6), cy2=y+row*(cardH+6);
+    const cost=hireCost(id), canAff=gs.gold>=cost;
+    roundRect(ctx,cx,cy2,cardW,cardH,6);
     ctx.fillStyle=canAff?'#1e293b':'#111827'; ctx.fill();
     ctx.strokeStyle=canAff?ut.color:'#374151'; ctx.lineWidth=1.5; ctx.stroke();
-    ctx.font='24px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillText(ut.icon,cx+cardW/2,y+4);
-    ctx.fillStyle=canAff?'#f1f5f9':'#64748b'; ctx.font='bold 11px sans-serif'; ctx.textBaseline='top'; ctx.fillText(ut.name,cx+cardW/2,y+34);
-    ctx.fillStyle='#94a3b8'; ctx.font='bold 9px sans-serif'; ctx.fillText(`ATK:${ut.atk+BONUSES.unitAtk} HP:${ut.hp+BONUSES.unitHp}`,cx+cardW/2,y+48);
-    ctx.fillStyle=canAff?COLORS.gold:'#64748b'; ctx.font='bold 10px sans-serif'; ctx.fillText(`💰 ${cost}`,cx+cardW/2,y+60);
-    gs.ui.hireCards.push({x:cx,y,w:cardW,h:cardH,typeId:ut.id});
+    ctx.globalAlpha=canAff?1:0.55;
+    ctx.fillStyle='#e2e8f0'; ctx.font='20px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.fillText(ut.icon,cx+cardW/2,cy2+4);
+    ctx.fillStyle=canAff?'#f1f5f9':'#64748b'; ctx.font='bold 11px sans-serif';
+    ctx.fillText(ut.name,cx+cardW/2,cy2+27);
+    ctx.fillStyle='#94a3b8'; ctx.font='bold 8px sans-serif';
+    ctx.fillText(`ATK ${ut.atk+BONUSES.unitAtk} · HP ${ut.hp+BONUSES.unitHp}`,cx+cardW/2,cy2+40);
+    ctx.fillStyle=canAff?COLORS.gold:'#64748b'; ctx.font='bold 10px sans-serif';
+    ctx.fillText(`💰${cost}`,cx+cardW/2,cy2+50);
+    ctx.globalAlpha=1;
+    gs.ui.hireCards.push({x:cx,y:cy2,w:cardW,h:cardH,typeId:id});
   });
-  y+=cardH+8;
+  y += Math.ceil(UNIT_ORDER.length/cols)*(cardH+6) + 4;
 
+  // 선택한 유닛 역할 설명
+  ctx.fillStyle='#475569'; ctx.font='9px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText('🛡️ 방패병은 적의 표적을 끌고 전체 보호막 · ✨ 마법사는 광역 피해',6,y);
+  y+=16;
+
+  // ── 편성 슬롯 ────────────────────────────────────────────────────────────
+  const hired=battle.ourTeam.filter(u=>!u.isHero);
   ctx.fillStyle='#64748b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText(`편성된 병력 (${battle.ourTeam.filter(u=>!u.isHero).length}/${battle.maxSlots})`,6,y); y+=14;
-  const slotW=82,slotH=60,slotGap=8; gs.ui.hiredSlots=[];
+  ctx.fillText(`편성된 병력 (${hired.length}/${battle.maxSlots})  ·  탭하면 해고`,6,y); y+=14;
+  const slotGap=6;
+  const slotW=Math.max(44,Math.min(82,Math.floor((CW-12-(battle.maxSlots-1)*slotGap)/battle.maxSlots)));
+  const slotH=56;
+  gs.ui.hiredSlots=[];
   for (let i=0;i<battle.maxSlots;i++) {
     const sx=6+i*(slotW+slotGap),sy=y;
-    const unit=battle.ourTeam.filter(u=>!u.isHero)[i];
+    const unit=hired[i];
     roundRect(ctx,sx,sy,slotW,slotH,6);
     ctx.fillStyle=unit?'#1e3a5f':'#0f172a'; ctx.fill();
     ctx.strokeStyle=unit?(unit.color||'#60a5fa'):'#334155'; ctx.lineWidth=1.5; ctx.stroke();
     if (unit) {
-      ctx.font='22px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(unit.icon,sx+slotW/2,sy+slotH/2-8);
-      ctx.fillStyle='#f1f5f9'; ctx.font='bold 9px sans-serif'; ctx.textBaseline='bottom'; ctx.fillText(unit.name,sx+slotW/2,sy+slotH-4);
-      ctx.fillStyle='#ef4444'; ctx.font='bold 11px sans-serif'; ctx.textBaseline='top'; ctx.fillText('✕',sx+slotW-14,sy+4);
+      ctx.fillStyle='#e2e8f0';
+      ctx.font='19px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(unit.icon,sx+slotW/2,sy+19);
+      drawHPBar(ctx,sx+5,sy+slotH-17,slotW-10,4,unit.hp/unit.maxHp);
+      ctx.fillStyle='#94a3b8'; ctx.font='bold 8px sans-serif'; ctx.textBaseline='bottom';
+      ctx.fillText(`${Math.ceil(unit.hp)}/${unit.maxHp}`,sx+slotW/2,sy+slotH-3);
+      ctx.fillStyle='#ef4444'; ctx.font='bold 10px sans-serif'; ctx.textBaseline='top';
+      ctx.fillText('✕',sx+slotW-11,sy+3);
     } else {
-      ctx.fillStyle='#334155'; ctx.font='24px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('+',sx+slotW/2,sy+slotH/2);
+      ctx.fillStyle='#334155'; ctx.font='22px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('+',sx+slotW/2,sy+slotH/2);
     }
     gs.ui.hiredSlots.push({x:sx,y:sy,w:slotW,h:slotH,idx:i});
   }
   y+=slotH+10;
 
+  // ── 출전 버튼 ────────────────────────────────────────────────────────────
+  const ready=battle.ourTeam.length>0;
   roundRect(ctx,6,y,CW-12,44,8);
-  ctx.fillStyle='#15803d'; ctx.fill();
-  ctx.strokeStyle='#22c55e'; ctx.lineWidth=2; ctx.stroke();
-  ctx.fillStyle='#fff'; ctx.font='bold 15px sans-serif';
+  ctx.fillStyle=ready?'#15803d':'#1f2937'; ctx.fill();
+  ctx.strokeStyle=ready?'#22c55e':'#374151'; ctx.lineWidth=2; ctx.stroke();
+  ctx.fillStyle=ready?'#fff':'#6b7280'; ctx.font='bold 15px sans-serif';
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText('▶ 출전! 웨이브 시작',6+(CW-12)/2,y+22);
+  ctx.fillText(ready?'▶ 출전! 웨이브 시작':'병력을 1명 이상 고용하세요',6+(CW-12)/2,y+22);
   gs.ui.deployBtn={x:6,y,w:CW-12,h:44};
+  y+=52;
+
+  // ── 팀 전투력 요약 (남는 공간 활용) ──────────────────────────────────────
+  if (y < CH-40) {
+    roundRect(ctx,6,y,CW-12,CH-y-10,7);
+    ctx.fillStyle='#080d18'; ctx.fill(); ctx.strokeStyle='#161f30'; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle='#94a3b8'; ctx.font='bold 11px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillText('전투력 요약',14,y+9);
+
+    const totAtk=battle.ourTeam.reduce((a,u)=>a+u.atk,0);
+    const totHp =battle.ourTeam.reduce((a,u)=>a+u.maxHp,0);
+    const totDef=battle.ourTeam.reduce((a,u)=>a+u.def,0);
+    const rows=[
+      ['총 공격력', `${totAtk}`, '#f87171'],
+      ['총 체력',   `${totHp}`,  '#22c55e'],
+      ['총 방어력', `${totDef}`, '#60a5fa'],
+      ['웨이브 후 회복', `최대 HP의 ${Math.round((REST_HEAL_PCT+BONUSES.restHealBonus)*100)}%`, '#34d399'],
+    ];
+    let ry=y+30;
+    for (const [label,val,col] of rows) {
+      ctx.fillStyle='#64748b'; ctx.font='10px sans-serif'; ctx.textAlign='left';
+      ctx.fillText(label,18,ry);
+      ctx.fillStyle=col; ctx.font='bold 11px sans-serif'; ctx.textAlign='right';
+      ctx.fillText(val,CW-18,ry);
+      ry+=18;
+    }
+    ctx.strokeStyle='#161f30'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(16,ry+2); ctx.lineTo(CW-16,ry+2); ctx.stroke();
+    ry+=14;
+
+    // 획득 강화
+    ctx.fillStyle='#64748b'; ctx.font='10px sans-serif'; ctx.textAlign='left';
+    ctx.fillText('획득 강화',18,ry);
+    const upIcons=(gs.activeUpgrades||[]).map(id=>(UPGRADE_CARDS.find(c=>c.id===id)||{}).icon||'').join(' ');
+    ctx.fillStyle='#a5b4fc'; ctx.font='11px sans-serif'; ctx.textAlign='right';
+    ctx.fillText(upIcons?upIcons.slice(0,40):'—',CW-18,ry);
+    ry+=18;
+
+    // 다음 웨이브 미리보기
+    const nd=WAVE_DEFS[gs.wave];
+    if (nd && ry < CH-40) {
+      ctx.fillStyle='#64748b'; ctx.font='10px sans-serif'; ctx.textAlign='left';
+      ctx.fillText('다음 웨이브',18,ry);
+      const mobIcons=nd.battleGroups.map(g=>g.types.map(t=>(BATTLE_MOB_TYPES[t]||{}).icon||'').join('')).join(' › ');
+      ctx.fillStyle='#f87171'; ctx.font='11px sans-serif'; ctx.textAlign='right';
+      ctx.fillText(mobIcons.slice(0,34),CW-18,ry);
+      ry+=18;
+    }
+
+    if (ry < CH-30) {
+      ctx.fillStyle='#3f4a5c'; ctx.font='9px sans-serif'; ctx.textAlign='left';
+      ctx.fillText('전투는 1초 1틱, 5틱마다 스킬이 자동 발동됩니다.',18,ry+2);
+      ry+=13;
+      ctx.fillText('웨이브를 클리어하면 강화 카드 3장 중 1장을 고릅니다.',18,ry+2);
+    }
+  }
 }
 
 function renderTownPageTowers(ctx, gs, startY) {
