@@ -197,6 +197,14 @@ const BATTLE_MOB_TYPES = {
 // 두 전선을 연결해, 하단에서 지는 것도 실제 패배로 이어지게 만든다.
 const BREAKTHROUGH_DPS = 0.03;   // 몹 공격력 1당 초당 기지 피해
 const BREAKTHROUGH_MAX = 2.5;    // 초당 상한 — 한 웨이브 전멸이 즉사가 되지 않도록
+const BREAKTHROUGH_DURATION = 15; // 돌파 지속(초). 이후 몬스터는 물러나고 상단만 남는다
+
+// 그룹을 한 바퀴 더 돌 때마다 골드 보상이 체감한다.
+// 몹은 계속 강해지므로 무한 파밍이 성립하지 않는다.
+const LOOP_GOLD_DECAY = 0.5;
+function loopGoldMult(loopCount) {
+  return 1 / (1 + Math.max(0, loopCount) * LOOP_GOLD_DECAY);
+}
 
 // 엘리트: 케이브 업그레이드로 확률 상승. 스탯 강화 + 보상 증가
 const ELITE_STAT_MULT = 1.8;

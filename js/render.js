@@ -290,10 +290,12 @@ function renderUIBar(ctx, gs, wm) {
   const bLabel = bp==='hire'          ? '병력 고용 중'
                : bp==='fighting'      ? (earn>0 ? `⚔️ +${earn}💰 적립 중` : '⚔️ 전투 중')
                : bp==='won'           ? '✅ 전투 승리'
+               : bp==='retreated'     ? '🛡 후퇴 — 병력 보존'
                : bp==='idle_defeated' ? '❌ 병력 전멸'
                : bp==='lost'          ? '❌ 전멸'
                : '';
-  ctx.fillStyle = bp==='fighting'||bp==='won' ? '#22c55e'
+  ctx.fillStyle = bp==='retreated' ? '#7dd3fc'
+                : bp==='fighting'||bp==='won' ? '#22c55e'
                 : bp.includes('defeat')||bp==='lost' ? '#ef4444' : COLORS.textDim;
   ctx.font='bold 10px sans-serif'; ctx.textAlign='center';
   ctx.fillText(bLabel, CW/2, cy+8);
@@ -337,6 +339,15 @@ function renderBattleControls(ctx, gs) {
   gs.ui.ctrlPause={x:x1,y:by,w:bw,h:bh};
   gs.ui.ctrlSpeed={x:x2,y:by,w:bw,h:bh};
   gs.ui.ctrlMute ={x:x3,y:by,w:bw,h:bh};
+
+  // 후퇴 버튼 — 하단 전투 중에만
+  if (wm.phase==='active' && gs.battle.phase==='fighting') {
+    const rw=62, rx=x1-rw-6;
+    drawBtn(ctx,rx,by,rw,bh,'🛡 후퇴','#1e3a4f','#7dd3fc',true,9);
+    gs.ui.retreatBtn={x:rx,y:by,w:rw,h:bh};
+  } else {
+    gs.ui.retreatBtn=null;
+  }
 }
 
 // ─── 출전 브리핑 (웨이브 대기 화면) ──────────────────────────────────────────
@@ -360,7 +371,7 @@ function renderBriefing(ctx, gs) {
   roundRect(ctx,6,y,CW-12,panelH,7);
   ctx.fillStyle='#0a1019'; ctx.fill(); ctx.strokeStyle='#3f1d1d'; ctx.lineWidth=1; ctx.stroke();
   ctx.fillStyle='#f87171'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText(`⚔️ 하단 전투 — ${def.battleGroups.length}개 그룹 (순차 등장)`, 12, y+7);
+  ctx.fillText(`⚔️ 하단 전투 — ${def.battleGroups.length}개 그룹 · 시간 내내 순환 등장`, 12, y+7);
 
   const groups = def.battleGroups;
   const gw = Math.floor((CW-24 - (groups.length-1)*5) / Math.max(1,groups.length));
@@ -482,14 +493,20 @@ function renderFightPhase(ctx, gs) {
   ctx.beginPath(); ctx.moveTo(CW/2, BATTLE_Y+35); ctx.lineTo(CW/2, BATTLE_Y+BATTLE_H-65); ctx.stroke();
 
   // 헤더
-  ctx.font='bold 11px sans-serif'; ctx.textBaseline='top'; ctx.textAlign='center';
-  ctx.fillStyle='#60a5fa'; ctx.fillText('우리팀', BATTLE_TEAM_X, BATTLE_Y+6);
-  ctx.fillStyle='#f87171'; ctx.fillText('적팀',   BATTLE_ENEMY_X, BATTLE_Y+6);
+  ctx.font='bold 11px sans-serif'; ctx.textBaseline='top'; ctx.textAlign='left';
+  ctx.fillStyle='#60a5fa'; ctx.fillText('우리팀', 8, BATTLE_Y+8);
 
   // 처치 수 & 강화 배율
+  // 정보 한 줄 — 컨트롤 버튼 아래, 유닛 위
   const pct = Math.round(battle.killCount * KILL_SCALE * 100);
-  ctx.font='8px sans-serif'; ctx.fillStyle='#7c3aed'; ctx.textAlign='center';
-  ctx.fillText(`🗿Lv.${gs.caveLevel}  처치 ${battle.killCount}회  강화 +${pct}%`, CW/2, BATTLE_Y+20);
+  ctx.font='bold 9px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle='#7c3aed';
+  ctx.fillText(`🗿Lv.${gs.caveLevel} · 처치 ${battle.killCount} · 몹 +${pct}%`, 8, BATTLE_Y+24);
+  if (wm.loopCount > 0) {
+    // 컨트롤 버튼 행(+6~+30) 아래에 둔다
+    ctx.fillStyle='#fbbf24'; ctx.textAlign='left';
+    ctx.fillText(`♻ 순환 ${wm.loopCount + 1}바퀴 · 보상 ${Math.round(loopGoldMult(wm.loopCount)*100)}% · 몹은 계속 강해집니다`, 8, BATTLE_Y+35);
+  }
 
   // 아군 유닛 (playerDrift 적용)
   const px = BATTLE_TEAM_X + battle.playerDrift;
@@ -532,6 +549,13 @@ function renderFightPhase(ctx, gs) {
     ctx.fillStyle = '#22c55e'; ctx.font = 'bold 24px sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(`전투 승리! 🎉 +${battle.goldEarned}💰`, CW / 2, BATTLE_Y + (BATTLE_H - 65) / 2);
+  } else if (battle.phase === 'retreated') {
+    ctx.fillStyle = 'rgba(8,30,45,0.72)'; ctx.fillRect(0, BATTLE_Y, CW, BATTLE_H - 65);
+    ctx.fillStyle = '#7dd3fc'; ctx.font = 'bold 20px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(`🛡 후퇴  획득: ${battle.goldEarned}💰`, CW / 2, BATTLE_Y + (BATTLE_H - 65) / 2);
+    ctx.fillStyle = '#94a3b8'; ctx.font = '11px sans-serif';
+    ctx.fillText('병력을 보존했습니다', CW / 2, BATTLE_Y + (BATTLE_H - 65) / 2 + 24);
   } else if (battle.phase === 'idle_defeated' || battle.phase === 'lost') {
     ctx.fillStyle = 'rgba(40,0,0,0.72)'; ctx.fillRect(0, BATTLE_Y, CW, BATTLE_H - 65);
     ctx.fillStyle = '#ef4444'; ctx.font = 'bold 22px sans-serif';

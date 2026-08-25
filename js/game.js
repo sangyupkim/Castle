@@ -177,6 +177,7 @@ window.addEventListener('keydown', e => {
     case 's': case 'S': cycleSpeed(); break;
     case 'm': case 'M': SFX.toggleMute(); break;
     case 't': case 'T': gs.page = (gs.page === 'town' ? 'battle' : 'town'); SFX.click(); break;
+    case 'r': case 'R': wm.retreat(gs); break;
     case 'Escape': gs.ui.towerAction = null; break;
   }
 });
@@ -213,6 +214,7 @@ function tap({x,y}) {
     if (hitTest(x,y,gs.ui.ctrlPause||{})) { togglePause(); return; }
     if (hitTest(x,y,gs.ui.ctrlSpeed||{})) { cycleSpeed();  return; }
     if (hitTest(x,y,gs.ui.ctrlMute ||{})) { SFX.toggleMute(); return; }
+    if (hitTest(x,y,gs.ui.retreatBtn||{})) { wm.retreat(gs); return; }
     if (hitTest(x,y,gs.ui.briefTownBtn||{}) || hitTest(x,y,gs.ui.uibarTownBtn||{})) { gs.page='town'; SFX.click(); return; }
   }
 

@@ -18,6 +18,8 @@ function createWaveManager() {
     groupPhase: 'idle',    // 'idle' | 'fighting' | 'advancing' | 'waiting' | 'done'
     advanceTimer: 0,
     waitTimer: 0,
+    loopCount: 0,          // 그룹을 몇 바퀴 순환했는지
+    wipedAt: null,         // 아군이 전멸한 시각(초). 돌파 지속시간 계산용
 
     init(idx) {
       this.waveIndex  = idx;
@@ -30,6 +32,8 @@ function createWaveManager() {
       this.groupPhase     = 'idle';
       this.advanceTimer   = 0;
       this.waitTimer      = 0;
+      this.loopCount      = 0;
+      this.wipedAt        = null;
     },
 
     startWave(gs) {
@@ -40,6 +44,8 @@ function createWaveManager() {
       this.timer      = WAVE_DURATION;
       this.groupIdx   = 0;
       this.groupPhase = 'idle';
+      this.loopCount  = 0;
+      this.wipedAt    = null;
 
       const def = WAVE_DEFS[this.waveIndex];
 
@@ -67,21 +73,39 @@ function createWaveManager() {
     },
 
     _spawnGroup(gs) {
+      if (!this.battleGroups.length) { this.groupPhase = 'done'; return; }
+      // 그룹을 다 돌면 처음으로 순환한다. 하단은 자원 확보 구간이므로
+      // 시간이 남아 있는 한 계속 몬스터가 나와야 한다.
       if (this.groupIdx >= this.battleGroups.length) {
-        this.groupPhase = 'done';
-        return;
+        this.groupIdx = 0;
+        this.loopCount++;
       }
       const group = this.battleGroups[this.groupIdx];
       const types = group.types.slice(0, MAX_GROUP_SIZE);
       // 아군/적 중 큰 쪽에 맞춰 행 간격을 먼저 확정해야 drawY가 화면 안에 들어온다
       setBattleRowCount(Math.max(4, gs.battle.ourTeam.length, types.length));
+      const goldMult = loopGoldMult(this.loopCount);
       types.forEach((type, i) => {
         const mob = makeScaledMob(type, gs.battle.killCount, gs.caveLevel);
+        mob.goldReward = Math.max(1, Math.round(mob.goldReward * goldMult));
         mob.drawY = unitY(i);
         gs.battle.enemyTeam.push(mob);
       });
       this.groupPhase = 'fighting';
       if (typeof SFX !== 'undefined' && this.groupIdx > 0) SFX.advance();
+    },
+
+    // 하단 전투에서 물러난다. 병력과 적립 골드를 지키고 남은 시간은 상단만 진행.
+    retreat(gs) {
+      if (this.phase !== 'active') return false;
+      if (this.groupPhase === 'done') return false;
+      if (gs.battle.phase !== 'fighting') return false;
+      gs.battle.enemyTeam = [];
+      this.groupPhase = 'done';
+      gs.battle.phase = 'retreated';
+      addLog(gs.battle, '🛡 후퇴 — 병력을 보존했습니다', '#38bdf8');
+      if (typeof SFX !== 'undefined') SFX.click();
+      return true;
     },
 
     update(gs, dt) {
@@ -106,19 +130,29 @@ function createWaveManager() {
         this._updateGroupSpawn(gs, dt);
       }
 
-      // 아군 전멸 시
+      // 아군 전멸 시 — 시각을 기록해 돌파 지속시간을 잰다
       if (gs.battle.phase === 'lost') {
         gs.battle.phase = 'idle_defeated';
+        this.wipedAt = this.elapsed;
+        addLog(gs.battle, '⚠️ 병력 전멸 — 몬스터가 기지로 향합니다', '#ef4444');
+      }
+      // 돌파가 일정 시간 지나면 몬스터는 물러난다 (남은 시간은 상단만 진행)
+      if (this.wipedAt !== null && this.elapsed - this.wipedAt >= BREAKTHROUGH_DURATION) {
+        if (gs.battle.enemyTeam.length) {
+          gs.battle.enemyTeam = [];
+          addLog(gs.battle, '몬스터가 물러났습니다', '#64748b');
+        }
       }
 
-      // 종료 조건
+      // 종료 조건 — 웨이브는 타이머로만 끝난다.
+      // 상단을 일찍 막았다고 해서 하단 자원 확보 시간까지 잘리면 안 된다.
+      // 양쪽 다 더 진행될 여지가 없을 때만 조기 종료한다.
       const defDone = this.defenseQueues.every(q => q.remaining <= 0) &&
                       gs.defenseEnemies.every(e => e.dead || e.reached);
-      const batDone = gs.battle.phase === 'idle_defeated';
-      const allGroupsDone = this.groupPhase === 'done' &&
-                            gs.battle.enemyTeam.every(e => e.dead);
+      const batOver = (gs.battle.phase === 'retreated') ||
+                      (gs.battle.phase === 'idle_defeated' && gs.battle.enemyTeam.length === 0);
 
-      if (this.timer <= 0 || (defDone && batDone) || allGroupsDone) {
+      if (this.timer <= 0 || (defDone && batOver)) {
         this.endWave(gs);
       }
     },
@@ -130,14 +164,10 @@ function createWaveManager() {
         // 현재 그룹 전원 사망 확인 (화면에서 제거 대기 포함)
         const liveOrFading = gs.battle.enemyTeam.filter(e => !e.dead || e.deadTimer < 0.7);
         if (liveOrFading.length === 0) {
-          // 모두 처치 — 다음 그룹이 있으면 전진 연출 시작
+          // 모두 처치 — 전진 연출 후 다음 그룹 (마지막이면 처음으로 순환)
           this.groupIdx++;
-          if (this.groupIdx >= this.battleGroups.length) {
-            this.groupPhase = 'done';
-          } else {
-            this.groupPhase   = 'advancing';
-            this.advanceTimer = ADVANCE_DURATION;
-          }
+          this.groupPhase   = 'advancing';
+          this.advanceTimer = ADVANCE_DURATION;
         }
       }
 
@@ -160,7 +190,7 @@ function createWaveManager() {
     },
 
     endWave(gs) {
-      if (gs.battle.phase === 'fighting') {
+      if (gs.battle.phase === 'fighting' || gs.battle.phase === 'retreated') {
         gs.battle.phase  = 'won';
         gs.battle.result = 'won';
       }
