@@ -179,6 +179,33 @@ tr.total td{font-weight:600;background:var(--sunk)}
 .loop-b .nm{font-weight:600;font-size:14.5px}
 .loop-b .fl{font-size:13px;color:var(--ink-2);margin-top:5px;line-height:1.6}
 
+
+/* ── 개정 배지 ────────────────────────────── */
+.rev{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;
+  letter-spacing:.09em;text-transform:uppercase;padding:2px 8px;border-radius:2px;
+  color:var(--lane-b);background:var(--lane-b-soft);vertical-align:middle;margin-left:8px}
+/* ── 전/후 비교 ───────────────────────────── */
+.ba{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--hair);
+  border-radius:3px;overflow:hidden;margin:18px 0;background:var(--surface)}
+@media(max-width:640px){.ba{grid-template-columns:1fr}}
+.ba>div{padding:15px 17px}
+.ba>div:first-child{border-right:1px solid var(--hair-2);background:var(--sunk)}
+@media(max-width:640px){.ba>div:first-child{border-right:0;border-bottom:1px solid var(--hair-2)}}
+.ba h5{margin:0 0 8px;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.11em;
+  text-transform:uppercase}
+.ba>div:first-child h5{color:var(--ink-3)}
+.ba>div:last-child h5{color:var(--lane-b)}
+.ba p{margin:0;font-size:13.5px;color:var(--ink-2);line-height:1.62;max-width:none}
+.ba ul{margin:0;padding-left:17px;font-size:13.5px;color:var(--ink-2);max-width:none}
+.ba li{margin:3px 0}
+/* ── 아레나 다이어그램 ────────────────────── */
+.arena-wrap{margin:20px 0;overflow-x:auto}
+.arena{border:1px solid var(--hair);border-radius:3px;background:var(--surface);padding:16px;
+  min-width:440px}
+.arena svg{display:block;width:100%;height:auto}
+.legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:12px;font-size:12px;color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto}
 hr{border:0;border-top:1px solid var(--hair);margin:34px 0}
 footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
   font-size:12.5px;color:var(--ink-3)}
@@ -187,16 +214,16 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <div class="wrap">
 <header class="cover">
-  <div class="eyebrow">Game Design Document · v1.0</div>
+  <div class="eyebrow">Game Design Document · v2.0 · 하단 실시간 전환</div>
   <h1>듀얼 프론티어</h1>
   <p class="tagline">한 화면에서 두 개의 전선을 동시에 굴리는 모바일 웹 로그라이트.
-     위는 지켜야 하고 아래는 벌어야 한다 — 그 사이에서 자원을 어떻게 쪼갤지가 이 게임의 전부다.</p>
+     위는 배치해서 지키고, 아래는 직접 뛰어들어 벌어온다.</p>
   <dl class="meta">
-    <div><dt>장르</dt><dd>타워디펜스 + 오토배틀러 로그라이트</dd></div>
+    <div><dt>장르</dt><dd>타워디펜스 + 실시간 액션 로그라이트</dd></div>
     <div><dt>플랫폼</dt><dd>모바일 웹 (480×800 캔버스)</dd></div>
-    <div><dt>1회 플레이</dt><dd>15~35분 (배속 시 7~15분)</dd></div>
+    <div><dt>1회 플레이</dt><dd>15~35분</dd></div>
     <div><dt>현재 볼륨</dt><dd>스테이지 1 · 30웨이브</dd></div>
-    <div><dt>구현 상태</dt><dd>플레이 가능 · 배포 중</dd></div>
+    <div><dt>이번 개정</dt><dd>하단을 턴제 → 실시간 아레나로</dd></div>
   </dl>
 </header>
 
@@ -205,21 +232,22 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
   <p>목차</p>
   <ol>
     <li><a href="#s1"><span class="n">01</span><span>게임 개요</span></a></li>
-    <li><a href="#s2"><span class="n">02</span><span>코어 루프</span></a></li>
-    <li><a href="#s3"><span class="n">03</span><span>화면 구성</span></a></li>
-    <li><a href="#s4"><span class="n">04</span><span>상단 방어선</span></a></li>
-    <li><a href="#s5"><span class="n">05</span><span>하단 원정</span></a></li>
-    <li><a href="#s6"><span class="n">06</span><span>돌파 · 두 전선의 연결</span></a></li>
-    <li><a href="#s7"><span class="n">07</span><span>영웅</span></a></li>
-    <li><a href="#s8"><span class="n">08</span><span>마을</span></a></li>
-    <li><a href="#s9"><span class="n">09</span><span>강화 픽</span></a></li>
-    <li><a href="#s10"><span class="n">10</span><span>스킬 트리</span></a></li>
+    <li><a href="#s2"><span class="n">02</span><span>이번 개정의 배경</span></a></li>
+    <li><a href="#s3"><span class="n">03</span><span>코어 루프</span></a></li>
+    <li><a href="#s4"><span class="n">04</span><span>화면 구성</span></a></li>
+    <li><a href="#s5"><span class="n">05</span><span>상단 방어선</span></a></li>
+    <li><a href="#s6"><span class="n">06</span><span>하단 아레나</span></a></li>
+    <li><a href="#s7"><span class="n">07</span><span>자동 · 수동 모드</span></a></li>
+    <li><a href="#s8"><span class="n">08</span><span>돌파</span></a></li>
+    <li><a href="#s9"><span class="n">09</span><span>영웅</span></a></li>
+    <li><a href="#s10"><span class="n">10</span><span>성장 시스템</span></a></li>
     <li><a href="#s11"><span class="n">11</span><span>자원 흐름</span></a></li>
     <li><a href="#s12"><span class="n">12</span><span>스테이지 구성</span></a></li>
-    <li><a href="#s13"><span class="n">13</span><span>밸런스 설계</span></a></li>
-    <li><a href="#s14"><span class="n">14</span><span>미해결 과제</span></a></li>
-    <li><a href="#s15"><span class="n">15</span><span>로드맵</span></a></li>
-    <li><a href="#s16"><span class="n">16</span><span>기술 구조</span></a></li>
+    <li><a href="#s13"><span class="n">13</span><span>밸런스 재설계</span></a></li>
+    <li><a href="#s14"><span class="n">14</span><span>전환 계획</span></a></li>
+    <li><a href="#s15"><span class="n">15</span><span>미해결 과제</span></a></li>
+    <li><a href="#s16"><span class="n">16</span><span>로드맵</span></a></li>
+    <li><a href="#s17"><span class="n">17</span><span>기술 구조</span></a></li>
   </ol>
 </nav>
 
@@ -227,74 +255,114 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <section id="s1">
 <h2>01 — 게임 개요</h2>
-<h3>지켜야 할 곳과 벌어야 할 곳이 동시에 굴러간다</h3>
+<h3>배치하는 전선과 뛰어드는 전선</h3>
 <p class="lede">플레이어는 매 웨이브 60초 동안 두 개의 전선을 한 화면에서 본다.
-화면 위쪽에서는 ∞자 경로를 따라 들어오는 침입자를 타워로 막고, 아래쪽에서는 편성한 병력이
-몬스터 그룹과 자동으로 싸우며 골드를 번다.</p>
+위쪽에서는 ∞자 경로에 미리 세워둔 타워가 침입자를 막고, 아래쪽 아레나에서는 영웅과 병력이
+사방에서 몰려드는 몬스터와 실시간으로 싸우며 골드를 번다.</p>
 
-<p>두 전선은 <strong>같은 골드를 놓고 경쟁한다.</strong> 타워에 쓰면 기지가 안전해지고,
-병력에 쓰면 수입이 늘어난다. 어느 쪽에 얼마를 넣을지가 매 웨이브의 결정이고, 이 게임이
-일반적인 타워디펜스나 오토배틀러와 갈라지는 지점이다.</p>
+<p>두 전선은 <strong>같은 골드를 놓고 경쟁</strong>하면서 <strong>플레이 방식이 완전히 다르다.</strong>
+위는 웨이브 전에 결정을 끝내는 배치형, 아래는 웨이브 중에 계속 손이 가는 실시간형이다.
+이 비대칭이 v2.0의 핵심 설계다.</p>
 
-<h4>설계 기둥 세 가지</h4>
 <div class="grid g3">
   <div class="card dl">
-    <h4>방어는 지출, 원정은 수입</h4>
-    <p>상단은 골드를 소모해 기지 HP를 지키는 쪽, 하단은 골드를 벌어오는 쪽.
-       한쪽만 키우면 반드시 다른 쪽에서 무너진다.</p>
+    <h4>위 — 준비하고 지켜본다</h4>
+    <p>웨이브 전에 타워를 세우고 강화한다. 웨이브가 시작되면 개입할 수 없다.
+       배치가 곧 실력이다.</p>
   </div>
   <div class="card bl">
-    <h4>자동전투에도 결정이 있다</h4>
-    <p>하단 전투는 자동으로 굴러가지만 <strong>언제 멈출지</strong>는 플레이어가 고른다.
-       더 돌수록 몬스터가 강해지고 보상은 줄어든다.</p>
+    <h4>아래 — 뛰어들어 벌어온다</h4>
+    <p>실시간 아레나. 몹이 사방에서 리젠되고 아군은 자동으로 싸운다.
+       필요하면 직접 부대를 움직여 포지션을 잡는다.</p>
   </div>
   <div class="card ml">
     <h4>져도 남는 게 있다</h4>
-    <p>런이 끝나면 보석을 얻고 스킬 트리를 연다. 다음 런은 반드시 이전보다
-       멀리 간다 — 실패가 진행의 일부다.</p>
+    <p>런이 끝나면 보석을 얻고 스킬 트리를 연다. 다음 런은 반드시 이전보다 멀리 간다.</p>
   </div>
 </div>
-
-<h4>타겟</h4>
-<p>짧은 세션을 반복하는 모바일 웹 플레이어. 설치 없이 링크로 바로 시작하고,
-한 런을 배속으로 10분 안에 끝낼 수 있어야 한다. 조작은 탭 위주이되 데스크톱에서는
-키보드 단축키로 더 빠르게 굴릴 수 있다.</p>
 </section>
 
 <section id="s2">
-<h2>02 — 코어 루프</h2>
-<h3>웨이브 · 스테이지 · 런의 3계층</h3>
-<p>세 겹의 루프가 서로 다른 시간 축에서 돌아간다. 각 계층은 고유한 보상과
-고유한 결정을 가진다.</p>
+<h2>02 — 이번 개정의 배경 <span class="rev">v2.0</span></h2>
+<h3>위아래가 같은 게임이었다</h3>
+<p class="lede">v1.0을 반복 플레이한 결과 나온 진단: 상단도 "일정 간격으로 나오는 몹을 처치",
+하단도 "일정 간격으로 나오는 적을 처치". 화면을 위아래로 나눴을 뿐 <strong>같은 게임을
+두 번 하고 있었다.</strong></p>
 
+<h4>코드가 뒷받침하는 증거</h4>
+<p>웨이브가 시작되면 <span class="mono">wm.phase</span>가 <span class="mono">'active'</span>가 되고,
+타워 건설·강화·판매·병력 고용이 전부 잠긴다. 즉 <strong>웨이브 60초 동안 플레이어가 할 수 있는
+조작이 사실상 없다.</strong> 배속 버튼을 누르고 결과를 기다리는 것이 전부였다.</p>
+
+<div class="ba">
+  <div>
+    <h5>v1.0 — 웨이브 중</h5>
+    <ul>
+      <li>상단: 타워가 알아서 쏨 (개입 불가)</li>
+      <li>하단: 1초 1틱 자동 계산 (개입 불가)</li>
+      <li>플레이어: 후퇴 버튼 하나</li>
+      <li>결과를 지켜보는 60초</li>
+    </ul>
+  </div>
+  <div>
+    <h5>v2.0 — 웨이브 중</h5>
+    <ul>
+      <li>상단: 그대로 (배치형 유지)</li>
+      <li>하단: 실시간 아레나 — 몹이 사방에서 몰려듦</li>
+      <li>플레이어: 부대 이동 · 포지셔닝 · 드랍 수거 · 후퇴 판단</li>
+      <li>계속 손이 가는 60초</li>
+    </ul>
+  </div>
+</div>
+
+<div class="note">
+<p><strong>이 개정이 노리는 것.</strong> 비어 있던 웨이브 중 시간을 채우는 것,
+그리고 상단과 하단을 <strong>다른 종류의 재미</strong>로 갈라놓는 것.
+"배치해두고 기다리는 것"과 "직접 움직이는 것"은 근본적으로 다른 경험이다.</p>
+</div>
+
+<h4>변경 요구사항</h4>
+<div class="tw"><table>
+<thead><tr><th class="num">#</th><th>요구</th><th>설계 해석</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td class="wrap">턴제 → 실시간 핵앤슬래시 (뱀파이어 서바이버류)</td><td class="wrap">1초 1틱 계산을 폐기하고 프레임 단위 이동·충돌·공격으로 전환</td></tr>
+<tr><td class="num">2</td><td class="wrap">일정 크기 맵에서 몬스터 랜덤 리젠</td><td class="wrap">고정 아레나(480×330) · 가장자리 랜덤 스폰 · 시간에 따라 압력 증가</td></tr>
+<tr><td class="num">3</td><td class="wrap">기본 자동 — 몹은 최근접 아군에게 돌진, 아군은 시야 내 적 자동 공격</td><td class="wrap">아군은 제자리 사수, 몹이 붙어옴. 공격·스킬 모두 쿨다운 자동</td></tr>
+<tr><td class="num">4</td><td class="wrap">수동 모드에서 병력 이동 조작 (공격은 자동)</td><td class="wrap">아레나 탭/드래그로 부대 집결 지점 지정 · 대형 유지 이동</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="s3">
+<h2>03 — 코어 루프</h2>
+<h3>웨이브 · 스테이지 · 런의 3계층</h3>
 <div class="loops">
   <div class="loop">
     <div class="loop-t"><span class="lv">1계층</span><span class="dur">60초</span></div>
     <div class="loop-b">
       <span class="nm">웨이브</span>
-      <div class="fl">타워 배치·병력 편성 → 두 전선 동시 진행 → 후퇴 판단 → 정산.
-        <strong>보상:</strong> 골드 · 영웅 EXP</div>
+      <div class="fl"><strong>준비</strong>(타워·편성) → <strong>전투</strong>(상단 자동 + 하단 실시간) →
+        후퇴 판단 → 정산. <strong>보상:</strong> 골드 · 영웅 EXP</div>
     </div>
   </div>
   <div class="loop">
     <div class="loop-t"><span class="lv">2계층</span><span class="dur">3웨이브</span></div>
     <div class="loop-b">
       <span class="nm">스테이지 (1-1 ~ 1-10)</span>
-      <div class="fl">웨이브마다 강화 카드 3장 중 1장 선택 → 스테이지 클리어 시 보석 지급.
-        <strong>보상:</strong> 강화 카드 · 보석 1개(최종 2개)</div>
+      <div class="fl">웨이브마다 강화 카드 3장 중 1장 → 스테이지 클리어 시 보석.
+        <strong>보상:</strong> 강화 카드 · 보석</div>
     </div>
   </div>
   <div class="loop">
     <div class="loop-t"><span class="lv">3계층</span><span class="dur">30웨이브</span></div>
     <div class="loop-b">
       <span class="nm">런</span>
-      <div class="fl">기지 HP가 0이 되거나 30웨이브를 완주하면 종료 → 보석 정산 → 스킬 트리 해금 → 새 런.
+      <div class="fl">기지 HP 0 또는 30웨이브 완주 시 종료 → 보석 정산 → 스킬 트리 → 새 런.
         <strong>보상:</strong> 보석 · 영구 스킬</div>
     </div>
   </div>
 </div>
 
-<h4>웨이브 60초 안에서 벌어지는 일</h4>
+<h4>웨이브 60초 — v2.0</h4>
 <div class="tl">
   <div class="tl-row">
     <div class="tl-lab">상단 방어</div>
@@ -303,12 +371,12 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
     </div>
   </div>
   <div class="tl-row">
-    <div class="tl-lab">하단 원정</div>
+    <div class="tl-lab">하단 아레나</div>
     <div class="tl-bar">
-      <div class="seg b1" style="left:0;width:22%">그룹 1·2·3</div>
-      <div class="seg b2" style="left:22%;width:24%">순환 2바퀴 · 67%</div>
-      <div class="seg b3" style="left:46%;width:26%">순환 3바퀴 · 50%</div>
-      <div class="seg b4" style="left:72%;width:28%">순환 4바퀴 · 40%</div>
+      <div class="seg b4" style="left:0;width:25%">소수 · 여유</div>
+      <div class="seg b3" style="left:25%;width:25%">스폰 간격 ↓</div>
+      <div class="seg b2" style="left:50%;width:25%">엘리트 등장</div>
+      <div class="seg b1" style="left:75%;width:25%">최대 압력</div>
     </div>
   </div>
   <div class="tl-axis">
@@ -316,577 +384,610 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
     <div class="tl-ticks"><span>0s</span><span>15s</span><span>30s</span><span>45s</span><span>60s</span></div>
   </div>
 </div>
-<p>상단은 웨이브당 정해진 물량이 있어 대개 <strong>15초 안팎에 소진</strong>된다. 하단은 그룹을
-다 잡으면 처음부터 다시 순환하며 타이머가 끝날 때까지 계속 돈다. 순환할수록 몬스터가 강해지고
-골드 보상은 줄어들기 때문에, 어디서 멈출지가 이 60초의 핵심 판단이다.</p>
+<p>상단은 정해진 물량이 있어 대개 15초 안팎에 소진된다. 하단은 <strong>시간이 갈수록 스폰이
+빨라지고 강해진다</strong> — 오래 버틸수록 많이 벌지만 위험도 같이 오른다.
+v1.0의 "그룹 순환 + 보상 체감" 구조를 이 압력 곡선이 대체한다.</p>
 
-<div class="note">
-<p><strong>설계 의도.</strong> 상단을 빨리 정리했다고 해서 하단 수입까지 잘리면
-"방어를 잘할수록 가난해지는" 역전이 생긴다. 그래서 웨이브는 <strong>타이머로만</strong> 끝나고,
-하단은 남은 시간을 전부 자원 확보에 쓴다.</p>
-</div>
-
-<h4>플레이어가 실제로 내리는 결정</h4>
+<h4>플레이어가 내리는 결정</h4>
 <div class="tw"><table>
-<caption>결정 목록 — 이 게임의 재미는 이 표가 전부다</caption>
+<caption>★ 표시가 v2.0에서 새로 생기거나 성격이 바뀐 결정</caption>
 <thead><tr><th>시점</th><th>결정</th><th>트레이드오프</th></tr></thead>
 <tbody>
 <tr><td>웨이브 전</td><td class="wrap">골드를 타워에 넣을까, 병력에 넣을까</td><td class="wrap">기지 안전 ↔ 이번 웨이브 수입</td></tr>
-<tr><td>웨이브 전</td><td class="wrap">어떤 타워를 어디에 세울까</td><td class="wrap">같은 종류를 지을수록 건설비 +28% 체증</td></tr>
-<tr><td>웨이브 전</td><td class="wrap">영웅을 상단에 둘까 하단에 둘까</td><td class="wrap">경로 방어+EXP ↔ 전투력 보강</td></tr>
-<tr><td>웨이브 전</td><td class="wrap">케이브를 올릴까</td><td class="wrap">보상 배율 ↑ ↔ 몬스터도 같이 강해짐</td></tr>
-<tr><td><strong>전투 중</strong></td><td class="wrap"><strong>언제 후퇴할까</strong></td><td class="wrap">더 벌기 ↔ 전멸 시 병력 손실 + 기지 피해</td></tr>
-<tr><td>웨이브 후</td><td class="wrap">강화 카드 3장 중 무엇</td><td class="wrap">이번 런의 빌드 방향 확정</td></tr>
-<tr><td>런 사이</td><td class="wrap">보석을 어느 계열에 쓸까</td><td class="wrap">타워 / 영웅 / 보조 — 선행 노드 필요</td></tr>
+<tr><td>웨이브 전</td><td class="wrap">어떤 타워를 어디에 세울까</td><td class="wrap">동종 건설비 +28% 체증</td></tr>
+<tr><td>웨이브 전</td><td class="wrap">영웅을 위에 둘까 아래에 둘까</td><td class="wrap">경로 방어+EXP ↔ 아레나 전투력</td></tr>
+<tr><td>웨이브 전</td><td class="wrap">편성 구성 (근접·원거리·탱커·힐러)</td><td class="wrap">★ 실시간에서는 <strong>배치 형태</strong>가 생김 — 탱커가 앞에 서야 함</td></tr>
+<tr><td><strong>전투 중</strong></td><td class="wrap">★ 자동으로 둘까, 직접 움직일까</td><td class="wrap">다른 데 신경 ↔ 포지셔닝 이득</td></tr>
+<tr><td><strong>전투 중</strong></td><td class="wrap">★ 어디에 자리 잡을까 · 몰릴 때 빠질까</td><td class="wrap">드랍 수거·집중 사격 ↔ 포위당할 위험</td></tr>
+<tr><td><strong>전투 중</strong></td><td class="wrap">언제 후퇴할까</td><td class="wrap">더 벌기 ↔ 전멸 시 병력 손실 + 기지 피해</td></tr>
+<tr><td>웨이브 후</td><td class="wrap">강화 카드 3장 중 무엇</td><td class="wrap">이번 런의 빌드 방향</td></tr>
+<tr><td>런 사이</td><td class="wrap">보석을 어느 계열에</td><td class="wrap">타워 / 영웅 / 보조</td></tr>
 </tbody></table></div>
 </section>
 
-<section id="s3">
-<h2>03 — 화면 구성</h2>
+<section id="s4">
+<h2>04 — 화면 구성</h2>
 <h3>두 페이지, 네 영역</h3>
-
 <div class="tw"><table>
 <caption>전투 페이지 — 480×800 세로 캔버스</caption>
 <thead><tr><th>영역</th><th class="num">Y 범위</th><th>내용</th></tr></thead>
 <tbody>
-<tr><td><span class="lane d">상단</span> 방어 구역</td><td class="num">0–355</td><td class="wrap">9×7 격자 · ∞ 경로 · 타워 · 영웅 · 기지 HP 바</td></tr>
+<tr><td><span class="lane d">상단</span> 방어 구역</td><td class="num">0–355</td><td class="wrap">9×7 격자 · ∞ 경로 · 타워 · 영웅 · 기지 HP</td></tr>
 <tr><td>정보 바</td><td class="num">355–410</td><td class="wrap">스테이지/웨이브 · 타이머 · 골드 · 마을 버튼</td></tr>
-<tr><td><span class="lane b">하단</span> 전투 구역</td><td class="num">410–800</td><td class="wrap">출전 브리핑 ↔ 사이드뷰 자동전투 · 컨트롤 · 전투 로그</td></tr>
+<tr><td><span class="lane b">하단</span> 아레나 <span class="rev">변경</span></td><td class="num">410–800</td><td class="wrap">상태 바(28px) · <strong>전투 아레나 480×330</strong> · 컨트롤 바(32px)</td></tr>
 </tbody></table></div>
-
-<div class="tw"><table>
-<caption>마을 페이지 — 기지(🏰) 탭 또는 T 키로 진입</caption>
-<thead><tr><th>탭</th><th>역할</th></tr></thead>
-<tbody>
-<tr><td>🏰 마을</td><td class="wrap">건물 건설 · 레벨업 · 건물별 강화 트리</td></tr>
-<tr><td>⚔️ 출전준비</td><td class="wrap">영웅 배치 · 병력 5종 고용 · 편성 슬롯 · 전투력 요약</td></tr>
-<tr><td>🏹 타워배치</td><td class="wrap">타워 4종 팔레트 · 미니 그리드 · 강화/판매 · 배치 현황</td></tr>
-</tbody></table></div>
-
-<h4>웨이브 대기 화면 = 출전 브리핑</h4>
-<p>웨이브를 시작하기 전 하단은 브리핑 패널이 된다. 이번 웨이브의 하단 그룹 편성(등장 순서대로),
-상단 침입자 종류와 물량, 내 편성과 영웅 배치, 지금까지 얻은 강화를 한 화면에서 확인하고
-출발한다. 정보를 보고 준비를 고치라는 것이 이 화면의 목적이다.</p>
+<p>v1.0의 하단은 좌우 2열 슬롯 + 전투 로그 65px였다. v2.0에서는 로그를 없애고 그 공간까지
+아레나로 쓴다 — 실시간 전투에서는 텍스트 로그를 읽을 여유가 없고, 화면에서 벌어지는 일이
+곧 로그다.</p>
 
 <h4>조작</h4>
 <div class="tw"><table>
 <thead><tr><th>동작</th><th>탭</th><th>키보드</th></tr></thead>
 <tbody>
 <tr><td>타워 종류 선택</td><td>타워배치 팔레트</td><td class="mono">1 – 4</td></tr>
-<tr><td>타워 건설</td><td>빈 격자 칸</td><td>—</td></tr>
-<tr><td>타워 강화 / 판매</td><td>세운 타워 → 패널</td><td>—</td></tr>
+<tr><td>타워 건설 / 강화 / 판매</td><td>격자 칸 · 타워 탭</td><td>—</td></tr>
 <tr><td>웨이브 시작</td><td>브리핑 / 출전 버튼</td><td class="mono">Space</td></tr>
+<tr><td><strong>부대 이동</strong> <span class="rev">신규</span></td><td>아레나 탭 / 드래그</td><td class="mono">방향키 · WASD</td></tr>
+<tr><td><strong>자동/수동 전환</strong> <span class="rev">신규</span></td><td>⚙ 모드 버튼</td><td class="mono">A</td></tr>
 <tr><td>하단 후퇴</td><td>🛡 후퇴 버튼</td><td class="mono">R</td></tr>
 <tr><td>마을 ↔ 전투</td><td>기지 셀 / 마을 버튼</td><td class="mono">T</td></tr>
-<tr><td>일시정지</td><td>⏸</td><td class="mono">P</td></tr>
-<tr><td>배속 1×/2×/3×</td><td>배속 버튼</td><td class="mono">S</td></tr>
-<tr><td>음소거</td><td>🔊</td><td class="mono">M</td></tr>
+<tr><td>일시정지 · 배속 · 음소거</td><td>컨트롤 바</td><td class="mono">P · S · M</td></tr>
 </tbody></table></div>
-</section>
-
-<section id="s4">
-<h2>04 — 상단 방어선 <span class="lane d">Defense</span></h2>
-<h3>골드를 쓰는 쪽</h3>
-<p>9×7 격자 위에 ∞(8자) 경로가 하나 놓인다. 침입자는 상단 출발점에서 나와 경로를 따라
-기지에 도달하며, 도달하면 기지 HP가 깎인다. <strong>경로가 같은 칸을 두 번 지나므로
-교차 지점 주변이 가장 효율적인 배치</strong>다 — 한 타워가 같은 적을 두 번 때린다.</p>
-
-<div class="stats">
-  <div><span class="v">9×7</span><span class="k">격자</span></div>
-  <div><span class="v">≈40</span><span class="k">건설 가능 칸</span></div>
-  <div><span class="v">100</span><span class="k">기지 HP</span></div>
-  <div><span class="v">25</span><span class="k">경로 웨이포인트</span></div>
+<div class="note">
+<p><strong>배속의 의미가 바뀐다.</strong> v1.0에서 배속은 "지켜보는 시간을 줄이는" 버튼이었다.
+실시간 전투에서 3배속은 조작 난이도를 실제로 올리므로, <strong>수동 모드에서는 2배속까지만</strong>
+허용하는 편이 낫다. (미해결 — 15절)</p>
 </div>
-
-<h4>타워 4종</h4>
-<div class="tw"><table>
-<caption>기본 스탯 · 비용은 Lv.1 기준</caption>
-<thead><tr><th>타워</th><th class="num">비용</th><th class="num">공격</th><th class="num">공속</th><th class="num">사거리</th><th>역할</th></tr></thead>
-<tbody>
-<tr><td>🏹 화살탑</td><td class="num">5</td><td class="num">2</td><td class="num">1.00/s</td><td class="num">2.4칸</td><td class="wrap">저렴한 단일 연사 · 초반 주력</td></tr>
-<tr><td>❄️ 서리탑</td><td class="num">12</td><td class="num">1</td><td class="num">0.90/s</td><td class="num">2.2칸</td><td class="wrap">적중 시 이동속도 45% 감소 (1.6초) · 딜은 없고 시간을 번다</td></tr>
-<tr><td>💣 대포탑</td><td class="num">18</td><td class="num">8</td><td class="num">0.50/s</td><td class="num">2.0칸</td><td class="wrap">반경 40px 범위 피해(50%) · 물량 대응</td></tr>
-<tr><td>🎯 저격탑</td><td class="num">26</td><td class="num">18</td><td class="num">0.35/s</td><td class="num">5.0칸</td><td class="wrap">방어 관통 · 체력 최대 적 우선 · 중장갑 해답</td></tr>
-</tbody></table></div>
-
-<h5>레벨과 비용</h5>
-<div class="tw"><table>
-<thead><tr><th>레벨</th><th class="num">공격</th><th class="num">공속</th><th class="num">사거리</th><th>강화 비용</th></tr></thead>
-<tbody>
-<tr><td>Lv.1</td><td class="num">×1.00</td><td class="num">×1.00</td><td class="num">×1.00</td><td>— (건설)</td></tr>
-<tr><td>Lv.2</td><td class="num">×1.70</td><td class="num">×1.15</td><td class="num">×1.12</td><td class="mono">기본비용 × 0.9 × 1</td></tr>
-<tr><td>Lv.3</td><td class="num">×2.60</td><td class="num">×1.30</td><td class="num">×1.25</td><td class="mono">기본비용 × 0.9 × 2</td></tr>
-</tbody></table></div>
-<ul>
-<li><strong>건설비 체증</strong> — 같은 종류를 1기 지을 때마다 +28%. 한 종류 도배 대신 조합을 강제한다.</li>
-<li><strong>판매</strong> — 투자 골드의 60% 환급. 배치 실수를 되돌릴 수 있다.</li>
-<li><strong>실시간 스탯</strong> — 타워 스탯은 발사할 때마다 현재 강화를 반영해 계산한다. 나중에 산 강화도 이미 세운 타워에 적용된다.</li>
-</ul>
-
-<h4>침입자 5종</h4>
-<div class="tw"><table>
-<caption>기본 스탯 · 웨이브 스케일링 적용 전</caption>
-<thead><tr><th>적</th><th class="num">HP</th><th class="num">속도</th><th class="num">기지 피해</th><th class="num">방어력</th><th class="num">처치 골드</th><th>대응</th></tr></thead>
-<tbody>
-<tr><td>🟢 고블린</td><td class="num">14</td><td class="num">1.10</td><td class="num">2</td><td class="num">0</td><td class="num">3</td><td class="wrap">무엇으로든</td></tr>
-<tr><td>🐺 늑대</td><td class="num">12</td><td class="num">2.30</td><td class="num">2</td><td class="num">0</td><td class="num">5</td><td class="wrap">빠름 — 서리탑으로 묶기</td></tr>
-<tr><td>👾 오크</td><td class="num">40</td><td class="num">0.70</td><td class="num">6</td><td class="num">1</td><td class="num">8</td><td class="wrap">평범</td></tr>
-<tr><td>🛡 강철오크</td><td class="num">95</td><td class="num">0.50</td><td class="num">12</td><td class="num">3</td><td class="num">18</td><td class="wrap">방어력 — 화살탑이 거의 안 통함</td></tr>
-<tr><td>💀 던전보스</td><td class="num">400</td><td class="num">0.40</td><td class="num">20</td><td class="num">5</td><td class="num">50</td><td class="wrap">저격탑 필수</td></tr>
-</tbody></table></div>
-
-<h5>웨이브 스케일링</h5>
-<div class="tw"><table>
-<thead><tr><th>항목</th><th>공식</th><th>웨이브 30 기준</th></tr></thead>
-<tbody>
-<tr><td>HP</td><td class="mono">기본 × (1 + 웨이브 × 0.22)</td><td class="num">×7.4</td></tr>
-<tr><td>물량</td><td class="mono">기본 × (1 + 웨이브 × 0.07)</td><td class="num">×3.0</td></tr>
-<tr><td>기지 피해</td><td class="mono">기본 × (1 + 웨이브 × 0.04)</td><td class="num">×2.2</td></tr>
-<tr><td>방어력</td><td class="mono">기본 + ⌊웨이브 ÷ 5⌋</td><td class="num">+5</td></tr>
-</tbody></table></div>
-<p><strong>방어력 증가가 핵심 압박이다.</strong> 투사체 피해에서 방어력을 뺀 값이 실제 피해이므로
-(최소 1 보장), 공격력 2짜리 화살탑은 후반에 사실상 1씩만 넣는다. 저격탑은 방어를 무시하므로
-후반 필수 해답이 된다.</p>
 </section>
 
 <section id="s5">
-<h2>05 — 하단 원정 <span class="lane b">Expedition</span></h2>
-<h3>골드를 버는 쪽</h3>
-<p>편성한 병력이 오른쪽에서 걸어오는 몬스터 그룹과 자동으로 싸운다.
-<strong>1초에 1틱</strong>, 각 유닛은 매 틱 공격하고 <strong>5틱마다 스킬</strong>이 자동 발동된다
-(MP 충족 시). 한 그룹을 전멸시키면 전진 연출 후 다음 그룹이 등장한다.</p>
-
-<h4>아군 유닛 5종</h4>
-<div class="tw"><table>
-<caption>편성 슬롯은 기본 4칸 · 강화로 최대 +3까지</caption>
-<thead><tr><th>유닛</th><th class="num">비용</th><th class="num">HP</th><th class="num">ATK</th><th class="num">DEF</th><th>스킬</th><th>역할</th></tr></thead>
-<tbody>
-<tr><td>🏹 궁수</td><td class="num">6</td><td class="num">40</td><td class="num">10</td><td class="num">1</td><td class="wrap">연사 — 무작위 3연타 (12×3)</td><td class="wrap">저렴한 딜 · 초반 필수</td></tr>
-<tr><td>⚔️ 검사</td><td class="num">8</td><td class="num">60</td><td class="num">12</td><td class="num">3</td><td class="wrap">강타 — 단일 28</td><td class="wrap">균형형 근접</td></tr>
-<tr><td>✚ 치유사</td><td class="num">10</td><td class="num">45</td><td class="num">5</td><td class="num">2</td><td class="wrap">치유 — 최저 HP 아군 +25</td><td class="wrap">지속력 · 순환 유지</td></tr>
-<tr><td>🛡️ 방패병</td><td class="num">14</td><td class="num">120</td><td class="num">7</td><td class="num">9</td><td class="wrap">수호 방벽 — 전체 보호막 +22</td><td class="wrap">탱커 · 적 표적 60% 유인</td></tr>
-<tr><td>✨ 마법사</td><td class="num">16</td><td class="num">45</td><td class="num">9</td><td class="num">1</td><td class="wrap">화염 폭발 — 적 전체 22</td><td class="wrap">광역 · 다수 그룹 해답</td></tr>
-</tbody></table></div>
-<ul>
-<li><strong>보호막</strong>은 HP보다 먼저 소모되는 별도 게이지다 (유닛 둘레 하늘색 링).</li>
-<li><strong>방패병 어그로</strong> — 살아 있으면 적이 60% 확률로 방패병을 노린다. 딜러 보호가 실제로 작동한다.</li>
-<li><strong>웨이브 종료 휴식</strong> — 생존 병력은 최대 HP의 30%를 회복하고 MP가 완충된다. 병력은 웨이브를 넘어 유지된다.</li>
-</ul>
-
-<h4>몬스터 5종</h4>
-<div class="tw"><table>
-<thead><tr><th>몹</th><th class="num">HP</th><th class="num">ATK</th><th class="num">DEF</th><th class="num">스킬</th><th class="num">골드</th><th>등장</th></tr></thead>
-<tbody>
-<tr><td>👺 고블린</td><td class="num">30</td><td class="num">8</td><td class="num">1</td><td class="num">15</td><td class="num">8</td><td>1-1 ~</td></tr>
-<tr><td>👹 오크</td><td class="num">80</td><td class="num">15</td><td class="num">4</td><td class="num">30</td><td class="num">20</td><td>1-2 ~</td></tr>
-<tr><td>🧌 오우거</td><td class="num">150</td><td class="num">22</td><td class="num">6</td><td class="num">42</td><td class="num">38</td><td>1-3 ~</td></tr>
-<tr><td>💀 보스</td><td class="num">200</td><td class="num">25</td><td class="num">8</td><td class="num">50</td><td class="num">60</td><td>1-4 ~</td></tr>
-<tr><td>🐲 마왕</td><td class="num">520</td><td class="num">40</td><td class="num">14</td><td class="num">88</td><td class="num">180</td><td>1-7 ~</td></tr>
-</tbody></table></div>
-
-<h4>그룹 순환 — 시간이 곧 자원</h4>
-<p>웨이브의 그룹을 모두 처치하면 <strong>첫 그룹부터 다시 순환</strong>한다. 웨이브는 타이머로만
-끝나므로, 상단을 일찍 정리해도 남은 시간을 전부 자원 확보에 쓸 수 있다.
-대신 무한 파밍이 되지 않도록 두 개의 브레이크가 걸린다.</p>
+<h2>05 — 상단 방어선 <span class="lane d">Defense</span></h2>
+<h3>배치형 — v1.0에서 변경 없음</h3>
+<p>9×7 격자 위 ∞(8자) 경로. 경로가 같은 칸을 두 번 지나므로 교차 지점 주변이 가장 효율적이다.
+웨이브가 시작되면 개입할 수 없고, 준비 단계의 배치가 그대로 결과가 된다.</p>
 
 <div class="tw"><table>
-<thead><tr><th>브레이크</th><th>공식</th><th>1바퀴</th><th>2바퀴</th><th>3바퀴</th><th>4바퀴</th></tr></thead>
+<caption>타워 4종 · Lv.1 기준</caption>
+<thead><tr><th>타워</th><th class="num">비용</th><th class="num">공격</th><th class="num">공속</th><th class="num">사거리</th><th>역할</th></tr></thead>
 <tbody>
-<tr><td>골드 보상 체감</td><td class="mono">1 ÷ (1 + 순환 × 0.5)</td><td class="num">100%</td><td class="num">67%</td><td class="num">50%</td><td class="num">40%</td></tr>
-<tr><td>몹 강화 (처치 누적)</td><td class="mono">1 + 처치수 × 0.08</td><td colspan="4" class="wrap">처치할수록 무한 상승 — 3바퀴쯤이면 +280% 수준</td></tr>
+<tr><td>🏹 화살탑</td><td class="num">5</td><td class="num">2</td><td class="num">1.00/s</td><td class="num">2.4칸</td><td class="wrap">저렴한 단일 연사</td></tr>
+<tr><td>❄️ 서리탑</td><td class="num">12</td><td class="num">1</td><td class="num">0.90/s</td><td class="num">2.2칸</td><td class="wrap">이동속도 45% 감소 (1.6초)</td></tr>
+<tr><td>💣 대포탑</td><td class="num">18</td><td class="num">8</td><td class="num">0.50/s</td><td class="num">2.0칸</td><td class="wrap">반경 40px 범위 피해(50%)</td></tr>
+<tr><td>🎯 저격탑</td><td class="num">26</td><td class="num">18</td><td class="num">0.35/s</td><td class="num">5.0칸</td><td class="wrap">방어 관통 · 최대 체력 우선</td></tr>
 </tbody></table></div>
+<p>레벨 1~3 (공격 ×1.0/1.7/2.6) · 동종 건설비 +28% 체증 · 판매 시 투자액 60% 환급 ·
+스탯은 발사할 때마다 현재 강화를 반영해 계산.</p>
 
-<h4>후퇴 — 언제 멈출지 고르는 결정</h4>
-<p>순환이 무한하므로 가만두면 <strong>반드시 전멸한다.</strong> 자동전투에 플레이어의 판단을
-넣기 위해 전투 중 언제든 후퇴할 수 있다.</p>
 <div class="tw"><table>
-<thead><tr><th>결과</th><th>병력</th><th>적립 골드</th><th>기지</th></tr></thead>
+<caption>침입자 5종 · 웨이브 스케일링 적용 전</caption>
+<thead><tr><th>적</th><th class="num">HP</th><th class="num">속도</th><th class="num">기지 피해</th><th class="num">방어력</th><th class="num">골드</th></tr></thead>
 <tbody>
-<tr><td><span class="chip lo">후퇴</span></td><td>보존</td><td>유지</td><td>피해 없음</td></tr>
-<tr><td><span class="chip hi">전멸</span></td><td>사망 — 재고용 필요</td><td>유지</td><td>돌파 피해</td></tr>
+<tr><td>🟢 고블린</td><td class="num">14</td><td class="num">1.10</td><td class="num">2</td><td class="num">0</td><td class="num">3</td></tr>
+<tr><td>🐺 늑대</td><td class="num">12</td><td class="num">2.30</td><td class="num">2</td><td class="num">0</td><td class="num">5</td></tr>
+<tr><td>👾 오크</td><td class="num">40</td><td class="num">0.70</td><td class="num">6</td><td class="num">1</td><td class="num">8</td></tr>
+<tr><td>🛡 강철오크</td><td class="num">95</td><td class="num">0.50</td><td class="num">12</td><td class="num">3</td><td class="num">18</td></tr>
+<tr><td>💀 던전보스</td><td class="num">400</td><td class="num">0.40</td><td class="num">20</td><td class="num">5</td><td class="num">50</td></tr>
 </tbody></table></div>
-<div class="note">
-<p><strong>이 게임의 중심 긴장.</strong> "한 바퀴 더 돌까?" — 보상은 줄고 몬스터는 세지는데
-아직 병력은 버틴다. 여기서 멈추면 안전하지만 가난하고, 더 가면 부유하지만 무너질 수 있다.</p>
-</div>
+<p>스케일링: HP <span class="mono">×(1+웨이브×0.22)</span> · 물량 <span class="mono">×(1+웨이브×0.07)</span> ·
+방어력 <span class="mono">+⌊웨이브÷5⌋</span>. 방어력 증가가 핵심 압박이며, 후반에는 저격탑이 필수 해답이 된다.</p>
 </section>
 
 <section id="s6">
-<h2>06 — 돌파 · 두 전선의 연결 <span class="lane d">D</span> <span class="lane b">B</span></h2>
-<h3>하단에서 지는 것이 실제 패배가 되도록</h3>
-<p>아군이 전멸하면 남은 몬스터가 <strong>기지로 돌파</strong>해 초당 피해를 준다.
-이 규칙이 없으면 하단 전멸은 "이번 웨이브 보너스를 놓침" 정도의 가벼운 손실이고,
-상단은 타워를 충분히 지으면 뚫리지 않으므로 <strong>게임에서 질 수가 없었다.</strong></p>
+<h2>06 — 하단 아레나 <span class="lane b">Arena</span> <span class="rev">전면 재설계</span></h2>
+<h3>실시간 핵앤슬래시</h3>
+<p class="lede">고정 크기 아레나에서 몬스터가 가장자리에 랜덤 리젠되어 아군에게 돌진한다.
+아군은 사거리 안의 적을 자동으로 공격하고, 플레이어는 필요할 때 부대를 직접 움직인다.</p>
+
+<h4>아레나</h4>
+<div class="arena-wrap"><div class="arena">
+<svg viewBox="0 0 480 330" role="img" aria-label="아레나 구조도: 480×330 고정 화면, 가장자리에서 몬스터가 스폰되어 중앙의 아군 부대로 돌진한다">
+  <defs>
+    <marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M0,0 L8,4 L0,8 z" fill="currentColor"/>
+    </marker>
+  </defs>
+  <rect x="1" y="1" width="478" height="328" rx="3" fill="var(--sunk)" stroke="var(--hair)"/>
+  <!-- 스폰 밴드 -->
+  <g fill="var(--lane-b)" opacity=".13">
+    <rect x="1" y="1" width="478" height="26"/><rect x="1" y="303" width="478" height="26"/>
+    <rect x="1" y="27" width="26" height="276"/><rect x="453" y="27" width="26" height="276"/>
+  </g>
+  <text x="240" y="18" text-anchor="middle" font-size="10" font-family="IBM Plex Mono, monospace"
+        fill="var(--lane-b)" letter-spacing=".08em">SPAWN BAND — 가장자리 랜덤 리젠</text>
+  <!-- 안전 반경 -->
+  <circle cx="240" cy="180" r="112" fill="none" stroke="var(--ink-3)" stroke-dasharray="4 4" opacity=".45"/>
+  <text x="240" y="298" text-anchor="middle" font-size="9.5" fill="var(--ink-3)">스폰 금지 반경 120px</text>
+  <!-- 아군 대형 -->
+  <g>
+    <circle cx="240" cy="184" r="9" fill="var(--brass)"/>
+    <circle cx="216" cy="168" r="7.5" fill="var(--lane-d)"/>
+    <circle cx="264" cy="168" r="7.5" fill="var(--lane-d)"/>
+    <circle cx="220" cy="204" r="7.5" fill="var(--lane-d)"/>
+    <circle cx="262" cy="204" r="7.5" fill="var(--lane-d)"/>
+    <text x="240" y="163" text-anchor="middle" font-size="9.5" font-weight="600" fill="var(--ink)">부대</text>
+  </g>
+  <!-- 몹과 돌진 벡터 -->
+  <g color="var(--lane-b)">
+    <circle cx="60" cy="60" r="6" fill="var(--lane-b)"/>
+    <line x1="70" y1="70" x2="196" y2="158" stroke="var(--lane-b)" stroke-width="1.4" marker-end="url(#ah)" opacity=".8"/>
+    <circle cx="420" cy="70" r="6" fill="var(--lane-b)"/>
+    <line x1="410" y1="80" x2="286" y2="158" stroke="var(--lane-b)" stroke-width="1.4" marker-end="url(#ah)" opacity=".8"/>
+    <circle cx="80" cy="280" r="6" fill="var(--lane-b)"/>
+    <line x1="92" y1="272" x2="202" y2="212" stroke="var(--lane-b)" stroke-width="1.4" marker-end="url(#ah)" opacity=".8"/>
+    <circle cx="415" cy="270" r="8" fill="var(--crit)"/>
+    <line x1="404" y1="262" x2="288" y2="208" stroke="var(--crit)" stroke-width="1.6" marker-end="url(#ah)" opacity=".85"/>
+    <text x="415" y="292" text-anchor="middle" font-size="9" fill="var(--crit)">엘리트</text>
+  </g>
+  <!-- 사거리 -->
+  <circle cx="216" cy="168" r="52" fill="none" stroke="var(--lane-d)" stroke-dasharray="3 3" opacity=".5"/>
+  <text x="118" y="126" font-size="9.5" fill="var(--lane-d)">원거리 사거리</text>
+  <!-- 드랍 -->
+  <circle cx="150" cy="240" r="4" fill="var(--brass)"/>
+  <circle cx="330" cy="110" r="4" fill="var(--brass)"/>
+  <text x="150" y="258" text-anchor="middle" font-size="9" fill="var(--brass)">드랍</text>
+</svg>
+<div class="legend">
+  <span><i class="dot" style="background:var(--brass)"></i>영웅 · 드랍</span>
+  <span><i class="dot" style="background:var(--lane-d)"></i>병력</span>
+  <span><i class="dot" style="background:var(--lane-b)"></i>몬스터</span>
+  <span><i class="dot" style="background:var(--crit)"></i>엘리트</span>
+</div>
+</div></div>
 
 <div class="tw"><table>
-<thead><tr><th>항목</th><th>값</th><th>이유</th></tr></thead>
+<thead><tr><th>항목</th><th>값</th><th>근거</th></tr></thead>
 <tbody>
-<tr><td>초당 피해</td><td class="mono">min(생존 몹 ATK 합 × 0.03, 2.5) × (1 − 기지방어율)</td><td class="wrap">상한이 없으면 후반 전멸이 즉사</td></tr>
-<tr><td>지속 시간</td><td class="mono">15초</td><td class="wrap">웨이브가 타이머까지 도는 구조라 무제한이면 전멸 = 게임오버</td></tr>
-<tr><td>종료 후</td><td class="wrap">몬스터 철수 · 남은 시간은 상단만 진행</td><td class="wrap">웨이브가 의미 없이 늘어지지 않도록</td></tr>
+<tr><td>아레나 크기</td><td class="mono">480 × 330 (화면 고정)</td><td class="wrap">카메라 추적 없음 — 세로 모바일에서 시야를 좁히지 않기 위해</td></tr>
+<tr><td>스폰 위치</td><td class="wrap">가장자리 26px 밴드에서 랜덤</td><td class="wrap">어디서 올지 예측 불가 → 포지셔닝 압박</td></tr>
+<tr><td>스폰 금지 반경</td><td class="mono">아군 부대 중심 120px</td><td class="wrap">눈앞에서 튀어나오는 불합리 방지</td></tr>
+<tr><td>동시 생존 상한</td><td class="mono">28마리</td><td class="wrap">가독성 + 성능. 초과 시 스폰 보류</td></tr>
+<tr><td>유닛 반지름</td><td class="mono">영웅 9 · 병력 7.5 · 몹 6~11</td><td class="wrap">좁은 화면에서 30여 개체가 겹치지 않도록</td></tr>
 </tbody></table></div>
-<p>최대 피해는 <span class="mono">2.5 × 15 = 37.5</span>. 기지 HP 100 기준으로 <strong>한 번 전멸하면
-기지의 3분의 1이 날아간다</strong> — 아프지만 즉사는 아닌, 회복 가능한 실수다.</p>
+
+<h4>스폰 압력 곡선</h4>
+<p>v1.0의 "그룹 순환 + 보상 체감"을 대체하는 긴장 장치다. 시간이 갈수록 촘촘하고 강하게 나온다.</p>
+<div class="tw"><table>
+<thead><tr><th>구간</th><th class="num">스폰 간격</th><th>등장</th><th>성격</th></tr></thead>
+<tbody>
+<tr><td>0–15초</td><td class="num">1.6s</td><td class="wrap">약한 몹 위주</td><td class="wrap">자리 잡고 드랍 수거</td></tr>
+<tr><td>15–30초</td><td class="num">1.1s</td><td class="wrap">중간 몹 섞임</td><td class="wrap">포위 시작 · 대형 유지 필요</td></tr>
+<tr><td>30–45초</td><td class="num">0.8s</td><td class="wrap">엘리트 출현</td><td class="wrap">수동 개입 가치가 가장 큰 구간</td></tr>
+<tr><td>45–60초</td><td class="num">0.6s</td><td class="wrap">보스급 + 물량</td><td class="wrap">버틸지 후퇴할지 판단</td></tr>
+</tbody></table></div>
+<p class="mono" style="font-size:13px;color:var(--ink-2)">스폰 간격 = base ÷ (1 + 경과초 × 0.03) · 웨이브 인덱스로 몹 등급 상향</p>
+
+<h4>아군 유닛 — 실시간 스탯</h4>
+<p>기존 틱 전투는 1초 1틱이라 <span class="mono">ATK</span>가 곧 DPS였다. 실시간에서는
+<strong>공격 주기와 사거리·이동속도</strong>가 새로 필요하다. DPS는 기존 값을 최대한 보존했다.</p>
+<div class="tw"><table>
+<thead><tr>
+  <th>유닛</th><th class="num">비용</th><th class="num">HP</th><th class="num">ATK</th><th class="num">주기</th>
+  <th class="num">DPS</th><th class="num">사거리</th><th class="num">이속</th><th>스킬 (쿨다운)</th>
+</tr></thead>
+<tbody>
+<tr><td>🏹 궁수</td><td class="num">6</td><td class="num">40</td><td class="num">10</td><td class="num">0.75s</td><td class="num">13.3</td><td class="num">130</td><td class="num">90</td><td class="wrap">연사 — 3발 관통 (5s)</td></tr>
+<tr><td>⚔️ 검사</td><td class="num">8</td><td class="num">60</td><td class="num">12</td><td class="num">0.90s</td><td class="num">13.3</td><td class="num">26</td><td class="num">85</td><td class="wrap">회전 베기 — 주변 원형 (6s)</td></tr>
+<tr><td>✚ 치유사</td><td class="num">10</td><td class="num">45</td><td class="num">5</td><td class="num">1.20s</td><td class="num">4.2</td><td class="num">100</td><td class="num">88</td><td class="wrap">치유 — 주변 아군 회복 (7s)</td></tr>
+<tr><td>🛡️ 방패병</td><td class="num">14</td><td class="num">120</td><td class="num">7</td><td class="num">1.10s</td><td class="num">6.4</td><td class="num">24</td><td class="num">70</td><td class="wrap">방벽 — 전체 보호막 + <strong>도발</strong> (8s)</td></tr>
+<tr><td>✨ 마법사</td><td class="num">16</td><td class="num">45</td><td class="num">9</td><td class="num">1.00s</td><td class="num">9.0</td><td class="num">110</td><td class="num">82</td><td class="wrap">화염 폭발 — 자기 중심 AoE (7s)</td></tr>
+<tr class="total"><td>👑 영웅 Lv.1</td><td class="num">—</td><td class="num">80</td><td class="num">15</td><td class="num">0.80s</td><td class="num">18.8</td><td class="num">34</td><td class="num">95</td><td class="wrap">영웅 일격 — 전방 강타 (6s)</td></tr>
+</tbody></table></div>
+
+<h5>실시간에서 달라지는 것</h5>
+<ul>
+<li><strong>방패병 어그로가 물리적으로 작동한다.</strong> v1.0에서는 "60% 확률로 방패병을 노림"이라는
+숫자였지만, 이제는 앞에 서 있으면 실제로 먼저 닿는다. 도발 스킬은 주변 몹의 목표를 강제로 바꾼다.</li>
+<li><strong>원거리 유닛에게 카이팅 가치가 생긴다.</strong> 궁수 사거리 130px는 대부분의 몹 접근보다 길다.</li>
+<li><strong>스킬이 위치 기반이 된다.</strong> 마법사 AoE는 몹이 뭉쳤을 때 값어치가 폭발한다 —
+뭉치게 만드는 것이 플레이어의 일이 된다.</li>
+</ul>
+
+<h4>몬스터 — 실시간 스탯</h4>
+<div class="tw"><table>
+<caption>이속이 아군보다 느려야 카이팅이 성립한다 — 돌진형만 예외</caption>
+<thead><tr><th>몹</th><th class="num">HP</th><th class="num">ATK</th><th class="num">주기</th><th class="num">사거리</th><th class="num">이속</th><th class="num">골드</th><th>행동</th></tr></thead>
+<tbody>
+<tr><td>👺 고블린</td><td class="num">30</td><td class="num">8</td><td class="num">1.0s</td><td class="num">20</td><td class="num">70</td><td class="num">8</td><td class="wrap">최근접 아군 직진</td></tr>
+<tr><td>🐺 광견 <span class="rev">신규</span></td><td class="num">22</td><td class="num">6</td><td class="num">0.7s</td><td class="num">18</td><td class="num">135</td><td class="num">12</td><td class="wrap">아군보다 빠름 — 카이팅 파훼</td></tr>
+<tr><td>👹 오크</td><td class="num">80</td><td class="num">15</td><td class="num">1.2s</td><td class="num">22</td><td class="num">55</td><td class="num">20</td><td class="wrap">최근접 아군 직진</td></tr>
+<tr><td>🏹 다크아처 <span class="rev">신규</span></td><td class="num">45</td><td class="num">12</td><td class="num">1.4s</td><td class="num">140</td><td class="num">60</td><td class="num">24</td><td class="wrap">거리 유지 원거리 — 접근 강제</td></tr>
+<tr><td>🧌 오우거</td><td class="num">150</td><td class="num">22</td><td class="num">1.6s</td><td class="num">26</td><td class="num">45</td><td class="num">38</td><td class="wrap">느림 · 고타격</td></tr>
+<tr><td>💀 보스</td><td class="num">200</td><td class="num">25</td><td class="num">1.5s</td><td class="num">30</td><td class="num">40</td><td class="num">60</td><td class="wrap">주기적 돌진 돌격</td></tr>
+<tr><td>🐲 마왕</td><td class="num">520</td><td class="num">40</td><td class="num">1.8s</td><td class="num">34</td><td class="num">35</td><td class="num">180</td><td class="wrap">광역 내려찍기</td></tr>
+</tbody></table></div>
+<p><strong>신규 2종의 이유.</strong> 전부 "직진해서 때리는" 몹이면 실시간으로 바꾼 의미가 절반만 산다.
+<strong>광견</strong>은 도망칠 수 없게 만들고, <strong>다크아처</strong>는 가만히 있을 수 없게 만든다.
+둘 다 플레이어를 움직이게 하는 장치다.</p>
+
+<h4>드랍과 수거 <span class="rev">신규</span></h4>
+<p>몹을 처치하면 그 자리에 골드가 떨어지고, 아군이 <strong>자동 수거 반경 40px</strong> 안에 들어가야
+획득된다. 8초 후 사라진다.</p>
+<div class="note">
+<p><strong>이 규칙이 수동 모드에 존재 이유를 준다.</strong> 자동 모드는 제자리를 지키므로 멀리 떨어진
+드랍을 놓친다. 직접 움직이면 더 번다 — 대신 안전한 자리를 떠나야 한다.
+"편하게 벌기"와 "적극적으로 벌기" 사이의 교환이 여기서 생긴다.</p>
+</div>
 </section>
 
 <section id="s7">
-<h2>07 — 영웅</h2>
-<h3>어느 전선에 설지 매 웨이브 고른다</h3>
-<div class="grid g2">
-  <div class="card dl">
-    <h4>상단 배치</h4>
-    <p>사거리 안의 적을 1초마다 자동 공격한다. 직접 처치하면 EXP 전액, 타워가 잡아도 40%를 받는다.
-       <strong>경로 칸을 탭해 위치를 옮길 수 있다.</strong> 대신 근접한 적(0.75칸 이내)에게 반격당하며
-       HP가 0이 되면 전사한다.</p>
+<h2>07 — 자동 · 수동 모드 <span class="rev">신규</span></h2>
+<h3>둘 다 공격은 자동, 다른 건 이동뿐</h3>
+<div class="ba">
+  <div>
+    <h5>자동 (기본)</h5>
+    <ul>
+      <li>부대는 시작 위치를 사수</li>
+      <li>사거리 내 최근접 적을 자동 공격</li>
+      <li>스킬은 쿨다운마다 자동 발동</li>
+      <li>사거리 내 적이 없으면 최근접 적 쪽으로 <span class="mono">40%</span> 속도로 전진</li>
+      <li>드랍은 반경 안에 들어온 것만 획득</li>
+    </ul>
   </div>
-  <div class="card bl">
-    <h4>하단 배치</h4>
-    <p>편성에 특수 유닛으로 합류한다. 스킬은 「영웅 일격」(공격력 ×2.2). 전투에서 죽으면 웨이브 종료 시
-       전사 처리되고 부활 대기에 들어간다. EXP를 못 벌지만 전투력은 확실히 오른다.</p>
+  <div>
+    <h5>수동</h5>
+    <ul>
+      <li>아레나를 탭/드래그 → 집결 지점 이동</li>
+      <li>영웅이 선두, 병력은 반경 30px 대형 유지</li>
+      <li>공격·스킬은 <strong>여전히 자동</strong></li>
+      <li>포지셔닝 · 카이팅 · 드랍 수거가 가능</li>
+      <li>키보드 방향키 / WASD 지원</li>
+    </ul>
   </div>
 </div>
-<p>전사 시 <strong>20초</strong> 후 부활하며 HP가 전량 회복된다 (스킬 트리로 즉시 부활 가능).
-부활 대기 중에는 어느 쪽에도 배치할 수 없다.</p>
+<p>전환은 컨트롤 바의 ⚙ 버튼 또는 <span class="mono">A</span> 키로 언제든 가능하다.
+아레나를 탭하면 자동으로 수동 모드로 전환된다 — 조작하려는 의도가 곧 모드 선택이다.</p>
 
+<h4>대형</h4>
+<p>집결 지점을 중심으로 역할에 따라 자리를 잡는다. 플레이어가 개별 유닛을 조작할 필요는 없다.</p>
 <div class="tw"><table>
-<caption>영웅 레벨 — 상단 배치로만 EXP를 번다</caption>
-<thead><tr><th>Lv</th><th class="num">필요 EXP</th><th class="num">ATK</th><th class="num">HP</th><th class="num">DEF</th><th class="num">사거리</th></tr></thead>
+<thead><tr><th>역할</th><th>배치</th><th>이유</th></tr></thead>
 <tbody>
-<tr><td>1</td><td class="num">30</td><td class="num">15</td><td class="num">80</td><td class="num">5</td><td class="num">3.0칸</td></tr>
-<tr><td>2</td><td class="num">70</td><td class="num">18</td><td class="num">90</td><td class="num">6</td><td class="num">3.2칸</td></tr>
-<tr><td>3</td><td class="num">130</td><td class="num">22</td><td class="num">105</td><td class="num">7</td><td class="num">3.4칸</td></tr>
-<tr><td>4</td><td class="num">220</td><td class="num">28</td><td class="num">125</td><td class="num">9</td><td class="num">3.6칸</td></tr>
-<tr><td>5</td><td class="num">340</td><td class="num">35</td><td class="num">150</td><td class="num">11</td><td class="num">4.0칸</td></tr>
-<tr><td>6</td><td class="num">500</td><td class="num">44</td><td class="num">180</td><td class="num">13</td><td class="num">4.2칸</td></tr>
-<tr><td>7</td><td class="num">720</td><td class="num">55</td><td class="num">215</td><td class="num">16</td><td class="num">4.4칸</td></tr>
-<tr><td>8</td><td class="num">1000</td><td class="num">68</td><td class="num">255</td><td class="num">19</td><td class="num">4.6칸</td></tr>
-<tr><td>9</td><td class="num">1400</td><td class="num">84</td><td class="num">300</td><td class="num">22</td><td class="num">4.8칸</td></tr>
-<tr class="total"><td>10</td><td class="num">MAX</td><td class="num">105</td><td class="num">360</td><td class="num">26</td><td class="num">5.2칸</td></tr>
+<tr><td>방패병</td><td class="wrap">집결 지점 기준 진행 방향 앞 24px</td><td class="wrap">먼저 닿아서 맞는 것이 역할</td></tr>
+<tr><td>영웅 · 검사</td><td class="wrap">중앙</td><td class="wrap">근접 딜, 사방 대응</td></tr>
+<tr><td>궁수 · 마법사 · 치유사</td><td class="wrap">뒤 22px, 좌우로 분산</td><td class="wrap">사거리를 살리고 광역에 함께 맞지 않도록</td></tr>
 </tbody></table></div>
 </section>
 
 <section id="s8">
-<h2>08 — 마을 <span class="lane m">Meta · 런 내</span></h2>
-<h3>골드를 장기 투자로 바꾸는 곳</h3>
-<p>건물은 런 안에서만 유지된다. 지금 병력을 한 명 더 뽑을지, 병영을 지어 앞으로의 모든 병력을
-강하게 할지가 초반의 큰 갈림길이다.</p>
-
+<h2>08 — 돌파 · 두 전선의 연결</h2>
+<h3>아래에서 지는 것이 실제 패배가 되도록</h3>
+<p>아군이 전멸하면 아레나에 남은 몬스터가 <strong>기지로 돌파</strong>해 초당 피해를 준다.
+이 규칙이 없으면 하단 전멸은 가벼운 손실에 그치고, 상단은 타워를 충분히 지으면 뚫리지 않으므로
+게임에서 질 수가 없다. v1.0에서 도입했고 v2.0에서도 유지한다.</p>
 <div class="tw"><table>
-<caption>건물 4종 · 각 Lv.2까지, 레벨업 시 상위 강화 해금</caption>
-<thead><tr><th>건물</th><th class="num">건설</th><th class="num">Lv.2</th><th class="num">강화</th><th>효과 영역</th></tr></thead>
+<thead><tr><th>항목</th><th>값</th></tr></thead>
 <tbody>
-<tr><td>⚒️ 무기 공방</td><td class="num">40</td><td class="num">60</td><td class="num">7종</td><td class="wrap">타워 공격력 · 공속 · 사거리 · 건설비 · 범위 피해</td></tr>
-<tr><td>⚔️ 병영</td><td class="num">30</td><td class="num">50</td><td class="num">8종</td><td class="wrap">아군 ATK · DEF · HP · 고용비 · 슬롯 · 콤보</td></tr>
-<tr><td>🏪 영웅 상점</td><td class="num">25</td><td class="num">45</td><td class="num">0종</td><td class="wrap">소모품 5종 · 장비 12종 중 랜덤 3종 진열</td></tr>
-<tr><td>🗿 몬스터 케이브</td><td class="num">0</td><td class="num">55</td><td class="num">5종</td><td class="wrap">전투 골드 · 몹 약화 · 엘리트 · 전리품</td></tr>
+<tr><td>초당 피해</td><td class="mono">min(생존 몹 ATK 합 × 0.03, 2.5) × (1 − 기지방어율)</td></tr>
+<tr><td>지속</td><td class="mono">15초 — 이후 몬스터 철수, 남은 시간은 상단만 진행</td></tr>
+<tr><td>최대 피해</td><td class="mono">37.5 (기지 HP 100의 약 1/3)</td></tr>
 </tbody></table></div>
-<p>같은 강화를 반복 구매하면 비용이 <span class="mono">기본 × (1 + 보유레벨 × 0.8)</span>로 오른다.</p>
-
-<h4>몬스터 케이브 — 위험을 사는 곳</h4>
-<div class="tw"><table>
-<thead><tr><th>Lv</th><th>이름</th><th class="num">몹 스탯</th><th class="num">보상</th><th class="num">업그레이드 비용</th></tr></thead>
-<tbody>
-<tr><td>1</td><td>자연 동굴</td><td class="num">×1.0</td><td class="num">×1.0</td><td class="num">—</td></tr>
-<tr><td>2</td><td>강화 동굴</td><td class="num">×1.4</td><td class="num">×1.5</td><td class="num">45</td></tr>
-<tr><td>3</td><td>위험 동굴</td><td class="num">×1.9</td><td class="num">×2.2</td><td class="num">110</td></tr>
-<tr><td>4</td><td>심연 동굴</td><td class="num">×2.6</td><td class="num">×3.2</td><td class="num">240</td></tr>
-<tr><td>5</td><td>지옥 동굴</td><td class="num">×3.5</td><td class="num">×4.5</td><td class="num">480</td></tr>
-</tbody></table></div>
-<p>보상 배율이 스탯 배율보다 항상 크다 — 감당할 수 있다면 올리는 게 이득이라는 뜻이고,
-"감당 가능한가"를 판단하는 것이 플레이어의 몫이다.</p>
-
-<h4>영웅 상점</h4>
-<p>장비 12종 중 <strong>랜덤 3종만 진열</strong>되며, 구매하면 새로 갱신된다. 장비는 런 내내 유지되는
-영구 효과다. 소모품 5종(회복 포션 12G, MP 포션 8G, 공격/방어 두루마리 15G, 마법의 두루마리 70G)은
-즉시 또는 해당 웨이브 한정으로 적용된다.</p>
-<div class="tw"><table>
-<caption>장비 풀 — 등급별</caption>
-<thead><tr><th>등급</th><th class="num">개수</th><th>예시</th></tr></thead>
-<tbody>
-<tr><td>Common</td><td class="num">5</td><td class="wrap">강철 검(ATK+8) · 사슬 갑옷(오라+4) · 생명의 반지(재생+3/s) · 신속의 장화(타워 공속+15%) · 황금 반지(골드+20%)</td></tr>
-<tr><td>Rare</td><td class="num">5</td><td class="wrap">은빛 검 · 힘의 부적 · 전사의 투구 · 마법사 지팡이 · 성스러운 십자가</td></tr>
-<tr><td>Epic</td><td class="num">2</td><td class="wrap">그림자 망토(불굴+콤보15%) · 마법의 두루마리(즉시 부활)</td></tr>
-</tbody></table></div>
+<p>실시간으로 바뀌면서 <strong>전멸 순간의 생존 몹 수가 더 크게 흔들린다</strong>(아레나에 최대 28마리).
+ATK 합 상한이 걸려 있어 즉사로 이어지지는 않지만, 압력이 최고조일 때 전멸하면 더 아프다 —
+이는 의도된 결과다.</p>
 </section>
 
 <section id="s9">
-<h2>09 — 강화 픽 <span class="lane m">Meta · 런 내</span></h2>
-<h3>웨이브마다 3장 중 1장</h3>
-<p>웨이브를 클리어할 때마다 랜덤 3장이 제시된다. 이 선택이 쌓여 이번 런의 빌드 방향이 결정된다.
-<strong>선택 즉시 이미 고용한 병력에도 반영</strong>되므로, 나중에 뽑은 강화가 기존 병력을 강하게 만든다.</p>
-
-<div class="stats">
-  <div><span class="v">32</span><span class="k">카드 종류</span></div>
-  <div><span class="v">60 : 28 : 12</span><span class="k">C : R : E 가중치</span></div>
-  <div><span class="v">29</span><span class="k">런당 최대 픽</span></div>
+<h2>09 — 영웅</h2>
+<h3>어느 전선에 설지 매 웨이브 고른다</h3>
+<div class="grid g2">
+  <div class="card dl">
+    <h4>상단 배치</h4>
+    <p>사거리 안의 적을 1초마다 자동 공격. 직접 처치 시 EXP 전액, 타워 처치 시 40%.
+       경로 칸을 탭해 위치를 옮길 수 있다. 근접한 적에게 반격당하며 HP 0이면 전사.</p>
+  </div>
+  <div class="card bl">
+    <h4>하단 배치 <span class="rev">역할 강화</span></h4>
+    <p>아레나 부대의 <strong>선두이자 이동 기준점</strong>이 된다. 가장 높은 DPS(18.8)와 이속(95)을
+       가지며, 수동 조작 시 영웅 위치가 곧 부대 위치다. EXP는 못 벌지만 전투력 기여가 v1.0보다 훨씬 크다.</p>
+  </div>
 </div>
+<p>v1.0에서는 하단 배치가 EXP를 못 버는 만큼의 값어치를 하지 못해 선택이 상단으로 기울었다.
+실시간에서는 영웅이 부대의 중심축이 되므로 이 불균형이 상당 부분 해소된다.</p>
+<p>전사 시 <strong>20초</strong> 후 부활(HP 전량 회복). 스킬 트리로 즉시 부활 가능.</p>
 
 <div class="tw"><table>
-<caption>계열별 구성</caption>
-<thead><tr><th>계열</th><th class="num">개수</th><th>대표 카드</th></tr></thead>
+<caption>영웅 레벨 — 상단 배치로만 EXP 획득</caption>
+<thead><tr><th>Lv</th><th class="num">필요 EXP</th><th class="num">ATK</th><th class="num">HP</th><th class="num">DEF</th><th class="num">상단 사거리</th></tr></thead>
 <tbody>
-<tr><td><span class="lane d">타워</span></td><td class="num">8</td><td class="wrap">날카로운 화살(+3) · 속사 장치(+50%) · 천둥 화살(전 타워 범위 피해) · 얼음 화살</td></tr>
-<tr><td><span class="lane b">유닛</span></td><td class="num">8</td><td class="wrap">훈련 강화 · 연속 공격(20% 추가타) · 불굴의 의지(최초 사망 시 생존) · 용병 모집(슬롯+1)</td></tr>
-<tr><td>영웅</td><td class="num">6</td><td class="wrap">용기의 기운 · 영웅의 오라(아군 DEF+3) · 불사의 영웅 · 신의 강림(전 스탯+20%)</td></tr>
-<tr><td>케이브</td><td class="num">4</td><td class="wrap">풍부한 광맥 · 약한 몹 · 몬스터 러시 · 엘도라도(보상×2)</td></tr>
-<tr><td>기지</td><td class="num">3</td><td class="wrap">성벽 보수 · 견고한 기지 · 철옹성(피해−20%)</td></tr>
-<tr><td>자원</td><td class="num">3</td><td class="wrap">황금 손길 · 보물 창고 · 무기 할인</td></tr>
+<tr><td>1</td><td class="num">30</td><td class="num">15</td><td class="num">80</td><td class="num">5</td><td class="num">3.0칸</td></tr>
+<tr><td>3</td><td class="num">130</td><td class="num">22</td><td class="num">105</td><td class="num">7</td><td class="num">3.4칸</td></tr>
+<tr><td>5</td><td class="num">340</td><td class="num">35</td><td class="num">150</td><td class="num">11</td><td class="num">4.0칸</td></tr>
+<tr><td>7</td><td class="num">720</td><td class="num">55</td><td class="num">215</td><td class="num">16</td><td class="num">4.4칸</td></tr>
+<tr class="total"><td>10</td><td class="num">MAX</td><td class="num">105</td><td class="num">360</td><td class="num">26</td><td class="num">5.2칸</td></tr>
 </tbody></table></div>
-<p>일회성/불린 카드(천둥 화살 · 불굴의 의지 · 불사의 영웅 · 철옹성 · 엘도라도)는 이미 뽑았으면
-후보에서 제외되어 중복 출현하지 않는다.</p>
 </section>
 
 <section id="s10">
-<h2>10 — 스킬 트리 <span class="lane m">Meta · 런 간</span></h2>
-<h3>져도 남는 것</h3>
-<p>런이 끝나면 보석을 정산받고, 3계열 스킬 트리에 영구히 투자한다. 각 노드는 선행 노드를
-요구하므로 한 계열을 깊게 파거나 세 계열을 얕게 가는 선택이 생긴다.</p>
+<h2>10 — 성장 시스템</h2>
+<h3>런 내 두 겹, 런 간 한 겹</h3>
 
+<h4>마을 <span class="lane m">런 내 · 골드</span></h4>
 <div class="tw"><table>
-<caption>3계열 × 9노드 · 계열당 총 16보석</caption>
-<thead><tr><th>계열</th><th>1티어 (1보석)</th><th>2티어 (2보석)</th><th>3티어 (3보석)</th></tr></thead>
+<thead><tr><th>건물</th><th class="num">건설</th><th class="num">Lv.2</th><th class="num">강화</th><th>효과</th></tr></thead>
+<tbody>
+<tr><td>⚒️ 무기 공방</td><td class="num">40</td><td class="num">60</td><td class="num">7종</td><td class="wrap">타워 공격력 · 공속 · 사거리 · 건설비</td></tr>
+<tr><td>⚔️ 병영</td><td class="num">30</td><td class="num">50</td><td class="num">8종</td><td class="wrap">아군 ATK · DEF · HP · 고용비 · 슬롯</td></tr>
+<tr><td>🏪 영웅 상점</td><td class="num">25</td><td class="num">45</td><td class="num">0종 <span class="chip hi">비어 있음</span></td><td class="wrap">소모품 5종 · 장비 12종 중 랜덤 3종</td></tr>
+<tr><td>🗿 몬스터 케이브</td><td class="num">0</td><td class="num">55</td><td class="num">5종</td><td class="wrap">전투 골드 · 몹 약화 · 엘리트 · 전리품</td></tr>
+</tbody></table></div>
+<p>케이브 Lv.1~5: 몹 스탯 ×1.0→×3.5 / 보상 ×1.0→×4.5 (비용 45·110·240·480).
+보상 배율이 항상 스탯 배율보다 크므로, 감당할 수 있다면 올리는 게 이득이다.</p>
+
+<h4>강화 픽 <span class="lane m">런 내 · 웨이브마다</span></h4>
+<p>웨이브 클리어마다 랜덤 3장 중 1장. 총 32종 (Common 13 · Rare 11 · Epic 8, 가중치 60:28:12).
+선택 즉시 이미 고용한 병력에도 반영된다.</p>
+<div class="tw"><table>
+<thead><tr><th>계열</th><th class="num">개수</th><th>v2.0 영향</th></tr></thead>
+<tbody>
+<tr><td><span class="lane d">타워</span></td><td class="num">8</td><td class="wrap">영향 없음 — 그대로 유효</td></tr>
+<tr><td><span class="lane b">유닛</span></td><td class="num">8</td><td class="wrap">"연속 공격(틱당 20% 추가타)"은 <strong>공격 주기 단축</strong>으로 재해석 필요</td></tr>
+<tr><td>영웅</td><td class="num">6</td><td class="wrap">"틱마다 재생" → 초당 재생으로 문구 정정</td></tr>
+<tr><td>케이브</td><td class="num">4</td><td class="wrap">"몬스터 러시(스폰 빠름)"이 아레나 스폰 간격에 직접 연결됨 — 오히려 더 명확해짐</td></tr>
+<tr><td>기지 · 자원</td><td class="num">6</td><td class="wrap">영향 없음</td></tr>
+</tbody></table></div>
+
+<h4>스킬 트리 <span class="lane m">런 간 · 보석</span></h4>
+<p>3계열 × 9노드, 계열당 총 16보석. 선행 노드 필요.</p>
+<div class="tw"><table>
+<thead><tr><th>계열</th><th>1티어</th><th>2티어</th><th>3티어</th></tr></thead>
 <tbody>
 <tr><td><span class="lane d">🏹 타워</span></td><td class="wrap">정밀 조준 · 강화 화살 · 속사 · 요새화</td><td class="wrap">저격 강화 · 연사 기계 · 비용 절감</td><td class="wrap">폭발 화살 · 타워 마스터</td></tr>
 <tr><td>👑 영웅</td><td class="wrap">영웅 훈련 · 투사 · 재생 · 경험 축적</td><td class="wrap">신의 강림 · 영웅의 오라 · 빠른 성장</td><td class="wrap">불사의 영웅 · 영웅 전설</td></tr>
 <tr><td>⚙️ 보조</td><td class="wrap">기지 강화 · 철옹성 · 병력 강화 · 황금 광맥</td><td class="wrap">난공불락 · 정예 부대 · 엘도라도</td><td class="wrap">성채 · 병력 만개</td></tr>
 </tbody></table></div>
-
-<h4>보석 획득</h4>
-<div class="tw"><table>
-<thead><tr><th>경로</th><th>양</th></tr></thead>
-<tbody>
-<tr><td>스테이지 클리어 (3웨이브마다)</td><td class="num">1개 · 최종 스테이지 2개</td></tr>
-<tr><td>런 종료 정산</td><td class="mono">클리어 웨이브×5 + 남은 기지HP×0.2 + 케이브Lv×3 + 런 처치수×0.3</td></tr>
-</tbody></table></div>
+<p class="mono" style="font-size:13px;color:var(--ink-2)">보석 = 클리어 웨이브×5 + 남은 기지HP×0.2 + 케이브Lv×3 + 런 처치수×0.3 · 스테이지 클리어마다 +1(최종 +2)</p>
 </section>
 
 <section id="s11">
 <h2>11 — 자원 흐름</h2>
-<h3>골드가 어디서 들어와 어디로 나가는가</h3>
 <div class="grid g2">
   <div class="card bl">
     <h4>수입</h4>
-    <p><strong>하단 처치</strong> — 몹 골드 × 케이브 배율 × 처치 스케일링 × 순환 체감 (주 수입원)<br>
-       <strong>상단 처치</strong> — 적별 3~50골드 (보조)<br>
+    <p><strong>아레나 처치 드랍</strong> — 몹 골드 × 케이브 배율 (주 수입 · 수거 필요)<br>
+       <strong>상단 처치</strong> — 3~50골드 (자동)<br>
        <strong>웨이브 정산</strong> — 처치 보너스 + 승리 보너스<br>
-       <strong>전리품</strong> — 케이브 강화 시 확률적 추가 골드</p>
+       <strong>전리품</strong> — 케이브 강화 시 확률적 추가</p>
   </div>
   <div class="card dl">
     <h4>지출</h4>
-    <p><strong>타워</strong> — 건설(체증) · 강화 · (판매 시 60% 회수)<br>
-       <strong>병력</strong> — 고용 6~16골드 (해고 시 50% 환급)<br>
-       <strong>마을</strong> — 건물 건설 · 레벨업 · 강화(체증)<br>
-       <strong>케이브</strong> — 45 / 110 / 240 / 480<br>
-       <strong>상점</strong> — 소모품 8~70 · 장비 25~70</p>
+    <p><strong>타워</strong> 건설(체증) · 강화 · 판매 시 60% 회수<br>
+       <strong>병력</strong> 고용 6~16 (해고 50% 환급)<br>
+       <strong>마을</strong> 건설 · 레벨업 · 강화(체증)<br>
+       <strong>케이브</strong> 45 / 110 / 240 / 480<br>
+       <strong>상점</strong> 소모품 8~70 · 장비 25~70</p>
   </div>
 </div>
 <div class="note">
-<p><strong>알려진 불균형.</strong> 후반에는 지출처가 고갈된다. 격자 40칸이 타워로 차고 마을 강화를
-다 사면 더 쓸 곳이 없어, 스테이지 1-8 무렵 <strong>4,000골드 이상이 남는다.</strong>
-14절에서 다룬다.</p>
+<p><strong>v1.0에서 넘어온 미해결 문제.</strong> 후반에 지출처가 고갈된다 — 격자 40칸이 차고
+마을 강화를 다 사면 스테이지 1-8 무렵 4,000골드 이상이 남는다.
+v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 문제가 더 두드러질 수 있다.</strong>
+15절에서 다룬다.</p>
 </div>
 </section>
 
 <section id="s12">
 <h2>12 — 스테이지 구성</h2>
 <h3>1-1 ~ 1-10 · 총 30웨이브</h3>
+<p>하단이 그룹 편성에서 스폰 테이블로 바뀌므로, 스테이지 정의도 "어떤 그룹이 순서대로 나오는가"에서
+<strong>"어떤 몹이 어떤 비율로 리젠되는가"</strong>로 바뀐다.</p>
 <div class="tw"><table>
-<caption>스테이지당 3웨이브 · 하단 그룹은 시간 내내 순환</caption>
-<thead><tr><th>스테이지</th><th>상단 침입자</th><th>하단 몹</th><th>도입되는 것</th></tr></thead>
+<thead><tr><th>스테이지</th><th>상단 침입자</th><th>아레나 스폰 풀</th><th>도입</th></tr></thead>
 <tbody>
-<tr><td>1-1</td><td>고블린 4~6</td><td>고블린</td><td class="wrap">기본 조작 · 화살탑</td></tr>
-<tr><td>1-2</td><td>고블린 + 늑대</td><td>고블린 · 오크</td><td class="wrap"><strong>늑대</strong> — 빠른 적, 서리탑의 이유</td></tr>
-<tr><td>1-3</td><td>고블린 + 오크</td><td>오크 · 오우거</td><td class="wrap"><strong>오우거</strong> — 하단 첫 벽</td></tr>
-<tr><td>1-4</td><td>+ <strong>강철오크</strong></td><td>+ <strong>보스</strong></td><td class="wrap">방어력 개념 · 저격탑/대포탑 필요</td></tr>
-<tr><td>1-5</td><td>늑대 · 강철오크</td><td>보스 + 오우거</td><td class="wrap">복합 편성</td></tr>
-<tr><td>1-6</td><td>오크 · 강철오크 다수</td><td>보스 2</td><td class="wrap">물량 압박</td></tr>
-<tr><td>1-7</td><td>물량 증가</td><td>+ <strong>마왕</strong></td><td class="wrap">단일 초고체력 대상</td></tr>
-<tr><td>1-8</td><td>강철오크 주력</td><td>마왕 + 오우거</td><td class="wrap">방어 관통 필수화</td></tr>
-<tr><td>1-9</td><td>+ <strong>던전보스</strong></td><td>마왕 2</td><td class="wrap">상단도 보스급</td></tr>
-<tr><td>1-10</td><td>던전보스 다수</td><td>마왕 3 + 보스 2</td><td class="wrap">최종</td></tr>
+<tr><td>1-1</td><td>고블린</td><td>고블린</td><td class="wrap">기본 조작 · 자동 모드</td></tr>
+<tr><td>1-2</td><td>+ 늑대</td><td>고블린 · <strong>광견</strong></td><td class="wrap">빠른 적 — 수동 조작의 첫 필요</td></tr>
+<tr><td>1-3</td><td>+ 오크</td><td>+ 오크</td><td class="wrap">체력 벽</td></tr>
+<tr><td>1-4</td><td>+ 강철오크</td><td>+ <strong>다크아처</strong></td><td class="wrap">원거리 몹 — 접근 강제</td></tr>
+<tr><td>1-5</td><td>늑대 · 강철오크</td><td>+ 오우거</td><td class="wrap">고타격 저속</td></tr>
+<tr><td>1-6</td><td>물량 증가</td><td>+ 보스 (드물게)</td><td class="wrap">돌진 패턴</td></tr>
+<tr><td>1-7</td><td>물량 증가</td><td>+ 엘리트 확률 상승</td><td class="wrap">단일 고위협</td></tr>
+<tr><td>1-8</td><td>강철오크 주력</td><td>오우거 · 보스 혼합</td><td class="wrap">복합 압력</td></tr>
+<tr><td>1-9</td><td>+ 던전보스</td><td>+ <strong>마왕</strong></td><td class="wrap">상·하단 모두 보스급</td></tr>
+<tr><td>1-10</td><td>던전보스 다수</td><td>마왕 다수 + 최대 밀도</td><td class="wrap">최종</td></tr>
 </tbody></table></div>
 <div class="stats">
   <div><span class="v">30</span><span class="k">웨이브</span></div>
-  <div><span class="v">90</span><span class="k">하단 그룹 정의</span></div>
-  <div><span class="v">293</span><span class="k">상단 적 총합(기본)</span></div>
-  <div><span class="v">5</span><span class="k">그룹 최대 인원</span></div>
+  <div><span class="v">28</span><span class="k">아레나 동시 상한</span></div>
+  <div><span class="v">7</span><span class="k">몹 종류 (신규 2 포함)</span></div>
+  <div><span class="v">6</span><span class="k">아군 종류 (영웅 포함)</span></div>
 </div>
-<p>그룹당 인원은 최대 5로 제한된다 — 그 이상은 세로 슬롯에 다 들어가지 않는다.
-행 간격과 유닛 크기는 아군/적 중 많은 쪽에 맞춰 자동 계산된다.</p>
 </section>
 
 <section id="s13">
-<h2>13 — 밸런스 설계</h2>
-<h3>원칙과 실측</h3>
+<h2>13 — 밸런스 재설계</h2>
+<h3>v1.0 실측치는 대부분 무효가 된다</h3>
+<p>하단 전투 모델이 바뀌므로 v1.0에서 측정한 난이도 곡선(1-4에서 기지 함락, 후퇴 활용 시 웨이브 25 도달)은
+<strong>재측정해야 한다.</strong> 다만 설계 원칙은 그대로 유효하다.</p>
 
-<h4>설계 원칙</h4>
+<h4>설계 원칙 (유지)</h4>
 <ol class="body">
-<li><strong>강해질수록 더 벌어야 한다.</strong> 어떤 지표를 올려도 수입이 줄어드는 구간이 있으면 안 된다.</li>
+<li><strong>강해질수록 더 벌어야 한다.</strong> 어떤 지표를 올려도 수입이 줄어드는 구간이 없어야 한다.</li>
 <li><strong>첫 런은 진다.</strong> 스킬 트리 없는 첫 판이 완주되면 메타 진행의 의미가 사라진다.</li>
-<li><strong>초·중반 골드는 빠듯하게.</strong> 모든 걸 다 살 수 있으면 배분 결정이 사라진다.</li>
-<li><strong>한 번의 실수는 회복 가능해야 한다.</strong> 전멸 1회로 런이 끝나면 안 된다.</li>
-<li><strong>도배보다 조합.</strong> 한 종류만 반복 구매하는 것이 최적해가 되면 안 된다.</li>
+<li><strong>초·중반 골드는 빠듯하게.</strong></li>
+<li><strong>한 번의 실수는 회복 가능해야 한다.</strong></li>
+<li><strong>도배보다 조합.</strong></li>
 </ol>
 
-<h4>실측 · 난이도 곡선</h4>
-<p>헤드리스 브라우저에서 스크립트 플레이어로 반복 측정한 결과다.
-(스킬 트리 없음 · 마을 미투자 · 후퇴 없음)</p>
+<h4>v2.0에서 추가되는 원칙</h4>
+<ol class="body" start="6">
+<li><strong>수동이 자동보다 이득이어야 하되, 자동이 못 쓸 수준이면 안 된다.</strong>
+목표 차이는 <strong>수입 +25~40%</strong> 수준. 수동이 2배 이득이면 사실상 강제가 되고,
+차이가 없으면 조작할 이유가 사라진다.</li>
+<li><strong>아레나에서 도망만 쳐서 이길 수 없어야 한다.</strong> 광견(이속 135)이 아군 최고 이속(95)보다
+빠른 이유다. 카이팅은 유효한 전술이되 만능이면 안 된다.</li>
+</ol>
+
+<h4>측정해야 할 것</h4>
 <div class="tw"><table>
-<caption>기지 HP 추이 — 첫 런</caption>
-<thead><tr><th>구간</th><th class="num">1-1~1-3w1</th><th class="num">1-3w2</th><th class="num">1-3w3</th><th class="num">1-4w1</th><th class="num">1-4w2</th></tr></thead>
+<thead><tr><th>지표</th><th>목표</th><th>측정 방법</th></tr></thead>
 <tbody>
-<tr><td>기지 HP</td><td class="num">100</td><td class="num">88</td><td class="num">70</td><td class="num">40</td><td class="num">0</td></tr>
+<tr><td>자동 vs 수동 수입차</td><td class="num">+25~40%</td><td class="wrap">동일 편성으로 두 모드 각 10웨이브 시뮬레이션</td></tr>
+<tr><td>첫 런 도달 웨이브</td><td class="num">8 ~ 14</td><td class="wrap">스킬 트리 없이 스크립트 플레이</td></tr>
+<tr><td>웨이브당 처치수</td><td class="num">25 ~ 60</td><td class="wrap">스폰 압력 곡선 검증</td></tr>
+<tr><td>동시 개체 수 피크</td><td class="num">≤ 28</td><td class="wrap">가독성 · 프레임 유지 확인</td></tr>
+<tr><td>프레임</td><td class="num">60fps 유지</td><td class="wrap">상단+하단 동시, 개체 최대 상태</td></tr>
 </tbody></table></div>
 
+<h4>핵심 수치</h4>
 <div class="tw"><table>
-<caption>플레이 스타일별 도달 웨이브</caption>
-<thead><tr><th>스타일</th><th class="num">도달</th><th>비고</th></tr></thead>
+<thead><tr><th>상수</th><th class="num">값</th><th>비고</th></tr></thead>
 <tbody>
-<tr><td>기본 (마을 미투자)</td><td class="num">11</td><td class="wrap">타워만 짓고 병력 4명 유지</td></tr>
-<tr><td>마을 투자</td><td class="num">16</td><td class="wrap">병영·공방 건설 → 투자가 유효함을 확인</td></tr>
-<tr><td>마을 투자 + 후퇴 활용</td><td class="num">25</td><td class="wrap">병력 보존이 가장 큰 생존 요인</td></tr>
-</tbody></table></div>
-
-<h4>실측 · 웨이브 지속과 수입</h4>
-<p>1-5 기준, 팀 전투력만 바꿔가며 측정. 순환 시스템 도입 전후 비교.</p>
-<div class="tw"><table>
-<thead>
-<tr><th rowspan="2">팀</th><th colspan="2">도입 전</th><th colspan="2">도입 후</th></tr>
-<tr><th class="num">지속</th><th class="num">골드</th><th class="num">지속</th><th class="num">골드</th></tr>
-</thead>
-<tbody>
-<tr><td>약함</td><td class="num">21초</td><td class="num">170</td><td class="num">36초</td><td class="num">202</td></tr>
-<tr><td>보통</td><td class="num">15초</td><td class="num">495</td><td class="num">42초</td><td class="num">419</td></tr>
-<tr><td>강함</td><td class="num">13초</td><td class="num" style="color:var(--crit)">466</td><td class="num">55초</td><td class="num">739</td></tr>
-</tbody></table></div>
-<p>도입 전에는 강한 팀이 그룹을 빨리 정리해 웨이브를 13초에 끝내버렸고, 그 결과 보통 팀보다
-<strong>덜 벌었다</strong> — 원칙 1의 정면 위반이었다. 순환 도입으로 해소됐다.</p>
-
-<h4>핵심 수치 요약</h4>
-<div class="tw"><table>
-<thead><tr><th>상수</th><th class="num">값</th><th>역할</th></tr></thead>
-<tbody>
-<tr><td class="mono">WAVE_DURATION</td><td class="num">60초</td><td class="wrap">웨이브 길이 · 배속 3× 시 실제 20초</td></tr>
-<tr><td class="mono">TICK_INTERVAL</td><td class="num">1.0초</td><td class="wrap">하단 전투 1틱</td></tr>
-<tr><td class="mono">SKILL_TICK_CD</td><td class="num">5틱</td><td class="wrap">스킬 자동 발동 주기</td></tr>
-<tr><td class="mono">KILL_SCALE</td><td class="num">0.08</td><td class="wrap">처치당 다음 몹 강화율</td></tr>
-<tr><td class="mono">LOOP_GOLD_DECAY</td><td class="num">0.5</td><td class="wrap">순환당 보상 체감 계수</td></tr>
-<tr><td class="mono">TOWER_COST_ESCALATION</td><td class="num">0.28</td><td class="wrap">동종 타워 1기당 건설비 증가</td></tr>
-<tr><td class="mono">REST_HEAL_PCT</td><td class="num">0.30</td><td class="wrap">웨이브 종료 시 생존 병력 회복</td></tr>
-<tr><td class="mono">BREAKTHROUGH_MAX</td><td class="num">2.5/s</td><td class="wrap">돌파 초당 피해 상한</td></tr>
-<tr><td class="mono">BREAKTHROUGH_DURATION</td><td class="num">15초</td><td class="wrap">돌파 지속</td></tr>
-<tr><td class="mono">HERO_REVIVE_TIME</td><td class="num">20초</td><td class="wrap">영웅 부활 대기</td></tr>
+<tr><td class="mono">WAVE_DURATION</td><td class="num">60초</td><td class="wrap">유지</td></tr>
+<tr><td class="mono">ARENA_W × ARENA_H</td><td class="num">480 × 330</td><td class="wrap">신규 — 화면 고정</td></tr>
+<tr><td class="mono">ARENA_MAX_MOBS</td><td class="num">28</td><td class="wrap">신규</td></tr>
+<tr><td class="mono">SPAWN_BASE_INTERVAL</td><td class="num">1.6초</td><td class="wrap">신규 · 경과에 따라 감소</td></tr>
+<tr><td class="mono">SPAWN_SAFE_RADIUS</td><td class="num">120px</td><td class="wrap">신규</td></tr>
+<tr><td class="mono">DROP_PICKUP_RADIUS</td><td class="num">40px</td><td class="wrap">신규</td></tr>
+<tr><td class="mono">DROP_LIFETIME</td><td class="num">8초</td><td class="wrap">신규</td></tr>
+<tr><td class="mono">FORMATION_RADIUS</td><td class="num">30px</td><td class="wrap">신규</td></tr>
+<tr><td class="mono">TICK_INTERVAL · SKILL_TICK_CD</td><td class="num">폐기</td><td class="wrap">쿨다운(초)으로 대체</td></tr>
+<tr><td class="mono">BREAKTHROUGH_*</td><td class="num">유지</td><td class="wrap">0.03 / 2.5 / 15초</td></tr>
 </tbody></table></div>
 </section>
 
 <section id="s14">
-<h2>14 — 미해결 과제</h2>
-<h3>다음에 손대야 할 것들</h3>
-<p>구현은 됐지만 설계가 완결되지 않은 지점들이다. 심각도 순으로 정리하고 각각에 대한
-방향을 제안한다.</p>
+<h2>14 — 전환 계획 <span class="rev">v1.0 → v2.0</span></h2>
+<h3>무엇이 사라지고 무엇이 남는가</h3>
+<p>구현이 이미 존재하므로, 무엇을 버리고 무엇을 고쳐 쓸지 먼저 정해야 한다.</p>
 
-<h4><span class="chip hi">높음</span> 후반 골드 잉여 — 지출처 고갈</h4>
-<p><strong>현상.</strong> 1-8 무렵 4,000골드 이상이 남는다. 격자 40칸이 타워로 차고 마을 강화도
-전부 사고 나면 골드를 쓸 곳이 없다. 수입은 처치 기반이라 계속 들어오는데 지출은 유한하다.</p>
-<p><strong>제안.</strong> ① 반복 소비처 추가 — 영웅 상점 소모품을 웨이브마다 다회 구매 가능하게,
-② 타워 Lv.4~5 개방(고비용·고효율), ③ 강화 카드 리롤을 골드로 구매,
-④ 남은 골드를 런 종료 시 보석으로 환산(감소 비율 적용). ①과 ③이 가장 저렴하고 즉시 효과가 있다.</p>
+<div class="tw"><table>
+<caption>시스템별 처리</caption>
+<thead><tr><th>대상</th><th>파일</th><th class="num">처리</th><th>비고</th></tr></thead>
+<tbody>
+<tr><td>틱 전투 루프 <span class="mono">battleTick</span></td><td class="mono">battle.js</td><td><span class="chip hi">폐기</span></td><td class="wrap">프레임 단위 <span class="mono">updateArena(dt)</span>로 대체</td></tr>
+<tr><td>그룹 순환 스폰</td><td class="mono">wave.js</td><td><span class="chip hi">폐기</span></td><td class="wrap">스폰 압력 곡선으로 대체</td></tr>
+<tr><td>순환 보상 체감</td><td class="mono">constants.js</td><td><span class="chip hi">폐기</span></td><td class="wrap">시간당 위험 증가가 대신함</td></tr>
+<tr><td>사이드뷰 슬롯 레이아웃</td><td class="mono">constants.js</td><td><span class="chip hi">폐기</span></td><td class="wrap"><span class="mono">BATTLE_TEAM_X</span> 등 2D 좌표로 교체</td></tr>
+<tr><td>전투 로그 (65px)</td><td class="mono">render.js</td><td><span class="chip hi">폐기</span></td><td class="wrap">공간을 아레나에 사용</td></tr>
+<tr><td>전진 연출 · 배경 스크롤</td><td class="mono">battle.js</td><td><span class="chip hi">폐기</span></td><td class="wrap">이동이 실제로 생기므로 불필요</td></tr>
+<tr><td>유닛 · 몹 스탯 테이블</td><td class="mono">constants.js</td><td><span class="chip md">확장</span></td><td class="wrap">주기 · 사거리 · 이속 필드 추가 (기존 값 보존)</td></tr>
+<tr><td>스킬 5종</td><td class="mono">battle.js</td><td><span class="chip md">재해석</span></td><td class="wrap">틱 → 쿨다운, 대상 선택 → 위치 기반</td></tr>
+<tr><td>후퇴</td><td class="mono">wave.js</td><td><span class="chip md">유지·수정</span></td><td class="wrap">즉시 전투 종료로 동작 단순화</td></tr>
+<tr><td>돌파</td><td class="mono">game.js</td><td><span class="chip lo">유지</span></td><td class="wrap">그대로</td></tr>
+<tr><td>상단 방어 전체</td><td class="mono">defense.js</td><td><span class="chip lo">유지</span></td><td class="wrap">손대지 않음</td></tr>
+<tr><td>마을 · 강화 픽 · 스킬 트리</td><td class="mono">town.js · upgrade.js</td><td><span class="chip lo">유지</span></td><td class="wrap">일부 카드 문구만 정정</td></tr>
+<tr><td>세이브</td><td class="mono">save.js</td><td><span class="chip md">버전업</span></td><td class="wrap">v6 → v7, 구 세이브 폐기</td></tr>
+</tbody></table></div>
 
-<h4><span class="chip hi">높음</span> 튜토리얼이 구버전</h4>
-<p><strong>현상.</strong> 6단계 튜토리얼이 "화살 타워" 하나만 설명한다. 마을 · 후퇴 · 순환 · 배속 ·
-방패병/마법사 · 스킬 트리 — 지금 게임의 절반이 튜토리얼에 없다. 신규 플레이어가
-핵심 시스템을 모른 채 시작한다.</p>
-<p><strong>제안.</strong> 튜토리얼 전면 재작성. 특히 <strong>후퇴</strong>는 게임의 중심 결정인데
-설명이 전혀 없다 — 첫 순환 진입 시 인게임 툴팁으로 알려주는 편이 낫다.</p>
+<h4>신규 모듈</h4>
+<div class="tw"><table>
+<thead><tr><th>파일</th><th>역할</th></tr></thead>
+<tbody>
+<tr><td class="mono">arena.js</td><td class="wrap">아레나 상태 · 개체 이동 · 충돌 · 자동 타게팅 · 스폰 · 드랍</td></tr>
+<tr><td class="mono">formation.js</td><td class="wrap">집결 지점 · 대형 배치 · 자동/수동 이동 결정</td></tr>
+</tbody></table></div>
+<p><span class="mono">battle.js</span>는 유닛 생성·스탯 계산·스킬 정의만 남기고, 전투 진행은
+<span class="mono">arena.js</span>로 옮긴다.</p>
 
-<h4><span class="chip md">중간</span> 영웅 상점 건물 레벨업이 무의미</h4>
-<p><strong>현상.</strong> 영웅 상점은 Lv.1/Lv.2 모두 강화 목록이 비어 있다(<span class="mono">upgrades:[]</span>).
-45골드를 내고 레벨을 올려도 아무것도 바뀌지 않는다.</p>
-<p><strong>제안.</strong> Lv.2에서 진열 슬롯 3→4칸, Rare 이상 출현률 상승, 또는 리롤 기능 해금.</p>
-
-<h4><span class="chip md">중간</span> 편성 슬롯 4칸 vs 유닛 5종</h4>
-<p><strong>현상.</strong> 유닛은 5종인데 기본 슬롯은 4칸이다. 선택 압박 자체는 좋지만,
-방패병(14G)과 마법사(16G)가 둘 다 비싸서 초반에는 사실상 궁수·검사·치유사 고정이 된다.
-신규 유닛 2종이 중반 이후에나 등장한다.</p>
-<p><strong>제안.</strong> 두 유닛의 비용을 낮추거나, 병영 Lv.1에 슬롯 +1을 배치해
-조합 실험을 앞당긴다.</p>
-
-<h4><span class="chip md">중간</span> 상단 방어의 후반 긴장 부족</h4>
-<p><strong>현상.</strong> 격자를 타워로 채우면 상단은 거의 뚫리지 않는다. 방어력 스케일링으로
-압박을 주고 있지만, 결국 후반 위협은 대부분 하단 돌파에서 온다.</p>
-<p><strong>제안.</strong> 경로를 지나가지 않는 <strong>비행 유닛</strong>(직선 돌진) 또는
-타워를 일시 무력화하는 적을 추가해 상단에 고유한 위협을 만든다.</p>
-
-<h4><span class="chip lo">낮음</span> 영웅 하단 배치의 상대적 약세</h4>
-<p><strong>현상.</strong> 하단 배치는 EXP를 못 버는데 전투력 기여만 있다. 상단 배치가
-장기적으로 이득이라 선택이 한쪽으로 기운다.</p>
-<p><strong>제안.</strong> 하단 배치 시 처치 골드 보너스를 주거나, 하단에서도 소량 EXP를 얻게 한다.</p>
-
-<h4><span class="chip lo">낮음</span> 콘텐츠 볼륨 — 스테이지 1뿐</h4>
-<p>1-1~1-10 이후가 없다. 30웨이브를 완주하면 콘텐츠가 끝난다.
-스테이지 2(신규 경로·지형) 또는 무한 모드가 필요하다.</p>
+<h4>단계별 진행</h4>
+<div class="tw"><table>
+<thead><tr><th class="num">단계</th><th>내용</th><th>검증</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td class="wrap">아레나 기반 — 좌표계 · 개체 이동 · 렌더</td><td class="wrap">몹이 아군에게 걸어오는 것만 확인</td></tr>
+<tr><td class="num">2</td><td class="wrap">자동 전투 — 타게팅 · 공격 주기 · 사망 · 드랍</td><td class="wrap">웨이브 완주 · 골드 획득</td></tr>
+<tr><td class="num">3</td><td class="wrap">스킬 5종 쿨다운 발동</td><td class="wrap">각 스킬 시각 확인</td></tr>
+<tr><td class="num">4</td><td class="wrap">수동 모드 — 집결 지점 · 대형 · 입력</td><td class="wrap">자동 대비 수입차 측정</td></tr>
+<tr><td class="num">5</td><td class="wrap">신규 몹 2종 · 엘리트 · 스폰 압력 곡선</td><td class="wrap">동시 개체 · 프레임 측정</td></tr>
+<tr><td class="num">6</td><td class="wrap">밸런스 재측정 · 튜토리얼 재작성</td><td class="wrap">30웨이브 스크립트 플레이</td></tr>
+</tbody></table></div>
 </section>
 
 <section id="s15">
-<h2>15 — 로드맵</h2>
-<h3>기획 완결 이후의 순서</h3>
-<div class="tw"><table>
-<thead><tr><th>단계</th><th>작업</th><th>근거</th><th class="num">상태</th></tr></thead>
-<tbody>
-<tr><td rowspan="3"><strong>A</strong><br>기반 정리</td><td class="wrap">튜토리얼 재작성 (후퇴·순환·마을 포함)</td><td class="wrap">신규 플레이어가 핵심 시스템을 모름</td><td><span class="chip todo">대기</span></td></tr>
-<tr><td class="wrap">골드 지출처 추가 (소모품 다회 구매 · 카드 리롤)</td><td class="wrap">후반 경제 붕괴</td><td><span class="chip todo">대기</span></td></tr>
-<tr><td class="wrap">영웅 상점 Lv.2 내용 채우기</td><td class="wrap">비용만 받고 효과 없음</td><td><span class="chip todo">대기</span></td></tr>
-<tr><td rowspan="2"><strong>B</strong><br>깊이</td><td class="wrap">상단 전용 위협 (비행 · 타워 무력화)</td><td class="wrap">후반 상단 긴장 부족</td><td><span class="chip todo">대기</span></td></tr>
-<tr><td class="wrap">유닛 비용 재조정 · 슬롯 배치</td><td class="wrap">신규 유닛 2종이 중반까지 사장</td><td><span class="chip todo">대기</span></td></tr>
-<tr><td rowspan="2"><strong>C</strong><br>볼륨</td><td class="wrap">스테이지 2 (신규 경로 · 지형 효과)</td><td class="wrap">현재 30웨이브가 전부</td><td><span class="chip todo">대기</span></td></tr>
-<tr><td class="wrap">영웅 고유 스킬 · 무한 모드</td><td class="wrap">엔드게임</td><td><span class="chip todo">대기</span></td></tr>
-<tr><td rowspan="2"><strong>D</strong><br>마감</td><td class="wrap">BGM · 업적 · 기록 비교</td><td class="wrap">리텐션</td><td><span class="chip todo">대기</span></td></tr>
-<tr><td class="wrap">밸런스 재측정 (A~C 반영 후)</td><td class="wrap">변경마다 곡선이 흔들림</td><td><span class="chip todo">대기</span></td></tr>
-</tbody></table></div>
-<div class="note">
-<p><strong>A를 먼저.</strong> B와 C는 콘텐츠를 늘리지만, A의 두 항목(튜토리얼·경제)은
-지금 플레이어가 겪는 실제 문제다. 콘텐츠를 더 얹기 전에 기반을 고치는 편이 낫다.</p>
-</div>
+<h2>15 — 미해결 과제</h2>
+
+<h4><span class="chip hi">높음</span> 좁은 화면의 가독성</h4>
+<p>480×330에 아군 5~6 + 몹 최대 28 + 드랍 + 투사체가 동시에 놓인다.
+반지름을 6~11px로 잡았지만 실제로 겹쳤을 때 무엇이 무엇인지 읽히는지는 <strong>만들어봐야 안다.</strong></p>
+<p><strong>대응.</strong> 1단계 구현 직후 최대 밀도 상태를 스크린샷으로 확인하고,
+안 되면 ① 동시 상한을 20으로 낮추거나 ② 몹 외곽선 강조 ③ 아군에게 상시 링 표시를 검토한다.</p>
+
+<h4><span class="chip hi">높음</span> 배속과 수동 조작의 충돌</h4>
+<p>3배속에서 실시간 조작은 사실상 불가능하다. 자동 모드에서만 3배속을 허용하고
+수동 전환 시 2배속으로 자동 강등하는 안을 기본으로 하되, 플레이어가 답답해할 여지가 있다.</p>
+
+<h4><span class="chip hi">높음</span> 튜토리얼 전면 재작성 필요</h4>
+<p>현재 튜토리얼은 6단계이고 "화살 타워" 하나만 설명한다. 마을·후퇴·배속·유닛 5종·스킬 트리가
+이미 빠져 있는데, 여기에 <strong>아레나·자동/수동·드랍 수거</strong>까지 더해진다.
+v2.0에서는 튜토리얼이 선택이 아니라 필수다.</p>
+
+<h4><span class="chip md">중간</span> 후반 골드 잉여 (v1.0에서 이월)</h4>
+<p>지출처가 유한해 1-8 무렵 4,000골드 이상 남는다. 드랍 수거로 수입 변동이 커지면 더 두드러진다.</p>
+<p><strong>제안.</strong> ① 소모품 다회 구매 ② 강화 카드 골드 리롤 ③ 타워 Lv.4~5 ④ 잔여 골드 보석 환산.</p>
+
+<h4><span class="chip md">중간</span> 영웅 상점 레벨업이 무의미</h4>
+<p>Lv.1/Lv.2 모두 강화 목록이 비어 있다(<span class="mono">upgrades:[]</span>). 45골드를 내도 변화가 없다.</p>
+
+<h4><span class="chip md">중간</span> 상단이 여전히 정적</h4>
+<p>이번 개정은 하단만 바꾼다. 상단은 배치형으로 <strong>의도적으로 남겨</strong> 두 전선의 성격을
+갈라놓았지만, 후반에 격자가 타워로 차면 상단은 완전히 자동이 된다.
+비행 유닛이나 타워 무력화 같은 상단 고유 위협은 여전히 필요하다.</p>
+
+<h4><span class="chip lo">낮음</span> 편성 슬롯 4칸 vs 유닛 5종</h4>
+<p>방패병(14G)·마법사(16G)가 비싸 초반에는 궁수·검사·치유사로 고정된다.
+실시간에서는 <strong>탱커의 가치가 올라가므로</strong> 방패병 비용을 낮추는 편이 나을 수 있다.</p>
+
+<h4><span class="chip lo">낮음</span> 콘텐츠 볼륨</h4>
+<p>스테이지 1-10 이후가 없다. 아레나는 지형·장애물을 넣기 쉬운 구조이므로
+스테이지 2에서 <strong>아레나 지형 변화</strong>를 차별점으로 쓸 수 있다.</p>
 </section>
 
 <section id="s16">
-<h2>16 — 기술 구조</h2>
-<h3>빌드 도구 없는 단일 캔버스</h3>
-<p>HTML 하나에 스크립트 12개를 순서대로 로드한다. 번들러·프레임워크·외부 에셋 없음.
-사운드는 WebAudio로 합성하고 폰트는 시스템 폰트를 쓴다. GitHub Pages에 그대로 배포된다.</p>
+<h2>16 — 로드맵</h2>
 <div class="tw"><table>
-<caption>파일 구조 · 총 4,285줄</caption>
-<thead><tr><th>파일</th><th class="num">줄</th><th>역할</th></tr></thead>
+<thead><tr><th>단계</th><th>작업</th><th>근거</th></tr></thead>
 <tbody>
-<tr><td class="mono">constants.js</td><td class="num">333</td><td class="wrap">레이아웃 · 경로 · 모든 스탯 테이블 · 30웨이브 정의</td></tr>
-<tr><td class="mono">render.js</td><td class="num">1592</td><td class="wrap">전체 캔버스 렌더링 (전투 · 마을 · 오버레이)</td></tr>
-<tr><td class="mono">game.js</td><td class="num">725</td><td class="wrap">메인 루프 · 입력 · 상태 · 돌파 · 런 정산</td></tr>
-<tr><td class="mono">battle.js</td><td class="num">437</td><td class="wrap">유닛 생성 · 스킬 5종 · 보호막 · 틱 전투</td></tr>
-<tr><td class="mono">wave.js</td><td class="num">287</td><td class="wrap">타이머 · 그룹 순환 스폰 · 후퇴 · 종료 정산</td></tr>
-<tr><td class="mono">upgrade.js</td><td class="num">229</td><td class="wrap">BONUSES · 강화 카드 32종 · 스킬 트리</td></tr>
-<tr><td class="mono">defense.js</td><td class="num">214</td><td class="wrap">타워 타게팅 · 침입자 이동 · 투사체</td></tr>
-<tr><td class="mono">town.js</td><td class="num">195</td><td class="wrap">건물 · 강화 · 영웅 상점</td></tr>
-<tr><td class="mono">audio.js / fx.js</td><td class="num">141</td><td class="wrap">절차적 효과음 · 파티클 · 화면 흔들림</td></tr>
-<tr><td class="mono">save.js / tutorial.js</td><td class="num">87</td><td class="wrap">localStorage · 튜토리얼</td></tr>
+<tr><td rowspan="2"><strong>A</strong><br>아레나 전환</td><td class="wrap">14절 단계 1~5 — 실시간 전투 구현</td><td class="wrap">이번 개정의 본체</td></tr>
+<tr><td class="wrap">밸런스 재측정 · 자동/수동 수입차 튜닝</td><td class="wrap">v1.0 수치가 무효</td></tr>
+<tr><td rowspan="2"><strong>B</strong><br>기반 정리</td><td class="wrap">튜토리얼 전면 재작성</td><td class="wrap">시스템 절반이 설명되지 않음</td></tr>
+<tr><td class="wrap">골드 지출처 추가 · 영웅 상점 Lv.2 내용</td><td class="wrap">후반 경제 붕괴</td></tr>
+<tr><td rowspan="2"><strong>C</strong><br>깊이</td><td class="wrap">상단 고유 위협 (비행 · 타워 무력화)</td><td class="wrap">상단이 후반에 완전 자동화됨</td></tr>
+<tr><td class="wrap">아레나 지형 · 장애물</td><td class="wrap">위치 선정에 의미를 더함</td></tr>
+<tr><td rowspan="2"><strong>D</strong><br>볼륨</td><td class="wrap">스테이지 2 · 영웅 고유 스킬</td><td class="wrap">엔드게임</td></tr>
+<tr><td class="wrap">BGM · 업적 · 기록</td><td class="wrap">리텐션</td></tr>
+</tbody></table></div>
+<div class="note">
+<p><strong>A를 끝까지 밀고 나서 B로.</strong> 아레나 전환은 하단을 통째로 바꾸는 작업이라
+중간에 멈추면 게임이 플레이 불가 상태가 된다. 단계 1~5를 한 흐름으로 끝내고,
+밸런스를 잡은 뒤에 다른 항목으로 넘어간다.</p>
+</div>
+</section>
+
+<section id="s17">
+<h2>17 — 기술 구조</h2>
+<h3>빌드 도구 없는 단일 캔버스</h3>
+<p>HTML 하나에 스크립트를 순서대로 로드한다. 번들러·프레임워크·외부 에셋 없음.
+사운드는 WebAudio 합성, GitHub Pages에 그대로 배포.</p>
+<div class="tw"><table>
+<caption>파일 구조 · 현재 4,285줄 → v2.0에서 약 +600줄 예상</caption>
+<thead><tr><th>파일</th><th class="num">현재</th><th>역할 · v2.0 변화</th></tr></thead>
+<tbody>
+<tr><td class="mono">constants.js</td><td class="num">333</td><td class="wrap">스탯 테이블 — 주기·사거리·이속 필드 추가</td></tr>
+<tr><td class="mono">render.js</td><td class="num">1592</td><td class="wrap">렌더링 — 하단 렌더 교체 (사이드뷰 → 아레나)</td></tr>
+<tr><td class="mono">game.js</td><td class="num">725</td><td class="wrap">메인 루프 · 입력 — 아레나 입력 추가</td></tr>
+<tr><td class="mono">battle.js</td><td class="num">437</td><td class="wrap">유닛 생성 · 스킬 정의만 남김</td></tr>
+<tr><td class="mono">arena.js</td><td class="num">신규</td><td class="wrap">이동 · 충돌 · 타게팅 · 스폰 · 드랍</td></tr>
+<tr><td class="mono">formation.js</td><td class="num">신규</td><td class="wrap">집결 지점 · 대형 · 자동/수동</td></tr>
+<tr><td class="mono">wave.js</td><td class="num">287</td><td class="wrap">타이머 · 스폰 압력 곡선</td></tr>
+<tr><td class="mono">defense.js · town.js · upgrade.js</td><td class="num">638</td><td class="wrap">변경 없음</td></tr>
+<tr><td class="mono">audio.js · fx.js · save.js · tutorial.js</td><td class="num">228</td><td class="wrap">tutorial 재작성 · save 버전업</td></tr>
 </tbody></table></div>
 
-<h4>상태 구조</h4>
-<p>단일 전역 <span class="mono">gs</span> 객체가 런 상태를 들고, <span class="mono">BONUSES</span> 전역이
-모든 강화의 누적 결과를 담는다. 강화가 바뀌면 <span class="mono">reapplyAllBonuses()</span>가
-스킬 트리 → 마을 → 장비 → 웨이브 버프 순으로 다시 계산한다. 영구 데이터(보석 · 스킬 · 통계)는
-런 리셋과 무관하게 모듈 스코프 변수로 유지된다.</p>
+<h4>성능 예산</h4>
+<p>최악의 경우 개체 34개(아군 6 + 몹 28)에 대해 매 프레임 타게팅 탐색을 하면
+<span class="mono">6 × 28 = 168</span>회 거리 계산이다. 공간 분할 없이도 60fps에 충분하다.
+투사체는 원거리 유닛 3종 × 최대 동시 8발 수준으로 상한을 둔다.</p>
 
 <h4>용어</h4>
 <div class="tw"><table>
 <thead><tr><th>용어</th><th>의미</th></tr></thead>
 <tbody>
-<tr><td>웨이브</td><td>60초 단위 전투. 상·하단이 동시에 진행됨</td></tr>
+<tr><td>웨이브</td><td>60초 단위. 상·하단 동시 진행</td></tr>
 <tr><td>스테이지</td><td>3웨이브 묶음. 클리어 시 보석</td></tr>
-<tr><td>런</td><td>기지 함락 또는 30웨이브 완주까지의 한 판</td></tr>
-<tr><td>그룹</td><td>하단에 한 번에 등장하는 몬스터 묶음 (최대 5)</td></tr>
-<tr><td>순환</td><td>그룹을 모두 처치한 뒤 처음부터 다시 도는 것</td></tr>
+<tr><td>런</td><td>기지 함락 또는 30웨이브 완주까지</td></tr>
+<tr><td><strong>아레나</strong></td><td>하단 실시간 전투 공간 (480×330)</td></tr>
+<tr><td><strong>집결 지점</strong></td><td>부대가 향하는 목표 좌표. 수동 시 플레이어가 지정</td></tr>
+<tr><td><strong>스폰 압력</strong></td><td>시간 경과에 따른 스폰 간격 감소와 등급 상승</td></tr>
 <tr><td>돌파</td><td>아군 전멸 후 남은 몹이 기지를 때리는 상태</td></tr>
-<tr><td>강화 픽</td><td>웨이브 클리어 시 3장 중 1장 선택 (런 내)</td></tr>
+<tr><td>강화 픽</td><td>웨이브 클리어 시 3장 중 1장 (런 내)</td></tr>
 <tr><td>스킬 트리</td><td>보석으로 여는 영구 강화 (런 간)</td></tr>
 </tbody></table></div>
 </section>
@@ -895,8 +996,8 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 </div>
 
 <footer>
-  듀얼 프론티어 게임 기획서 v1.0 · 스테이지 1(30웨이브) 구현 기준으로 역설계 정리 ·
-  수치는 <span class="mono">js/constants.js</span> 등 실제 코드에서 추출 ·
-  밸런스 수치는 헤드리스 브라우저 시뮬레이션 실측값
+  듀얼 프론티어 게임 기획서 v2.0 · 하단 실시간 아레나 전환안 ·
+  상단·메타 수치는 <span class="mono">js/constants.js</span> 등 실제 코드에서 추출 ·
+  아레나 수치는 미구현 설계값이며 14절 단계별 구현 후 재측정 대상
 </footer>
 </div>
