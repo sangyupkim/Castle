@@ -59,7 +59,19 @@ function createWaveManager() {
       }
       clearArena(gs);
       gs.battle.phase = 'retreated';
-      addLog(gs.battle, '🛡 후퇴 — 병력을 보존했습니다', '#38bdf8');
+
+      // 하단을 비운 대가 — 남은 시간만큼 몬스터가 성벽을 두드린다.
+      // 일찍 뺄수록 비싸고, 거의 다 버티고 뺐다면 거의 공짜다.
+      const cost = retreatCost(this.timer);
+      if (cost > 0) {
+        gs.baseHP = Math.max(0, gs.baseHP - cost);
+        spawnFloaty(`후퇴 -${cost}HP`, CW / 2, DEFENSE_H - 40, '#f87171');
+        addLog(gs.battle, `🛡 후퇴 — 남은 ${Math.ceil(this.timer)}초만큼 성벽 -${cost}HP`, '#f87171');
+        if (typeof FX !== 'undefined') FX.shake(3, 0.25);
+        if (gs.baseHP <= 0) { gs.gameOver = true; bankRunResult(); return true; }
+      } else {
+        addLog(gs.battle, '🛡 후퇴 — 병력을 보존했습니다', '#38bdf8');
+      }
       if (typeof SFX !== 'undefined') SFX.click();
       return true;
     },
@@ -112,10 +124,11 @@ function createWaveManager() {
     },
 
     endWave(gs) {
-      if (gs.battle.phase === 'fighting' || gs.battle.phase === 'retreated') {
-        gs.battle.phase  = 'won';
-        gs.battle.result = 'won';
-      }
+      // 타이머 만료까지 'fighting'이었다면 완주다.
+      const cleared   = (gs.battle.phase === 'fighting');
+      const retreated = (gs.battle.phase === 'retreated');
+      gs.battle.phase  = 'won';
+      gs.battle.result = cleared ? 'cleared' : retreated ? 'retreated' : 'defeated';
 
       // 바닥에 남은 드랍은 절반만 회수된다
       const leftover = Math.floor(gs.arena.drops.reduce((a, d) => a + d.amount, 0) * 0.5);
@@ -124,20 +137,36 @@ function createWaveManager() {
         gs.battle.totalGoldEarned += leftover;
       }
 
-      const earned    = gs.battle.goldEarned;
-      const killBonus = gs.battle.killCount * (this.waveIndex + 1);
-      const winBonus  = (gs.battle.result === 'won') ? (20 + this.waveIndex * 15) : 0;
-      const total     = earned + killBonus + winBonus;
-      gs.gold += total;
+      const earned     = gs.battle.goldEarned;
+      const killBonus  = gs.battle.killCount * (this.waveIndex + 1);
+      const fullWin    = 20 + this.waveIndex * 15;
+      // 후퇴는 승리 보너스를 절반만 받는다 — 하단을 끝까지 지킨 것이 아니므로
+      const winBonus   = cleared ? fullWin : retreated ? Math.floor(fullWin * 0.5) : 0;
+      const clearBonus = cleared ? clearBonusGold(this.waveIndex) : 0;
+      gs.gold += earned + killBonus + winBonus + clearBonus;
 
       const parts = [];
-      if (earned > 0)    parts.push(`드랍 +${earned}💰`);
-      if (killBonus > 0) parts.push(`처치보너스 +${killBonus}💰`);
-      if (winBonus > 0)  parts.push(`승리 +${winBonus}💰`);
+      if (earned > 0)     parts.push(`드랍 +${earned}💰`);
+      if (killBonus > 0)  parts.push(`처치 +${killBonus}💰`);
+      if (winBonus > 0)   parts.push(`${retreated ? '후퇴' : '승리'} +${winBonus}💰`);
+      if (clearBonus > 0) parts.push(`★완주 +${clearBonus}💰`);
       addLog(gs.battle, `웨이브${this.waveIndex+1}: ${parts.join(' ')}`, COLORS.gold);
 
+      // 완주하면 성벽을 조금 수리한다. 기지 HP가 내려가기만 하면
+      // 공격적으로 굴리는 플레이가 구조적으로 지속 불가능해진다.
+      if (cleared) {
+        const before = gs.baseHP;
+        gs.baseHP = Math.min(baseHpMax(), gs.baseHP + clearRepair(this.waveIndex));
+        const healed = Math.round(gs.baseHP - before);
+        if (healed > 0) {
+          addLog(gs.battle, `★ 완주 — 성벽 +${healed}HP 수리`, '#22c55e');
+          spawnFloaty(`완주! +${healed}HP`, CW / 2, DEFENSE_H - 40, '#22c55e');
+        }
+        gs.stats.wavesFullCleared = (gs.stats.wavesFullCleared || 0) + 1;
+      }
+
       if (typeof SFX !== 'undefined') {
-        if (gs.battle.result === 'won') SFX.win(); else SFX.lose();
+        if (cleared) SFX.win(); else if (retreated) SFX.click(); else SFX.lose();
       }
 
       // 하단에 배치했던 영웅 상태를 되돌려 받는다

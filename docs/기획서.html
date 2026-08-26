@@ -219,7 +219,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <div class="wrap">
 <header class="cover">
-  <div class="eyebrow">Game Design Document · v2.2 · 구현 완료 · 실측 반영</div>
+  <div class="eyebrow">Game Design Document · v2.3 · 웨이브 결과 3단계</div>
   <h1>듀얼 프론티어</h1>
   <p class="tagline">한 화면에서 두 개의 전선을 동시에 굴리는 모바일 웹 로그라이트.
      위는 배치해서 지키고, 아래는 직접 뛰어들어 벌어온다.</p>
@@ -243,7 +243,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
     <li><a href="#s5"><span class="n">05</span><span>상단 방어선</span></a></li>
     <li><a href="#s6"><span class="n">06</span><span>하단 아레나</span></a></li>
     <li><a href="#s7"><span class="n">07</span><span>자동 · 수동 모드</span></a></li>
-    <li><a href="#s8"><span class="n">08</span><span>돌파</span></a></li>
+    <li><a href="#s8"><span class="n">08</span><span>완주 · 후퇴 · 전멸</span></a></li>
     <li><a href="#s9"><span class="n">09</span><span>영웅</span></a></li>
     <li><a href="#s10"><span class="n">10</span><span>로비 · 캠프</span></a></li>
     <li><a href="#s11"><span class="n">11</span><span>런 내 성장</span></a></li>
@@ -719,21 +719,72 @@ v1.0의 "그룹 순환 + 보상 체감" 구조를 이 압력 곡선이 대체한
 </section>
 
 <section id="s8">
-<h2>08 — 돌파 · 두 전선의 연결</h2>
-<h3>아래에서 지는 것이 실제 패배가 되도록</h3>
-<p>아군이 전멸하면 아레나에 남은 몬스터가 <strong>기지로 돌파</strong>해 초당 피해를 준다.
-이 규칙이 없으면 하단 전멸은 가벼운 손실에 그치고, 상단은 타워를 충분히 지으면 뚫리지 않으므로
-게임에서 질 수가 없다. v1.0에서 도입했고 v2.0에서도 유지한다.</p>
+<h2>08 — 웨이브를 끝내는 세 가지 방법 <span class="rev">v2.3 개정</span></h2>
+<h3>완주 · 후퇴 · 전멸이 각각 다른 값을 갖도록</h3>
+<p class="lede">v2.2까지는 <strong>전멸만 벌을 받고 후퇴는 공짜였다.</strong> 병력을 지키고
+적립 골드도 챙기고 기지도 멀쩡하니, 실측에서 "일찍 후퇴하는 것이 언제나 정답"이 되어버렸다.
+세 결과에 각각 값을 매겨 <strong>언제 뺄까</strong>를 실제 판단으로 만든다.</p>
+
+<div class="tw"><table>
+<caption>웨이브 결과 3단계</caption>
+<thead><tr><th>결과</th><th>조건</th><th>골드</th><th>기지</th><th>병력</th></tr></thead>
+<tbody>
+<tr><td><strong>★ 완주</strong></td><td class="wrap">60초를 버텼다</td><td class="wrap">승리 보너스 <strong>+ 완주 보너스</strong><br><span class="mono">30 + 웨이브×12</span></td><td class="wrap"><strong>수리 +2~6HP</strong></td><td>유지</td></tr>
+<tr><td><span class="lane b">🛡 후퇴</span></td><td class="wrap">스스로 하단을 비웠다</td><td class="wrap">승리 보너스 <strong>절반</strong><br>바닥 드랍은 50%만 회수</td><td class="wrap"><strong>−남은 초 × 0.20</strong><br>(상한 14)</td><td>유지</td></tr>
+<tr><td><span class="lane d">☠️ 전멸</span></td><td class="wrap">병력을 모두 잃었다</td><td class="wrap">보너스 없음</td><td class="wrap">돌파 피해 최대 <strong>−27HP</strong></td><td><strong>전멸</strong></td></tr>
+</tbody></table></div>
+
+<h4>후퇴 비용은 남은 시간에 비례한다</h4>
+<p>하단을 비우면 그 시간만큼 몬스터가 성벽을 두드린다는 규칙이다.
+<strong>일찍 뺄수록 비싸고, 거의 다 버티고 뺐다면 거의 공짜다.</strong></p>
+<div class="tw"><table>
+<thead><tr><th class="num">남은 시간</th><th class="num">60s</th><th class="num">45s</th><th class="num">30s</th><th class="num">15s</th><th class="num">5s</th></tr></thead>
+<tbody>
+<tr><td>기지 피해</td><td class="num">12</td><td class="num">9</td><td class="num">6</td><td class="num">3</td><td class="num">1</td></tr>
+</tbody></table></div>
+<p>비용은 <strong>후퇴 버튼에 실시간으로 표시된다</strong> — <span class="mono">🛡 후퇴 -9</span>.
+14 이상이면 버튼이 붉게 변한다. 누르기 전에 값을 알아야 판단이 된다.</p>
+
+<h4>완주 보상의 알맹이는 골드가 아니라 성벽 수리다</h4>
+<p>후반에는 골드가 남아돌지만 <strong>기지 HP는 언제나 모자란다.</strong> 그래서 완주 보상의
+핵심을 수리로 잡았고, 버티기 어려운 후반 웨이브일수록 많이 수리해준다
+(<span class="mono">2 + ⌊웨이브÷4⌋</span>, 최대 6).</p>
+<div class="note">
+<p><strong>이 규칙이 없으면 기지 HP는 내려가기만 한다.</strong> 공격적으로 굴리는 플레이가
+구조적으로 지속 불가능해지고, 결국 후퇴가 정답이 된다. 완주에 수리를 붙이면
+<strong>잘 버틴 만큼 성벽이 회복되는</strong> 순환이 생긴다 — 실측에서 발전한 편성의 기지 HP가
+초반 웨이브 동안 106 → 115로 <em>올라가는</em> 것이 확인됐다.</p>
+</div>
+
+<h4>돌파 — 하단에서 지는 것이 실제 패배가 되도록</h4>
+<p>아군이 전멸하면 아레나에 남은 몬스터가 기지로 돌파해 초당 피해를 준다.
+이 규칙이 없으면 하단 전멸은 가벼운 손실에 그치고, 상단은 타워를 충분히 지으면 뚫리지
+않으므로 게임에서 질 수가 없다. v1.0에서 도입했고 지금도 유지한다.</p>
 <div class="tw"><table>
 <thead><tr><th>항목</th><th>값</th></tr></thead>
 <tbody>
-<tr><td>초당 피해</td><td class="mono">min(생존 몹 ATK 합 × 0.03, 2.5) × (1 − 기지방어율)</td></tr>
-<tr><td>지속</td><td class="mono">15초 — 이후 몬스터 철수, 남은 시간은 상단만 진행</td></tr>
-<tr><td>최대 피해</td><td class="mono">37.5 (기지 HP 100의 약 1/3)</td></tr>
+<tr><td>초당 피해</td><td class="wrap"><span class="mono">min(생존 몹 ATK 합 × 0.03, 1.8) × (1 − 기지방어율)</span></td></tr>
+<tr><td>지속</td><td class="wrap">15초 — 이후 몬스터 철수, 남은 시간은 상단만 진행</td></tr>
+<tr><td>최대 피해</td><td class="wrap">27 (후퇴 상한 14의 약 두 배)</td></tr>
 </tbody></table></div>
-<p>실시간으로 바뀌면서 <strong>전멸 순간의 생존 몹 수가 더 크게 흔들린다</strong>(아레나에 최대 28마리).
-ATK 합 상한이 걸려 있어 즉사로 이어지지는 않지만, 압력이 최고조일 때 전멸하면 더 아프다 —
-이는 의도된 결과다.</p>
+
+<h4>실측 — 인센티브가 뒤집혔는가</h4>
+<p>같은 조건으로 3회씩 돌린 평균이다.</p>
+<div class="tw"><table>
+<thead><tr><th>편성 · 정책</th><th class="num">도달 웨이브</th><th class="num">누적 골드</th><th class="num">웨이브당 처치</th></tr></thead>
+<tbody>
+<tr><td>첫 런 (해금·스킬 없음) · 후퇴</td><td class="num">9.7</td><td class="num">1,604</td><td class="num">23.0</td></tr>
+<tr><td>발전한 편성 · 후퇴 활용</td><td class="num">12.7</td><td class="num">5,234</td><td class="num">36.3</td></tr>
+<tr class="total"><td>발전한 편성 · 완주 지향</td><td class="num">9.3</td><td class="num">5,266</td><td class="num">42.6</td></tr>
+</tbody></table></div>
+<div class="note">
+<p><strong>수입이 같아졌다.</strong> 개정 전에는 후퇴가 도달·수입 양쪽에서 압도했다
+(후퇴 13웨이브 vs 완주 지향 4웨이브). 지금은 누적 골드가 5,234 대 5,266으로 사실상 동률이고,
+후퇴는 <strong>3~4웨이브를 더 사는 대신 웨이브당 수입을 포기하는</strong> 선택이 됐다.
+"안전은 시간으로 값을 치른다"는 교환이 성립한다.</p>
+<p>완주 지향 플레이의 웨이브당 처치가 42.6으로 <strong>목표(25~60) 안에 들어온 것</strong>도
+같은 이유다 — 60초를 끝까지 쓰기 때문이다.</p>
+</div>
 </section>
 
 <section id="s9">
@@ -1101,16 +1152,15 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
 <thead><tr><th>지표</th><th class="num">목표</th><th class="num">실측</th><th></th></tr></thead>
 <tbody>
 <tr><td>자동 vs 수동 수입차</td><td class="num">+25~40%</td><td class="num">+33%</td><td><span class="chip lo">달성</span></td></tr>
-<tr><td>첫 런 도달 웨이브</td><td class="num">8 ~ 14</td><td class="num">13</td><td><span class="chip lo">달성</span></td></tr>
-<tr><td>웨이브당 처치수</td><td class="num">25 ~ 60</td><td class="num">평균 19 · 최고 58</td><td><span class="chip md">미달</span></td></tr>
+<tr><td>첫 런 도달 웨이브</td><td class="num">8 ~ 14</td><td class="num">9.7 (3회 평균)</td><td><span class="chip lo">달성</span></td></tr>
+<tr><td>웨이브당 처치수</td><td class="num">25 ~ 60</td><td class="num">완주 지향 42.6 · 후퇴 활용 36.3</td><td><span class="chip lo">달성</span></td></tr>
 <tr><td>동시 개체 수 피크</td><td class="num">≤ 28</td><td class="num">11 (상한 28)</td><td><span class="chip lo">달성</span></td></tr>
 <tr><td>프레임 (개체 28 + 상단)</td><td class="num">60fps</td><td class="num">60fps</td><td><span class="chip lo">달성</span></td></tr>
 </tbody></table></div>
 <div class="note">
-<p><strong>웨이브당 처치가 목표를 밑도는 이유.</strong> 후퇴가 웨이브를 조기에 끝내기 때문이다.
-끝까지 버틴 웨이브는 58처치까지 나오지만, 팀 HP 30%에서 후퇴하는 플레이는 평균 19에 머문다.
-목표치는 "끝까지 버틴 웨이브" 기준이었으므로 곡선 자체는 의도대로 작동한다 —
-동시에 <strong>소극적으로 플레이하면 그만큼 덜 번다</strong>는 뜻이기도 하다.</p>
+<p><strong>v2.2에서는 웨이브당 처치가 19로 목표를 밑돌았다.</strong> 후퇴가 웨이브를 조기에
+끝내는데 후퇴에 아무 대가가 없어서, 최적 플레이가 곧 "빨리 빼기"였기 때문이다.
+8절의 3단계 규칙을 넣은 뒤 완주 지향 플레이가 성립하면서 42.6으로 올라왔다.</p>
 </div>
 
 <h4>기지 HP 곡선 <span class="rev">실측</span></h4>
@@ -1153,6 +1203,9 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
 <tr><td class="mono">KILL_SCALE</td><td class="num">0.08 → 0.006</td><td class="wrap"><span class="rev">v2.2</span> 웨이브 내 4.6배 폭주를 잡았다</td></tr>
 <tr><td class="mono">TICK_INTERVAL · SKILL_TICK_CD</td><td class="num">폐기</td><td class="wrap">쿨다운(초)으로 대체</td></tr>
 <tr><td class="mono">BREAKTHROUGH_DPS / MAX / DUR</td><td class="num">0.03 / 1.8 / 15초</td><td class="wrap">상한만 2.5 → 1.8 <span class="rev">v2.2</span></td></tr>
+<tr><td class="mono">RETREAT_DPS / MAX</td><td class="num">0.20 / 14</td><td class="wrap">신규 <span class="rev">v2.3</span> — 후퇴 시 남은 초당 기지 피해</td></tr>
+<tr><td class="mono">CLEAR_BONUS_BASE / PER_WAVE</td><td class="num">30 / 12</td><td class="wrap">신규 <span class="rev">v2.3</span> — 완주 골드 보너스</td></tr>
+<tr><td class="mono">CLEAR_REPAIR</td><td class="num">2 + ⌊웨이브÷4⌋ (최대 6)</td><td class="wrap">신규 <span class="rev">v2.3</span> — 완주 시 성벽 수리</td></tr>
 </tbody></table></div>
 </section>
 
@@ -1272,10 +1325,12 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
 <strong>해결됨</strong> — 8단계로 전면 재작성했다: 개요 · 캠프 · 상단 배치 · 실시간 아레나 ·
 자동/수동 · 드랍 수거 · 후퇴와 돌파 · 조작 요약.</p>
 
-<h4><span class="chip lo">당분간 해소</span> 후반 골드 잉여 (v1.0에서 이월)</h4>
-<p>v1.0에서는 1-8 무렵 4,000골드 이상 남았다. v2.2 실측에서는 최고 보유가 682로 내려왔다 —
-타워 30기까지 꾸준히 소비되고 런이 13웨이브에서 끝나기 때문이다.
-<strong>다만 스킬 트리를 다 연 뒤 런이 길어지면 다시 나타난다.</strong> 그때를 위해 아래 제안은 남겨둔다.</p>
+<h4><span class="chip md">중간</span> 후반 골드 잉여 — 발전한 편성에서 재발 <span class="rev">v2.3 실측</span></h4>
+<p>첫 런에서는 최고 보유가 682로 문제가 없다. 그런데 <strong>해금·스킬을 갖춘 편성으로
+돌리면 웨이브 5부터 2,000~3,600골드가 놀고 있다.</strong> 타워 격자가 30기에서 차고
+마을 강화가 바닥나는데 수입은 계속 늘기 때문이다 — v1.0에서 이월된 문제가 그대로 남았다.</p>
+<p>완주 보너스가 골드를 더 얹기 때문에 이 항목은 <strong>v2.3에서 조금 더 나빠졌다.</strong>
+완주 보상의 알맹이를 성벽 수리로 잡은 것도 그래서다.</p>
 <p><strong>제안.</strong> ① 소모품 다회 구매 ② 강화 카드 골드 리롤 ③ 타워 Lv.4~5.
 ④ "잔여 골드 보석 환산"은 <strong>철회한다</strong> — 보석 수입이 이미 과다한 상태(위 항목)에서
 경로를 더 여는 것은 문제를 키운다.</p>
@@ -1293,13 +1348,17 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
 <p>방패병(14G)·마법사(16G)가 비싸 초반에는 궁수·검사·치유사로 고정된다.
 실시간에서는 <strong>탱커의 가치가 올라가므로</strong> 방패병 비용을 낮추는 편이 나을 수 있다.</p>
 
-<h4><span class="chip md">중간</span> 후퇴가 너무 안전하다 <span class="rev">v2.2 신규</span></h4>
-<p>실측에서 드러났다. 팀 HP 30%에서 후퇴하는 소극적 플레이는 13웨이브까지 가지만,
-후퇴하지 않는 적극적 플레이는 <strong>4웨이브에서 끝난다.</strong> 후퇴가 전략이 아니라
-정답이 되어버린 셈이다.</p>
-<p><strong>제안.</strong> ① 후퇴 시 그 웨이브 승리 보너스를 포기하게 한다 ② 후퇴 횟수에
-쿨다운을 둔다 ③ 끝까지 버틴 웨이브에 완주 보너스를 준다. ③이 가장 자연스럽다 —
-벌을 주는 대신 상을 준다.</p>
+<h4><span class="chip lo">해결</span> 후퇴가 너무 안전하다 <span class="rev">v2.3</span></h4>
+<p>v2.2 실측에서 드러났던 문제다. 후퇴 13웨이브 vs 완주 지향 4웨이브로,
+후퇴가 전략이 아니라 정답이었다.</p>
+<p><strong>해결됨.</strong> 8절의 3단계 규칙 — ① 완주 보너스와 성벽 수리 ② 후퇴 시
+승리 보너스 절반 ③ 후퇴 시 남은 시간에 비례한 성벽 피해. 세 가지를 함께 넣었다.
+결과: 누적 골드가 5,234 대 5,266으로 동률이 됐고, 후퇴는 도달 웨이브를 3~4 더 사는
+대신 수입을 포기하는 선택이 됐다.</p>
+<p><strong>남은 눈금 조정.</strong> 후퇴 계수를 0.30으로 잡았을 때는 첫 런이 7웨이브에서
+끝나 목표(8~14)를 벗어났다 — 약한 편성은 매 웨이브 후퇴할 수밖에 없는데 회복 수단이 없기
+때문이다. 0.20으로 낮춰 첫 런 평균 9.7로 되돌렸다. <strong>계수 하나로 첫 런 난이도와
+후퇴 인센티브가 동시에 움직이므로</strong>, 앞으로도 함께 봐야 한다.</p>
 
 <h4><span class="chip lo">낮음</span> 콘텐츠 볼륨</h4>
 <p>스테이지 1-10 이후가 없다. 아레나는 지형·장애물을 넣기 쉬운 구조이므로
@@ -1316,16 +1375,18 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
 <tr><td class="wrap">L4~L6 — 해금 · 서약 · 기록</td><td class="wrap">완료. 해금 6종 · 서약 6종 · 도감</td></tr>
 <tr><td rowspan="2"><strong>B</strong><br>아레나 전환 <span class="chip lo">완료</span></td><td class="wrap">단계 1~5 — 실시간 전투 구현</td><td class="wrap">완료. <span class="mono">arena.js</span> · <span class="mono">formation.js</span></td></tr>
 <tr><td class="wrap">밸런스 재측정 · 자동/수동 수입차 튜닝</td><td class="wrap">완료. +33% (목표 25~40%)</td></tr>
-<tr><td rowspan="2"><strong>C</strong><br>기반 정리</td><td class="wrap">튜토리얼 전면 재작성 <span class="chip lo">완료</span></td><td class="wrap">8단계로 재작성</td></tr>
-<tr><td class="wrap">후퇴 인센티브 조정 · 골드 지출처</td><td class="wrap">후퇴가 정답이 되는 문제 (16절)</td></tr>
+<tr><td rowspan="3"><strong>C</strong><br>기반 정리</td><td class="wrap">튜토리얼 전면 재작성 <span class="chip lo">완료</span></td><td class="wrap">8단계로 재작성</td></tr>
+<tr><td class="wrap">후퇴 인센티브 조정 <span class="chip lo">완료</span></td><td class="wrap">완주·후퇴·전멸 3단계 (8절)</td></tr>
+<tr><td class="wrap">골드 지출처 추가</td><td class="wrap">발전한 편성에서 2,000~3,600 잉여 (16절)</td></tr>
 <tr><td rowspan="2"><strong>D</strong><br>깊이</td><td class="wrap">상단 고유 위협 (비행 · 타워 무력화)</td><td class="wrap">상단이 후반에 완전 자동화됨</td></tr>
 <tr><td class="wrap">아레나 지형 · 장애물</td><td class="wrap">위치 선정에 의미를 더함</td></tr>
 <tr><td rowspan="2"><strong>E</strong><br>볼륨</td><td class="wrap">스테이지 2 · 영웅 고유 스킬</td><td class="wrap">엔드게임</td></tr>
 <tr><td class="wrap">BGM · 업적 · 기록</td><td class="wrap">리텐션</td></tr>
 </tbody></table></div>
 <div class="note">
-<p><strong>A와 B는 끝났다.</strong> 다음은 C — 실측에서 드러난 "후퇴가 정답이 되는" 문제부터다
-(16절). 완주 보너스를 붙여 끝까지 버티는 쪽에 상을 주는 방향을 먼저 시도한다.</p>
+<p><strong>A · B와 C의 후퇴 인센티브까지 끝났다.</strong> C에 남은 것은 골드 지출처다 —
+발전한 편성에서 2,000~3,600골드가 놀고 있고, 완주 보너스가 골드를 더 얹으면서
+조금 더 나빠졌다. 타워 Lv.4~5, 소모품 다회 구매, 강화 카드 리롤 중에서 고른다.</p>
 <p>그 다음이 D(상단 고유 위협 · 아레나 지형)다. 이번 개정으로 하단은 완전히 다른 게임이 됐지만
 <strong>상단은 그대로다</strong> — 두 전선의 성격을 갈라놓기 위한 의도적 선택이었으나,
 후반에 격자가 차면 상단은 완전히 자동이 된다. 비행 유닛이나 타워 무력화가 필요하다.</p>

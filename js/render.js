@@ -353,8 +353,11 @@ function renderBattleControls(ctx, gs) {
             manual?'#4c1d95':'#111c2e', manual?'#ddd6fe':'#94a3b8', true, 10);
     gs.ui.modeBtn={x:mx,y:by,w:mw,h:bh};
 
-    const rw=62, rx=mx+mw+6;
-    drawBtn(ctx,rx,by,rw,bh,'🛡 후퇴','#1e3a4f','#7dd3fc',true,10);
+    // 후퇴 비용을 버튼에 직접 띄운다 — 누르기 전에 값을 알아야 판단이 된다
+    const cost = retreatCost(wm.timer);
+    const rw=84, rx=mx+mw+6;
+    drawBtn(ctx,rx,by,rw,bh, cost>0?`🛡 후퇴 -${cost}`:'🛡 후퇴',
+            cost>=14?'#4c1020':'#1e3a4f', cost>=14?'#fca5a5':'#7dd3fc', true, 10);
     gs.ui.retreatBtn={x:rx,y:by,w:rw,h:bh};
   } else {
     gs.ui.modeBtn=null;
@@ -479,7 +482,13 @@ function renderBriefing(ctx, gs) {
   gs.ui.briefTownBtn = {x:tbx,y:y,w:tbw,h:bh2};
 
   y += bh2 + 6;
-  ctx.fillStyle='#3f4a5c'; ctx.font='9px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
+  ctx.font='9px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
+  ctx.fillStyle='#22c55e';
+  ctx.fillText(`★ 완주 +${clearBonusGold(gs.wave)}💰 · 성벽 +${clearRepair(gs.wave)}HP    `, CW/2-52, y);
+  ctx.fillStyle='#f87171';
+  ctx.fillText(`   🛡 후퇴 = 남은 시간 × ${RETREAT_DPS} 만큼 성벽 피해`, CW/2+78, y);
+  y += 12;
+  ctx.fillStyle='#3f4a5c';
   ctx.fillText('Space 시작 · A 자동/수동 · 방향키 부대 이동 · R 후퇴 · T 마을', CW/2, y);
 }
 
@@ -580,21 +589,25 @@ function renderArenaStatusBar(ctx, gs) {
 
   const live = a.mobs.filter(m=>!m.dead).length;
   ctx.fillStyle = live >= ARENA_MAX_MOBS ? '#ef4444' : '#94a3b8';
-  ctx.fillText(`👾 ${live}/${ARENA_MAX_MOBS}`, 206, cy);
+  ctx.fillText(`👾 ${live}/${ARENA_MAX_MOBS}`, 200, cy);
 
   // 스폰 압력 게이지 — 간격이 짧아질수록 찬다
   const iv   = spawnInterval(a.elapsed) * (a.spawnMult||1);
   const pres = Math.max(0, Math.min(1, (SPAWN_BASE_INTERVAL - iv) / (SPAWN_BASE_INTERVAL - 0.4)));
-  const gx = 272, gw = 128;
+  const gx = 256, gw = 92;
   ctx.fillStyle='#1e293b'; ctx.fillRect(gx, cy-4, gw, 8);
   ctx.fillStyle = pres > 0.75 ? '#ef4444' : pres > 0.45 ? '#f59e0b' : '#22c55e';
   ctx.fillRect(gx, cy-4, gw*pres, 8);
-  ctx.fillStyle='#64748b'; ctx.font='bold 8px sans-serif'; ctx.textAlign='left';
-  ctx.fillText('압력', gx+gw+5, cy);
 
   ctx.textAlign='right'; ctx.font='bold 9px sans-serif';
   ctx.fillStyle = a.mode==='manual' ? '#c4b5fd' : '#475569';
   ctx.fillText(a.mode==='manual' ? '수동' : '자동', CW-8, cy);
+
+  // 완주하면 받을 보너스를 미리 보여준다 — 버티는 쪽에도 이유를 준다
+  if (gs.battle.phase === 'fighting') {
+    ctx.textAlign='right'; ctx.fillStyle='#22c55e'; ctx.font='bold 9px sans-serif';
+    ctx.fillText(`★완주 +${clearBonusGold(wm.waveIndex)}`, CW-38, cy);
+  }
 }
 
 function renderArenaEntity(ctx, e, alpha) {
@@ -653,17 +666,28 @@ function renderArenaOverlay(ctx, gs) {
 
   const cx = ARENA_X + ARENA_W/2, cy = ARENA_Y + ARENA_H/2;
   if (ph === 'won') {
-    ctx.fillStyle='rgba(0,40,0,0.72)'; ctx.fillRect(ARENA_X,ARENA_Y,ARENA_W,ARENA_H);
-    ctx.fillStyle='#22c55e'; ctx.font='bold 22px sans-serif';
+    const cleared = gs.battle.result === 'cleared';
+    ctx.fillStyle = cleared ? 'rgba(0,40,0,0.72)' : 'rgba(8,30,45,0.72)';
+    ctx.fillRect(ARENA_X,ARENA_Y,ARENA_W,ARENA_H);
     ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(`웨이브 완료! +${gs.battle.goldEarned}💰`, cx, cy);
+    if (cleared) {
+      ctx.fillStyle='#22c55e'; ctx.font='bold 22px sans-serif';
+      ctx.fillText('★ 완주!', cx, cy-14);
+      ctx.fillStyle='#86efac'; ctx.font='bold 12px sans-serif';
+      ctx.fillText(`완주 보너스 +${clearBonusGold(wm.waveIndex)}💰 · 성벽 +${clearRepair(wm.waveIndex)}HP`, cx, cy+14);
+    } else {
+      ctx.fillStyle='#7dd3fc'; ctx.font='bold 20px sans-serif';
+      ctx.fillText(`🛡 후퇴  획득 ${gs.battle.goldEarned}💰`, cx, cy-10);
+      ctx.fillStyle='#94a3b8'; ctx.font='11px sans-serif';
+      ctx.fillText('병력은 지켰지만 완주 보너스는 없습니다', cx, cy+16);
+    }
   } else if (ph === 'retreated') {
     ctx.fillStyle='rgba(8,30,45,0.72)'; ctx.fillRect(ARENA_X,ARENA_Y,ARENA_W,ARENA_H);
     ctx.fillStyle='#7dd3fc'; ctx.font='bold 20px sans-serif';
     ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(`🛡 후퇴  획득 ${gs.battle.goldEarned}💰`, cx, cy);
+    ctx.fillText(`🛡 후퇴  획득 ${gs.battle.goldEarned}💰`, cx, cy-10);
     ctx.fillStyle='#94a3b8'; ctx.font='11px sans-serif';
-    ctx.fillText('병력을 보존했습니다', cx, cy+24);
+    ctx.fillText('상단이 끝나면 웨이브가 마무리됩니다', cx, cy+16);
   } else if (ph === 'idle_defeated' || ph === 'lost') {
     ctx.fillStyle='rgba(40,0,0,0.62)'; ctx.fillRect(ARENA_X,ARENA_Y,ARENA_W,ARENA_H);
     ctx.fillStyle='#ef4444'; ctx.font='bold 20px sans-serif';

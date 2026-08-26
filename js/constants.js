@@ -236,6 +236,42 @@ const BATTLE_MOB_TYPES = {
   warlord:  { id:'warlord',  name:'마왕',     hp:520, atk:40, def:14, atkPeriod:1.8, range:34,  moveSpd:35,  radius:11, goldReward:180, color:'#db2777', icon:'🐲', behavior:'slam',  isBoss:true }
 };
 
+// ─── 웨이브 결과 3단계 ───────────────────────────────────────────────────────
+// 완주 · 후퇴 · 전멸이 각각 다른 값을 갖도록 만든다.
+// v2.2까지는 전멸만 기지 피해를 받고 후퇴는 공짜였다 — 그래서 실측에서
+// "일찍 후퇴하는 것이 언제나 정답"이 되어버렸다.
+//
+//   완주 — 60초를 버텼다        : 승리 보너스 + 완주 보너스 + 성벽 수리
+//   후퇴 — 하단을 비웠다        : 승리 보너스 절반, 남은 시간만큼 성벽 피해
+//   전멸 — 병력을 잃었다        : 보너스 없음, 돌파 피해 + 병력 전멸
+//
+// 후퇴 피해가 남은 시간에 비례하므로 "언제 뺄까"가 실제 판단이 된다.
+// 10초 남기고 빼면 3HP, 50초 남기고 빼면 15HP.
+// 0.30으로 잡았더니 첫 런이 7웨이브에서 끝났다 — 약한 편성은 매 웨이브
+// 후퇴할 수밖에 없는데 그때마다 15HP씩 나가 회복할 방법이 없었다.
+// 0.20이면 60초 남기고 빼도 12HP, 20초 남기고 빼면 4HP다.
+const RETREAT_DPS = 0.20;   // 후퇴 시 남은 1초당 기지 피해
+const RETREAT_MAX = 14;     // 상한 — 돌파(27)의 절반 수준
+
+const CLEAR_BONUS_BASE     = 30;   // 완주 보너스 기본
+const CLEAR_BONUS_PER_WAVE = 12;   // 웨이브당 가산
+// 완주 보상의 알맹이는 골드가 아니라 성벽 수리다.
+// 후반에는 골드가 남아돌지만 기지 HP는 언제나 모자라기 때문이고,
+// 버티기 어려운 후반 웨이브일수록 많이 수리해줘야 완주할 이유가 생긴다.
+const CLEAR_REPAIR_BASE = 2;
+const CLEAR_REPAIR_MAX  = 6;
+function clearRepair(waveIndex) {
+  return Math.min(CLEAR_REPAIR_MAX, CLEAR_REPAIR_BASE + Math.floor((waveIndex || 0) / 4));
+}
+
+function retreatCost(remainSec) {
+  return Math.min(RETREAT_MAX,
+    Math.ceil(Math.max(0, remainSec) * RETREAT_DPS * (1 - BONUSES.baseDefPct)));
+}
+function clearBonusGold(waveIndex) {
+  return CLEAR_BONUS_BASE + waveIndex * CLEAR_BONUS_PER_WAVE;
+}
+
 // 아군이 전멸하면 아레나에 남은 몬스터가 기지로 돌파해 초당 피해를 준다.
 // 두 전선을 연결해, 하단에서 지는 것도 실제 패배로 이어지게 만든다.
 const BREAKTHROUGH_DPS      = 0.03;  // 몹 공격력 1당 초당 기지 피해
