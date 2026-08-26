@@ -33,6 +33,18 @@ const THE_PATH = [
 ];
 const PATH_CELLS = new Set(THE_PATH.map(([c,r]) => `${c},${r}`));
 
+// ─── 비행 항로 ───────────────────────────────────────────────────────────────
+// 비행은 ∞ 경로를 따르지 않는다. 판 전체를 대각선으로 가로질러 기지로 온다 —
+// 경로 루프에 딱 붙여 지은 타워는 하늘을 못 잡는다는 뜻이고,
+// 그래서 "어디에 짓는가"가 물량이 아니라 배치의 문제가 된다.
+// 좌우 두 항로를 번갈아 쓴다.
+// 처음엔 판을 가로지르는 대각선으로 잡았는데, 그 대각선이 하필 판 중앙 —
+// ∞ 경로에 붙여 지은 타워가 이미 덮고 있는 자리 — 를 지나가서 위협이 되지 않았다.
+// 바깥을 크게 도는 경로로 바꿨다. 경로 루프만 촘촘히 막은 배치는 하늘을 놓친다.
+const AIR_PATH_L = [[4,0],[1,1],[0,3],[0,5],[2,6],[4,6]];
+const AIR_PATH_R = [[4,0],[7,1],[8,3],[8,5],[6,6],[4,6]];
+function airPathFor(n) { return (n % 2 === 0) ? AIR_PATH_L : AIR_PATH_R; }
+
 function cellCenter(col, row) {
   return {
     x: GRID_OX + col * CELL_W + CELL_W / 2,
@@ -45,6 +57,39 @@ function isBlockedCell(c, r) {
   if (PATH_CELLS.has(`${c},${r}`)) return true;
   if (c === 4 && (r === 0 || r === 6)) return true;
   return false;
+}
+
+// ─── 몬스터 등급 ─────────────────────────────────────────────────────────────
+// 타워마다 잘 잡는 등급이 달라, 물량으로 도배하는 대신 조합을 짜야 한다.
+const MOB_CLASSES = {
+  small:  { id:'small',  name:'소형', tag:'S', color:'#4ade80', desc:'빠르고 약하다 · 물량으로 온다' },
+  medium: { id:'medium', name:'중형', tag:'M', color:'#818cf8', desc:'균형 잡힌 주력' },
+  large:  { id:'large',  name:'대형', tag:'L', color:'#f59e0b', desc:'느리지만 단단하다' },
+  air:    { id:'air',    name:'비행', tag:'A', color:'#c084fc', desc:'다른 항로로 가로질러 온다' }
+};
+const MOB_CLASS_ORDER = ['small', 'medium', 'large', 'air'];
+
+// 타워 × 등급 피해 배율. 행 합이 비슷하도록 잡아 "무조건 좋은 타워"가 없게 했다.
+const TOWER_AFFINITY = {
+  arrow:  { small:1.25, medium:1.00, large:0.60, air:0.75 },
+  frost:  { small:1.10, medium:1.25, large:0.70, air:0.50 },
+  cannon: { small:0.65, medium:1.10, large:1.50, air:0.30 },
+  sniper: { small:0.70, medium:1.05, large:1.45, air:1.20 },
+  tesla:  { small:1.40, medium:0.90, large:0.55, air:1.60 }
+};
+const HERO_AFFINITY = { small:1.00, medium:1.00, large:0.85, air:0.55 };
+
+function affinityOf(towerTypeId, enemy) {
+  const row = TOWER_AFFINITY[towerTypeId];
+  if (!row) return 1;
+  const cls = (ENEMY_TYPES[enemy.typeId] || {}).cls || 'medium';
+  return row[cls] !== undefined ? row[cls] : 1;
+}
+// 상성 표시용 — 1.2 이상이면 강함, 0.8 이하면 약함
+function affinityLabel(mult) {
+  if (mult >= 1.2) return { txt:'강', color:'#22c55e' };
+  if (mult <= 0.8) return { txt:'약', color:'#ef4444' };
+  return { txt:'—', color:'#475569' };
 }
 
 // ─── Tower Types ─────────────────────────────────────────────────────────────
@@ -75,9 +120,16 @@ const TOWER_TYPES = {
     pierceArmor: true, targetMode:'strongest',
     color:'#e879f9', projColor:'#f0abfc', icon:'🎯',
     desc:'초장거리·방어 무시'
+  },
+  tesla: {
+    id:'tesla', name:'번개탑', cost:22,
+    dmg:6, spd:1.4, range: CELL_W * 2.6,
+    chain: 2, chainRange: CELL_W * 1.5,
+    color:'#22d3ee', projColor:'#67e8f9', icon:'⚡',
+    desc:'대공 특화·연쇄'
   }
 };
-const TOWER_ORDER = ['arrow', 'frost', 'cannon', 'sniper'];
+const TOWER_ORDER = ['arrow', 'frost', 'cannon', 'sniper', 'tesla'];
 
 // ─── 해금 (로비에서 보석으로 영구 개방) ──────────────────────────────────────
 // 처음부터 열려 있는 것은 화살탑 · 궁수 · 검사뿐이다.
@@ -88,6 +140,7 @@ const UNLOCK_DEFS = [
   { id:'cannon',   kind:'tower', cost:8,  name:'대포탑',   icon:'💣',  desc:'착탄 범위 피해' },
   { id:'guardian', kind:'unit',  cost:9,  name:'방패병',   icon:'🛡️', desc:'전방 방벽 · 도발' },
   { id:'mage',     kind:'unit',  cost:12, name:'마법사',   icon:'✨',  desc:'자기 중심 광역' },
+  { id:'tesla',    kind:'tower', cost:11, name:'번개탑',   icon:'⚡',  desc:'대공 특화 · 연쇄' },
   { id:'sniper',   kind:'tower', cost:14, name:'저격탑',   icon:'🎯',  desc:'초장거리 · 방어 무시' },
 ];
 const UNLOCK_TOTAL_COST = UNLOCK_DEFS.reduce((a, u) => a + u.cost, 0);
@@ -138,12 +191,21 @@ function towerSellValue(t) {
 }
 
 // ─── Defense Enemy Types ─────────────────────────────────────────────────────
+// cls로 타워 상성이 결정된다. flying이면 ∞ 경로 대신 항로를 탄다.
 const ENEMY_TYPES = {
-  goblin: { id:'goblin', name:'고블린',   hp:14,  spd:1.10, dmg:2,  reward:3,  armor:0, color:'#4ade80', radius:9  },
-  runner: { id:'runner', name:'늑대',     hp:12,  spd:2.30, dmg:2,  reward:5,  armor:0, color:'#fbbf24', radius:8  },
-  orc:    { id:'orc',    name:'오크',     hp:40,  spd:0.70, dmg:6,  reward:8,  armor:1, color:'#818cf8', radius:13 },
-  brute:  { id:'brute',  name:'강철오크', hp:95,  spd:0.50, dmg:12, reward:18, armor:3, color:'#94a3b8', radius:15 },
-  boss:   { id:'boss',   name:'던전보스', hp:400, spd:0.40, dmg:20, reward:50, armor:5, color:'#ef4444', radius:20 }
+  goblin: { id:'goblin', name:'고블린',   cls:'small',  hp:14,  spd:1.10, dmg:2,  reward:3,  armor:0, color:'#4ade80', radius:9  },
+  runner: { id:'runner', name:'늑대',     cls:'small',  hp:12,  spd:2.30, dmg:2,  reward:5,  armor:0, color:'#fbbf24', radius:8  },
+  orc:    { id:'orc',    name:'오크',     cls:'medium', hp:40,  spd:0.70, dmg:6,  reward:8,  armor:1, color:'#818cf8', radius:13 },
+  brute:  { id:'brute',  name:'강철오크', cls:'large',  hp:95,  spd:0.50, dmg:12, reward:18, armor:3, color:'#94a3b8', radius:15 },
+  boss:   { id:'boss',   name:'던전보스', cls:'large',  hp:400, spd:0.40, dmg:20, reward:50, armor:5, color:'#ef4444', radius:20 },
+
+  // ── 비행 ──
+  // 지상보다 빠르고 항로가 짧다. 대신 대포탑·서리탑은 거의 못 맞힌다.
+  bat:    { id:'bat',    name:'박쥐',     cls:'air',    hp:26,  spd:1.50, dmg:4,  reward:7,  armor:0, color:'#c084fc', radius:9,  flying:true },
+  wyvern: { id:'wyvern', name:'비룡',     cls:'air',    hp:150, spd:0.90, dmg:16, reward:30, armor:2, color:'#7c3aed', radius:15, flying:true },
+
+  // ── 현상수배 (플레이어가 직접 소환) ──
+  bounty: { id:'bounty', name:'현상수배', cls:'large',  hp:340, spd:0.55, dmg:26, reward:40, armor:4, color:'#fbbf24', radius:18, isBounty:true }
 };
 const ENEMY_CELL_SPD = CELL_W;
 // 웨이브가 오를수록 상단 적도 강해진다
@@ -336,33 +398,33 @@ const WAVE_DEFS = [
   { defenseEnemies:[{type:'goblin',count:9,interval:1100},{type:'orc',count:3,interval:3500}], arenaPool:[['goblin',7],['hound',5],['orc',5]] },
   { defenseEnemies:[{type:'goblin',count:10,interval:1000},{type:'orc',count:3,interval:3200}], arenaPool:[['goblin',6],['hound',5],['orc',6]] },
   // ── 1-4 : 다크아처 · 접근 강제 ───────────────────────────────────────────
-  { defenseEnemies:[{type:'goblin',count:8,interval:1000},{type:'brute',count:1,interval:6000}], arenaPool:[['goblin',6],['hound',5],['orc',6],['darkarch',3]] },
-  { defenseEnemies:[{type:'orc',count:4,interval:2500},{type:'brute',count:1,interval:6000}], arenaPool:[['goblin',5],['hound',5],['orc',6],['darkarch',4]] },
-  { defenseEnemies:[{type:'orc',count:5,interval:2200},{type:'brute',count:2,interval:5000}], arenaPool:[['goblin',4],['hound',5],['orc',7],['darkarch',5]] },
+  { defenseEnemies:[{type:'goblin',count:8,interval:1000},{type:'brute',count:1,interval:6000},{type:'bat',count:3,interval:3000}], arenaPool:[['goblin',6],['hound',5],['orc',6],['darkarch',3]] },
+  { defenseEnemies:[{type:'orc',count:4,interval:2500},{type:'brute',count:1,interval:6000},{type:'bat',count:4,interval:2600}], arenaPool:[['goblin',5],['hound',5],['orc',6],['darkarch',4]] },
+  { defenseEnemies:[{type:'orc',count:5,interval:2200},{type:'brute',count:2,interval:5000},{type:'bat',count:5,interval:2400}], arenaPool:[['goblin',4],['hound',5],['orc',7],['darkarch',5]] },
   // ── 1-5 : 오우거 · 고타격 저속 ───────────────────────────────────────────
-  { defenseEnemies:[{type:'runner',count:6,interval:1400},{type:'orc',count:3,interval:2200}], arenaPool:[['goblin',4],['hound',5],['orc',6],['darkarch',4],['ogre',2]] },
-  { defenseEnemies:[{type:'orc',count:5,interval:2000},{type:'brute',count:2,interval:4500}], arenaPool:[['hound',5],['orc',6],['darkarch',4],['ogre',3]] },
-  { defenseEnemies:[{type:'goblin',count:8,interval:800},{type:'brute',count:3,interval:4000}], arenaPool:[['hound',5],['orc',6],['darkarch',4],['ogre',4]] },
+  { defenseEnemies:[{type:'runner',count:6,interval:1400},{type:'orc',count:3,interval:2200},{type:'bat',count:5,interval:2200}], arenaPool:[['goblin',4],['hound',5],['orc',6],['darkarch',4],['ogre',2]] },
+  { defenseEnemies:[{type:'orc',count:5,interval:2000},{type:'brute',count:2,interval:4500},{type:'bat',count:6,interval:2000}], arenaPool:[['hound',5],['orc',6],['darkarch',4],['ogre',3]] },
+  { defenseEnemies:[{type:'goblin',count:8,interval:800},{type:'brute',count:3,interval:4000},{type:'bat',count:7,interval:1800}], arenaPool:[['hound',5],['orc',6],['darkarch',4],['ogre',4]] },
   // ── 1-6 : 보스 등장 · 돌진 패턴 ──────────────────────────────────────────
-  { defenseEnemies:[{type:'orc',count:6,interval:1800},{type:'brute',count:2,interval:4000}], arenaPool:[['hound',5],['orc',6],['darkarch',4],['ogre',4],['boss',1]] },
-  { defenseEnemies:[{type:'runner',count:8,interval:1100},{type:'orc',count:5,interval:1800}], arenaPool:[['hound',5],['orc',5],['darkarch',4],['ogre',5],['boss',1]] },
-  { defenseEnemies:[{type:'orc',count:7,interval:1600},{type:'brute',count:3,interval:3600}], arenaPool:[['hound',4],['orc',5],['darkarch',4],['ogre',5],['boss',2]] },
+  { defenseEnemies:[{type:'orc',count:6,interval:1800},{type:'brute',count:2,interval:4000},{type:'bat',count:6,interval:2000}], arenaPool:[['hound',5],['orc',6],['darkarch',4],['ogre',4],['boss',1]] },
+  { defenseEnemies:[{type:'runner',count:8,interval:1100},{type:'orc',count:5,interval:1800},{type:'bat',count:8,interval:1600}], arenaPool:[['hound',5],['orc',5],['darkarch',4],['ogre',5],['boss',1]] },
+  { defenseEnemies:[{type:'orc',count:7,interval:1600},{type:'brute',count:3,interval:3600},{type:'bat',count:8,interval:1500}], arenaPool:[['hound',4],['orc',5],['darkarch',4],['ogre',5],['boss',2]] },
   // ── 1-7 : 엘리트 확률 상승 · 단일 고위협 ─────────────────────────────────
-  { defenseEnemies:[{type:'orc',count:7,interval:1500},{type:'brute',count:3,interval:3400}], arenaPool:[['hound',4],['orc',5],['darkarch',5],['ogre',5],['boss',2]], eliteBonus:0.10 },
-  { defenseEnemies:[{type:'orc',count:8,interval:1400},{type:'runner',count:6,interval:1600}], arenaPool:[['hound',4],['orc',4],['darkarch',5],['ogre',6],['boss',3]], eliteBonus:0.12 },
-  { defenseEnemies:[{type:'orc',count:9,interval:1300},{type:'brute',count:4,interval:3000}], arenaPool:[['hound',4],['orc',4],['darkarch',5],['ogre',6],['boss',3]], eliteBonus:0.14 },
+  { defenseEnemies:[{type:'orc',count:7,interval:1500},{type:'brute',count:3,interval:3400},{type:'wyvern',count:1,interval:9000}], arenaPool:[['hound',4],['orc',5],['darkarch',5],['ogre',5],['boss',2]], eliteBonus:0.10 },
+  { defenseEnemies:[{type:'orc',count:8,interval:1400},{type:'runner',count:6,interval:1600},{type:'bat',count:8,interval:1500},{type:'wyvern',count:1,interval:8000}], arenaPool:[['hound',4],['orc',4],['darkarch',5],['ogre',6],['boss',3]], eliteBonus:0.12 },
+  { defenseEnemies:[{type:'orc',count:9,interval:1300},{type:'brute',count:4,interval:3000},{type:'wyvern',count:2,interval:7000}], arenaPool:[['hound',4],['orc',4],['darkarch',5],['ogre',6],['boss',3]], eliteBonus:0.14 },
   // ── 1-8 : 오우거 · 보스 혼합 · 복합 압력 ─────────────────────────────────
-  { defenseEnemies:[{type:'orc',count:8,interval:1200},{type:'brute',count:4,interval:2800}], arenaPool:[['hound',3],['orc',4],['darkarch',5],['ogre',7],['boss',4]], eliteBonus:0.14 },
-  { defenseEnemies:[{type:'brute',count:5,interval:2600},{type:'runner',count:8,interval:1000}], arenaPool:[['hound',3],['darkarch',5],['ogre',7],['boss',5]], eliteBonus:0.16 },
-  { defenseEnemies:[{type:'brute',count:6,interval:2400},{type:'orc',count:6,interval:1600}], arenaPool:[['hound',3],['darkarch',4],['ogre',7],['boss',6]], eliteBonus:0.16 },
+  { defenseEnemies:[{type:'orc',count:8,interval:1200},{type:'brute',count:4,interval:2800},{type:'bat',count:9,interval:1400},{type:'wyvern',count:2,interval:6500}], arenaPool:[['hound',3],['orc',4],['darkarch',5],['ogre',7],['boss',4]], eliteBonus:0.14 },
+  { defenseEnemies:[{type:'brute',count:5,interval:2600},{type:'runner',count:8,interval:1000},{type:'wyvern',count:2,interval:6000}], arenaPool:[['hound',3],['darkarch',5],['ogre',7],['boss',5]], eliteBonus:0.16 },
+  { defenseEnemies:[{type:'brute',count:6,interval:2400},{type:'orc',count:6,interval:1600},{type:'bat',count:10,interval:1300},{type:'wyvern',count:3,interval:5500}], arenaPool:[['hound',3],['darkarch',4],['ogre',7],['boss',6]], eliteBonus:0.16 },
   // ── 1-9 : 마왕 · 상하단 모두 보스급 ──────────────────────────────────────
-  { defenseEnemies:[{type:'brute',count:6,interval:2200},{type:'boss',count:1,interval:9000}], arenaPool:[['darkarch',4],['ogre',6],['boss',6],['warlord',1]], eliteBonus:0.18 },
-  { defenseEnemies:[{type:'brute',count:7,interval:2000},{type:'boss',count:1,interval:8000}], arenaPool:[['darkarch',4],['ogre',5],['boss',7],['warlord',2]], eliteBonus:0.18 },
-  { defenseEnemies:[{type:'brute',count:8,interval:1800},{type:'boss',count:2,interval:6000}], arenaPool:[['darkarch',3],['ogre',5],['boss',8],['warlord',3]], eliteBonus:0.20 },
+  { defenseEnemies:[{type:'brute',count:6,interval:2200},{type:'boss',count:1,interval:9000},{type:'wyvern',count:3,interval:5000}], arenaPool:[['darkarch',4],['ogre',6],['boss',6],['warlord',1]], eliteBonus:0.18 },
+  { defenseEnemies:[{type:'brute',count:7,interval:2000},{type:'boss',count:1,interval:8000},{type:'bat',count:10,interval:1200},{type:'wyvern',count:3,interval:4800}], arenaPool:[['darkarch',4],['ogre',5],['boss',7],['warlord',2]], eliteBonus:0.18 },
+  { defenseEnemies:[{type:'brute',count:8,interval:1800},{type:'boss',count:2,interval:6000},{type:'wyvern',count:4,interval:4500}], arenaPool:[['darkarch',3],['ogre',5],['boss',8],['warlord',3]], eliteBonus:0.20 },
   // ── 1-10 : 최종 · 마왕 다수 + 최대 밀도 ──────────────────────────────────
-  { defenseEnemies:[{type:'brute',count:8,interval:1600},{type:'boss',count:2,interval:5000}], arenaPool:[['ogre',4],['boss',8],['warlord',4]], eliteBonus:0.20, spawnMult:0.85 },
-  { defenseEnemies:[{type:'brute',count:9,interval:1500},{type:'boss',count:3,interval:4500}], arenaPool:[['ogre',3],['boss',8],['warlord',6]], eliteBonus:0.22, spawnMult:0.80 },
-  { defenseEnemies:[{type:'boss',count:5,interval:3500},{type:'brute',count:8,interval:1600}], arenaPool:[['ogre',2],['boss',7],['warlord',9]], eliteBonus:0.25, spawnMult:0.72 },
+  { defenseEnemies:[{type:'brute',count:8,interval:1600},{type:'boss',count:2,interval:5000},{type:'bat',count:12,interval:1100},{type:'wyvern',count:4,interval:4200}], arenaPool:[['ogre',4],['boss',8],['warlord',4]], eliteBonus:0.20, spawnMult:0.85 },
+  { defenseEnemies:[{type:'brute',count:9,interval:1500},{type:'boss',count:3,interval:4500},{type:'wyvern',count:5,interval:4000}], arenaPool:[['ogre',3],['boss',8],['warlord',6]], eliteBonus:0.22, spawnMult:0.80 },
+  { defenseEnemies:[{type:'boss',count:5,interval:3500},{type:'brute',count:8,interval:1600},{type:'bat',count:12,interval:1000},{type:'wyvern',count:6,interval:3500}], arenaPool:[['ogre',2],['boss',7],['warlord',9]], eliteBonus:0.25, spawnMult:0.72 },
 ];
 
 // 가중치 풀에서 몹 id 하나를 뽑는다
@@ -392,6 +454,30 @@ const CAVE_LEVELS = [
   { label:'심연 동굴', statMult:2.6, goldMult:3.2, upgradeCost: 240 },
   { label:'지옥 동굴', statMult:3.5, goldMult:4.5, upgradeCost: 480 }
 ];
+// ─── 현상수배 몹 ─────────────────────────────────────────────────────────────
+// 준비 단계에서 플레이어가 직접 불러오는 강한 적. 잡으면 보석, 놓치면 큰 피해.
+// 스테이지당 한 번씩 기회가 생기고, 부를수록 강해지며 보상도 조금씩 오른다.
+// 보석 수급을 플레이어가 조절할 수 있게 하되, 실력 없이는 못 가져가게 만든다.
+const BOUNTY_HP_ESCALATION = 0.85;   // 소환 1회당 HP +85%
+const BOUNTY_SPAWN_DELAY   = 8;      // 웨이브 시작 후 등장까지(초)
+function bountyCharges(waveIndex) { return Math.floor((waveIndex || 0) / 3) + 1; }
+function bountyHp(n, waveIndex) {
+  return Math.round(ENEMY_TYPES.bounty.hp * (1 + (n || 0) * BOUNTY_HP_ESCALATION)
+                    * (1 + (waveIndex || 0) * DEF_WAVE_HP_SCALE));
+}
+function bountyGems(n)  { return 1 + Math.floor((n || 0) / 2); }   // 1,1,2,2,3,3…
+function bountyGold(n, waveIndex) {
+  return Math.round(ENEMY_TYPES.bounty.reward * (1 + (n || 0) * 0.5) * (1 + (waveIndex || 0) * 0.05));
+}
+
+// ─── 상단 개입 수단 ──────────────────────────────────────────────────────────
+// 웨이브가 시작되면 상단은 손댈 곳이 없었다. 배치형은 유지하되
+// 웨이브 중에 쓸 수 있는 카드 하나를 준다.
+const OVERLOAD_DURATION = 5;    // 과부하 지속(초)
+const OVERLOAD_COOLDOWN = 20;   // 재사용 대기(초)
+const OVERLOAD_SPD_MULT = 3;    // 공격속도 배율
+const HERO_DEF_MOVE_SPD = 105;  // 상단 영웅 이동속도(px/s)
+
 const CAVE_MAX_LEVEL = CAVE_LEVELS.length - 1;
 
 // 몹 강화 곡선.

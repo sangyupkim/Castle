@@ -219,7 +219,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <div class="wrap">
 <header class="cover">
-  <div class="eyebrow">Game Design Document · v2.4 · 골드 사용처</div>
+  <div class="eyebrow">Game Design Document · v2.5 · 상단 전선 개편</div>
   <h1>듀얼 프론티어</h1>
   <p class="tagline">한 화면에서 두 개의 전선을 동시에 굴리는 모바일 웹 로그라이트.
      위는 배치해서 지키고, 아래는 직접 뛰어들어 벌어온다.</p>
@@ -228,7 +228,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
     <div><dt>플랫폼</dt><dd>모바일 웹 (480×800 캔버스)</dd></div>
     <div><dt>1회 플레이</dt><dd>15~35분</dd></div>
     <div><dt>현재 볼륨</dt><dd>스테이지 1 · 30웨이브</dd></div>
-    <div><dt>이번 개정</dt><dd>아레나 · 로비 구현 완료 (v2.2) — 수치는 실측치</dd></div>
+    <div><dt>이번 개정</dt><dd>상단에 등급 상성 · 비행 · 현상수배 (v2.5)</dd></div>
   </dl>
 </header>
 
@@ -511,35 +511,110 @@ v1.0의 "그룹 순환 + 보상 체감" 구조를 이 압력 곡선이 대체한
 </section>
 
 <section id="s5">
-<h2>05 — 상단 방어선 <span class="lane d">Defense</span></h2>
-<h3>배치형 — v1.0에서 변경 없음</h3>
-<p>9×7 격자 위 ∞(8자) 경로. 경로가 같은 칸을 두 번 지나므로 교차 지점 주변이 가장 효율적이다.
-웨이브가 시작되면 개입할 수 없고, 준비 단계의 배치가 그대로 결과가 된다.</p>
+<h2>05 — 상단 방어선 <span class="lane d">Defense</span> <span class="rev">v2.5 개편</span></h2>
+<h3>물량이 아니라 조합과 배치</h3>
+<p class="lede">v2.4까지 상단은 v1.0 그대로였다. 실측에서 <strong>만렙 편성이 12웨이브 동안
+기지 HP 220을 한 번도 안 잃었다</strong> — 격자가 차면 상단은 완전히 자동이 되고,
+같은 타워를 계속 짓는 것 외에 할 일이 없었기 때문이다. 세 가지를 넣어 배치를 다시 문제로 만든다.</p>
 
+<h4>① 몬스터 등급 4종 × 타워 상성</h4>
+<p>적마다 등급이 있고, 타워마다 잘 잡는 등급이 다르다.
+<strong>어떤 타워도 모든 등급에 좋지 않다</strong> — 행 합을 비슷하게 맞춰 "무조건 좋은 타워"를 없앴다.</p>
 <div class="tw"><table>
-<caption>타워 4종 · Lv.1 기준</caption>
+<caption>타워 × 등급 피해 배율. 상성은 방어력 차감보다 먼저 곱해져, 약한 조합은 이중으로 안 통한다</caption>
+<thead><tr><th>타워</th><th class="num">🔹 소형</th><th class="num">🔸 중형</th><th class="num">🔶 대형</th><th class="num">🔺 비행</th><th>성격</th></tr></thead>
+<tbody>
+<tr><td>🏹 화살탑</td><td class="num">1.25</td><td class="num">1.00</td><td class="num">0.60</td><td class="num">0.75</td><td class="wrap">싸고 물량에 강하다</td></tr>
+<tr><td>❄️ 서리탑</td><td class="num">1.10</td><td class="num">1.25</td><td class="num">0.70</td><td class="num">0.50</td><td class="wrap">중형 특화 + 감속</td></tr>
+<tr><td>💣 대포탑</td><td class="num">0.65</td><td class="num">1.10</td><td class="num">1.50</td><td class="num">0.30</td><td class="wrap">대형 특화 · 하늘엔 무력</td></tr>
+<tr><td>🎯 저격탑</td><td class="num">0.70</td><td class="num">1.05</td><td class="num">1.45</td><td class="num">1.20</td><td class="wrap">대형·비행 · 방어 관통</td></tr>
+<tr><td>⚡ 번개탑 <span class="rev">신규</span></td><td class="num">1.40</td><td class="num">0.90</td><td class="num">0.55</td><td class="num">1.60</td><td class="wrap">대공 특화 + 2회 연쇄</td></tr>
+<tr class="total"><td>👑 영웅</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">0.85</td><td class="num">0.55</td><td class="wrap">하늘은 영웅으로 못 막는다</td></tr>
+</tbody></table></div>
+<p>등급 태그(S/M/L/A)는 적의 몸통에 직접 찍히고, 타워 카드와 상세 패널에도 배율이 뜬다.
+상성이 갈리는 순간에는 <strong>"효과적!" / "저항"</strong>이 떠서 왜 안 죽는지 알 수 있게 했다.</p>
+
+<h4>② 비행 — 다른 길로 온다</h4>
+<p>처음 설계는 "기지로 직행하는 빠른 적"이었는데, 9×7 격자에서 위에서 아래는 너무 짧아
+즉사기가 된다. <strong>속도가 아니라 경로를 다르게</strong> 하는 쪽으로 바꿨다.</p>
+<div class="tw"><table>
+<thead><tr><th>경로</th><th class="num">길이</th><th>지나는 곳</th><th class="num">도달 시간</th></tr></thead>
+<tbody>
+<tr><td>∞ 지상 경로</td><td class="num">1,236px</td><td class="wrap">격자 중앙 (col 1–7, row 1–4)</td><td class="num">고블린 21초 · 늑대 10초</td></tr>
+<tr class="total"><td>🔺 항로 (좌·우)</td><td class="num">603px</td><td class="wrap">판 바깥을 크게 돎 (col 0·8, row 5–6)</td><td class="num">박쥐 7.6초 · 비룡 12.6초</td></tr>
+</tbody></table></div>
+<div class="note">
+<p><strong>처음엔 판을 가로지르는 대각선으로 잡았다가 실측에서 폐기했다.</strong>
+그 대각선이 하필 격자 중앙 — ∞ 경로에 붙여 지은 타워가 이미 덮고 있는 자리 — 를 지나가서
+비행이 전혀 위협이 되지 않았다(도달 0마리). 바깥을 도는 경로로 바꾸자 의도대로 작동한다.</p>
+</div>
+<div class="tw"><table>
+<caption>웨이브 12 (박쥐 5) · 상단만 분리 측정 · 타워 Lv.3</caption>
+<thead><tr><th>배치</th><th class="num">타워</th><th class="num">웨이브 후 기지 HP</th></tr></thead>
+<tbody>
+<tr><td>∞ 경로에만 촘촘히</td><td class="num">8기</td><td class="num">50</td></tr>
+<tr><td>같은 자리에 화살탑 3기 <strong>추가</strong></td><td class="num">11기</td><td class="num">50</td></tr>
+<tr class="total"><td>하늘길에 ⚡번개탑 3기</td><td class="num">11기</td><td class="num">100</td></tr>
+</tbody></table></div>
+<p><strong>같은 자리에 타워를 더 지어도 결과가 같다.</strong> 물량이 답이 아니게 됐다는 뜻이고,
+이번 개편이 노린 것이 정확히 이 표다. 항로는 준비 화면에 점선으로 미리 표시된다.</p>
+
+<h4>③ 웨이브 중 개입 수단</h4>
+<div class="tw"><table>
+<thead><tr><th>수단</th><th>조작</th><th>내용</th></tr></thead>
+<tbody>
+<tr><td>⚡ 타워 과부하</td><td class="wrap">전투 중 타워 탭</td><td class="wrap">5초간 공격속도 ×3 · 재사용 20초</td></tr>
+<tr><td>👑 영웅 이동</td><td class="wrap">전투 중 빈 칸 탭</td><td class="wrap">상단 영웅이 그 자리로 (105px/s)</td></tr>
+</tbody></table></div>
+<p>배치형이라는 성격은 유지하되, 60초 동안 아무것도 못 하던 상태를 없앤다.
+과부하는 하나뿐이라 <strong>어느 타워에, 언제</strong>가 실제 판단이 된다.</p>
+
+<h4>타워 5종 · Lv.1 기준</h4>
+<div class="tw"><table>
 <thead><tr><th>타워</th><th class="num">비용</th><th class="num">공격</th><th class="num">공속</th><th class="num">사거리</th><th>역할</th></tr></thead>
 <tbody>
-<tr><td>🏹 화살탑</td><td class="num">5</td><td class="num">2</td><td class="num">1.00/s</td><td class="num">2.4칸</td><td class="wrap">저렴한 단일 연사</td></tr>
+<tr><td>🏹 화살탑</td><td class="num">5</td><td class="num">2</td><td class="num">1.00/s</td><td class="num">2.4칸</td><td class="wrap">저렴한 단일 연사 · 처음부터 열려 있음</td></tr>
 <tr><td>❄️ 서리탑</td><td class="num">12</td><td class="num">1</td><td class="num">0.90/s</td><td class="num">2.2칸</td><td class="wrap">이동속도 45% 감소 (1.6초)</td></tr>
 <tr><td>💣 대포탑</td><td class="num">18</td><td class="num">8</td><td class="num">0.50/s</td><td class="num">2.0칸</td><td class="wrap">반경 40px 범위 피해(50%)</td></tr>
+<tr><td>⚡ 번개탑 <span class="rev">신규</span></td><td class="num">22</td><td class="num">6</td><td class="num">1.40/s</td><td class="num">2.6칸</td><td class="wrap">대공 특화 · 주변 2회 연쇄(60%)</td></tr>
 <tr><td>🎯 저격탑</td><td class="num">26</td><td class="num">18</td><td class="num">0.35/s</td><td class="num">5.0칸</td><td class="wrap">방어 관통 · 최대 체력 우선</td></tr>
 </tbody></table></div>
-<p>레벨 1~3 (공격 ×1.0/1.7/2.6) · 동종 건설비 +28% 체증 · 판매 시 투자액 60% 환급 ·
-스탯은 발사할 때마다 현재 강화를 반영해 계산.</p>
+<p>레벨 1~5 (공격 ×1.0/1.7/2.6/3.8/5.4) · 동종 건설비 +28% 체증 · 판매 시 60% 환급 ·
+스탯은 발사할 때마다 현재 강화를 반영해 계산. 타워는 <strong>상성이 좋은 표적을 우선</strong>
+노려서, 대포탑이 박쥐를 붙잡고 헛되이 쏘지 않는다.</p>
 
+<h4>침입자 8종</h4>
 <div class="tw"><table>
-<caption>침입자 5종 · 웨이브 스케일링 적용 전</caption>
-<thead><tr><th>적</th><th class="num">HP</th><th class="num">속도</th><th class="num">기지 피해</th><th class="num">방어력</th><th class="num">골드</th></tr></thead>
+<caption>웨이브 스케일링 적용 전</caption>
+<thead><tr><th>적</th><th>등급</th><th class="num">HP</th><th class="num">속도</th><th class="num">기지 피해</th><th class="num">방어력</th><th class="num">골드</th></tr></thead>
 <tbody>
-<tr><td>🟢 고블린</td><td class="num">14</td><td class="num">1.10</td><td class="num">2</td><td class="num">0</td><td class="num">3</td></tr>
-<tr><td>🐺 늑대</td><td class="num">12</td><td class="num">2.30</td><td class="num">2</td><td class="num">0</td><td class="num">5</td></tr>
-<tr><td>👾 오크</td><td class="num">40</td><td class="num">0.70</td><td class="num">6</td><td class="num">1</td><td class="num">8</td></tr>
-<tr><td>🛡 강철오크</td><td class="num">95</td><td class="num">0.50</td><td class="num">12</td><td class="num">3</td><td class="num">18</td></tr>
-<tr><td>💀 던전보스</td><td class="num">400</td><td class="num">0.40</td><td class="num">20</td><td class="num">5</td><td class="num">50</td></tr>
+<tr><td>🟢 고블린</td><td>🔹 소형</td><td class="num">14</td><td class="num">1.10</td><td class="num">2</td><td class="num">0</td><td class="num">3</td></tr>
+<tr><td>🐺 늑대</td><td>🔹 소형</td><td class="num">12</td><td class="num">2.30</td><td class="num">2</td><td class="num">0</td><td class="num">5</td></tr>
+<tr><td>👾 오크</td><td>🔸 중형</td><td class="num">40</td><td class="num">0.70</td><td class="num">6</td><td class="num">1</td><td class="num">8</td></tr>
+<tr><td>🛡 강철오크</td><td>🔶 대형</td><td class="num">95</td><td class="num">0.50</td><td class="num">12</td><td class="num">3</td><td class="num">18</td></tr>
+<tr><td>💀 던전보스</td><td>🔶 대형</td><td class="num">400</td><td class="num">0.40</td><td class="num">20</td><td class="num">5</td><td class="num">50</td></tr>
+<tr><td>🦇 박쥐 <span class="rev">신규</span></td><td>🔺 비행</td><td class="num">26</td><td class="num">1.50</td><td class="num">4</td><td class="num">0</td><td class="num">7</td></tr>
+<tr><td>🐉 비룡 <span class="rev">신규</span></td><td>🔺 비행</td><td class="num">150</td><td class="num">0.90</td><td class="num">16</td><td class="num">2</td><td class="num">30</td></tr>
+<tr class="total"><td>💰 현상수배 <span class="rev">신규</span></td><td>🔶 대형</td><td class="num">340↑</td><td class="num">0.55</td><td class="num">26</td><td class="num">4</td><td class="num">40↑</td></tr>
 </tbody></table></div>
 <p>스케일링: HP <span class="mono">×(1+웨이브×0.22)</span> · 물량 <span class="mono">×(1+웨이브×0.07)</span> ·
-방어력 <span class="mono">+⌊웨이브÷5⌋</span>. 방어력 증가가 핵심 압박이며, 후반에는 저격탑이 필수 해답이 된다.</p>
+방어력 <span class="mono">+⌊웨이브÷5⌋</span>. 비행은 <strong>웨이브 10(1-4)부터</strong> 박쥐로 시작해
+<strong>웨이브 19(1-7)부터</strong> 비룡이 섞인다 — 번개탑 해금(💎11)이 늦으면 그대로 새어나간다.</p>
+
+<h4>💰 현상수배 — 보석 수급을 플레이어가 조절한다</h4>
+<p>준비 화면에서 <strong>직접 불러오는</strong> 강한 적. 잡으면 보석, 놓치면 성벽에 큰 피해.
+스테이지마다 기회가 한 번씩 쌓이고, 부를수록 강해지며 보상도 조금씩 오른다.</p>
+<div class="tw"><table>
+<thead><tr><th class="num">소환 회차</th><th class="num">1</th><th class="num">2</th><th class="num">3</th><th class="num">4</th><th class="num">5</th><th class="num">6</th></tr></thead>
+<tbody>
+<tr><td>HP 배율</td><td class="num">×1.00</td><td class="num">×1.85</td><td class="num">×2.70</td><td class="num">×3.55</td><td class="num">×4.40</td><td class="num">×5.25</td></tr>
+<tr><td>💎 보상</td><td class="num">1</td><td class="num">1</td><td class="num">2</td><td class="num">2</td><td class="num">3</td><td class="num">3</td></tr>
+</tbody></table></div>
+<div class="note">
+<p><strong>실력 없이는 못 가져간다.</strong> 현상수배는 대형이라 대포탑·저격탑이 없으면
+피해 배율 0.60~0.70이 걸려 60초 안에 못 잡는다. 스크립트 플레이에서 잡을 수 없는데도
+부르게 했더니 첫 런 도달이 10.3 → 7로 떨어졌다 — 잘못 부르면 그만큼 아프다는 뜻이다.</p>
+</div>
 </section>
 
 <section id="s6">
@@ -1195,6 +1270,9 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
 <tr><td>웨이브당 처치수</td><td class="num">25 ~ 60</td><td class="num">완주 지향 42.6 · 후퇴 활용 36.3</td><td><span class="chip lo">달성</span></td></tr>
 <tr><td>동시 개체 수 피크</td><td class="num">≤ 28</td><td class="num">11 (상한 28)</td><td><span class="chip lo">달성</span></td></tr>
 <tr><td>프레임 (개체 28 + 상단)</td><td class="num">60fps</td><td class="num">60fps</td><td><span class="chip lo">달성</span></td></tr>
+<tr><td>첫 런 도달 (v2.5 상성·비행 적용)</td><td class="num">8 ~ 14</td><td class="num">10.3 (12·10·9)</td><td><span class="chip lo">달성</span></td></tr>
+<tr><td>상단 배치가 결과를 가르는가</td><td class="wrap">가른다</td><td class="wrap">같은 자리 +3기 = 무변화<br>하늘길 +3기 = 피해 0</td><td><span class="chip lo">달성</span></td></tr>
+<tr><td>만렙 편성 기지 피해</td><td class="wrap">유의미</td><td class="wrap">220 → 212 (13웨이브)</td><td><span class="chip hi">미달</span></td></tr>
 </tbody></table></div>
 <div class="note">
 <p><strong>v2.2에서는 웨이브당 처치가 19로 목표를 밑돌았다.</strong> 후퇴가 웨이브를 조기에
@@ -1383,10 +1461,22 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
 <p>Lv.1/Lv.2 모두 강화 목록이 비어 있어 45골드를 내도 변화가 없었다.
 <strong>해결됨</strong> — Lv.1에 영웅 단련·전투 교본, Lv.2에 영웅 각성·구원의 손·지휘 오라를 넣었다.</p>
 
-<h4><span class="chip md">중간</span> 상단이 여전히 정적</h4>
-<p>이번 개정은 하단만 바꾼다. 상단은 배치형으로 <strong>의도적으로 남겨</strong> 두 전선의 성격을
-갈라놓았지만, 후반에 격자가 타워로 차면 상단은 완전히 자동이 된다.
-비행 유닛이나 타워 무력화 같은 상단 고유 위협은 여전히 필요하다.</p>
+<h4><span class="chip lo">해결</span> 상단이 여전히 정적 <span class="rev">v2.5</span></h4>
+<p>격자가 차면 상단이 완전히 자동이 되던 문제. 5절의 세 가지 —
+등급 상성 · 비행 항로 · 웨이브 중 개입 — 으로 해결했다.
+<strong>같은 자리에 타워를 더 지어도 결과가 안 바뀌고, 하늘길에 대공을 놓으면 피해가 0이 된다</strong>는
+실측이 근거다.</p>
+
+<h4><span class="chip hi">높음</span> 만렙 편성이 사실상 무적 <span class="rev">v2.5 실측</span></h4>
+<p>스킬 27개 + 해금 전부를 갖춘 편성으로 돌리면 <strong>13웨이브 동안 기지 HP가 220 → 212밖에
+안 줄어든다.</strong> 상단 개편 후에도 거의 그대로다 — 타워 30기를 Lv.5까지 올리고 대공까지
+갖추면 어떤 조합도 뚫지 못한다.</p>
+<p><strong>이건 상단 콘텐츠로 풀 문제가 아니다.</strong> 로그라이트의 구조적 숙명이고,
+답은 두 가지다. ① <strong>서약을 실효화</strong> — 지금 서약은 기지 HP −20(220 중 20), 슬롯 −1(6→5)로
+만렙 상대로 너무 약하다. 배율형(적 HP ×2, 완주 수리 없음 등)으로 다시 잡아야 한다.
+② <strong>무한 모드</strong> — 30웨이브 이후 난이도가 계속 오르는 구간. 다음 개정의 본체다.</p>
+<p>같은 편성에서 <strong>골드도 12,100까지 쌓인다</strong> — v2.4의 사용처 3종으로도 이 규모는
+못 흡수한다. 서약·무한 모드와 함께 볼 항목이다.</p>
 
 <h4><span class="chip lo">낮음</span> 편성 슬롯 4칸 vs 유닛 5종</h4>
 <p>방패병(14G)·마법사(16G)가 비싸 초반에는 궁수·검사·치유사로 고정된다.
@@ -1422,13 +1512,18 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
 <tr><td rowspan="3"><strong>C</strong><br>기반 정리 <span class="chip lo">완료</span></td><td class="wrap">튜토리얼 전면 재작성 <span class="chip lo">완료</span></td><td class="wrap">8단계로 재작성</td></tr>
 <tr><td class="wrap">후퇴 인센티브 조정 <span class="chip lo">완료</span></td><td class="wrap">완주·후퇴·전멸 3단계 (8절)</td></tr>
 <tr><td class="wrap">골드 지출처 추가 <span class="chip lo">완료</span></td><td class="wrap">성벽 보수 · 리롤 · 타워 Lv.4~5 (12절)</td></tr>
-<tr><td rowspan="2"><strong>D</strong><br>깊이</td><td class="wrap">상단 고유 위협 (비행 · 타워 무력화)</td><td class="wrap">상단이 후반에 완전 자동화됨</td></tr>
+<tr><td rowspan="2"><strong>D</strong><br>상단 개편 <span class="chip lo">완료</span></td><td class="wrap">등급 상성 · 비행 항로 · 번개탑 · 현상수배 · 과부하</td><td class="wrap">완료 (5절)</td></tr>
 <tr><td class="wrap">아레나 지형 · 장애물</td><td class="wrap">위치 선정에 의미를 더함</td></tr>
-<tr><td rowspan="2"><strong>E</strong><br>볼륨</td><td class="wrap">스테이지 2 · 영웅 고유 스킬</td><td class="wrap">엔드게임</td></tr>
+<tr><td rowspan="2"><strong>E</strong><br>엔드게임</td><td class="wrap">서약 실효화 — 배율형으로 재설계</td><td class="wrap">만렙이 13웨이브 무피해 (16절)</td></tr>
+<tr><td class="wrap">30웨이브 이후 무한 모드</td><td class="wrap">난이도 상한과 골드 상한을 같이 푼다</td></tr>
+<tr><td rowspan="2"><strong>F</strong><br>볼륨</td><td class="wrap">스테이지 2 · 영웅 고유 스킬</td><td class="wrap">엔드게임</td></tr>
 <tr><td class="wrap">BGM · 업적 · 기록</td><td class="wrap">리텐션</td></tr>
 </tbody></table></div>
 <div class="note">
-<p><strong>A · B · C가 모두 끝났다.</strong> 다음은 D — 상단 고유 위협이다.</p>
+<p><strong>A · B · C · D가 끝났다.</strong> 다음은 E — 엔드게임이다.
+만렙 편성이 13웨이브 동안 기지 HP를 8밖에 안 잃는다는 실측이 나왔고,
+이건 상단·하단 콘텐츠를 더 넣어서 풀 문제가 아니다. <strong>서약을 배율형으로 다시 잡고
+30웨이브 이후 무한 모드를 붙이는 것</strong>이 순서다 — 후반 골드 상한도 같이 풀린다.</p>
 <p>그 다음이 D(상단 고유 위협 · 아레나 지형)다. 이번 개정으로 하단은 완전히 다른 게임이 됐지만
 <strong>상단은 그대로다</strong> — 두 전선의 성격을 갈라놓기 위한 의도적 선택이었으나,
 후반에 격자가 차면 상단은 완전히 자동이 된다. 비행 유닛이나 타워 무력화가 필요하다.</p>

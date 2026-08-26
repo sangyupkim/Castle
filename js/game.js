@@ -74,6 +74,7 @@ function newState() {
       dead:false, reviveTimer:0,
       defX: GRID_OX + 4*CELL_W + CELL_W/2,
       defY: GRID_OY + 3*CELL_H + CELL_H/2,
+      moveX: null, moveY: null,   // 웨이브 중 지정한 이동 목표
       atkCooldown:0
     },
     town: createTown(),
@@ -83,6 +84,9 @@ function newState() {
     activeUpgrades: [],
     wallRepairs:0,      // 이번 런에서 성벽을 몇 번 보수했는지 (비용 체증)
     rerolls:0,          // 이번 런에서 강화 카드를 몇 번 리롤했는지
+    bountyUsed:0,       // 현상수배를 몇 번 불렀는지 (강해지고 보상도 오른다)
+    bountyPending:false,// 이번 웨이브에 소환 예약됨
+    overloadReady:0,    // 타워 과부하 재사용까지 남은 시간
     hoveredCell:null,
     selectedTowerType:'arrow',
     resultBanked:false,
@@ -142,6 +146,7 @@ gs.battle = createBattle();
   gs.battle.totalGoldEarned = sv.totalGoldEarned || 0;
   gs.caveLevel  = Math.max(1, Math.min(5, sv.caveLevel||1));
   gs.wallRepairs = sv.wallRepairs || 0;
+  gs.bountyUsed  = sv.bountyUsed  || 0;
   gs.rerolls     = sv.rerolls     || 0;
   if (sv.townBuildings) {
     for (const [k, v] of Object.entries(sv.townBuildings)) {
@@ -204,7 +209,7 @@ window.addEventListener('keydown', e => {
   }
 
   switch (e.key) {
-    case '1': case '2': case '3': case '4': {
+    case '1': case '2': case '3': case '4': case '5': {
       const id = TOWER_ORDER[Number(e.key) - 1];
       if (id && isUnlocked(id)) { gs.selectedTowerType = id; gs.ui.towerAction = null; SFX.click(); }
       else if (id) { spawnFloaty('🔒 아직 해금되지 않았습니다', CW/2, UIBAR_Y-20, '#ef4444'); SFX.denied(); }
@@ -298,6 +303,37 @@ function tap({x,y}) {
     return;
   }
 
+  // ── 웨이브 중 상단 개입 ──────────────────────────────────────────────────
+  // 타워를 탭하면 과부하, 빈 곳을 탭하면 영웅이 그리로 이동한다.
+  if (wm.phase==='active' && gs.page==='battle' && y < UIBAR_Y) {
+    const cell = screenToCell(x, y);
+    if (cell) {
+      const tw = gs.towers.find(t => t.col===cell.c && t.row===cell.r);
+      if (tw) {
+        if (gs.overloadReady > 0) {
+          spawnFloaty(`재사용까지 ${Math.ceil(gs.overloadReady)}초`, x, y, '#64748b');
+          SFX.denied();
+        } else {
+          tw.overloadUntil  = OVERLOAD_DURATION;
+          gs.overloadReady  = OVERLOAD_COOLDOWN;
+          const ctr = cellCenter(tw.col, tw.row);
+          spawnFloaty('⚡ 과부하!', ctr.x, ctr.y - 18, '#fbbf24');
+          FX.ring(ctr.x, ctr.y, '#fbbf24', 12);
+          SFX.upgrade();
+        }
+        return;
+      }
+      // 빈 칸 → 영웅 이동 (상단에 배치돼 있을 때만)
+      if (gs.hero.placement==='defense' && !gs.hero.dead) {
+        const ctr = cellCenter(cell.c, cell.r);
+        gs.hero.moveX = ctr.x; gs.hero.moveY = ctr.y;
+        spawnFloaty('👑 이동', ctr.x, ctr.y - 14, COLORS.hero);
+        return;
+      }
+    }
+    return;
+  }
+
   // 기지 탭 → 마을 진입 (idle 상태에서만)
   if (wm.phase==='idle' && y<UIBAR_Y) {
     const cell=screenToCell(x,y);
@@ -324,6 +360,24 @@ function tap({x,y}) {
   if (gs.ui.towerAction && y<UIBAR_Y) {
     if (hitTest(x,y,gs.ui.towerUpgradeBtn||{})) { upgradeSelectedTower(x,y); return; }
     if (hitTest(x,y,gs.ui.towerRemoveBtn||{}))  { sellSelectedTower(x,y);    return; }
+  }
+
+  // 현상수배 소환 (준비 단계)
+  if (wm.phase==='idle' && hitTest(x,y,gs.ui.bountyBtn||{})) {
+    if (gs.bountyPending) {
+      gs.bountyPending = false;
+      spawnFloaty('소환 취소', x, y, '#64748b');
+      SFX.click();
+    } else if (gs.bountyUsed >= bountyCharges(gs.wave)) {
+      spawnFloaty('남은 소환 기회가 없습니다', x, y, '#ef4444');
+      SFX.denied();
+    } else {
+      gs.bountyPending = true;
+      gs.bountyUsed++;
+      spawnFloaty(`💰 ${gs.bountyUsed}번째 현상수배 예약`, x, y, '#fbbf24');
+      SFX.upgrade();
+    }
+    return;
   }
 
   // Idle phase: wave start buttons (UIBar or battle area)
@@ -622,6 +676,17 @@ function drawFloaties(ctx) {
 function onDefenseKill(e, byHero) {
   const tpl  = ENEMY_TYPES[e.typeId] || {};
   const gold = Math.max(1, Math.round((e.reward || 1) * BONUSES.defenseGoldMult));
+
+  // 현상수배 — 잡아야만 보석이 들어온다
+  if (e.gems > 0) {
+    gs.soulStones += e.gems;
+    gs.stats.totalGems = (gs.stats.totalGems || 0) + e.gems;
+    gs.stats.bountyKills = (gs.stats.bountyKills || 0) + 1;
+    spawnFloaty(`💎 +${e.gems}`, e.x, e.y - 30, '#a78bfa');
+    addLog(gs.battle, `💰 현상수배 처치! 보석 +${e.gems}`, '#a78bfa');
+    if (typeof FX !== 'undefined') { FX.ring(e.x, e.y, '#fbbf24', 26); FX.shake(6, 0.4); }
+    SaveManager.save(gs);
+  }
   gs.gold += gold;
   gs.battle.totalGoldEarned += gold;
   gs.battle.runKills = (gs.battle.runKills || 0) + 1;
@@ -646,6 +711,18 @@ function updateHeroDefense(dt) {
   if (hero.placement !== 'defense' || hero.dead) return;
   const lv = HERO_LEVELS[hero.level];
 
+  // 지정한 지점으로 이동 — 상단에도 포지셔닝이 생긴다
+  if (hero.moveX !== null && hero.moveY !== null) {
+    const dx = hero.moveX - hero.defX, dy = hero.moveY - hero.defY;
+    const d  = Math.hypot(dx, dy);
+    if (d < 3) { hero.moveX = hero.moveY = null; }
+    else {
+      const step = Math.min(d, HERO_DEF_MOVE_SPD * dt);
+      hero.defX += dx / d * step;
+      hero.defY += dy / d * step;
+    }
+  }
+
   // 공격
   hero.atkCooldown = Math.max(0, hero.atkCooldown - dt);
   if (hero.atkCooldown <= 0) {
@@ -653,7 +730,8 @@ function updateHeroDefense(dt) {
     if (best) {
       hero.atkCooldown = 1.0;
       const atk = Math.round((lv.atk + BONUSES.heroAtk) * BONUSES.heroStatMult);
-      hurtDefenseEnemy(best, atk, false, e => onDefenseKill(e, true));
+      const hAff = HERO_AFFINITY[best.cls || 'medium'] || 1;
+      hurtDefenseEnemy(best, atk, false, e => onDefenseKill(e, true), hAff);
       gs.projectiles.push({
         x: hero.defX, y: hero.defY, tx: best.x, ty: best.y,
         target: best, dmg: 0, color: '#f59e0b', spd: 420, visual: true
@@ -688,6 +766,7 @@ function killHero(state) {
   hero.dead = true;
   hero.hp = 0;
   hero.placement = 'none';
+  hero.moveX = hero.moveY = null;
   hero.reviveTimer = BONUSES.heroInstantRevive ? 0 : heroReviveDur();
   state.battle.ourTeam = state.battle.ourTeam.filter(u => !u.isHero);
   spawnFloaty('👑 영웅 전사!', CW/2, DEFENSE_H/2, '#ef4444');
@@ -761,6 +840,7 @@ function update(dt) {
       const dmg = Math.max(1, Math.round(e.dmg * (1 - BONUSES.baseDefPct)));
       gs.baseHP=Math.max(0,gs.baseHP-dmg);
       spawnFloaty(`-${dmg}HP`,CW/2,DEFENSE_H-25,'#ef4444');
+      if (e.isBounty) addLog(gs.battle, `💰 현상수배를 놓쳤습니다 — 성벽 -${dmg}HP`, '#ef4444');
       FX.shake(Math.min(8, 2 + dmg * 0.2), 0.3);
       SFX.baseHit();
       if (gs.baseHP<=0) { gs.gameOver=true; bankRunResult(); return; }
@@ -772,6 +852,7 @@ function update(dt) {
     gs.baseHP = Math.min(baseHpMax(), gs.baseHP + BONUSES.baseRegen * dt);
   }
 
+  if (gs.overloadReady > 0) gs.overloadReady = Math.max(0, gs.overloadReady - dt);
   updateTowers(gs.towers,gs.defenseEnemies,gs.projectiles,dt);
   updateProjectiles(gs.projectiles, e => onDefenseKill(e, false), dt);
   gs.defenseEnemies=gs.defenseEnemies.filter(e=>!e.dead&&!e.reached);

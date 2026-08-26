@@ -3,6 +3,7 @@
 // ─── 파티클 / 화면 흔들림 ────────────────────────────────────────────────────
 const FX = (() => {
   const parts = [];
+  const bolts = [];              // 번개 연쇄 섬광
   let shakeMag = 0, shakeTime = 0;
   const MAX_PARTS = 220;
 
@@ -30,6 +31,11 @@ const FX = (() => {
         });
       }
     },
+    // 번개 연쇄 — 두 점을 잇는 짧은 섬광
+    spark(x1, y1, x2, y2, color) {
+      bolts.push({ x1, y1, x2, y2, color, life: 0.16, maxLife: 0.16 });
+      if (bolts.length > 40) bolts.shift();
+    },
     shake(mag, time) {
       shakeMag  = Math.max(shakeMag, mag);
       shakeTime = Math.max(shakeTime, time);
@@ -41,12 +47,24 @@ const FX = (() => {
         p.life -= dt;
         if (p.life <= 0) parts.splice(i, 1);
       }
+      for (let i = bolts.length - 1; i >= 0; i--) {
+        bolts[i].life -= dt;
+        if (bolts[i].life <= 0) bolts.splice(i, 1);
+      }
       if (shakeTime > 0) {
         shakeTime = Math.max(0, shakeTime - dt);
         if (shakeTime === 0) shakeMag = 0;
       }
     },
     draw(ctx) {
+      for (const b of bolts) {
+        ctx.globalAlpha = Math.max(0, b.life / b.maxLife);
+        ctx.strokeStyle = b.color; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(b.x1, b.y1);
+        // 가운데를 살짝 꺾어 번개처럼
+        ctx.lineTo((b.x1+b.x2)/2 + (Math.random()*10-5), (b.y1+b.y2)/2 + (Math.random()*10-5));
+        ctx.lineTo(b.x2, b.y2); ctx.stroke();
+      }
       for (const p of parts) {
         ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
         ctx.fillStyle = p.color;
@@ -58,6 +76,6 @@ const FX = (() => {
       if (shakeTime <= 0) return [0, 0];
       return [(Math.random() * 2 - 1) * shakeMag, (Math.random() * 2 - 1) * shakeMag];
     },
-    clear() { parts.length = 0; shakeMag = 0; shakeTime = 0; }
+    clear() { parts.length = 0; bolts.length = 0; shakeMag = 0; shakeTime = 0; }
   };
 })();

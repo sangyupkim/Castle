@@ -27,6 +27,7 @@ const SaveManager = {
       heroExp:    gs.hero.exp,
       caveLevel:  gs.caveLevel,
       wallRepairs: gs.wallRepairs || 0,
+      bountyUsed:  gs.bountyUsed || 0,
       rerolls:     gs.rerolls || 0,
       totalGoldEarned: gs.battle ? gs.battle.totalGoldEarned : 0,
       townBuildings: JSON.parse(JSON.stringify(gs.town?.buildings || {})),

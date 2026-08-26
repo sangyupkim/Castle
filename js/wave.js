@@ -17,6 +17,7 @@ function createWaveManager() {
       this.elapsed   = 0;
       this.defenseQueues = [];
       this.wipedAt   = null;
+      this.bountyTimer = null;   // 현상수배 등장까지 남은 시간
     },
 
     startWave(gs) {
@@ -38,6 +39,9 @@ function createWaveManager() {
         interval: (d.interval / 1000) / spawnMult,
         nextSpawn: 0.5
       }));
+
+      // 예약해둔 현상수배는 웨이브 시작 조금 뒤에 등장한다
+      this.bountyTimer = gs.bountyPending ? BOUNTY_SPAWN_DELAY : null;
 
       reapplyAllBonuses(gs);
       startFighting(gs.battle);
@@ -90,6 +94,27 @@ function createWaveManager() {
           gs.defenseEnemies.push(makeDefenseEnemy(q.type, this.waveIndex));
           q.remaining--;
           q.nextSpawn = q.interval;
+        }
+      }
+
+      // 현상수배 등장
+      if (this.bountyTimer !== null) {
+        this.bountyTimer -= dt;
+        if (this.bountyTimer <= 0) {
+          this.bountyTimer = null;
+          // 예약할 때 이미 1 올려뒀으므로, 첫 소환이 n=0이 되도록 되돌려 읽는다
+          const n = Math.max(0, gs.bountyUsed - 1);
+          const e = makeDefenseEnemy('bounty', this.waveIndex, {
+            hp:     bountyHp(n, this.waveIndex),
+            reward: bountyGold(n, this.waveIndex)
+          });
+          e.gems = bountyGems(n);
+          gs.defenseEnemies.push(e);
+          gs.bountyPending = false;
+          spawnFloaty(`💰 현상수배 등장! 처치 시 보석 +${e.gems}`, CW/2, 60, '#fbbf24');
+          addLog(gs.battle, `💰 현상수배 등장 — 놓치면 성벽 -${e.dmg}HP`, '#fbbf24');
+          if (typeof FX  !== 'undefined') FX.shake(5, 0.35);
+          if (typeof SFX !== 'undefined') SFX.waveStart();
         }
       }
 
@@ -178,6 +203,10 @@ function createWaveManager() {
 
       gs.defenseEnemies    = [];
       gs.projectiles       = [];
+      gs.bountyPending     = false;
+      this.bountyTimer     = null;
+      for (const t of gs.towers) t.overloadUntil = 0;
+      gs.hero.moveX = gs.hero.moveY = null;
       clearArena(gs);
       gs.battle.ourTeam    = gs.battle.ourTeam.filter(u => !u.dead && !u.isHero);
       gs.battle.phase      = 'hire';

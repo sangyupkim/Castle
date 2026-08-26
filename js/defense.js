@@ -18,36 +18,51 @@ function makeTower(col, row, typeId) {
 function towerStats(t) {
   const tpl = TOWER_TYPES[t.typeId];
   const m   = TOWER_LEVEL_MULT[t.level || 1] || TOWER_LEVEL_MULT[1];
+  const overloaded = (t.overloadUntil || 0) > 0;
   return {
     dmg:   Math.round((tpl.dmg + BONUSES.towerDmg) * m.dmg),
-    spd:   tpl.spd   * m.spd   * BONUSES.towerSpdMult,
+    spd:   tpl.spd   * m.spd   * BONUSES.towerSpdMult * (overloaded ? OVERLOAD_SPD_MULT : 1),
     range: tpl.range * m.range * BONUSES.towerRangeMult,
     slow:        tpl.slow ? Math.min(0.8, tpl.slow) : 0,
     slowDur:     tpl.slowDur || 0,
     splash:      tpl.splash || 0,
     pierceArmor: !!tpl.pierceArmor,
-    targetMode:  tpl.targetMode || 'nearest'
+    targetMode:  tpl.targetMode || 'nearest',
+    chain:       tpl.chain || 0,
+    chainRange:  tpl.chainRange || 0,
+    overloaded
   };
 }
 
 // ─── Defense Enemy ────────────────────────────────────────────────────────────
 let _defEnemyId = 0;
-function makeDefenseEnemy(typeId, waveIndex) {
+let _airLaneCounter = 0;
+
+function makeDefenseEnemy(typeId, waveIndex, opts) {
   const tpl   = ENEMY_TYPES[typeId];
   const w     = Math.max(0, waveIndex || 0);
-  const scale = 1 + w * DEF_WAVE_HP_SCALE;
-  const hp    = Math.max(1, Math.round(tpl.hp * scale));
-  const start = cellCenter(THE_PATH[0][0], THE_PATH[0][1]);
+  const scale = (1 + w * DEF_WAVE_HP_SCALE) * (BONUSES.pactDefHpMult || 1);
+  const hp    = Math.max(1, Math.round((opts && opts.hp) || tpl.hp * scale));
+
+  // 비행은 ∞ 경로가 아니라 항로를 탄다 — 좌우를 번갈아 써서 한쪽만 막지 못하게
+  const flying = !!tpl.flying;
+  const path   = flying ? airPathFor(_airLaneCounter++) : THE_PATH;
+  const start  = cellCenter(path[0][0], path[0][1]);
+
   return {
     id: ++_defEnemyId,
     typeId,
-    path: THE_PATH,
+    cls: tpl.cls || 'medium',
+    flying,
+    isBounty: !!tpl.isBounty,
+    path,
     wpIdx: 0,
     x: start.x, y: start.y,
     hp, maxHp: hp,
     spd: tpl.spd * ENEMY_CELL_SPD,
     dmg: Math.round(tpl.dmg * (1 + w * 0.04)),
-    reward: tpl.reward,
+    reward: (opts && opts.reward) || tpl.reward,
+    gems: (opts && opts.gems) || 0,
     armor: (tpl.armor || 0) + Math.floor(w / DEF_WAVE_ARMOR_EVERY),
     radius: tpl.radius,
     slowTimer: 0, slowFactor: 0,
@@ -66,14 +81,16 @@ function makeProjectile(sx, sy, target, dmg, color, opts) {
   }, opts || {});
 }
 
-function defDamage(enemy, dmg, pierceArmor) {
-  if (pierceArmor) return Math.max(1, Math.round(dmg));
-  return Math.max(1, Math.round(dmg - (enemy.armor || 0)));
+// 상성 배율은 방어력 차감보다 먼저 곱한다 — 약한 타워는 방어력까지 겹쳐 더 안 통한다
+function defDamage(enemy, dmg, pierceArmor, affinity) {
+  const base = dmg * (affinity === undefined ? 1 : affinity);
+  if (pierceArmor) return Math.max(1, Math.round(base));
+  return Math.max(1, Math.round(base - (enemy.armor || 0)));
 }
 
-function hurtDefenseEnemy(e, dmg, pierceArmor, onKill) {
+function hurtDefenseEnemy(e, dmg, pierceArmor, onKill, affinity) {
   if (e.dead || e.reached) return 0;
-  const real = defDamage(e, dmg, pierceArmor);
+  const real = defDamage(e, dmg, pierceArmor, affinity);
   e.hp -= real;
   e.hitFlash = 0.12;
   if (e.hp <= 0) {
@@ -129,15 +146,34 @@ function pickTarget(enemies, center, range, mode) {
   return best;
 }
 
+// 상성이 좋은 적을 우선 노린다. 대포탑이 박쥐를 붙잡고 헛되이 쏘는 것을 막는다.
+function pickTargetSmart(enemies, center, range, mode, towerTypeId) {
+  let best = null, bestScore = -Infinity;
+  for (const e of enemies) {
+    if (e.dead || e.reached) continue;
+    const d = Math.hypot(e.x - center.x, e.y - center.y);
+    if (d > range) continue;
+    const aff = affinityOf(towerTypeId, e);
+    // 거의 안 통하는 상대(0.5 미만)는 다른 표적이 있으면 넘긴다
+    let score = aff * 100;
+    if (mode === 'strongest') score += e.hp * 0.05;
+    else                      score += (range - d) * 0.02;
+    if (e.isBounty) score += 40;          // 현상수배는 놓치면 손해가 크다
+    if (score > bestScore) { bestScore = score; best = e; }
+  }
+  return best;
+}
+
 function updateTowers(towers, enemies, projectiles, dt) {
   for (const tower of towers) {
     if (tower.muzzle > 0) tower.muzzle = Math.max(0, tower.muzzle - dt);
+    if (tower.overloadUntil > 0) tower.overloadUntil = Math.max(0, tower.overloadUntil - dt);
     tower.cooldown = Math.max(0, tower.cooldown - dt);
     if (tower.cooldown > 0) continue;
 
     const st     = towerStats(tower);
     const center = cellCenter(tower.col, tower.row);
-    const best   = pickTarget(enemies, center, st.range, st.targetMode);
+    const best   = pickTargetSmart(enemies, center, st.range, st.targetMode, tower.typeId);
     if (!best) continue;
 
     tower.cooldown = 1 / st.spd;
@@ -149,7 +185,9 @@ function updateTowers(towers, enemies, projectiles, dt) {
       splash: st.splash || (BONUSES.towerSplash ? 34 : 0),
       pierceArmor: st.pierceArmor,
       spd: tower.typeId === 'sniper' ? 620 : 320,
-      owner: tower
+      owner: tower,
+      towerTypeId: tower.typeId,
+      chain: st.chain, chainRange: st.chainRange
     });
     proj._enemies = enemies;
     projectiles.push(proj);
@@ -188,8 +226,37 @@ function updateProjectiles(projectiles, onKill, dt) {
       if (p.owner) p.owner.kills++;
       if (onKill) onKill(victim, p.owner);
     };
-    const dealt = hurtDefenseEnemy(tgt, p.dmg, p.pierceArmor, credit);
+    const aff   = p.towerTypeId ? affinityOf(p.towerTypeId, tgt) : 1;
+    const dealt = hurtDefenseEnemy(tgt, p.dmg, p.pierceArmor, credit, aff);
     if (p.owner) p.owner.damageDealt += dealt;
+    // 상성이 갈리는 순간을 눈에 보이게 — 왜 안 죽는지 알아야 배치를 바꾼다
+    if (typeof spawnFloaty === 'function' && p.towerTypeId && (aff >= 1.2 || aff <= 0.6)) {
+      if (Math.random() < 0.25) {
+        spawnFloaty(aff >= 1.2 ? '효과적!' : '저항', tgt.x, tgt.y - (tgt.radius || 8) - 6,
+                    aff >= 1.2 ? '#22c55e' : '#94a3b8');
+      }
+    }
+
+    // ⚡ 번개탑 연쇄 — 근처 적으로 튄다
+    if (p.chain > 0) {
+      let hops = p.chain, from = tgt;
+      const hit = new Set([tgt]);
+      while (hops-- > 0) {
+        let next = null, nd = p.chainRange;
+        for (const e of (p._enemies || [])) {
+          if (hit.has(e) || e.dead || e.reached) continue;
+          const d = Math.hypot(e.x - from.x, e.y - from.y);
+          if (d < nd) { nd = d; next = e; }
+        }
+        if (!next) break;
+        hit.add(next);
+        const cAff = affinityOf(p.towerTypeId, next);
+        const cd = hurtDefenseEnemy(next, p.dmg * 0.6, p.pierceArmor, credit, cAff);
+        if (p.owner) p.owner.damageDealt += cd;
+        if (typeof FX !== 'undefined') FX.spark(from.x, from.y, next.x, next.y, p.color);
+        from = next;
+      }
+    }
 
     if (p.slow > 0) {
       tgt.slowFactor = Math.max(tgt.slowFactor, p.slow);
@@ -200,7 +267,8 @@ function updateProjectiles(projectiles, onKill, dt) {
       for (const e of (p._enemies || [])) {
         if (e === tgt || e.dead || e.reached) continue;
         if (Math.hypot(e.x - tgt.x, e.y - tgt.y) < p.splash) {
-          const d = hurtDefenseEnemy(e, p.dmg * 0.5, p.pierceArmor, credit);
+          const d = hurtDefenseEnemy(e, p.dmg * 0.5, p.pierceArmor, credit,
+                                     p.towerTypeId ? affinityOf(p.towerTypeId, e) : 1);
           if (p.owner) p.owner.damageDealt += d;
         }
       }
