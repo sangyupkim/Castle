@@ -219,7 +219,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <div class="wrap">
 <header class="cover">
-  <div class="eyebrow">Game Design Document · v2.3 · 웨이브 결과 3단계</div>
+  <div class="eyebrow">Game Design Document · v2.4 · 골드 사용처</div>
   <h1>듀얼 프론티어</h1>
   <p class="tagline">한 화면에서 두 개의 전선을 동시에 굴리는 모바일 웹 로그라이트.
      위는 배치해서 지키고, 아래는 직접 뛰어들어 벌어온다.</p>
@@ -1023,13 +1023,52 @@ v1.0의 "그룹 순환 + 보상 체감" 구조를 이 압력 곡선이 대체한
   </div>
   <div class="card dl">
     <h4>지출</h4>
-    <p><strong>타워</strong> 건설(체증) · 강화 · 판매 시 60% 회수<br>
+    <p><strong>타워</strong> 건설(체증) · 강화 <strong>Lv.1~5</strong> · 판매 시 60% 회수<br>
        <strong>병력</strong> 고용 6~16 (해고 50% 환급)<br>
        <strong>마을</strong> 건설 · 레벨업 · 강화(체증)<br>
        <strong>케이브</strong> 45 / 110 / 240 / 480<br>
-       <strong>상점</strong> 소모품 8~70 · 장비 25~70</p>
+       <strong>상점</strong> 소모품 8~70 · 장비 25~70<br>
+       <strong>성벽 보수</strong> 70부터 1.6배씩 <span class="rev">v2.4</span><br>
+       <strong>강화 카드 리롤</strong> 40부터 1.8배씩 <span class="rev">v2.4</span></p>
   </div>
 </div>
+
+<h4>후반 골드 사용처 <span class="rev">v2.4 신규</span></h4>
+<p>실측에서 발전한 편성은 웨이브 5부터 <strong>2,000~3,600골드를 놀렸다.</strong>
+격자 40칸이 차고 마을 강화가 바닥나는데 수입은 계속 늘기 때문이다.
+셋 다 <strong>반복 구매할 수 있고 살수록 비싸져</strong>, 수입이 늘어도 계속 흡수한다.</p>
+
+<div class="tw"><table>
+<caption>비용 곡선 — 한 번 살 때마다 오른다</caption>
+<thead><tr><th>사용처</th><th>얻는 것</th><th class="num">1회</th><th class="num">2회</th><th class="num">3회</th><th class="num">4회</th><th class="num">5회</th></tr></thead>
+<tbody>
+<tr><td><strong>🧱 성벽 보수</strong></td><td class="wrap">기지 HP +12</td><td class="num">70</td><td class="num">112</td><td class="num">179</td><td class="num">287</td><td class="num">459</td></tr>
+<tr><td><strong>🎲 강화 리롤</strong></td><td class="wrap">카드 3장 다시 뽑기</td><td class="num">40</td><td class="num">72</td><td class="num">130</td><td class="num">233</td><td class="num">420</td></tr>
+<tr><td colspan="7" class="wrap" style="padding-top:10px"><strong>🗼 타워 Lv.4~5</strong> — Lv.3까지는 완만하고 그 위부터 급격히 비싸진다 (기존 Lv.3 상한을 5로 확장)</td></tr>
+<tr><td class="mono">화살탑</td><td class="wrap">Lv.5에서 피해 5.4배</td><td class="num">5</td><td class="num">9</td><td class="num">35</td><td class="num">122</td><td class="num">—</td></tr>
+<tr><td class="mono">저격탑</td><td class="wrap">사거리 1.45배</td><td class="num">23</td><td class="num">47</td><td class="num">183</td><td class="num">633</td><td class="num">—</td></tr>
+</tbody></table></div>
+
+<div class="note">
+<p><strong>성벽 보수가 핵심이다.</strong> 후반에 남아도는 것은 골드고 모자란 것은 기지 HP다 —
+그 둘을 교환하는 통로를 여는 것이 가장 자연스러운 사용처였다. 무한 회복이 되지 않도록
+런 안에서 <strong>살수록 비싸진다</strong>(1.6배씩). 6번째는 734골드다.</p>
+<p><strong>리롤은 빌드를 밀어붙이는 값이다.</strong> 타워 특화로 가는 중에 유닛 카드 3장이
+뜨면 판이 흔들린다. 골드로 다시 뽑을 수 있게 하면 후반 잉여가 <strong>빌드 완성도</strong>로
+환전된다.</p>
+</div>
+
+<h4>실측 — 잉여가 사라졌는가 <span class="rev">v2.4</span></h4>
+<div class="tw"><table>
+<caption>발전한 편성의 웨이브별 보유 골드</caption>
+<thead><tr><th>웨이브</th><th class="num">1</th><th class="num">3</th><th class="num">5</th><th class="num">7</th><th class="num">9</th><th class="num">11</th></tr></thead>
+<tbody>
+<tr><td>v2.3 (사용처 없음)</td><td class="num">4</td><td class="num">605</td><td class="num">2,303</td><td class="num">3,617</td><td class="num">3,237</td><td class="num">2,592</td></tr>
+<tr class="total"><td>v2.4 (사용처 추가)</td><td class="num">4</td><td class="num">400</td><td class="num">1,501</td><td class="num">436</td><td class="num">43</td><td class="num">42</td></tr>
+</tbody></table></div>
+<p>웨이브 5에서 1,501로 정점을 찍은 뒤 40대로 떨어져 유지된다.
+<strong>도달 웨이브는 12.7로 변하지 않았다</strong>(3회 평균, v2.3과 동일) — 사용처가
+런을 길게 만든 것이 아니라 <strong>놀던 골드를 실제 전력과 성벽으로 바꿨다</strong>는 뜻이다.</p>
 <div class="note">
 <p><strong>v1.0에서 넘어온 미해결 문제.</strong> 후반에 지출처가 고갈된다 — 격자 40칸이 차고
 마을 강화를 다 사면 스테이지 1-8 무렵 4,000골드 이상이 남는다.
@@ -1206,6 +1245,9 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
 <tr><td class="mono">RETREAT_DPS / MAX</td><td class="num">0.20 / 14</td><td class="wrap">신규 <span class="rev">v2.3</span> — 후퇴 시 남은 초당 기지 피해</td></tr>
 <tr><td class="mono">CLEAR_BONUS_BASE / PER_WAVE</td><td class="num">30 / 12</td><td class="wrap">신규 <span class="rev">v2.3</span> — 완주 골드 보너스</td></tr>
 <tr><td class="mono">CLEAR_REPAIR</td><td class="num">2 + ⌊웨이브÷4⌋ (최대 6)</td><td class="wrap">신규 <span class="rev">v2.3</span> — 완주 시 성벽 수리</td></tr>
+<tr><td class="mono">TOWER_MAX_LEVEL</td><td class="num">3 → 5</td><td class="wrap"><span class="rev">v2.4</span> — Lv.4~5가 후반 골드를 흡수</td></tr>
+<tr><td class="mono">WALL_REPAIR_*</td><td class="num">+12HP · 70 · ×1.6</td><td class="wrap">신규 <span class="rev">v2.4</span> — 성벽 보수</td></tr>
+<tr><td class="mono">REROLL_*</td><td class="num">40 · ×1.8</td><td class="wrap">신규 <span class="rev">v2.4</span> — 강화 카드 리롤</td></tr>
 </tbody></table></div>
 </section>
 
@@ -1325,12 +1367,14 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
 <strong>해결됨</strong> — 8단계로 전면 재작성했다: 개요 · 캠프 · 상단 배치 · 실시간 아레나 ·
 자동/수동 · 드랍 수거 · 후퇴와 돌파 · 조작 요약.</p>
 
-<h4><span class="chip md">중간</span> 후반 골드 잉여 — 발전한 편성에서 재발 <span class="rev">v2.3 실측</span></h4>
-<p>첫 런에서는 최고 보유가 682로 문제가 없다. 그런데 <strong>해금·스킬을 갖춘 편성으로
-돌리면 웨이브 5부터 2,000~3,600골드가 놀고 있다.</strong> 타워 격자가 30기에서 차고
-마을 강화가 바닥나는데 수입은 계속 늘기 때문이다 — v1.0에서 이월된 문제가 그대로 남았다.</p>
-<p>완주 보너스가 골드를 더 얹기 때문에 이 항목은 <strong>v2.3에서 조금 더 나빠졌다.</strong>
-완주 보상의 알맹이를 성벽 수리로 잡은 것도 그래서다.</p>
+<h4><span class="chip lo">해결</span> 후반 골드 잉여 (v1.0에서 이월) <span class="rev">v2.4</span></h4>
+<p>v1.0부터 따라온 문제였다. v2.3 실측에서 발전한 편성이 웨이브 5부터
+2,000~3,600골드를 놀렸다.</p>
+<p><strong>해결됨.</strong> 12절의 반복 구매 사용처 3종 — 성벽 보수 · 강화 카드 리롤 ·
+타워 Lv.4~5. 보유 골드 정점이 3,617에서 1,501로 내려왔고 중반 이후 40대를 유지한다.
+도달 웨이브는 12.7로 그대로다.</p>
+<p><strong>남은 여지.</strong> 셋 다 체증이 있어 무한히 흡수하지는 못한다.
+스킬 트리를 다 열고 30웨이브를 완주하는 단계가 되면 다시 볼 필요가 있다.</p>
 <p><strong>제안.</strong> ① 소모품 다회 구매 ② 강화 카드 골드 리롤 ③ 타워 Lv.4~5.
 ④ "잔여 골드 보석 환산"은 <strong>철회한다</strong> — 보석 수입이 이미 과다한 상태(위 항목)에서
 경로를 더 여는 것은 문제를 키운다.</p>
@@ -1375,18 +1419,16 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
 <tr><td class="wrap">L4~L6 — 해금 · 서약 · 기록</td><td class="wrap">완료. 해금 6종 · 서약 6종 · 도감</td></tr>
 <tr><td rowspan="2"><strong>B</strong><br>아레나 전환 <span class="chip lo">완료</span></td><td class="wrap">단계 1~5 — 실시간 전투 구현</td><td class="wrap">완료. <span class="mono">arena.js</span> · <span class="mono">formation.js</span></td></tr>
 <tr><td class="wrap">밸런스 재측정 · 자동/수동 수입차 튜닝</td><td class="wrap">완료. +33% (목표 25~40%)</td></tr>
-<tr><td rowspan="3"><strong>C</strong><br>기반 정리</td><td class="wrap">튜토리얼 전면 재작성 <span class="chip lo">완료</span></td><td class="wrap">8단계로 재작성</td></tr>
+<tr><td rowspan="3"><strong>C</strong><br>기반 정리 <span class="chip lo">완료</span></td><td class="wrap">튜토리얼 전면 재작성 <span class="chip lo">완료</span></td><td class="wrap">8단계로 재작성</td></tr>
 <tr><td class="wrap">후퇴 인센티브 조정 <span class="chip lo">완료</span></td><td class="wrap">완주·후퇴·전멸 3단계 (8절)</td></tr>
-<tr><td class="wrap">골드 지출처 추가</td><td class="wrap">발전한 편성에서 2,000~3,600 잉여 (16절)</td></tr>
+<tr><td class="wrap">골드 지출처 추가 <span class="chip lo">완료</span></td><td class="wrap">성벽 보수 · 리롤 · 타워 Lv.4~5 (12절)</td></tr>
 <tr><td rowspan="2"><strong>D</strong><br>깊이</td><td class="wrap">상단 고유 위협 (비행 · 타워 무력화)</td><td class="wrap">상단이 후반에 완전 자동화됨</td></tr>
 <tr><td class="wrap">아레나 지형 · 장애물</td><td class="wrap">위치 선정에 의미를 더함</td></tr>
 <tr><td rowspan="2"><strong>E</strong><br>볼륨</td><td class="wrap">스테이지 2 · 영웅 고유 스킬</td><td class="wrap">엔드게임</td></tr>
 <tr><td class="wrap">BGM · 업적 · 기록</td><td class="wrap">리텐션</td></tr>
 </tbody></table></div>
 <div class="note">
-<p><strong>A · B와 C의 후퇴 인센티브까지 끝났다.</strong> C에 남은 것은 골드 지출처다 —
-발전한 편성에서 2,000~3,600골드가 놀고 있고, 완주 보너스가 골드를 더 얹으면서
-조금 더 나빠졌다. 타워 Lv.4~5, 소모품 다회 구매, 강화 카드 리롤 중에서 고른다.</p>
+<p><strong>A · B · C가 모두 끝났다.</strong> 다음은 D — 상단 고유 위협이다.</p>
 <p>그 다음이 D(상단 고유 위협 · 아레나 지형)다. 이번 개정으로 하단은 완전히 다른 게임이 됐지만
 <strong>상단은 그대로다</strong> — 두 전선의 성격을 갈라놓기 위한 의도적 선택이었으나,
 후반에 격자가 차면 상단은 완전히 자동이 된다. 비행 유닛이나 타워 무력화가 필요하다.</p>

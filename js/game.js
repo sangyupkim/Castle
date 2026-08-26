@@ -81,6 +81,8 @@ function newState() {
     gameOver:false, stageCleared:false,
     upgradePick: { active:false, cards:[] },
     activeUpgrades: [],
+    wallRepairs:0,      // 이번 런에서 성벽을 몇 번 보수했는지 (비용 체증)
+    rerolls:0,          // 이번 런에서 강화 카드를 몇 번 리롤했는지
     hoveredCell:null,
     selectedTowerType:'arrow',
     resultBanked:false,
@@ -139,6 +141,8 @@ gs.battle = createBattle();
   gs.hero.hp    = HERO_LEVELS[gs.hero.level].hp;
   gs.battle.totalGoldEarned = sv.totalGoldEarned || 0;
   gs.caveLevel  = Math.max(1, Math.min(5, sv.caveLevel||1));
+  gs.wallRepairs = sv.wallRepairs || 0;
+  gs.rerolls     = sv.rerolls     || 0;
   if (sv.townBuildings) {
     for (const [k, v] of Object.entries(sv.townBuildings)) {
       if (gs.town.buildings[k]) gs.town.buildings[k] = v;
@@ -258,6 +262,15 @@ function tap({x,y}) {
   if (gs.gameOver || gs.stageCleared) { showResult(); return; }
 
   if (gs.upgradePick.active) {
+    if (hitTest(x,y,gs.ui.rerollBtn||{})) {
+      const cost = rerollCost(gs.rerolls);
+      if (gs.gold < cost) { spawnFloaty('골드 부족!',x,y,'#ef4444'); SFX.denied(); return; }
+      gs.gold -= cost;
+      gs.rerolls++;
+      gs.upgradePick.cards = rollUpgradeCards(gs.activeUpgrades);
+      SFX.click();
+      return;
+    }
     for (const card of gs.ui.upgradeCards||[]) {
       if (hitTest(x,y,card)) { applyUpgradeCard(card.card,gs); wm.confirmPick(gs); gs.upgradePick={active:false,cards:[]}; gs.waveActive=false; return; }
     }
@@ -474,6 +487,18 @@ function handleTownTap(x,y) {
         }
         return;
       }
+    }
+    if (hitTest(x,y,gs.ui.wallRepairBtn||{})) {
+      const cost = wallRepairCost(gs.wallRepairs);
+      if (gs.baseHP >= baseHpMax()) { spawnFloaty('성벽이 이미 온전합니다',x,y,'#64748b'); SFX.denied(); return; }
+      if (gs.gold < cost) { spawnFloaty('골드 부족!',x,y,'#ef4444'); SFX.denied(); return; }
+      gs.gold -= cost;
+      gs.wallRepairs++;
+      const before = gs.baseHP;
+      gs.baseHP = Math.min(baseHpMax(), gs.baseHP + WALL_REPAIR_AMOUNT);
+      spawnFloaty(`🧱 성벽 +${Math.round(gs.baseHP-before)}HP`, CW/2, 300, '#22c55e');
+      SFX.upgrade();
+      return;
     }
     if (hitTest(x,y,gs.ui.caveBtn||{})) {
       const nextLv=gs.caveLevel+1;

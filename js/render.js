@@ -119,7 +119,7 @@ function renderDefense(ctx, gs) {
       const ax=cc.x-50, ay2=cc.y+CELL_H/2+2, aw=100, ah=22;
       roundRect(ctx,ax,ay2,aw,ah,4); ctx.fillStyle='#0f172a'; ctx.fill(); ctx.strokeStyle='#f59e0b'; ctx.lineWidth=1.5; ctx.stroke();
       ctx.fillStyle='#f59e0b'; ctx.font='bold 8px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText(`Lv.${lv}/3`,ax+18,ay2+ah/2);
+      ctx.fillText(`Lv.${lv}/${TOWER_MAX_LEVEL}`,ax+18,ay2+ah/2);
       if (lv<3) {
         roundRect(ctx,ax+26,ay2+2,42,ah-4,3); ctx.fillStyle='#1e3a5f'; ctx.fill(); ctx.strokeStyle='#60a5fa'; ctx.lineWidth=1; ctx.stroke();
         ctx.fillStyle='#60a5fa'; ctx.font='7px sans-serif'; ctx.fillText(`강화 ${lv*15}💰`,ax+47,ay2+ah/2);
@@ -178,10 +178,12 @@ function renderTower(ctx, t) {
   ctx.font='13px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.fillText(tpl.icon,x,y+1);
   ctx.strokeStyle=tpl.color; ctx.lineWidth=1; ctx.strokeRect(x-9,y-9,18,18);
-  if ((t.level||1)>1) {
+  const tlv = t.level || 1;
+  if (tlv > 1) {
+    // Lv.4~5는 별 네 개가 칸을 넘치므로 숫자로 표기한다
     ctx.fillStyle='#fbbf24'; ctx.font='bold 7px sans-serif';
     ctx.textAlign='center'; ctx.textBaseline='top';
-    ctx.fillText('★'.repeat((t.level||1)-1), x, y+9);
+    ctx.fillText(tlv <= 3 ? '★'.repeat(tlv-1) : `Lv${tlv}`, x, y+9);
   }
 }
 
@@ -720,7 +722,8 @@ function renderHUD(ctx, gs) {
 
 // ─── 업그레이드 픽 화면 ──────────────────────────────────────────────────────
 function renderUpgradePick(ctx, gs) {
-  ctx.fillStyle='rgba(0,0,0,0.80)'; ctx.fillRect(0,0,CW,CH);
+  // 강화 선택은 온전히 집중해야 하는 결정이다 — 뒤 화면을 완전히 가린다
+  ctx.fillStyle='#050810'; ctx.fillRect(0,0,CW,CH);
 
   ctx.fillStyle='#a5b4fc'; ctx.font='bold 16px sans-serif';
   ctx.textAlign='center'; ctx.textBaseline='top';
@@ -789,6 +792,121 @@ function renderUpgradePick(ctx, gs) {
     ctx.fillText('선택', cx+cardW/2, cy+cardH-19);
 
     gs.ui.upgradeCards.push({x:cx, y:cy, w:cardW, h:cardH, card});
+  });
+
+  // ── 리롤 — 원하는 빌드로 밀어붙이고 싶을 때 쓰는 골드 사용처 ──
+  const rc   = rerollCost(gs.rerolls);
+  const rAff = gs.gold >= rc;
+  const rw=170, rh=34, rx=(CW-rw)/2, ry=startY+cardH+18;
+  roundRect(ctx, rx, ry, rw, rh, 7);
+  ctx.fillStyle = rAff ? '#1e293b' : '#12161f'; ctx.fill();
+  ctx.strokeStyle = rAff ? '#f59e0b' : '#2a3140'; ctx.lineWidth=1.5; ctx.stroke();
+  ctx.fillStyle = rAff ? '#fbbf24' : '#475569'; ctx.font='bold 12px sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(`🎲 다시 뽑기  ${rc}💰`, CW/2, ry+rh/2);
+  gs.ui.rerollBtn = rAff ? {x:rx,y:ry,w:rw,h:rh} : null;
+
+  ctx.fillStyle='#475569'; ctx.font='9px sans-serif'; ctx.textBaseline='top';
+  ctx.fillText(`보유 ${gs.gold}💰${gs.rerolls?`  ·  이번 런 ${gs.rerolls}회 리롤`:''}`, CW/2, ry+rh+8);
+
+  // ── 지금까지 쌓은 빌드 — 무엇을 고를지 판단할 근거 ──────────────────────
+  let by2 = ry + rh + 34;
+  ctx.textAlign='left';
+  ctx.fillStyle='#334155'; ctx.font='bold 10px sans-serif';
+  ctx.fillText('이번 런에서 고른 강화', 22, by2);
+  ctx.textAlign='right'; ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif';
+  ctx.fillText(`${(gs.activeUpgrades||[]).length}개`, CW-22, by2+1);
+  by2 += 17;
+
+  const taken = (gs.activeUpgrades||[]).map(id => UPGRADE_CARDS.find(c=>c.id===id)).filter(Boolean);
+  if (taken.length) {
+    // 같은 카드를 여러 번 골랐으면 묶어서 ×N으로
+    const counted = [];
+    for (const c of taken) {
+      const hit = counted.find(e => e.card.id === c.id);
+      if (hit) hit.n++; else counted.push({ card:c, n:1 });
+    }
+    const rowH = 17, perCol = 6, colW = (CW-44)/2;
+    counted.slice(0, perCol*2).forEach((e, i) => {
+      const col = Math.floor(i / perCol), row = i % perCol;
+      const ex = 22 + col*colW, ey = by2 + row*rowH;
+      const gc = e.card.grade==='epic' ? '#a78bfa' : e.card.grade==='rare' ? '#60a5fa' : '#64748b';
+      ctx.textAlign='left'; ctx.font='11px sans-serif'; ctx.fillStyle='#cbd5e1';
+      ctx.fillText(e.card.icon, ex, ey);
+      ctx.font='10px sans-serif'; ctx.fillStyle=gc;
+      ctx.fillText(e.card.name + (e.n>1?` ×${e.n}`:''), ex+18, ey);
+    });
+    if (counted.length > perCol*2) {
+      ctx.textAlign='center'; ctx.fillStyle='#334155'; ctx.font='9px sans-serif';
+      ctx.fillText(`외 ${counted.length - perCol*2}종`, CW/2, by2 + perCol*rowH + 4);
+    }
+  } else {
+    ctx.textAlign='left'; ctx.fillStyle='#334155'; ctx.font='10px sans-serif';
+    ctx.fillText('아직 없습니다 — 이번이 첫 선택입니다', 22, by2);
+  }
+
+  // ── 다음 웨이브 예고 — 무엇을 고를지 판단할 또 하나의 근거 ──────────────
+  const nextIdx = gs.wave + 1;
+  const nd = WAVE_DEFS[nextIdx];
+  if (nd) {
+    const npY = by2 + 6*17 + 16;
+    const npH = 78;
+    roundRect(ctx, 20, npY, CW-40, npH, 7);
+    ctx.fillStyle='#0a0f1a'; ctx.fill(); ctx.strokeStyle='#1e293b'; ctx.lineWidth=1; ctx.stroke();
+
+    const nst = getStageInfo(nextIdx);
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillStyle='#94a3b8'; ctx.font='bold 10px sans-serif';
+    ctx.fillText(`다음 — 스테이지 ${nst.stageLabel} 웨이브 ${nst.waveInStage+1}/3`, 32, npY+9);
+    ctx.textAlign='right'; ctx.fillStyle='#22c55e'; ctx.font='bold 9px sans-serif';
+    ctx.fillText(`★완주 +${clearBonusGold(nextIdx)}💰 · 성벽 +${clearRepair(nextIdx)}`, CW-32, npY+10);
+
+    // 아레나 스폰 풀
+    ctx.textAlign='left'; ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif';
+    ctx.fillText('아레나', 32, npY+30);
+    const npool = nd.arenaPool || [];
+    const ntot  = npool.reduce((a,[,w])=>a+w,0) || 1;
+    npool.forEach(([id,w],i) => {
+      const mt = BATTLE_MOB_TYPES[id]; if (!mt) return;
+      const ix = 72 + i*42;
+      ctx.font='14px sans-serif'; ctx.fillStyle='#e2e8f0'; ctx.textAlign='left';
+      ctx.fillText(mt.icon, ix, npY+27);
+      ctx.font='bold 8px sans-serif'; ctx.fillStyle='#475569';
+      ctx.fillText(`${Math.round(w/ntot*100)}%`, ix+17, npY+31);
+    });
+
+    // 상단 침입자
+    ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif'; ctx.textAlign='left';
+    ctx.fillText('상단', 32, npY+54);
+    const ncm = 1 + nextIdx * DEF_WAVE_COUNT_SCALE;
+    let nx = 72;
+    for (const d of nd.defenseEnemies) {
+      const t = ENEMY_TYPES[d.type]; if (!t) continue;
+      ctx.fillStyle=t.color; ctx.font='bold 9px sans-serif';
+      ctx.fillText(`● ${t.name} ×${Math.max(1,Math.round(d.count*ncm))}`, nx, npY+54);
+      nx += 96;
+    }
+  }
+
+  // 현재 상태 요약
+  const sy = CH - 74;
+  ctx.strokeStyle='#151b28'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(22, sy-12); ctx.lineTo(CW-22, sy-12); ctx.stroke();
+  const stats = [
+    ['기지',   `${Math.ceil(gs.baseHP)}/${baseHpMax()}`, hpColor(gs.baseHP/baseHpMax())],
+    ['타워',   `${gs.towers.length}기`,                  '#22c55e'],
+    ['병력',   `${gs.battle.ourTeam.filter(u=>!u.isHero).length}/${gs.battle.maxSlots}`, '#60a5fa'],
+    ['영웅',   `Lv.${gs.hero.level}`,                    COLORS.hero],
+    ['케이브', `Lv.${gs.caveLevel}`,                     '#a78bfa'],
+  ];
+  const sw = (CW-44)/stats.length;
+  stats.forEach((st,i) => {
+    const sx = 22 + i*sw + sw/2;
+    ctx.textAlign='center';
+    ctx.fillStyle='#334155'; ctx.font='bold 9px sans-serif';
+    ctx.fillText(st[0], sx, sy);
+    ctx.fillStyle=st[2]; ctx.font='bold 12px sans-serif';
+    ctx.fillText(st[1], sx, sy+14);
   });
 }
 
@@ -1706,7 +1824,40 @@ function renderTownPageBuildingGrid(ctx, gs, startY) {
     gs.ui.buildingCards.push({x:bx,y:by,w:bw,h:bh,id:def.id,built});
   });
 
-  const stripY=startY+2*(bh+gap)+4;
+  // ── 성벽 보수 — 남는 골드를 기지 HP로 바꾸는 통로 ──────────────────────
+  const wrY = startY+2*(bh+gap)+4;
+  const wrH = 46;
+  roundRect(ctx,6,wrY,CW-12,wrH,6);
+  ctx.fillStyle='#0a0d1a'; ctx.fill(); ctx.strokeStyle='#2a3f5f'; ctx.lineWidth=1; ctx.stroke();
+
+  const full   = gs.baseHP >= baseHpMax();
+  const wrCost = wallRepairCost(gs.wallRepairs);
+  const wrAff  = !full && gs.gold >= wrCost;
+
+  ctx.fillStyle='#94a3b8'; ctx.font='bold 11px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText('🧱 성벽 보수', 12, wrY+8);
+  ctx.fillStyle='#475569'; ctx.font='9px sans-serif';
+  ctx.fillText(full ? '성벽이 온전합니다'
+                    : `기지 HP +${WALL_REPAIR_AMOUNT} · 보수할수록 비싸집니다 (${gs.wallRepairs}회)`, 12, wrY+26);
+
+  // 기지 HP 바
+  const hbX=150, hbW=110;
+  ctx.fillStyle='#1e293b'; ctx.fillRect(hbX, wrY+9, hbW, 7);
+  const hr = gs.baseHP / baseHpMax();
+  ctx.fillStyle = hpColor(hr); ctx.fillRect(hbX, wrY+9, hbW*Math.max(0,Math.min(1,hr)), 7);
+  ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif'; ctx.textAlign='left';
+  ctx.fillText(`${Math.ceil(gs.baseHP)}/${baseHpMax()}`, hbX+hbW+6, wrY+9);
+
+  const wbW=112, wbH=28, wbX=CW-12-wbW, wbY=wrY+(wrH-wbH)/2;
+  roundRect(ctx,wbX,wbY,wbW,wbH,5);
+  ctx.fillStyle = wrAff ? '#14532d' : '#1a1a2e'; ctx.fill();
+  ctx.strokeStyle = wrAff ? '#22c55e' : '#334155'; ctx.lineWidth=1; ctx.stroke();
+  ctx.fillStyle = wrAff ? '#22c55e' : '#64748b'; ctx.font='bold 10px sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(full ? '온전함' : `보수 ${wrCost}💰`, wbX+wbW/2, wbY+wbH/2);
+  gs.ui.wallRepairBtn = full ? null : {x:wbX,y:wbY,w:wbW,h:wbH};
+
+  const stripY=wrY+wrH+5;
   roundRect(ctx,6,stripY,CW-12,44,6);
   ctx.fillStyle='#0a0d1a'; ctx.fill(); ctx.strokeStyle='#1e293b'; ctx.lineWidth=1; ctx.stroke();
   const pool=WAVE_DEFS[gs.wave]?.arenaPool||[];

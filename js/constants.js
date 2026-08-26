@@ -103,13 +103,18 @@ const PACT_DEFS = [
   { id:'pc_solo',  name:'고독한 지휘', icon:'🕯️', gem:0.20, desc:'편성 슬롯 −1',                apply:b=>{ b.maxSlotBonus    -= 1;    } },
 ];
 
-// 타워 레벨 1~3 배율
-const TOWER_MAX_LEVEL = 3;
+// 타워 레벨 1~5.
+// Lv.4~5는 후반 골드 사용처다. 격자 40칸이 다 차고 마을 강화가 바닥나면
+// 갈 곳 없는 골드가 수천 단위로 쌓이는데, 비용이 급격히 오르는 상위 레벨이
+// 그것을 계속 빨아들인다.
+const TOWER_MAX_LEVEL = 5;
 const TOWER_LEVEL_MULT = [
   null,
   { dmg:1.00, spd:1.00, range:1.00 },
   { dmg:1.70, spd:1.15, range:1.12 },
-  { dmg:2.60, spd:1.30, range:1.25 }
+  { dmg:2.60, spd:1.30, range:1.25 },
+  { dmg:3.80, spd:1.45, range:1.35 },
+  { dmg:5.40, spd:1.62, range:1.45 }
 ];
 // 같은 종류를 많이 지을수록 건설비가 오른다 — 도배 대신 배치를 고민하게 만든다
 const TOWER_COST_ESCALATION = 0.28;
@@ -118,9 +123,15 @@ function towerBuildCost(typeId, towers) {
   const n = (towers || []).filter(t => t.typeId === typeId).length;
   return Math.max(1, Math.round(base * (1 + TOWER_COST_ESCALATION * n)) - BONUSES.towerCostDiscount);
 }
+// Lv.3까지는 완만하고, Lv.4부터 급격히 비싸진다
+const TOWER_HIGH_LEVEL_ESCALATION = 2.6;
 function towerUpgradeCost(t) {
-  if ((t.level || 1) >= TOWER_MAX_LEVEL) return null;
-  return Math.max(1, Math.round(TOWER_TYPES[t.typeId].cost * 0.9 * (t.level || 1)));
+  const lv = t.level || 1;
+  if (lv >= TOWER_MAX_LEVEL) return null;
+  const base = TOWER_TYPES[t.typeId].cost;
+  const mult = lv <= 2 ? 0.9 * lv
+                       : 0.9 * lv * Math.pow(TOWER_HIGH_LEVEL_ESCALATION, lv - 2);
+  return Math.max(1, Math.round(base * mult));
 }
 function towerSellValue(t) {
   return Math.max(1, Math.floor((t.invested || TOWER_TYPES[t.typeId].cost) * 0.6));
@@ -252,6 +263,27 @@ const BATTLE_MOB_TYPES = {
 // 0.20이면 60초 남기고 빼도 12HP, 20초 남기고 빼면 4HP다.
 const RETREAT_DPS = 0.20;   // 후퇴 시 남은 1초당 기지 피해
 const RETREAT_MAX = 14;     // 상한 — 돌파(27)의 절반 수준
+
+// ─── 후반 골드 사용처 ────────────────────────────────────────────────────────
+// 실측에서 발전한 편성은 웨이브 5부터 2,000~3,600골드를 놀린다.
+// 타워 격자가 30기에서 차고 마을 강화가 바닥나는데 수입은 계속 늘기 때문이다.
+// 아래 셋은 모두 반복 구매 가능하고, 살수록 비싸져 수입이 늘어도 계속 흡수한다.
+
+// 성벽 보수 — 후반에 남아도는 것은 골드고 모자란 것은 기지 HP다.
+// 그 둘을 교환하는 통로를 열되, 런 안에서 살수록 비싸진다.
+const WALL_REPAIR_AMOUNT = 12;
+const WALL_REPAIR_BASE   = 70;
+const WALL_REPAIR_ESCALATION = 1.6;
+function wallRepairCost(n) {
+  return Math.round(WALL_REPAIR_BASE * Math.pow(WALL_REPAIR_ESCALATION, Math.max(0, n || 0)));
+}
+
+// 강화 카드 리롤 — 원하는 빌드로 밀어붙이고 싶을 때 쓰는 곳
+const REROLL_BASE = 40;
+const REROLL_ESCALATION = 1.8;
+function rerollCost(n) {
+  return Math.round(REROLL_BASE * Math.pow(REROLL_ESCALATION, Math.max(0, n || 0)));
+}
 
 const CLEAR_BONUS_BASE     = 30;   // 완주 보너스 기본
 const CLEAR_BONUS_PER_WAVE = 12;   // 웨이브당 가산
