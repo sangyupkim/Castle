@@ -23,6 +23,10 @@ function createDefaultBonuses() {
     baseHpMax: 0, baseDefPct: 0, baseRegen: 0,
     // 자원
     startGoldBonus: 0, defenseGoldMult: 1.0,
+    // 유닛 공속 (실시간 전투)
+    unitAtkSpdMult: 1.0,
+    // 서약 — 로비에서 스스로 거는 난이도
+    pactDefHpMult: 1.0, pactSpawnMult: 1.0,
   };
 }
 
@@ -60,7 +64,7 @@ const UPGRADE_CARDS = [
     apply: b => { b.unitHp += 15; } },
   { id:'u_lifesteal',name:'전투 의지',    desc:'처치 시 아군 HP 5 회복', grade:'rare', icon:'❤️', cat:'unit',
     apply: b => { b.killHeal += 5; } },
-  { id:'u_combo',   name:'연속 공격',     desc:'틱당 20% 추가 공격',   grade:'rare',   icon:'⚔️', cat:'unit',
+  { id:'u_combo',   name:'연속 공격',     desc:'공격 시 20% 추가 타격', grade:'rare',   icon:'⚔️', cat:'unit',
     apply: b => { b.comboChance += 0.2; } },
   { id:'u_epic1',   name:'영웅적 전투',   desc:'공격력 +8, HP +30',    grade:'epic',   icon:'🔥', cat:'unit',
     apply: b => { b.unitAtk += 8; b.unitHp += 30; } },
@@ -82,7 +86,7 @@ const UPGRADE_CARDS = [
   // ── 영웅 ──────────────────────────────────────────────────────────────────
   { id:'h_atk1',    name:'용기의 기운',   desc:'영웅 공격력 +5',       grade:'common', icon:'👑', cat:'hero',
     apply: b => { b.heroAtk += 5; } },
-  { id:'h_regen',   name:'회복의 기운',   desc:'영웅 틱마다 HP +3 재생', grade:'common', icon:'👑', cat:'hero',
+  { id:'h_regen',   name:'회복의 기운',   desc:'영웅 HP 초당 +3 재생',  grade:'common', icon:'👑', cat:'hero',
     apply: b => { b.heroRegen += 3; } },
   { id:'h_aura',    name:'영웅의 오라',   desc:'아군 전체 방어력 +3',  grade:'rare',   icon:'👑', cat:'hero',
     apply: b => { b.heroAura += 3; } },
@@ -131,7 +135,7 @@ const SKILL_TREES = {
     skills: [
       { id:'hr_s1', name:'영웅 훈련',   icon:'⚔️', cost:1, req:null,   row:0, col:1, desc:'영웅 공격력 +8',         apply:b=>{ b.heroAtk+=8; } },
       { id:'hr_s2', name:'투사',        icon:'🗡️', cost:1, req:'hr_s1', row:1, col:0, desc:'영웅 공격력 +15',        apply:b=>{ b.heroAtk+=15; } },
-      { id:'hr_s3', name:'재생',        icon:'💚', cost:1, req:'hr_s1', row:1, col:1, desc:'영웅 HP 재생 +5/틱',      apply:b=>{ b.heroRegen+=5; } },
+      { id:'hr_s3', name:'재생',        icon:'💚', cost:1, req:'hr_s1', row:1, col:1, desc:'영웅 HP 재생 +5/초',      apply:b=>{ b.heroRegen+=5; } },
       { id:'hr_s4', name:'경험 축적',   icon:'📖', cost:1, req:'hr_s1', row:1, col:2, desc:'영웅 시작 EXP +40',       apply:b=>{ b.heroStartExp+=40; } },
       { id:'hr_s5', name:'신의 강림',   icon:'👑', cost:2, req:'hr_s2', row:2, col:0, desc:'영웅 모든 스탯 +20%',     apply:b=>{ b.heroStatMult*=1.20; b.heroAtk+=10; } },
       { id:'hr_s6', name:'영웅의 오라', icon:'✨', cost:2, req:'hr_s3', row:2, col:1, desc:'아군 방어력 오라 +5',      apply:b=>{ b.heroAura+=5; } },
@@ -186,9 +190,8 @@ function rollUpgradeCards(taken) {
 function applyUpgradeCard(card, gs) {
   card.apply(BONUSES, gs);
   gs.activeUpgrades.push(card.id);
-  gs.battle.maxSlots = 4 + BONUSES.maxSlotBonus;
+  gs.battle.maxSlots = Math.max(1, 4 + BONUSES.maxSlotBonus);
   refreshTeamStats(gs.battle);   // 이미 고용한 병력에도 즉시 적용
-  syncBattleLayout(gs.battle);
 }
 
 // ─── 스킬 트리를 BONUSES에 반영 ──────────────────────────────────────────────
@@ -218,12 +221,30 @@ function buySkillNode(skillId, gs) {
   return true;
 }
 
-// ─── 영혼석 계산 ──────────────────────────────────────────────────────────────
+// ─── 보석 정산 ────────────────────────────────────────────────────────────────
+// 구 정산식(도달웨이브 × 5 + 기지HP × 0.2 + 케이브 × 3 + 처치 × 0.3)은
+// 1-1만 넘긴 첫 런이 39보석을 줬다 — 스킬 트리 전체가 48보석인데.
+// 영구 성장이 두 번째 런 전에 끝나는 문제라, 소비처(스킬 48 + 해금 52 = 100)에
+// 맞춰 6~9런 규모로 다시 잡았다.
 function calcSoulStones(gs) {
-  const wavesCleared = gs.wave;
-  const hpBonus   = Math.floor(gs.baseHP * 0.2);
-  const caveBonus = gs.caveLevel * 3;
-  const killBonus = Math.floor((gs.battle.runKills || 0) * 0.3);
-  return Math.max(1, wavesCleared * 5 + hpBonus + caveBonus + killBonus);
+  const waveTerm = Math.floor(gs.wave * 0.5);
+  const caveTerm = gs.caveLevel;
+  const killTerm = Math.floor((gs.battle.runKills || 0) / 60);
+  const reached  = gs.wave + (gs.stageCleared ? 1 : 0);
+  const recTerm  = reached > (gs.stats.bestWave || 0) ? 3 : 0;   // 반복 파밍보다 더 멀리 가기
+  const base     = Math.max(1, waveTerm + caveTerm + killTerm + recTerm);
+  return Math.max(1, Math.round(base * pactGemMult()));
 }
 
+// 정산 내역 — 결과 화면에서 그대로 보여준다
+function soulStoneBreakdown(gs) {
+  const reached = gs.wave + (gs.stageCleared ? 1 : 0);
+  const rows = [
+    { label:'도달 웨이브',  value:Math.floor(gs.wave * 0.5),           note:`${gs.wave}웨이브 × 0.5` },
+    { label:'케이브 레벨',  value:gs.caveLevel,                        note:`Lv.${gs.caveLevel}` },
+    { label:'처치',         value:Math.floor((gs.battle.runKills||0)/60), note:`${gs.battle.runKills||0}마리 ÷ 60` },
+  ];
+  if (reached > (gs.stats.bestWave || 0)) rows.push({ label:'최고 기록 갱신', value:3, note:'신기록!' });
+  const mult = pactGemMult();
+  return { rows, mult, total: calcSoulStones(gs) };
+}

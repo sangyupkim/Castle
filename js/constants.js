@@ -79,6 +79,30 @@ const TOWER_TYPES = {
 };
 const TOWER_ORDER = ['arrow', 'frost', 'cannon', 'sniper'];
 
+// ─── 해금 (로비에서 보석으로 영구 개방) ──────────────────────────────────────
+// 처음부터 열려 있는 것은 화살탑 · 궁수 · 검사뿐이다.
+// 나머지는 런을 돌며 모은 보석으로 하나씩 연다 — 로그라이트의 주 진행축.
+const UNLOCK_DEFS = [
+  { id:'frost',    kind:'tower', cost:4,  name:'서리탑',   icon:'❄️',  desc:'이동속도 45% 감속' },
+  { id:'healer',   kind:'unit',  cost:5,  name:'치유사',   icon:'✚',   desc:'주변 아군 회복' },
+  { id:'cannon',   kind:'tower', cost:8,  name:'대포탑',   icon:'💣',  desc:'착탄 범위 피해' },
+  { id:'guardian', kind:'unit',  cost:9,  name:'방패병',   icon:'🛡️', desc:'전방 방벽 · 도발' },
+  { id:'mage',     kind:'unit',  cost:12, name:'마법사',   icon:'✨',  desc:'자기 중심 광역' },
+  { id:'sniper',   kind:'tower', cost:14, name:'저격탑',   icon:'🎯',  desc:'초장거리 · 방어 무시' },
+];
+const UNLOCK_TOTAL_COST = UNLOCK_DEFS.reduce((a, u) => a + u.cost, 0);
+const INITIAL_UNLOCKED  = ['arrow', 'archer', 'swordsman'];
+
+// ─── 서약 (난이도를 스스로 올리고 보석 배율을 받는다) ────────────────────────
+const PACT_DEFS = [
+  { id:'pc_hp',    name:'거친 침입자', icon:'💢', gem:0.12, desc:'상단 적 HP +25%',              apply:b=>{ b.pactDefHpMult   *= 1.25; } },
+  { id:'pc_spawn', name:'굶주린 무리', icon:'🌑', gem:0.15, desc:'아레나 스폰 간격 −15%',        apply:b=>{ b.pactSpawnMult   *= 0.85; } },
+  { id:'pc_wall',  name:'얇은 성벽',   icon:'🧱', gem:0.12, desc:'기지 최대 HP −20',             apply:b=>{ b.baseHpMax       -= 20;   } },
+  { id:'pc_purse', name:'빈 주머니',   icon:'👛', gem:0.18, desc:'시작 골드 −5 · 골드 획득 −10%', apply:b=>{ b.startGoldBonus -= 5; b.battleGoldMult *= 0.9; b.defenseGoldMult *= 0.9; } },
+  { id:'pc_rest',  name:'짧은 휴식',   icon:'😴', gem:0.10, desc:'웨이브 후 회복 30% → 10%',     apply:b=>{ b.restHealBonus   -= 0.20; } },
+  { id:'pc_solo',  name:'고독한 지휘', icon:'🕯️', gem:0.20, desc:'편성 슬롯 −1',                apply:b=>{ b.maxSlotBonus    -= 1;    } },
+];
+
 // 타워 레벨 1~3 배율
 const TOWER_MAX_LEVEL = 3;
 const TOWER_LEVEL_MULT = [
@@ -116,148 +140,172 @@ const DEF_WAVE_HP_SCALE    = 0.22;
 const DEF_WAVE_ARMOR_EVERY = 5;
 const DEF_WAVE_COUNT_SCALE = 0.07;
 
-// ─── Battle Layout ────────────────────────────────────────────────────────────
-const BATTLE_TEAM_X        = 110;   // 아군 x (렌더 기준)
-const BATTLE_ENEMY_X       = 340;   // 적 전투 대기 x
-const BATTLE_ENEMY_SPAWN_X = CW + 70; // 적 스폰 위치 (화면 밖)
-const BATTLE_MARCH_SPD     = 90;    // 배경 스크롤 속도 (전진 연출)
-const BATTLE_ENEMY_WALK_SPD = 180;  // 적 걸어오는 속도 px/s
-const BATTLE_LOG_H         = 65;
+// ─── 하단 아레나 레이아웃 ─────────────────────────────────────────────────────
+// 410 ┌ 상태 바 28 ┐ 438 ┌ 아레나 330 ┐ 768 ┌ 컨트롤 바 32 ┐ 800
+const ARENA_STATUS_H = 28;
+const ARENA_CTRL_H   = 32;
+const ARENA_X = 0;
+const ARENA_Y = BATTLE_Y + ARENA_STATUS_H;
+const ARENA_W = CW;
+const ARENA_H = BATTLE_H - ARENA_STATUS_H - ARENA_CTRL_H;   // 330
 
-// 한 줄에 세울 유닛 수에 맞춰 간격/반지름을 계산한다.
-// 보스 그룹처럼 9마리가 몰려도 화면 밖으로 밀려나지 않는다.
-let BATTLE_ROW_COUNT = 4;
-let BATTLE_UNIT_GAP  = 64;
-let BATTLE_UNIT_R    = 24;
-let BATTLE_UNIT_TOP  = BATTLE_Y + 42;
+const ARENA_MAX_MOBS      = 28;    // 동시 생존 상한 — 가독성 + 성능
+const ARENA_SPAWN_BAND    = 26;    // 가장자리 스폰 밴드 두께
+const SPAWN_BASE_INTERVAL = 1.6;   // 초. 경과에 따라 짧아진다
+const SPAWN_RAMP          = 0.03;  // 간격 = base / (1 + 경과초 × RAMP)
+const SPAWN_SAFE_RADIUS   = 120;   // 아군 부대 중심에서 이 반경 안에는 스폰 금지
+const DROP_PICKUP_RADIUS  = 40;    // 아군이 이 반경에 들어와야 드랍 획득
+const DROP_LIFETIME       = 8;     // 초
+const DROP_SCATTER_MIN    = 24;    // 처치 지점에서 튀어나가는 최소 거리
+const DROP_SCATTER_MAX    = 66;    // 최대 거리 — 수거 반경(40)보다 넓어야 이동에 값이 생긴다
+const FORMATION_RADIUS    = 30;    // 집결 지점 기준 대형 반경
+const AUTO_ADVANCE_PCT    = 0.40;  // 자동 모드에서 사거리 밖 적에게 접근하는 속도 비율
+const SEPARATION_FORCE    = 26;    // 개체가 서로 완전히 겹치지 않게 미는 힘
 
-function setBattleRowCount(n) {
-  BATTLE_ROW_COUNT = Math.max(4, n || 4);
-  const top = BATTLE_Y + 42;
-  const bot = BATTLE_Y + BATTLE_H - BATTLE_LOG_H - 10;
-  BATTLE_UNIT_TOP = top;
-  BATTLE_UNIT_GAP = Math.min(64, (bot - top) / BATTLE_ROW_COUNT);
-  BATTLE_UNIT_R   = Math.max(9, Math.min(24, BATTLE_UNIT_GAP * 0.36));
-}
-function unitY(idx) {
-  return BATTLE_UNIT_TOP + BATTLE_UNIT_GAP * (idx + 0.5);
-}
-// 아군 슬롯과 적 그룹 중 큰 쪽에 맞춰 레이아웃을 잡는다
-function syncBattleLayout(battle) {
-  const our = battle ? battle.ourTeam.length : 0;
-  const foe = battle ? battle.enemyTeam.length : 0;
-  setBattleRowCount(Math.max(4, our, foe));
-}
-setBattleRowCount(4);
+// 전투에서 벗어나면 회복한다. 틱 전투에서는 한 웨이브가 짧은 그룹전 3번이었지만
+// 실시간에서는 60초 내내 노출되므로, 사거리 밖으로 빼는 행동에 값을 줘야 한다.
+// 수동 조작(빼고 다시 붙이기)이 이득이 되는 것도 이 규칙 덕분이다.
+const ARENA_REGEN_DELAY = 3.5;   // 마지막 피격 후 이 시간이 지나야 회복 시작
+const ARENA_REGEN_PCT   = 0.045; // 초당 최대 HP 비율
 
-// ─── 아군 유닛 ───────────────────────────────────────────────────────────────
+function spawnInterval(elapsed) {
+  const base = SPAWN_BASE_INTERVAL * (BONUSES.pactSpawnMult || 1) / (BONUSES.spawnSpeedMult || 1);
+  return Math.max(0.30, base / (1 + elapsed * SPAWN_RAMP));
+}
+function clampToArena(p, r) {
+  p.x = Math.max(ARENA_X + r, Math.min(ARENA_X + ARENA_W - r, p.x));
+  p.y = Math.max(ARENA_Y + r, Math.min(ARENA_Y + ARENA_H - r, p.y));
+  return p;
+}
+function arenaCenter() {
+  return { x: ARENA_X + ARENA_W / 2, y: ARENA_Y + ARENA_H / 2 };
+}
+
+// ─── 아군 유닛 — 실시간 스탯 ─────────────────────────────────────────────────
+// atkPeriod(초) · range(px) · moveSpd(px/s) · skillCd(초)
+// DPS는 v1.0 틱 전투(ATK = 초당 피해)와 같은 값이 되도록 주기를 맞췄다.
 const UNIT_TYPES = {
   swordsman: {
     id:'swordsman', name:'검사',   cost:8,
-    hp:60, atk:12, def:3, mp:30, maxMp:30,
-    skillName:'강타', skillKind:'strike', skillAtk:28, skillCost:15, skillColor:'#f59e0b',
+    hp:105, atk:12, def:3, atkPeriod:0.90, range:26, moveSpd:85, radius:7.5,
+    skillName:'회전 베기', skillKind:'spin', skillAtk:28, skillCd:6, skillRadius:52, skillColor:'#f59e0b',
     color:'#60a5fa', icon:'⚔️', role:'균형 잡힌 근접 딜러'
   },
   archer: {
     id:'archer',    name:'궁수',   cost:6,
-    hp:40, atk:10, def:1, mp:30, maxMp:30,
-    skillName:'연사', skillKind:'multi', skillAtk:12, skillHits:3, skillCost:12, skillColor:'#a78bfa',
-    color:'#a78bfa', icon:'🏹', role:'저렴한 다단 히트'
+    hp:70, atk:10, def:1, atkPeriod:0.75, range:130, moveSpd:90, radius:7.5, ranged:true,
+    skillName:'연사', skillKind:'volley', skillAtk:12, skillHits:3, skillCd:5, skillColor:'#a78bfa',
+    color:'#a78bfa', icon:'🏹', role:'긴 사거리 · 카이팅'
   },
   healer: {
     id:'healer',    name:'치유사', cost:10,
-    hp:45, atk:5,  def:2, mp:40, maxMp:40,
-    skillName:'치유', skillKind:'heal', skillAtk:0, skillCost:20, skillColor:'#34d399', healAmt:25,
-    color:'#34d399', icon:'✚', role:'가장 다친 아군 회복'
+    hp:80, atk:5,  def:2, atkPeriod:1.20, range:100, moveSpd:88, radius:7.5, ranged:true,
+    skillName:'치유', skillKind:'heal', skillAtk:0, skillCd:7, skillRadius:90, healAmt:25, skillColor:'#34d399',
+    color:'#34d399', icon:'✚', role:'주변 아군 회복'
   },
   guardian: {
     id:'guardian',  name:'방패병', cost:14,
-    hp:120, atk:7,  def:9, mp:30, maxMp:30,
-    skillName:'수호 방벽', skillKind:'shield', skillAtk:0, skillCost:16, skillColor:'#38bdf8', shieldAmt:22,
-    color:'#38bdf8', icon:'🛡️', role:'적 표적을 끌고 전체 보호막'
+    hp:210, atk:7,  def:9, atkPeriod:1.10, range:24, moveSpd:70, radius:9, isTank:true,
+    skillName:'방벽', skillKind:'bulwark', skillAtk:0, skillCd:8, skillRadius:110, shieldAmt:22, skillColor:'#38bdf8',
+    color:'#38bdf8', icon:'🛡️', role:'앞에 서서 맞고 도발'
   },
   mage: {
     id:'mage',      name:'마법사', cost:16,
-    hp:45, atk:9,  def:1, mp:40, maxMp:40,
-    skillName:'화염 폭발', skillKind:'aoe', skillAtk:22, skillCost:22, skillColor:'#f97316',
-    color:'#f97316', icon:'✨', role:'적 전체 광역 피해'
+    hp:80, atk:9,  def:1, atkPeriod:1.00, range:110, moveSpd:82, radius:7.5, ranged:true,
+    skillName:'화염 폭발', skillKind:'nova', skillAtk:22, skillCd:7, skillRadius:78, skillColor:'#f97316',
+    color:'#f97316', icon:'✨', role:'뭉친 적에게 광역'
   }
 };
 const UNIT_ORDER = ['archer', 'swordsman', 'healer', 'guardian', 'mage'];
 
-// ─── 적 유닛 (하단 전투) ─────────────────────────────────────────────────────
-const BATTLE_MOB_TYPES = {
-  goblin:  { id:'goblin',  name:'고블린', hp:30,  atk:8,  def:1,  mp:20, maxMp:20, skillAtk:15, skillCost:10, color:'#4ade80', icon:'👺', goldReward:8   },
-  orc:     { id:'orc',     name:'오크',   hp:80,  atk:15, def:4,  mp:20, maxMp:20, skillAtk:30, skillCost:15, color:'#818cf8', icon:'👹', goldReward:20  },
-  ogre:    { id:'ogre',    name:'오우거', hp:150, atk:22, def:6,  mp:24, maxMp:24, skillAtk:42, skillCost:16, color:'#a16207', icon:'🧌', goldReward:38  },
-  boss:    { id:'boss',    name:'보스',   hp:200, atk:25, def:8,  mp:30, maxMp:30, skillAtk:50, skillCost:20, color:'#ef4444', icon:'💀', goldReward:60,  isBoss:true },
-  warlord: { id:'warlord', name:'마왕',   hp:520, atk:40, def:14, mp:36, maxMp:36, skillAtk:88, skillCost:22, color:'#db2777', icon:'🐲', goldReward:180, isBoss:true }
+const HERO_ARENA = {
+  atkPeriod:0.80, range:34, moveSpd:95, radius:9,
+  skillName:'영웅 일격', skillKind:'cleave', skillCd:6, skillRadius:60, skillMult:2.2, skillColor:'#fbbf24'
 };
-// 아군이 전멸하면 남은 몬스터가 기지로 돌파해 초당 피해를 준다.
-// 두 전선을 연결해, 하단에서 지는 것도 실제 패배로 이어지게 만든다.
-const BREAKTHROUGH_DPS = 0.03;   // 몹 공격력 1당 초당 기지 피해
-const BREAKTHROUGH_MAX = 2.5;    // 초당 상한 — 한 웨이브 전멸이 즉사가 되지 않도록
-const BREAKTHROUGH_DURATION = 15; // 돌파 지속(초). 이후 몬스터는 물러나고 상단만 남는다
 
-// 그룹을 한 바퀴 더 돌 때마다 골드 보상이 체감한다.
-// 몹은 계속 강해지므로 무한 파밍이 성립하지 않는다.
-const LOOP_GOLD_DECAY = 0.5;
-function loopGoldMult(loopCount) {
-  return 1 / (1 + Math.max(0, loopCount) * LOOP_GOLD_DECAY);
-}
+// ─── 아레나 몬스터 ───────────────────────────────────────────────────────────
+// behavior: 'charge' 최근접 아군 직진 · 'kite' 거리 유지 원거리 · 'dash' 주기적 돌진
+// 이속은 아군 최고(95)보다 느려야 카이팅이 성립한다 — 광견(135)만 예외.
+const BATTLE_MOB_TYPES = {
+  goblin:   { id:'goblin',   name:'고블린',   hp:30,  atk:8,  def:1,  atkPeriod:1.0, range:20,  moveSpd:70,  radius:6,  goldReward:8,   color:'#4ade80', icon:'👺', behavior:'charge' },
+  hound:    { id:'hound',    name:'광견',     hp:22,  atk:6,  def:0,  atkPeriod:0.7, range:18,  moveSpd:135, radius:6,  goldReward:12,  color:'#f472b6', icon:'🐺', behavior:'charge' },
+  orc:      { id:'orc',      name:'오크',     hp:80,  atk:15, def:4,  atkPeriod:1.2, range:22,  moveSpd:55,  radius:8,  goldReward:20,  color:'#818cf8', icon:'👹', behavior:'charge' },
+  darkarch: { id:'darkarch', name:'다크아처', hp:45,  atk:12, def:2,  atkPeriod:1.4, range:140, moveSpd:60,  radius:7,  goldReward:24,  color:'#c084fc', icon:'🏹', behavior:'kite', ranged:true },
+  ogre:     { id:'ogre',     name:'오우거',   hp:150, atk:22, def:6,  atkPeriod:1.6, range:26,  moveSpd:45,  radius:10, goldReward:38,  color:'#a16207', icon:'🧌', behavior:'charge' },
+  boss:     { id:'boss',     name:'보스',     hp:200, atk:25, def:8,  atkPeriod:1.5, range:30,  moveSpd:40,  radius:11, goldReward:60,  color:'#ef4444', icon:'💀', behavior:'dash',  isBoss:true },
+  warlord:  { id:'warlord',  name:'마왕',     hp:520, atk:40, def:14, atkPeriod:1.8, range:34,  moveSpd:35,  radius:11, goldReward:180, color:'#db2777', icon:'🐲', behavior:'slam',  isBoss:true }
+};
+
+// 아군이 전멸하면 아레나에 남은 몬스터가 기지로 돌파해 초당 피해를 준다.
+// 두 전선을 연결해, 하단에서 지는 것도 실제 패배로 이어지게 만든다.
+const BREAKTHROUGH_DPS      = 0.03;  // 몹 공격력 1당 초당 기지 피해
+const BREAKTHROUGH_MAX      = 1.8;   // 초당 상한 — 한 웨이브 전멸이 즉사가 되지 않도록
+// v1.0에서는 2.5(전멸 1회당 37HP)였다. 그룹 전투에서 전멸은 예외였지만
+// 아레나에서는 흔한 일이라, 전멸 3번이면 런이 끝나는 계산이 너무 가팔랐다.
+// 1.8 = 전멸 1회당 최대 27HP → 네 번은 버틴다.
+const BREAKTHROUGH_DURATION = 15;    // 돌파 지속(초). 이후 몬스터는 물러나고 상단만 남는다
 
 // 엘리트: 케이브 업그레이드로 확률 상승. 스탯 강화 + 보상 증가
 const ELITE_STAT_MULT = 1.8;
 const ELITE_GOLD_MULT = 2.5;
 
 // ─── 웨이브 정의 ─────────────────────────────────────────────────────────────
-// battleGroups: 하단 전투 그룹 배열. 한 그룹을 전멸시켜야 다음 그룹 등장.
-// 각 그룹은 types 배열 (동시 등장 몬스터 목록)
+// defenseEnemies: 상단 스폰 큐 (변경 없음)
+// arenaPool: 하단 아레나 스폰 풀 — [몹 id, 가중치] 목록에서 뽑아 리젠한다.
+//            v1.0의 "그룹을 순서대로 격파"가 "어떤 몹이 어떤 비율로 나오는가"로 바뀌었다.
 // 10 스테이지 × 3 웨이브 = 30 웨이브
 const WAVE_DEFS = [
-  // ── Stage 1-1 : 고블린 입문 ──────────────────────────────────────────────
-  { defenseEnemies:[{type:'goblin',count:4,interval:2000}], battleGroups:[{types:['goblin']},{types:['goblin']},{types:['goblin','goblin']}] },
-  { defenseEnemies:[{type:'goblin',count:5,interval:1800}], battleGroups:[{types:['goblin']},{types:['goblin','goblin']},{types:['goblin','goblin']}] },
-  { defenseEnemies:[{type:'goblin',count:6,interval:1600}], battleGroups:[{types:['goblin','goblin']},{types:['goblin','goblin']},{types:['goblin','goblin','goblin']}] },
-  // ── Stage 1-2 : 늑대 등장 ────────────────────────────────────────────────
-  { defenseEnemies:[{type:'goblin',count:6,interval:1500},{type:'runner',count:2,interval:3000}], battleGroups:[{types:['goblin','goblin']},{types:['goblin','orc']},{types:['goblin','goblin','goblin']}] },
-  { defenseEnemies:[{type:'goblin',count:7,interval:1400},{type:'runner',count:3,interval:2600}], battleGroups:[{types:['goblin','orc']},{types:['orc','goblin']},{types:['orc','orc']}] },
-  { defenseEnemies:[{type:'goblin',count:8,interval:1300},{type:'runner',count:4,interval:2400}], battleGroups:[{types:['orc','goblin']},{types:['orc','orc']},{types:['goblin','orc','goblin']}] },
-  // ── Stage 1-3 : 오크 주력 ────────────────────────────────────────────────
-  { defenseEnemies:[{type:'goblin',count:8,interval:1200},{type:'orc',count:2,interval:4000}], battleGroups:[{types:['orc','orc']},{types:['goblin','orc','goblin']},{types:['orc','orc','goblin']}] },
-  { defenseEnemies:[{type:'goblin',count:9,interval:1100},{type:'orc',count:3,interval:3500}], battleGroups:[{types:['orc','orc']},{types:['orc','orc','goblin']},{types:['ogre']}] },
-  { defenseEnemies:[{type:'goblin',count:10,interval:1000},{type:'orc',count:3,interval:3200}], battleGroups:[{types:['goblin','orc','orc']},{types:['ogre','goblin']},{types:['ogre','orc']}] },
-  // ── Stage 1-4 : 강철오크 & 첫 보스 ───────────────────────────────────────
-  { defenseEnemies:[{type:'goblin',count:8,interval:1000},{type:'brute',count:1,interval:6000}], battleGroups:[{types:['orc','orc','goblin']},{types:['ogre','orc']},{types:['boss']}] },
-  { defenseEnemies:[{type:'orc',count:4,interval:2500},{type:'brute',count:1,interval:6000}], battleGroups:[{types:['ogre','orc']},{types:['ogre','ogre']},{types:['boss','goblin']}] },
-  { defenseEnemies:[{type:'orc',count:5,interval:2200},{type:'brute',count:2,interval:5000}], battleGroups:[{types:['ogre','ogre']},{types:['boss','orc']},{types:['boss','ogre']}] },
-  // ── Stage 1-5 : 오우거 무리 ──────────────────────────────────────────────
-  { defenseEnemies:[{type:'runner',count:6,interval:1400},{type:'orc',count:3,interval:2200}], battleGroups:[{types:['ogre','ogre']},{types:['boss','goblin','goblin']},{types:['boss','ogre']}] },
-  { defenseEnemies:[{type:'orc',count:5,interval:2000},{type:'brute',count:2,interval:4500}], battleGroups:[{types:['boss','orc']},{types:['ogre','ogre','orc']},{types:['boss','ogre']}] },
-  { defenseEnemies:[{type:'goblin',count:8,interval:800},{type:'brute',count:3,interval:4000}], battleGroups:[{types:['boss','ogre']},{types:['boss','orc','goblin']},{types:['boss','boss']}] },
-  // ── Stage 1-6 : 보스 상시 등장 ───────────────────────────────────────────
-  { defenseEnemies:[{type:'orc',count:6,interval:1800},{type:'brute',count:2,interval:4000}], battleGroups:[{types:['boss','ogre']},{types:['boss','ogre','goblin']},{types:['boss','boss']}] },
-  { defenseEnemies:[{type:'runner',count:8,interval:1100},{type:'orc',count:5,interval:1800}], battleGroups:[{types:['boss','ogre','goblin']},{types:['boss','boss']},{types:['boss','boss','ogre']}] },
-  { defenseEnemies:[{type:'orc',count:7,interval:1600},{type:'brute',count:3,interval:3600}], battleGroups:[{types:['boss','boss']},{types:['boss','boss','orc']},{types:['boss','boss','ogre']}] },
-  // ── Stage 1-7 : 마왕 예고 ────────────────────────────────────────────────
-  { defenseEnemies:[{type:'orc',count:7,interval:1500},{type:'brute',count:3,interval:3400}], battleGroups:[{types:['boss','boss','ogre']},{types:['boss','boss','orc']},{types:['warlord']}] },
-  { defenseEnemies:[{type:'orc',count:8,interval:1400},{type:'runner',count:6,interval:1600}], battleGroups:[{types:['boss','boss']},{types:['boss','boss','ogre']},{types:['warlord','goblin']}] },
-  { defenseEnemies:[{type:'orc',count:9,interval:1300},{type:'brute',count:4,interval:3000}], battleGroups:[{types:['boss','boss','ogre']},{types:['boss','boss','boss']},{types:['warlord','orc']}] },
-  // ── Stage 1-8 : 정예 편성 ────────────────────────────────────────────────
-  { defenseEnemies:[{type:'orc',count:8,interval:1200},{type:'brute',count:4,interval:2800}], battleGroups:[{types:['boss','boss','ogre']},{types:['boss','boss','boss']},{types:['warlord','ogre']}] },
-  { defenseEnemies:[{type:'brute',count:5,interval:2600},{type:'runner',count:8,interval:1000}], battleGroups:[{types:['boss','boss','boss']},{types:['warlord','orc']},{types:['warlord','ogre','goblin']}] },
-  { defenseEnemies:[{type:'brute',count:6,interval:2400},{type:'orc',count:6,interval:1600}], battleGroups:[{types:['boss','boss','boss','ogre']},{types:['warlord','ogre']},{types:['warlord','boss']}] },
-  // ── Stage 1-9 : 마왕 다수 ────────────────────────────────────────────────
-  { defenseEnemies:[{type:'brute',count:6,interval:2200},{type:'boss',count:1,interval:9000}], battleGroups:[{types:['boss','boss','boss','ogre']},{types:['warlord','boss']},{types:['warlord','boss','ogre']}] },
-  { defenseEnemies:[{type:'brute',count:7,interval:2000},{type:'boss',count:1,interval:8000}], battleGroups:[{types:['warlord','boss']},{types:['warlord','boss','ogre']},{types:['warlord','warlord']}] },
-  { defenseEnemies:[{type:'brute',count:8,interval:1800},{type:'boss',count:2,interval:6000}], battleGroups:[{types:['warlord','boss','ogre']},{types:['warlord','warlord']},{types:['warlord','warlord','boss']}] },
-  // ── Stage 1-10 : 최종 보스 스테이지 ──────────────────────────────────────
-  { defenseEnemies:[{type:'brute',count:8,interval:1600},{type:'boss',count:2,interval:5000}], battleGroups:[{types:['warlord','boss','boss']},{types:['warlord','warlord']},{types:['warlord','warlord','boss']}] },
-  { defenseEnemies:[{type:'brute',count:9,interval:1500},{type:'boss',count:3,interval:4500}], battleGroups:[{types:['warlord','warlord']},{types:['warlord','warlord','boss']},{types:['warlord','warlord','ogre','boss']}] },
-  { defenseEnemies:[{type:'boss',count:5,interval:3500},{type:'brute',count:8,interval:1600}], battleGroups:[{types:['warlord','warlord','boss']},{types:['warlord','warlord','boss','ogre']},{types:['warlord','warlord','warlord','boss','boss']}] },
+  // ── 1-1 : 고블린 입문 · 기본 조작 ────────────────────────────────────────
+  { defenseEnemies:[{type:'goblin',count:4,interval:2000}], arenaPool:[['goblin',10]] },
+  { defenseEnemies:[{type:'goblin',count:5,interval:1800}], arenaPool:[['goblin',10]] },
+  { defenseEnemies:[{type:'goblin',count:6,interval:1600}], arenaPool:[['goblin',10]] },
+  // ── 1-2 : 광견 등장 · 수동 조작의 첫 필요 ────────────────────────────────
+  { defenseEnemies:[{type:'goblin',count:6,interval:1500},{type:'runner',count:2,interval:3000}], arenaPool:[['goblin',10],['hound',3]] },
+  { defenseEnemies:[{type:'goblin',count:7,interval:1400},{type:'runner',count:3,interval:2600}], arenaPool:[['goblin',9],['hound',5]] },
+  { defenseEnemies:[{type:'goblin',count:8,interval:1300},{type:'runner',count:4,interval:2400}], arenaPool:[['goblin',8],['hound',6]] },
+  // ── 1-3 : 오크 · 체력 벽 ─────────────────────────────────────────────────
+  { defenseEnemies:[{type:'goblin',count:8,interval:1200},{type:'orc',count:2,interval:4000}], arenaPool:[['goblin',8],['hound',5],['orc',3]] },
+  { defenseEnemies:[{type:'goblin',count:9,interval:1100},{type:'orc',count:3,interval:3500}], arenaPool:[['goblin',7],['hound',5],['orc',5]] },
+  { defenseEnemies:[{type:'goblin',count:10,interval:1000},{type:'orc',count:3,interval:3200}], arenaPool:[['goblin',6],['hound',5],['orc',6]] },
+  // ── 1-4 : 다크아처 · 접근 강제 ───────────────────────────────────────────
+  { defenseEnemies:[{type:'goblin',count:8,interval:1000},{type:'brute',count:1,interval:6000}], arenaPool:[['goblin',6],['hound',5],['orc',6],['darkarch',3]] },
+  { defenseEnemies:[{type:'orc',count:4,interval:2500},{type:'brute',count:1,interval:6000}], arenaPool:[['goblin',5],['hound',5],['orc',6],['darkarch',4]] },
+  { defenseEnemies:[{type:'orc',count:5,interval:2200},{type:'brute',count:2,interval:5000}], arenaPool:[['goblin',4],['hound',5],['orc',7],['darkarch',5]] },
+  // ── 1-5 : 오우거 · 고타격 저속 ───────────────────────────────────────────
+  { defenseEnemies:[{type:'runner',count:6,interval:1400},{type:'orc',count:3,interval:2200}], arenaPool:[['goblin',4],['hound',5],['orc',6],['darkarch',4],['ogre',2]] },
+  { defenseEnemies:[{type:'orc',count:5,interval:2000},{type:'brute',count:2,interval:4500}], arenaPool:[['hound',5],['orc',6],['darkarch',4],['ogre',3]] },
+  { defenseEnemies:[{type:'goblin',count:8,interval:800},{type:'brute',count:3,interval:4000}], arenaPool:[['hound',5],['orc',6],['darkarch',4],['ogre',4]] },
+  // ── 1-6 : 보스 등장 · 돌진 패턴 ──────────────────────────────────────────
+  { defenseEnemies:[{type:'orc',count:6,interval:1800},{type:'brute',count:2,interval:4000}], arenaPool:[['hound',5],['orc',6],['darkarch',4],['ogre',4],['boss',1]] },
+  { defenseEnemies:[{type:'runner',count:8,interval:1100},{type:'orc',count:5,interval:1800}], arenaPool:[['hound',5],['orc',5],['darkarch',4],['ogre',5],['boss',1]] },
+  { defenseEnemies:[{type:'orc',count:7,interval:1600},{type:'brute',count:3,interval:3600}], arenaPool:[['hound',4],['orc',5],['darkarch',4],['ogre',5],['boss',2]] },
+  // ── 1-7 : 엘리트 확률 상승 · 단일 고위협 ─────────────────────────────────
+  { defenseEnemies:[{type:'orc',count:7,interval:1500},{type:'brute',count:3,interval:3400}], arenaPool:[['hound',4],['orc',5],['darkarch',5],['ogre',5],['boss',2]], eliteBonus:0.10 },
+  { defenseEnemies:[{type:'orc',count:8,interval:1400},{type:'runner',count:6,interval:1600}], arenaPool:[['hound',4],['orc',4],['darkarch',5],['ogre',6],['boss',3]], eliteBonus:0.12 },
+  { defenseEnemies:[{type:'orc',count:9,interval:1300},{type:'brute',count:4,interval:3000}], arenaPool:[['hound',4],['orc',4],['darkarch',5],['ogre',6],['boss',3]], eliteBonus:0.14 },
+  // ── 1-8 : 오우거 · 보스 혼합 · 복합 압력 ─────────────────────────────────
+  { defenseEnemies:[{type:'orc',count:8,interval:1200},{type:'brute',count:4,interval:2800}], arenaPool:[['hound',3],['orc',4],['darkarch',5],['ogre',7],['boss',4]], eliteBonus:0.14 },
+  { defenseEnemies:[{type:'brute',count:5,interval:2600},{type:'runner',count:8,interval:1000}], arenaPool:[['hound',3],['darkarch',5],['ogre',7],['boss',5]], eliteBonus:0.16 },
+  { defenseEnemies:[{type:'brute',count:6,interval:2400},{type:'orc',count:6,interval:1600}], arenaPool:[['hound',3],['darkarch',4],['ogre',7],['boss',6]], eliteBonus:0.16 },
+  // ── 1-9 : 마왕 · 상하단 모두 보스급 ──────────────────────────────────────
+  { defenseEnemies:[{type:'brute',count:6,interval:2200},{type:'boss',count:1,interval:9000}], arenaPool:[['darkarch',4],['ogre',6],['boss',6],['warlord',1]], eliteBonus:0.18 },
+  { defenseEnemies:[{type:'brute',count:7,interval:2000},{type:'boss',count:1,interval:8000}], arenaPool:[['darkarch',4],['ogre',5],['boss',7],['warlord',2]], eliteBonus:0.18 },
+  { defenseEnemies:[{type:'brute',count:8,interval:1800},{type:'boss',count:2,interval:6000}], arenaPool:[['darkarch',3],['ogre',5],['boss',8],['warlord',3]], eliteBonus:0.20 },
+  // ── 1-10 : 최종 · 마왕 다수 + 최대 밀도 ──────────────────────────────────
+  { defenseEnemies:[{type:'brute',count:8,interval:1600},{type:'boss',count:2,interval:5000}], arenaPool:[['ogre',4],['boss',8],['warlord',4]], eliteBonus:0.20, spawnMult:0.85 },
+  { defenseEnemies:[{type:'brute',count:9,interval:1500},{type:'boss',count:3,interval:4500}], arenaPool:[['ogre',3],['boss',8],['warlord',6]], eliteBonus:0.22, spawnMult:0.80 },
+  { defenseEnemies:[{type:'boss',count:5,interval:3500},{type:'brute',count:8,interval:1600}], arenaPool:[['ogre',2],['boss',7],['warlord',9]], eliteBonus:0.25, spawnMult:0.72 },
 ];
-// 한 그룹 최대 인원 (레이아웃/가독성 상한)
-const MAX_GROUP_SIZE = 5;
+
+// 가중치 풀에서 몹 id 하나를 뽑는다
+function rollArenaMob(pool) {
+  if (!pool || !pool.length) return 'goblin';
+  let total = 0;
+  for (const [, w] of pool) total += w;
+  let r = Math.random() * total;
+  for (const [id, w] of pool) { r -= w; if (r <= 0) return id; }
+  return pool[0][0];
+}
 
 function getStageInfo(waveIndex) {
   const stageIdx = Math.floor(waveIndex / 3);
@@ -277,8 +325,22 @@ const CAVE_LEVELS = [
   { label:'지옥 동굴', statMult:3.5, goldMult:4.5, upgradeCost: 480 }
 ];
 const CAVE_MAX_LEVEL = CAVE_LEVELS.length - 1;
-// 처치 1회마다 다음 몹 스탯/보상 8% 증가
-const KILL_SCALE = 0.08;
+
+// 몹 강화 곡선.
+// v1.0에서는 "처치 1회마다 +8%"였다. 한 웨이브에 10마리쯤 잡던 그룹 전투에서는
+// 1.8배로 끝났지만, 아레나는 한 웨이브에 45~70마리가 나온다 — 같은 계수면
+// 웨이브 후반 고블린이 4.6배가 되어 어떤 편성으로도 따라잡을 수 없다.
+// 난이도 상승은 웨이브 인덱스(등급·물량)가 맡고, 처치 항은 보조로만 남긴다.
+const WAVE_STAT_SCALE = 0.07;   // 웨이브 1당 몹 스탯 +7%
+const KILL_SCALE      = 0.006;  // 처치 1회당 +0.6% (웨이브 내 완만한 가속)
+const WAVE_GOLD_SCALE = 0.06;   // 웨이브 1당 보상 +6%
+
+function mobStatScale(waveIndex, killCount) {
+  return (1 + (waveIndex || 0) * WAVE_STAT_SCALE) * (1 + (killCount || 0) * KILL_SCALE);
+}
+function mobGoldScale(waveIndex, killCount) {
+  return (1 + (waveIndex || 0) * WAVE_GOLD_SCALE) * (1 + (killCount || 0) * KILL_SCALE);
+}
 
 // 웨이브 종료 후 생존 병력이 회복하는 최대 HP 비율
 const REST_HEAL_PCT    = 0.30;
@@ -288,10 +350,8 @@ const INTERMISSION     = 15;
 const BASE_HP_MAX      = 100;
 const HERO_REVIVE_TIME = 20;
 
-// ─── 전투 틱 ──────────────────────────────────────────────────────────────────
-const TICK_INTERVAL = 1.0;
-const SKILL_TICK_CD = 5;
-const MP_REGEN_TICK = 5;
+// v1.0의 틱 전투 상수(TICK_INTERVAL · SKILL_TICK_CD · MP_REGEN_TICK)는 폐기됐다.
+// 실시간 전투에서는 유닛마다 atkPeriod / skillCd(초)를 직접 쓴다.
 
 // ─── 영웅 기본 스탯 ───────────────────────────────────────────────────────────
 // 30웨이브 분량에 맞춰 Lv.10까지 확장

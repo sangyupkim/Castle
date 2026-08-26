@@ -32,7 +32,7 @@ const TOWN_BUILDINGS = [
         { id:'u_atk2', name:'정예 훈련', icon:'⚔️', cost:25, maxLv:3, desc:lv=>`아군 공격력 +${lv*6}`,  apply:(b,lv)=>{ b.unitAtk += lv*6; } },
         { id:'u_def2', name:'중갑 착용', icon:'🛡️', cost:25, maxLv:3, desc:lv=>`아군 방어력 +${lv*4}`,  apply:(b,lv)=>{ b.unitDef += lv*4; } },
         { id:'u_slot', name:'병력 증원', icon:'➕', cost:35, maxLv:2, desc:lv=>`병력 슬롯 +${lv}`,       apply:(b,lv)=>{ b.maxSlotBonus += lv; } },
-        { id:'u_combo',name:'연속 공격', icon:'🔥', cost:40, maxLv:1, desc:()=>'틱당 20% 추가 공격',      apply:(b)=>  { b.comboChance += 0.2; } },
+        { id:'u_combo',name:'연속 공격', icon:'🔥', cost:40, maxLv:1, desc:()=>'공격 시 20% 추가 타격',    apply:(b)=>  { b.comboChance += 0.2; } },
       ]},
     ]
   },
@@ -40,8 +40,15 @@ const TOWN_BUILDINGS = [
     id:'heroShop', name:'영웅 상점', icon:'🏪', buildCost:25, color:'#a78bfa',
     desc:'영웅 아이템을 구매하는 시설',
     levels:[
-      { levelName:'Lv.1', upgradeCost:0, upgrades:[] },
-      { levelName:'Lv.2', upgradeCost:45, upgrades:[] },
+      { levelName:'Lv.1', upgradeCost:0, upgrades:[
+        { id:'hs_atk',  name:'영웅 단련', icon:'⚔️', cost:18, maxLv:3, desc:lv=>`영웅 공격력 +${lv*6}`,    apply:(b,lv)=>{ b.heroAtk += lv*6; } },
+        { id:'hs_exp',  name:'전투 교본', icon:'📖', cost:22, maxLv:2, desc:lv=>`영웅 EXP +${lv*25}%`,     apply:(b,lv)=>{ b.heroExpMult *= Math.pow(1.25,lv); } },
+      ]},
+      { levelName:'Lv.2', upgradeCost:45, upgrades:[
+        { id:'hs_stat', name:'영웅 각성', icon:'🌟', cost:40, maxLv:2, desc:lv=>`영웅 모든 스탯 +${lv*12}%`, apply:(b,lv)=>{ b.heroStatMult *= Math.pow(1.12,lv); } },
+        { id:'hs_rev',  name:'구원의 손', icon:'🔮', cost:35, maxLv:2, desc:lv=>`영웅 부활 −${lv*5}초`,      apply:(b,lv)=>{ b.heroReviveReduction += lv*5; } },
+        { id:'hs_aura', name:'지휘 오라', icon:'✨', cost:30, maxLv:2, desc:lv=>`아군 방어 오라 +${lv*3}`,   apply:(b,lv)=>{ b.heroAura += lv*3; } },
+      ]},
     ]
   },
   {
@@ -190,6 +197,7 @@ function applyTownUpgrades(gs) {
 function reapplyAllBonuses(gs) {
   resetBonuses();
   applySkillTree(gs);
+  applyPacts();          // 서약은 스킬 트리 뒤, 마을 강화 앞에 적용한다
   applyTownUpgrades(gs);
-  if (gs.battle) gs.battle.maxSlots=4+BONUSES.maxSlotBonus;
+  if (gs.battle) gs.battle.maxSlots=Math.max(1,4+BONUSES.maxSlotBonus);
 }

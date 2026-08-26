@@ -1,51 +1,31 @@
 'use strict';
 
-const ADVANCE_DURATION = 1.4;  // 전진 연출 시간(초)
-const SPAWN_DELAY      = 0.5;  // 전진 후 다음 그룹 스폰까지 대기(초)
-
 function createWaveManager() {
   return {
     waveIndex: 0,
-    phase: 'idle',
+    phase: 'idle',            // 'idle' | 'active' | 'upgradePick' | 'intermission'
     timer: 0,
     elapsed: 0,
     intermissionTimer: 0,
     defenseQueues: [],
-
-    // 그룹 기반 전투 스폰
-    battleGroups: [],      // 전체 그룹 목록
-    groupIdx: 0,           // 현재 그룹 인덱스
-    groupPhase: 'idle',    // 'idle' | 'fighting' | 'advancing' | 'waiting' | 'done'
-    advanceTimer: 0,
-    waitTimer: 0,
-    loopCount: 0,          // 그룹을 몇 바퀴 순환했는지
-    wipedAt: null,         // 아군이 전멸한 시각(초). 돌파 지속시간 계산용
+    wipedAt: null,            // 아군 전멸 시각(초). 돌파 지속시간 계산용
 
     init(idx) {
-      this.waveIndex  = idx;
-      this.phase      = 'idle';
-      this.timer      = WAVE_DURATION;
-      this.elapsed    = 0;
-      this.defenseQueues  = [];
-      this.battleGroups   = [];
-      this.groupIdx       = 0;
-      this.groupPhase     = 'idle';
-      this.advanceTimer   = 0;
-      this.waitTimer      = 0;
-      this.loopCount      = 0;
-      this.wipedAt        = null;
+      this.waveIndex = idx;
+      this.phase     = 'idle';
+      this.timer     = WAVE_DURATION;
+      this.elapsed   = 0;
+      this.defenseQueues = [];
+      this.wipedAt   = null;
     },
 
     startWave(gs) {
       if (this.phase !== 'idle') return;
 
-      this.phase      = 'active';
-      this.elapsed    = 0;
-      this.timer      = WAVE_DURATION;
-      this.groupIdx   = 0;
-      this.groupPhase = 'idle';
-      this.loopCount  = 0;
-      this.wipedAt    = null;
+      this.phase   = 'active';
+      this.elapsed = 0;
+      this.timer   = WAVE_DURATION;
+      this.wipedAt = null;
 
       const def = WAVE_DEFS[this.waveIndex];
 
@@ -53,55 +33,31 @@ function createWaveManager() {
       const countMult = 1 + this.waveIndex * DEF_WAVE_COUNT_SCALE;
       const spawnMult = BONUSES.spawnSpeedMult || 1;
       this.defenseQueues = def.defenseEnemies.map(d => ({
-        type:d.type,
+        type: d.type,
         remaining: Math.max(1, Math.round(d.count * countMult)),
         interval: (d.interval / 1000) / spawnMult,
         nextSpawn: 0.5
       }));
 
-      // 하단 그룹 목록 복사
-      this.battleGroups = def.battleGroups.map(g => ({ types:[...g.types] }));
-
-      // 적팀 클린 스타트
-      gs.battle.enemyTeam = [];
       reapplyAllBonuses(gs);
       startFighting(gs.battle);
-
-      // 첫 그룹 바로 스폰
-      this._spawnGroup(gs);
+      startArena(gs, this.waveIndex);
       if (typeof SFX !== 'undefined') SFX.waveStart();
     },
 
-    _spawnGroup(gs) {
-      if (!this.battleGroups.length) { this.groupPhase = 'done'; return; }
-      // 그룹을 다 돌면 처음으로 순환한다. 하단은 자원 확보 구간이므로
-      // 시간이 남아 있는 한 계속 몬스터가 나와야 한다.
-      if (this.groupIdx >= this.battleGroups.length) {
-        this.groupIdx = 0;
-        this.loopCount++;
-      }
-      const group = this.battleGroups[this.groupIdx];
-      const types = group.types.slice(0, MAX_GROUP_SIZE);
-      // 아군/적 중 큰 쪽에 맞춰 행 간격을 먼저 확정해야 drawY가 화면 안에 들어온다
-      setBattleRowCount(Math.max(4, gs.battle.ourTeam.length, types.length));
-      const goldMult = loopGoldMult(this.loopCount);
-      types.forEach((type, i) => {
-        const mob = makeScaledMob(type, gs.battle.killCount, gs.caveLevel);
-        mob.goldReward = Math.max(1, Math.round(mob.goldReward * goldMult));
-        mob.drawY = unitY(i);
-        gs.battle.enemyTeam.push(mob);
-      });
-      this.groupPhase = 'fighting';
-      if (typeof SFX !== 'undefined' && this.groupIdx > 0) SFX.advance();
-    },
-
-    // 하단 전투에서 물러난다. 병력과 적립 골드를 지키고 남은 시간은 상단만 진행.
+    // 하단 아레나에서 물러난다. 병력과 적립 골드를 지키고 남은 시간은 상단만 진행.
     retreat(gs) {
       if (this.phase !== 'active') return false;
-      if (this.groupPhase === 'done') return false;
       if (gs.battle.phase !== 'fighting') return false;
-      gs.battle.enemyTeam = [];
-      this.groupPhase = 'done';
+      // 바닥에 남은 드랍은 절반만 챙긴다 — 후퇴가 손해만은 아니되,
+      // 제때 주우러 간 것보다 이득일 수는 없다
+      const left = Math.floor(gs.arena.drops.reduce((a, d) => a + d.amount, 0) * 0.5);
+      if (left > 0) {
+        gs.battle.goldEarned      += left;
+        gs.battle.totalGoldEarned += left;
+        addLog(gs.battle, `후퇴하며 드랍 회수 +${left}💰`, COLORS.gold);
+      }
+      clearArena(gs);
       gs.battle.phase = 'retreated';
       addLog(gs.battle, '🛡 후퇴 — 병력을 보존했습니다', '#38bdf8');
       if (typeof SFX !== 'undefined') SFX.click();
@@ -125,12 +81,10 @@ function createWaveManager() {
         }
       }
 
-      // 하단 그룹 기반 스폰 관리
-      if (gs.battle.phase === 'fighting') {
-        this._updateGroupSpawn(gs, dt);
-      }
+      // 하단 아레나
+      updateArena(gs, dt);
 
-      // 아군 전멸 시 — 시각을 기록해 돌파 지속시간을 잰다
+      // 아군 전멸 — 시각을 기록해 돌파 지속시간을 잰다
       if (gs.battle.phase === 'lost') {
         gs.battle.phase = 'idle_defeated';
         this.wipedAt = this.elapsed;
@@ -138,8 +92,8 @@ function createWaveManager() {
       }
       // 돌파가 일정 시간 지나면 몬스터는 물러난다 (남은 시간은 상단만 진행)
       if (this.wipedAt !== null && this.elapsed - this.wipedAt >= BREAKTHROUGH_DURATION) {
-        if (gs.battle.enemyTeam.length) {
-          gs.battle.enemyTeam = [];
+        if (gs.arena.mobs.length) {
+          clearArena(gs);
           addLog(gs.battle, '몬스터가 물러났습니다', '#64748b');
         }
       }
@@ -150,42 +104,10 @@ function createWaveManager() {
       const defDone = this.defenseQueues.every(q => q.remaining <= 0) &&
                       gs.defenseEnemies.every(e => e.dead || e.reached);
       const batOver = (gs.battle.phase === 'retreated') ||
-                      (gs.battle.phase === 'idle_defeated' && gs.battle.enemyTeam.length === 0);
+                      (gs.battle.phase === 'idle_defeated' && gs.arena.mobs.length === 0);
 
       if (this.timer <= 0 || (defDone && batOver)) {
         this.endWave(gs);
-      }
-    },
-
-    _updateGroupSpawn(gs, dt) {
-      if (this.groupPhase === 'done') return;
-
-      if (this.groupPhase === 'fighting') {
-        // 현재 그룹 전원 사망 확인 (화면에서 제거 대기 포함)
-        const liveOrFading = gs.battle.enemyTeam.filter(e => !e.dead || e.deadTimer < 0.7);
-        if (liveOrFading.length === 0) {
-          // 모두 처치 — 전진 연출 후 다음 그룹 (마지막이면 처음으로 순환)
-          this.groupIdx++;
-          this.groupPhase   = 'advancing';
-          this.advanceTimer = ADVANCE_DURATION;
-        }
-      }
-
-      else if (this.groupPhase === 'advancing') {
-        this.advanceTimer -= dt;
-        if (this.advanceTimer <= 0) {
-          this.groupPhase = 'waiting';
-          this.waitTimer  = SPAWN_DELAY;
-        }
-      }
-
-      else if (this.groupPhase === 'waiting') {
-        this.waitTimer -= dt;
-        if (this.waitTimer <= 0) {
-          // 다음 그룹 스폰
-          gs.battle.enemyTeam = [];  // 사망한 적 잔해 제거
-          this._spawnGroup(gs);
-        }
       }
     },
 
@@ -195,6 +117,13 @@ function createWaveManager() {
         gs.battle.result = 'won';
       }
 
+      // 바닥에 남은 드랍은 절반만 회수된다
+      const leftover = Math.floor(gs.arena.drops.reduce((a, d) => a + d.amount, 0) * 0.5);
+      if (leftover > 0) {
+        gs.battle.goldEarned      += leftover;
+        gs.battle.totalGoldEarned += leftover;
+      }
+
       const earned    = gs.battle.goldEarned;
       const killBonus = gs.battle.killCount * (this.waveIndex + 1);
       const winBonus  = (gs.battle.result === 'won') ? (20 + this.waveIndex * 15) : 0;
@@ -202,7 +131,7 @@ function createWaveManager() {
       gs.gold += total;
 
       const parts = [];
-      if (earned > 0)    parts.push(`처치 +${earned}💰`);
+      if (earned > 0)    parts.push(`드랍 +${earned}💰`);
       if (killBonus > 0) parts.push(`처치보너스 +${killBonus}💰`);
       if (winBonus > 0)  parts.push(`승리 +${winBonus}💰`);
       addLog(gs.battle, `웨이브${this.waveIndex+1}: ${parts.join(' ')}`, COLORS.gold);
@@ -220,17 +149,16 @@ function createWaveManager() {
 
       gs.defenseEnemies    = [];
       gs.projectiles       = [];
-      gs.battle.enemyTeam  = [];
+      clearArena(gs);
       gs.battle.ourTeam    = gs.battle.ourTeam.filter(u => !u.dead && !u.isHero);
       gs.battle.phase      = 'hire';
       gs.battle.result     = null;
       gs.battle.goldEarned = 0;
       gs.battle.floaties   = [];
-      gs.battle.maxSlots   = 4 + BONUSES.maxSlotBonus;
+      gs.battle.maxSlots   = Math.max(1, 4 + BONUSES.maxSlotBonus);
 
       gs.hero.placement = 'none';
       restHealTeam(gs.battle);       // 생존 병력 휴식 회복
-      syncBattleLayout(gs.battle);
 
       const isLast = (this.waveIndex + 1 >= WAVE_DEFS.length);
       if (!isLast) {
@@ -244,16 +172,17 @@ function createWaveManager() {
       gs.town.waveBuffs = [];
       reapplyAllBonuses(gs);
 
-      // Stage completion gem reward
+      // 스테이지 최초 클리어 보석 (일회성)
       const stageIdx = Math.floor(this.waveIndex / 3);
       const isLastWaveOfStage = ((this.waveIndex + 1) % 3 === 0);
       if (isLastWaveOfStage) {
         if (!gs.clearedStages) gs.clearedStages = new Array(10).fill(false);
+        gs.stats.bestStage = Math.max(gs.stats.bestStage || 0, stageIdx + 1);
         if (!gs.clearedStages[stageIdx]) {
           gs.clearedStages[stageIdx] = true;
-          const isBoss = stageIdx === 9;
-          const gems = isBoss ? 2 : 1;
+          const gems = (stageIdx === 9) ? 2 : 1;
           gs.soulStones += gems;
+          gs.stats.totalGems = (gs.stats.totalGems || 0) + gems;
           addLog(gs.battle, `★ 1-${stageIdx+1} 클리어! 보석 +${gems}`, '#a78bfa');
         }
       }

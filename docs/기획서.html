@@ -219,7 +219,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <div class="wrap">
 <header class="cover">
-  <div class="eyebrow">Game Design Document · v2.1 · 실시간 아레나 + 로비</div>
+  <div class="eyebrow">Game Design Document · v2.2 · 구현 완료 · 실측 반영</div>
   <h1>듀얼 프론티어</h1>
   <p class="tagline">한 화면에서 두 개의 전선을 동시에 굴리는 모바일 웹 로그라이트.
      위는 배치해서 지키고, 아래는 직접 뛰어들어 벌어온다.</p>
@@ -228,7 +228,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
     <div><dt>플랫폼</dt><dd>모바일 웹 (480×800 캔버스)</dd></div>
     <div><dt>1회 플레이</dt><dd>15~35분</dd></div>
     <div><dt>현재 볼륨</dt><dd>스테이지 1 · 30웨이브</dd></div>
-    <div><dt>이번 개정</dt><dd>하단 실시간 아레나(v2.0) · 로비 신설(v2.1)</dd></div>
+    <div><dt>이번 개정</dt><dd>아레나 · 로비 구현 완료 (v2.2) — 수치는 실측치</dd></div>
   </dl>
 </header>
 
@@ -1095,15 +1095,44 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
 빠른 이유다. 카이팅은 유효한 전술이되 만능이면 안 된다.</li>
 </ol>
 
-<h4>측정해야 할 것</h4>
+<h4>측정 결과 <span class="rev">v2.2 실측</span></h4>
+<p>구현 후 스크립트 플레이(합리적인 플레이어 · 팀 HP 30%에서 후퇴)로 측정했다.</p>
 <div class="tw"><table>
-<thead><tr><th>지표</th><th>목표</th><th>측정 방법</th></tr></thead>
+<thead><tr><th>지표</th><th class="num">목표</th><th class="num">실측</th><th></th></tr></thead>
 <tbody>
-<tr><td>자동 vs 수동 수입차</td><td class="num">+25~40%</td><td class="wrap">동일 편성으로 두 모드 각 10웨이브 시뮬레이션</td></tr>
-<tr><td>첫 런 도달 웨이브</td><td class="num">8 ~ 14</td><td class="wrap">스킬 트리 없이 스크립트 플레이</td></tr>
-<tr><td>웨이브당 처치수</td><td class="num">25 ~ 60</td><td class="wrap">스폰 압력 곡선 검증</td></tr>
-<tr><td>동시 개체 수 피크</td><td class="num">≤ 28</td><td class="wrap">가독성 · 프레임 유지 확인</td></tr>
-<tr><td>프레임</td><td class="num">60fps 유지</td><td class="wrap">상단+하단 동시, 개체 최대 상태</td></tr>
+<tr><td>자동 vs 수동 수입차</td><td class="num">+25~40%</td><td class="num">+33%</td><td><span class="chip lo">달성</span></td></tr>
+<tr><td>첫 런 도달 웨이브</td><td class="num">8 ~ 14</td><td class="num">13</td><td><span class="chip lo">달성</span></td></tr>
+<tr><td>웨이브당 처치수</td><td class="num">25 ~ 60</td><td class="num">평균 19 · 최고 58</td><td><span class="chip md">미달</span></td></tr>
+<tr><td>동시 개체 수 피크</td><td class="num">≤ 28</td><td class="num">11 (상한 28)</td><td><span class="chip lo">달성</span></td></tr>
+<tr><td>프레임 (개체 28 + 상단)</td><td class="num">60fps</td><td class="num">60fps</td><td><span class="chip lo">달성</span></td></tr>
+</tbody></table></div>
+<div class="note">
+<p><strong>웨이브당 처치가 목표를 밑도는 이유.</strong> 후퇴가 웨이브를 조기에 끝내기 때문이다.
+끝까지 버틴 웨이브는 58처치까지 나오지만, 팀 HP 30%에서 후퇴하는 플레이는 평균 19에 머문다.
+목표치는 "끝까지 버틴 웨이브" 기준이었으므로 곡선 자체는 의도대로 작동한다 —
+동시에 <strong>소극적으로 플레이하면 그만큼 덜 번다</strong>는 뜻이기도 하다.</p>
+</div>
+
+<h4>기지 HP 곡선 <span class="rev">실측</span></h4>
+<p>첫 런(스킬 트리 없음 · 자동 모드)의 기지 HP는 100 → 100 → 73 → 46 → 2 → 함락(13웨이브)으로
+내려간다. 전멸 1회당 최대 27HP가 깎이므로 네 번까지 버틴다.</p>
+<p>v1.0의 미해결 문제였던 <strong>후반 골드 잉여는 관측되지 않았다</strong> — 보유 골드 최고치가
+682로 v1.0의 4,400에서 크게 내려왔다. 타워 30기까지 꾸준히 소비되고 런이 13웨이브에서
+끝나기 때문이다. 스킬 트리를 다 연 뒤 런이 길어지면 다시 나타날 수 있다.</p>
+
+<h4>구현하며 바꾼 수치 <span class="rev">v2.2</span></h4>
+<p>기획 단계의 표는 v1.0 값을 최대한 보존했지만, 실제로 돌려보니 <strong>모델이 바뀌면
+같은 숫자가 다른 뜻이 된다</strong>는 것이 드러났다. 측정을 근거로 바꾼 것들이다.</p>
+<div class="tw"><table>
+<thead><tr><th>항목</th><th class="num">기획 → 구현</th><th>바꾼 이유 (실측)</th></tr></thead>
+<tbody>
+<tr><td>몹 강화 곡선</td><td class="num">처치당 +8%<br>→ 웨이브당 +7% · 처치당 +0.6%</td><td class="wrap"><strong>가장 큰 문제였다.</strong> v1.0은 한 웨이브에 10마리를 잡아 1.8배로 끝났지만 아레나는 45~70마리다 — 같은 계수면 웨이브 후반 고블린이 <strong>4.6배</strong>가 되어 어떤 편성으로도 따라잡을 수 없었다. 무적 팀으로도 70마리 중 45마리밖에 못 잡았다</td></tr>
+<tr><td>아군 HP</td><td class="num">×1.75<br>(궁수 40→70 · 검사 60→105 · 방패병 120→210)</td><td class="wrap">틱 전투에서는 짧은 그룹전 3번이었지만 아레나는 <strong>60초 내내 노출</strong>된다. 원래 값으로는 고블린 한두 마리에게도 30초 만에 녹았다</td></tr>
+<tr><td>전투 이탈 회복 <span class="rev">신규</span></td><td class="num">3.5초 후 초당 최대 HP 4.5%</td><td class="wrap">기획에 없던 규칙. 위와 같은 이유로 필요했고, <strong>빼고 다시 붙이는 수동 조작에 값을 주는</strong> 장치이기도 하다</td></tr>
+<tr><td>돌파 초당 상한</td><td class="num">2.5 → 1.8</td><td class="wrap">전멸 1회 = 37HP였다. 그룹 전투에서 전멸은 예외였지만 아레나에서는 흔하다 — 세 번이면 런이 끝나는 계산이 너무 가팔랐다</td></tr>
+<tr><td>드랍 산란 <span class="rev">신규</span></td><td class="num">처치 지점에서 24~66px 밖으로</td><td class="wrap">기획은 "자동 모드가 멀리 떨어진 드랍을 놓친다"를 전제했지만, <strong>몹이 아군에게 오므로 드랍도 발밑에 떨어졌다.</strong> 산란 없이는 자동/수동 수입차가 +10%에 그쳤고, 넣으니 +33%가 됐다</td></tr>
+<tr><td>남은 드랍 회수</td><td class="num">100% → 50%</td><td class="wrap">웨이브 종료·후퇴 시 안 주운 골드를 전액 주면 수거 규칙 자체가 무의미해진다</td></tr>
+<tr><td>영웅 상점 Lv.1·2</td><td class="num">빈 목록 → 강화 5종</td><td class="wrap">v1.0에서 45골드를 내도 아무 변화가 없던 문제(구 16절)를 함께 해결했다</td></tr>
 </tbody></table></div>
 
 <h4>핵심 수치</h4>
@@ -1117,16 +1146,20 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
 <tr><td class="mono">SPAWN_SAFE_RADIUS</td><td class="num">120px</td><td class="wrap">신규</td></tr>
 <tr><td class="mono">DROP_PICKUP_RADIUS</td><td class="num">40px</td><td class="wrap">신규</td></tr>
 <tr><td class="mono">DROP_LIFETIME</td><td class="num">8초</td><td class="wrap">신규</td></tr>
+<tr><td class="mono">DROP_SCATTER_MIN / MAX</td><td class="num">24 / 66px</td><td class="wrap">신규 <span class="rev">v2.2</span> — 수거 반경(40)보다 넓어야 이동에 값이 생긴다</td></tr>
 <tr><td class="mono">FORMATION_RADIUS</td><td class="num">30px</td><td class="wrap">신규</td></tr>
+<tr><td class="mono">ARENA_REGEN_DELAY / PCT</td><td class="num">3.5초 / 4.5%s</td><td class="wrap">신규 <span class="rev">v2.2</span> — 전투 이탈 회복</td></tr>
+<tr><td class="mono">WAVE_STAT_SCALE</td><td class="num">0.07</td><td class="wrap">신규 <span class="rev">v2.2</span> — 웨이브당 몹 스탯 +7%</td></tr>
+<tr><td class="mono">KILL_SCALE</td><td class="num">0.08 → 0.006</td><td class="wrap"><span class="rev">v2.2</span> 웨이브 내 4.6배 폭주를 잡았다</td></tr>
 <tr><td class="mono">TICK_INTERVAL · SKILL_TICK_CD</td><td class="num">폐기</td><td class="wrap">쿨다운(초)으로 대체</td></tr>
-<tr><td class="mono">BREAKTHROUGH_*</td><td class="num">유지</td><td class="wrap">0.03 / 2.5 / 15초</td></tr>
+<tr><td class="mono">BREAKTHROUGH_DPS / MAX / DUR</td><td class="num">0.03 / 1.8 / 15초</td><td class="wrap">상한만 2.5 → 1.8 <span class="rev">v2.2</span></td></tr>
 </tbody></table></div>
 </section>
 
 <section id="s15">
-<h2>15 — 전환 계획 <span class="rev">v1.0 → v2.1</span></h2>
-<h3>무엇이 사라지고 무엇이 남는가</h3>
-<p>구현이 이미 존재하므로, 무엇을 버리고 무엇을 고쳐 쓸지 먼저 정해야 한다.</p>
+<h2>15 — 전환 계획 <span class="rev">완료</span></h2>
+<h3>무엇이 사라지고 무엇이 남았는가</h3>
+<p>아래 항목은 <strong>모두 반영됐다.</strong> 단계 표의 검증 항목도 전부 통과했다 (결과는 14절).</p>
 
 <div class="tw"><table>
 <caption>시스템별 처리</caption>
@@ -1199,22 +1232,25 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
 <section id="s16">
 <h2>16 — 미해결 과제</h2>
 
-<h4><span class="chip hi">높음</span> 좁은 화면의 가독성</h4>
-<p>480×330에 아군 5~6 + 몹 최대 28 + 드랍 + 투사체가 동시에 놓인다.
-반지름을 6~11px로 잡았지만 실제로 겹쳤을 때 무엇이 무엇인지 읽히는지는 <strong>만들어봐야 안다.</strong></p>
-<p><strong>대응.</strong> 1단계 구현 직후 최대 밀도 상태를 스크린샷으로 확인하고,
-안 되면 ① 동시 상한을 20으로 낮추거나 ② 몹 외곽선 강조 ③ 아군에게 상시 링 표시를 검토한다.</p>
+<h4><span class="chip lo">해결</span> 좁은 화면의 가독성</h4>
+<p>개체 28마리 + 드랍 9개 상태를 스크린샷으로 확인했다. 처음에는 반지름 7.5px 원에
+8px 아이콘을 그려 <strong>전부 색깔 점으로만 보였다.</strong></p>
+<p><strong>해결됨.</strong> ① 아이콘을 원보다 크게(최소 11px) ② 아군에게 상시 밝은 링
+③ 보스는 금색 · 엘리트는 분홍 외곽 링 ④ HP 바는 다쳤을 때만 표시.
+동시 상한은 28을 유지했고 이 상태에서 60fps가 나온다.</p>
 
-<h4><span class="chip hi">높음</span> 배속과 수동 조작의 충돌</h4>
-<p>3배속에서 실시간 조작은 사실상 불가능하다. 자동 모드에서만 3배속을 허용하고
-수동 전환 시 2배속으로 자동 강등하는 안을 기본으로 하되, 플레이어가 답답해할 여지가 있다.</p>
+<h4><span class="chip lo">해결</span> 배속과 수동 조작의 충돌</h4>
+<p><strong>해결됨</strong> — 수동으로 전환하면 2배속으로 자동 강등된다
+(<span class="mono">clampManualSpeed</span>). 자동 모드에서는 3배속을 그대로 쓴다.
+답답하다는 반응이 나오면 강등을 없애고 경고만 띄우는 쪽으로 되돌릴 수 있다.</p>
 
-<h4><span class="chip hi">높음</span> 보석 정산식이 소비처를 압도한다</h4>
+<h4><span class="chip lo">해결</span> 보석 정산식이 소비처를 압도한다</h4>
 <p>실측으로 확인된 가장 큰 경제 문제다. 1-1만 넘긴 첫 런이 39보석을 주는데
 스킬 트리 전체가 48보석이다 — <strong>영구 성장이 두 번째 런 전에 끝난다.</strong>
 12절에 개편안을 냈지만 실제 곡선은 아레나 전환 이후 처치 수가 달라지면 또 움직인다.</p>
-<p><strong>대응.</strong> 로비 L4(해금) 착수 전에 정산식부터 교체하고 스크립트 플레이로 재측정한다.
-해금을 먼저 넣으면 <strong>잠금만 걸리고 첫 런에 전부 열려</strong> 진행 축이 무의미해진다.</p>
+<p><strong>해결됨.</strong> 12절 개편안대로 교체했다. 실측 결과 13웨이브 도달 첫 런이 12보석
+(웨이브 6 + 케이브 3 + 처치 4 + 기록 갱신 3 근처)을 준다 — 소비처 100을 여는 데 6~9런.
+해금(L4)은 정산식 교체 뒤에 넣었다.</p>
 
 <h4><span class="chip hi">높음</span> 첫 런이 헐거워질 위험 (해금)</h4>
 <p>해금은 "새로 열린다"는 동기를 만드는 대신 <strong>시작 시점의 선택지를 줄인다.</strong>
@@ -1230,19 +1266,23 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
 <p><strong>대응.</strong> 화폐 아이콘(💰/💎)과 색(황동/보라)을 화면 전체에서 일관되게 쓰고,
 마을에는 보석을, 로비에는 골드를 <strong>아예 표시하지 않는다.</strong></p>
 
-<h4><span class="chip hi">높음</span> 튜토리얼 전면 재작성 필요</h4>
+<h4><span class="chip lo">해결</span> 튜토리얼 전면 재작성 필요</h4>
 <p>현재 튜토리얼은 6단계이고 "화살 타워" 하나만 설명한다. 마을·후퇴·배속·유닛 5종·스킬 트리가
-이미 빠져 있는데, 여기에 <strong>아레나·자동/수동·드랍 수거</strong>까지 더해진다.
-v2.0에서는 튜토리얼이 선택이 아니라 필수다.</p>
+이미 빠져 있었다.
+<strong>해결됨</strong> — 8단계로 전면 재작성했다: 개요 · 캠프 · 상단 배치 · 실시간 아레나 ·
+자동/수동 · 드랍 수거 · 후퇴와 돌파 · 조작 요약.</p>
 
-<h4><span class="chip md">중간</span> 후반 골드 잉여 (v1.0에서 이월)</h4>
-<p>지출처가 유한해 1-8 무렵 4,000골드 이상 남는다. 드랍 수거로 수입 변동이 커지면 더 두드러진다.</p>
+<h4><span class="chip lo">당분간 해소</span> 후반 골드 잉여 (v1.0에서 이월)</h4>
+<p>v1.0에서는 1-8 무렵 4,000골드 이상 남았다. v2.2 실측에서는 최고 보유가 682로 내려왔다 —
+타워 30기까지 꾸준히 소비되고 런이 13웨이브에서 끝나기 때문이다.
+<strong>다만 스킬 트리를 다 연 뒤 런이 길어지면 다시 나타난다.</strong> 그때를 위해 아래 제안은 남겨둔다.</p>
 <p><strong>제안.</strong> ① 소모품 다회 구매 ② 강화 카드 골드 리롤 ③ 타워 Lv.4~5.
 ④ "잔여 골드 보석 환산"은 <strong>철회한다</strong> — 보석 수입이 이미 과다한 상태(위 항목)에서
 경로를 더 여는 것은 문제를 키운다.</p>
 
-<h4><span class="chip md">중간</span> 영웅 상점 레벨업이 무의미</h4>
-<p>Lv.1/Lv.2 모두 강화 목록이 비어 있다(<span class="mono">upgrades:[]</span>). 45골드를 내도 변화가 없다.</p>
+<h4><span class="chip lo">해결</span> 영웅 상점 레벨업이 무의미</h4>
+<p>Lv.1/Lv.2 모두 강화 목록이 비어 있어 45골드를 내도 변화가 없었다.
+<strong>해결됨</strong> — Lv.1에 영웅 단련·전투 교본, Lv.2에 영웅 각성·구원의 손·지휘 오라를 넣었다.</p>
 
 <h4><span class="chip md">중간</span> 상단이 여전히 정적</h4>
 <p>이번 개정은 하단만 바꾼다. 상단은 배치형으로 <strong>의도적으로 남겨</strong> 두 전선의 성격을
@@ -1252,6 +1292,14 @@ v2.0에서는 튜토리얼이 선택이 아니라 필수다.</p>
 <h4><span class="chip lo">낮음</span> 편성 슬롯 4칸 vs 유닛 5종</h4>
 <p>방패병(14G)·마법사(16G)가 비싸 초반에는 궁수·검사·치유사로 고정된다.
 실시간에서는 <strong>탱커의 가치가 올라가므로</strong> 방패병 비용을 낮추는 편이 나을 수 있다.</p>
+
+<h4><span class="chip md">중간</span> 후퇴가 너무 안전하다 <span class="rev">v2.2 신규</span></h4>
+<p>실측에서 드러났다. 팀 HP 30%에서 후퇴하는 소극적 플레이는 13웨이브까지 가지만,
+후퇴하지 않는 적극적 플레이는 <strong>4웨이브에서 끝난다.</strong> 후퇴가 전략이 아니라
+정답이 되어버린 셈이다.</p>
+<p><strong>제안.</strong> ① 후퇴 시 그 웨이브 승리 보너스를 포기하게 한다 ② 후퇴 횟수에
+쿨다운을 둔다 ③ 끝까지 버틴 웨이브에 완주 보너스를 준다. ③이 가장 자연스럽다 —
+벌을 주는 대신 상을 준다.</p>
 
 <h4><span class="chip lo">낮음</span> 콘텐츠 볼륨</h4>
 <p>스테이지 1-10 이후가 없다. 아레나는 지형·장애물을 넣기 쉬운 구조이므로
@@ -1263,25 +1311,24 @@ v2.0에서는 튜토리얼이 선택이 아니라 필수다.</p>
 <div class="tw"><table>
 <thead><tr><th>단계</th><th>작업</th><th>근거</th></tr></thead>
 <tbody>
-<tr><td rowspan="3"><strong>A</strong><br>로비 <span class="rev">신규</span></td><td class="wrap">15절 L1~L3 — 로비 셸 · 스킬 트리 이전 · 결과 화면</td><td class="wrap">"죽어야 보석을 쓴다"를 제거. 전투 코드와 무관해 위험이 낮다</td></tr>
-<tr><td class="wrap">보석 정산식 교체 · 재측정</td><td class="wrap">첫 런 39보석 vs 트리 전체 48보석</td></tr>
-<tr><td class="wrap">L4~L6 — 해금 · 서약 · 기록</td><td class="wrap">정산식을 고친 뒤에만 의미가 있다</td></tr>
-<tr><td rowspan="2"><strong>B</strong><br>아레나 전환</td><td class="wrap">15절 단계 1~5 — 실시간 전투 구현</td><td class="wrap">이번 개정의 본체</td></tr>
-<tr><td class="wrap">밸런스 재측정 · 자동/수동 수입차 튜닝</td><td class="wrap">v1.0 수치가 무효</td></tr>
-<tr><td rowspan="2"><strong>C</strong><br>기반 정리</td><td class="wrap">튜토리얼 전면 재작성</td><td class="wrap">시스템 절반이 설명되지 않음</td></tr>
-<tr><td class="wrap">골드 지출처 추가 · 영웅 상점 Lv.2 내용</td><td class="wrap">후반 경제 붕괴</td></tr>
+<tr><td rowspan="3"><strong>A</strong><br>로비 <span class="chip lo">완료</span></td><td class="wrap">L1~L3 — 로비 셸 · 스킬 트리 이전 · 결과 화면</td><td class="wrap">완료. 타이틀 → 캠프 → 출격 → 결과 → 캠프</td></tr>
+<tr><td class="wrap">보석 정산식 교체 · 재측정</td><td class="wrap">완료. 첫 런 39 → 12보석</td></tr>
+<tr><td class="wrap">L4~L6 — 해금 · 서약 · 기록</td><td class="wrap">완료. 해금 6종 · 서약 6종 · 도감</td></tr>
+<tr><td rowspan="2"><strong>B</strong><br>아레나 전환 <span class="chip lo">완료</span></td><td class="wrap">단계 1~5 — 실시간 전투 구현</td><td class="wrap">완료. <span class="mono">arena.js</span> · <span class="mono">formation.js</span></td></tr>
+<tr><td class="wrap">밸런스 재측정 · 자동/수동 수입차 튜닝</td><td class="wrap">완료. +33% (목표 25~40%)</td></tr>
+<tr><td rowspan="2"><strong>C</strong><br>기반 정리</td><td class="wrap">튜토리얼 전면 재작성 <span class="chip lo">완료</span></td><td class="wrap">8단계로 재작성</td></tr>
+<tr><td class="wrap">후퇴 인센티브 조정 · 골드 지출처</td><td class="wrap">후퇴가 정답이 되는 문제 (16절)</td></tr>
 <tr><td rowspan="2"><strong>D</strong><br>깊이</td><td class="wrap">상단 고유 위협 (비행 · 타워 무력화)</td><td class="wrap">상단이 후반에 완전 자동화됨</td></tr>
 <tr><td class="wrap">아레나 지형 · 장애물</td><td class="wrap">위치 선정에 의미를 더함</td></tr>
 <tr><td rowspan="2"><strong>E</strong><br>볼륨</td><td class="wrap">스테이지 2 · 영웅 고유 스킬</td><td class="wrap">엔드게임</td></tr>
 <tr><td class="wrap">BGM · 업적 · 기록</td><td class="wrap">리텐션</td></tr>
 </tbody></table></div>
 <div class="note">
-<p><strong>순서를 바꿨다 — 로비가 아레나보다 먼저다.</strong> 아레나 전환은 하단을 통째로 뜯는
-작업이라 중간에 멈추면 게임이 플레이 불가 상태가 되고, 되돌리기도 어렵다. 반면 로비는
-전투 코드를 건드리지 않고 단계마다 완결되며, 지금 가장 아픈 두 문제
-(보석을 쓰려면 죽어야 한다 · 진행축이 첫 런에 소진된다)를 바로 해결한다.
-A를 끝내 <strong>돌아올 곳</strong>을 만들어 두고, 그 다음에 B로 하단을 뜯는다.
-B는 단계 1~5를 한 흐름으로 끝내고 밸런스를 잡은 뒤에야 다음으로 넘어간다.</p>
+<p><strong>A와 B는 끝났다.</strong> 다음은 C — 실측에서 드러난 "후퇴가 정답이 되는" 문제부터다
+(16절). 완주 보너스를 붙여 끝까지 버티는 쪽에 상을 주는 방향을 먼저 시도한다.</p>
+<p>그 다음이 D(상단 고유 위협 · 아레나 지형)다. 이번 개정으로 하단은 완전히 다른 게임이 됐지만
+<strong>상단은 그대로다</strong> — 두 전선의 성격을 갈라놓기 위한 의도적 선택이었으나,
+후반에 격자가 차면 상단은 완전히 자동이 된다. 비행 유닛이나 타워 무력화가 필요하다.</p>
 </div>
 </section>
 

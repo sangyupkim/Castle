@@ -324,15 +324,20 @@ function renderBattle(ctx, gs) {
   } else if (wm.phase==='upgradePick') {
     ctx.fillStyle='#080d18'; ctx.fillRect(0,BATTLE_Y,CW,BATTLE_H);
   } else {
-    renderFightPhase(ctx,gs);
+    renderArenaPhase(ctx,gs);
   }
   renderBattleControls(ctx, gs);
 }
 
-// ─── 게임 컨트롤 (일시정지 / 배속 / 음소거) ──────────────────────────────────
+// ─── 컨트롤 바 (아레나 아래 32px) ────────────────────────────────────────────
 function renderBattleControls(ctx, gs) {
-  const bw=34, bh=24, gap=4, by=BATTLE_Y+6;
+  const fighting = wm.phase==='active';
+  const by = fighting ? (ARENA_Y + ARENA_H + 4) : (BATTLE_Y + 6);
+  const bw=34, bh=24, gap=4;
   const x3=CW-6-bw, x2=x3-bw-gap, x1=x2-bw-gap;
+
+  if (fighting) { ctx.fillStyle='#080e18'; ctx.fillRect(0, ARENA_Y+ARENA_H, CW, ARENA_CTRL_H); }
+
   drawBtn(ctx,x1,by,bw,bh,_paused?'▶':'⏸','#111c2e','#a5b4fc',true);
   drawBtn(ctx,x2,by,bw,bh,`x${gameSpeed()}`,gameSpeed()>1?'#3b1d6e':'#111c2e',gameSpeed()>1?'#c4b5fd':'#94a3b8',true);
   drawBtn(ctx,x3,by,bw,bh,SFX.isMuted()?'🔇':'🔊','#111c2e','#94a3b8',true);
@@ -340,12 +345,19 @@ function renderBattleControls(ctx, gs) {
   gs.ui.ctrlSpeed={x:x2,y:by,w:bw,h:bh};
   gs.ui.ctrlMute ={x:x3,y:by,w:bw,h:bh};
 
-  // 후퇴 버튼 — 하단 전투 중에만
-  if (wm.phase==='active' && gs.battle.phase==='fighting') {
-    const rw=62, rx=x1-rw-6;
-    drawBtn(ctx,rx,by,rw,bh,'🛡 후퇴','#1e3a4f','#7dd3fc',true,9);
+  if (fighting && gs.battle.phase==='fighting') {
+    // ⚙ 자동/수동 · 🛡 후퇴
+    const manual = gs.arena.mode==='manual';
+    const mw=76, mx=6;
+    drawBtn(ctx,mx,by,mw,bh, manual?'⚙ 수동':'⚙ 자동',
+            manual?'#4c1d95':'#111c2e', manual?'#ddd6fe':'#94a3b8', true, 10);
+    gs.ui.modeBtn={x:mx,y:by,w:mw,h:bh};
+
+    const rw=62, rx=mx+mw+6;
+    drawBtn(ctx,rx,by,rw,bh,'🛡 후퇴','#1e3a4f','#7dd3fc',true,10);
     gs.ui.retreatBtn={x:rx,y:by,w:rw,h:bh};
   } else {
+    gs.ui.modeBtn=null;
     gs.ui.retreatBtn=null;
   }
 }
@@ -355,9 +367,8 @@ function renderBriefing(ctx, gs) {
   ctx.fillStyle='#0c1421'; ctx.fillRect(0,BATTLE_Y,CW,BATTLE_H);
 
   const st  = getStageInfo(gs.wave);
-  const def = WAVE_DEFS[gs.wave] || { battleGroups:[], defenseEnemies:[] };
+  const def = WAVE_DEFS[gs.wave] || { arenaPool:[], defenseEnemies:[] };
 
-  // ── 헤더 ─────────────────────────────────────────────────────────────────
   ctx.fillStyle='#a5b4fc'; ctx.font='bold 13px sans-serif';
   ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillText(`출전 브리핑 — 스테이지 ${st.stageLabel}`, 10, BATTLE_Y+9);
@@ -366,27 +377,28 @@ function renderBriefing(ctx, gs) {
 
   let y = BATTLE_Y+44;
 
-  // ── 하단 전투 그룹 ───────────────────────────────────────────────────────
+  // ── 아레나 스폰 풀 ───────────────────────────────────────────────────────
   const panelH = 74;
   roundRect(ctx,6,y,CW-12,panelH,7);
   ctx.fillStyle='#0a1019'; ctx.fill(); ctx.strokeStyle='#3f1d1d'; ctx.lineWidth=1; ctx.stroke();
   ctx.fillStyle='#f87171'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText(`⚔️ 하단 전투 — ${def.battleGroups.length}개 그룹 · 시간 내내 순환 등장`, 12, y+7);
+  ctx.fillText('⚔️ 아레나 — 60초 내내 리젠 · 갈수록 촘촘하고 강해집니다', 12, y+7);
 
-  const groups = def.battleGroups;
-  const gw = Math.floor((CW-24 - (groups.length-1)*5) / Math.max(1,groups.length));
-  groups.forEach((g,i) => {
-    const gx = 12 + i*(gw+5);
-    roundRect(ctx,gx,y+22,gw,44,4);
+  const pool = def.arenaPool || [];
+  const total = pool.reduce((a,[,w])=>a+w, 0) || 1;
+  const pw = Math.floor((CW-24 - (pool.length-1)*5) / Math.max(1,pool.length));
+  pool.forEach(([id,w],i) => {
+    const t = BATTLE_MOB_TYPES[id]; if (!t) return;
+    const px = 12 + i*(pw+5);
+    roundRect(ctx,px,y+22,pw,44,4);
     ctx.fillStyle='#140c0c'; ctx.fill();
     ctx.strokeStyle='#5b2121'; ctx.lineWidth=1; ctx.stroke();
-    ctx.fillStyle='#64748b'; ctx.font='bold 8px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
-    ctx.fillText(`G${i+1}`, gx+gw/2, y+25);
-    // 몬스터 아이콘 나열
-    const icons = g.types.map(t=>BATTLE_MOB_TYPES[t]?BATTLE_MOB_TYPES[t].icon:'?').join('');
-    const fs = Math.max(9, Math.min(15, (gw-8) / Math.max(1,g.types.length) * 0.95));
-    ctx.fillStyle='#e2e8f0'; ctx.font=`${Math.floor(fs)}px sans-serif`; ctx.textBaseline='middle';
-    ctx.fillText(icons, gx+gw/2, y+48);
+    ctx.fillStyle='#e2e8f0'; ctx.font='16px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.fillText(t.icon, px+pw/2, y+26);
+    ctx.fillStyle='#94a3b8'; ctx.font='bold 8px sans-serif';
+    ctx.fillText(`${Math.round(w/total*100)}%`, px+pw/2, y+47);
+    ctx.fillStyle='#475569'; ctx.font='7px sans-serif';
+    ctx.fillText(t.name, px+pw/2, y+57);
   });
   y += panelH + 6;
 
@@ -441,7 +453,6 @@ function renderBriefing(ctx, gs) {
   ctx.fillText(`🏹 타워 ${gs.towers.length}기`, CW-14, y+23);
   ctx.fillText(`🗿 케이브 Lv.${gs.caveLevel}`, CW-14, y+36);
 
-  // 획득 강화 아이콘
   ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillText('강화', 12, y+56);
   const icons = (gs.activeUpgrades||[]).map(id=>(UPGRADE_CARDS.find(c=>c.id===id)||{}).icon||'').join(' ');
@@ -469,199 +480,218 @@ function renderBriefing(ctx, gs) {
 
   y += bh2 + 6;
   ctx.fillStyle='#3f4a5c'; ctx.font='9px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
-  ctx.fillText('Space 시작 · P 일시정지 · S 배속 · T 마을 · 1~4 타워 선택', CW/2, y);
+  ctx.fillText('Space 시작 · A 자동/수동 · 방향키 부대 이동 · R 후퇴 · T 마을', CW/2, y);
 }
 
-// ─── 전투 화면 ────────────────────────────────────────────────────────────────
-function renderFightPhase(ctx, gs) {
-  const {battle} = gs;
+// ─── 실시간 아레나 ───────────────────────────────────────────────────────────
+function renderArenaPhase(ctx, gs) {
+  const a = gs.arena, b = gs.battle;
 
-  // 배경: 가로줄 스크롤 (전진 연출)
-  ctx.fillStyle = '#0a1520';
-  ctx.fillRect(0, BATTLE_Y, CW, BATTLE_H);
+  renderArenaStatusBar(ctx, gs);
 
-  // 스크롤 세로 스트라이프 (오른쪽→왼쪽으로 흐름)
-  const strW = 60;
-  const sOff = battle.scrollX % (strW * 2);
-  ctx.fillStyle = 'rgba(255,255,255,0.018)';
-  for (let x = -sOff; x < CW + strW * 2; x += strW * 2) {
-    ctx.fillRect(x, BATTLE_Y, strW, BATTLE_H - 65);
+  // 아레나 바닥
+  ctx.fillStyle = '#0b1622';
+  ctx.fillRect(ARENA_X, ARENA_Y, ARENA_W, ARENA_H);
+
+  // 격자 (위치감)
+  ctx.strokeStyle = 'rgba(148,163,184,0.055)'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let gx = ARENA_X + 40; gx < ARENA_X + ARENA_W; gx += 40) { ctx.moveTo(gx, ARENA_Y); ctx.lineTo(gx, ARENA_Y+ARENA_H); }
+  for (let gy = ARENA_Y + 40; gy < ARENA_Y + ARENA_H; gy += 40) { ctx.moveTo(ARENA_X, gy); ctx.lineTo(ARENA_X+ARENA_W, gy); }
+  ctx.stroke();
+
+  // 스폰 밴드
+  ctx.strokeStyle = 'rgba(239,68,68,0.16)'; ctx.lineWidth = 1; ctx.setLineDash([5,5]);
+  ctx.strokeRect(ARENA_X+ARENA_SPAWN_BAND, ARENA_Y+ARENA_SPAWN_BAND,
+                 ARENA_W-ARENA_SPAWN_BAND*2, ARENA_H-ARENA_SPAWN_BAND*2);
+  ctx.setLineDash([]);
+
+  ctx.save();
+  ctx.beginPath(); ctx.rect(ARENA_X, ARENA_Y, ARENA_W, ARENA_H); ctx.clip();
+
+  // 집결 지점
+  if (a.mode==='manual' && a.rally) {
+    const t = (Date.now()%1000)/1000;
+    ctx.strokeStyle = `rgba(167,139,250,${0.9-t*0.6})`; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(a.rally.x, a.rally.y, 8 + t*14, 0, Math.PI*2); ctx.stroke();
+    ctx.fillStyle = '#a78bfa';
+    ctx.beginPath(); ctx.arc(a.rally.x, a.rally.y, 3.5, 0, Math.PI*2); ctx.fill();
   }
 
-  // 중앙선
-  ctx.strokeStyle = '#1e2d40'; ctx.lineWidth = 1; ctx.setLineDash([]);
-  ctx.beginPath(); ctx.moveTo(CW/2, BATTLE_Y+35); ctx.lineTo(CW/2, BATTLE_Y+BATTLE_H-65); ctx.stroke();
-
-  // 헤더
-  ctx.font='bold 11px sans-serif'; ctx.textBaseline='top'; ctx.textAlign='left';
-  ctx.fillStyle='#60a5fa'; ctx.fillText('우리팀', 8, BATTLE_Y+8);
-
-  // 처치 수 & 강화 배율
-  // 정보 한 줄 — 컨트롤 버튼 아래, 유닛 위
-  const pct = Math.round(battle.killCount * KILL_SCALE * 100);
-  ctx.font='bold 9px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillStyle='#7c3aed';
-  ctx.fillText(`🗿Lv.${gs.caveLevel} · 처치 ${battle.killCount} · 몹 +${pct}%`, 8, BATTLE_Y+24);
-  if (wm.loopCount > 0) {
-    // 컨트롤 버튼 행(+6~+30) 아래에 둔다
-    ctx.fillStyle='#fbbf24'; ctx.textAlign='left';
-    ctx.fillText(`♻ 순환 ${wm.loopCount + 1}바퀴 · 보상 ${Math.round(loopGoldMult(wm.loopCount)*100)}% · 몹은 계속 강해집니다`, 8, BATTLE_Y+35);
+  // 드랍 (수거 반경 안내 포함)
+  for (const d of a.drops) {
+    const fade = d.life < 2 ? (d.life/2) : 1;
+    const bob  = Math.sin(Date.now()/220 + d.x) * 1.6;
+    ctx.globalAlpha = fade;
+    ctx.fillStyle = d.big ? '#fde047' : COLORS.gold;
+    ctx.beginPath(); ctx.arc(d.x, d.y + bob, d.big ? 5 : 3.6, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = 'rgba(120,80,10,0.8)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.globalAlpha = 1;
   }
 
-  // 아군 유닛 (playerDrift 적용)
-  const px = BATTLE_TEAM_X + battle.playerDrift;
-  battle.ourTeam.forEach((u, i) => renderBattleUnit(ctx, u, i, px, unitY(i)));
+  // 스킬 파동
+  for (const f of a.bursts) {
+    const p = f.t / f.dur;
+    ctx.globalAlpha = (1 - p) * 0.55;
+    ctx.strokeStyle = f.color; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(f.x, f.y, f.r * (0.35 + p * 0.75), 0, Math.PI*2); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
 
-  // 적 유닛 (drawX/drawY 사용, 사망 페이드아웃)
-  for (const e of battle.enemyTeam) {
-    const alpha = e.dead ? Math.max(0, 1 - e.deadTimer / 0.7) : 1;
-    if (alpha > 0.01) renderBattleUnit(ctx, e, -1, e.drawX, e.drawY, alpha);
+  // 몹 → 아군 순으로 그려 아군이 위에 오게 한다
+  for (const m of a.mobs) renderArenaEntity(ctx, m, m.dead ? Math.max(0, 1 - m.deadTimer/0.5) : 1);
+  for (const u of b.ourTeam) if (!u.dead) renderArenaEntity(ctx, u, 1);
+
+  // 투사체
+  for (const sh of a.shots) {
+    if (sh.delay > 0) continue;
+    ctx.fillStyle = sh.color;
+    ctx.beginPath(); ctx.arc(sh.x, sh.y, 2.6, 0, Math.PI*2); ctx.fill();
   }
 
   // 플로티
-  for (const f of battle.floaties) {
-    ctx.globalAlpha = Math.max(0, f.life / 1.2);
-    ctx.fillStyle = f.color; ctx.font = 'bold 12px sans-serif';
+  for (const f of b.floaties) {
+    ctx.globalAlpha = Math.max(0, Math.min(1, f.life));
+    ctx.fillStyle = f.color; ctx.font = 'bold 10px sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(f.text, f.x, f.y);
   }
   ctx.globalAlpha = 1;
+  ctx.restore();
 
-  // 전투 로그
-  const logY = BATTLE_Y + BATTLE_H - 65;
-  ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(0, logY - 2, CW, 67);
-  battle.log.slice(0, 4).forEach((e, i) => {
-    ctx.globalAlpha = Math.min(1, e.timer / 0.8);
-    ctx.fillStyle = e.color; ctx.font = 'bold 10px sans-serif';
-    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-    ctx.fillText(e.text, 6, logY + 2 + i * 15);
-  });
-  ctx.globalAlpha = 1;
+  // 아레나 테두리
+  ctx.strokeStyle = '#1e2d40'; ctx.lineWidth = 1;
+  ctx.strokeRect(ARENA_X+0.5, ARENA_Y+0.5, ARENA_W-1, ARENA_H-1);
 
-  // 틱 프로그레스 바
-  const tp = battle.tickTimer / TICK_INTERVAL;
-  ctx.fillStyle = '#1e293b'; ctx.fillRect(6, BATTLE_Y + BATTLE_H - 7, CW - 12, 5);
-  ctx.fillStyle = '#6366f1'; ctx.fillRect(6, BATTLE_Y + BATTLE_H - 7, (CW - 12) * tp, 5);
-
-  // 결과 오버레이
-  if (battle.phase === 'won') {
-    ctx.fillStyle = 'rgba(0,40,0,0.72)'; ctx.fillRect(0, BATTLE_Y, CW, BATTLE_H - 65);
-    ctx.fillStyle = '#22c55e'; ctx.font = 'bold 24px sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(`전투 승리! 🎉 +${battle.goldEarned}💰`, CW / 2, BATTLE_Y + (BATTLE_H - 65) / 2);
-  } else if (battle.phase === 'retreated') {
-    ctx.fillStyle = 'rgba(8,30,45,0.72)'; ctx.fillRect(0, BATTLE_Y, CW, BATTLE_H - 65);
-    ctx.fillStyle = '#7dd3fc'; ctx.font = 'bold 20px sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(`🛡 후퇴  획득: ${battle.goldEarned}💰`, CW / 2, BATTLE_Y + (BATTLE_H - 65) / 2);
-    ctx.fillStyle = '#94a3b8'; ctx.font = '11px sans-serif';
-    ctx.fillText('병력을 보존했습니다', CW / 2, BATTLE_Y + (BATTLE_H - 65) / 2 + 24);
-  } else if (battle.phase === 'idle_defeated' || battle.phase === 'lost') {
-    ctx.fillStyle = 'rgba(40,0,0,0.72)'; ctx.fillRect(0, BATTLE_Y, CW, BATTLE_H - 65);
-    ctx.fillStyle = '#ef4444'; ctx.font = 'bold 22px sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(`병력 전멸  획득: ${battle.goldEarned}💰`, CW / 2, BATTLE_Y + (BATTLE_H - 65) / 2);
-    const live = battle.enemyTeam.filter(e => !e.dead).length;
-    if (live > 0) {
-      ctx.fillStyle = '#fca5a5'; ctx.font = 'bold 13px sans-serif';
-      ctx.fillText(`⚠️ 몬스터 ${live}마리가 기지로 돌파 중!`, CW / 2, BATTLE_Y + (BATTLE_H - 65) / 2 + 28);
-    }
-  }
+  renderArenaOverlay(ctx, gs);
 }
 
-// idx=-1이면 x,y를 직접 사용 (적), 그 외 플레이어 인덱스 기반
-function renderBattleUnit(ctx, u, idx, x, y, alpha) {
-  const r = BATTLE_UNIT_R;
-  if (alpha !== undefined) ctx.globalAlpha = alpha;
+// 상태 바 28px — 처치 · 드랍 · 압력 · 모드
+function renderArenaStatusBar(ctx, gs) {
+  const a = gs.arena, b = gs.battle;
+  ctx.fillStyle = '#080e18'; ctx.fillRect(0, BATTLE_Y, CW, ARENA_STATUS_H);
 
-  if (u.dead) {
-    // 사망한 아군은 반투명 해골로 표시
-    if (u.isPlayer) {
-      ctx.globalAlpha = (alpha !== undefined ? alpha : 1) * 0.35;
-      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fillStyle = '#374151'; ctx.fill();
-      ctx.globalAlpha = (alpha !== undefined ? alpha : 1) * 0.5;
-      ctx.font = '14px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('💀', x, y);
-    }
-    ctx.globalAlpha = 1;
-    return;
+  ctx.font='bold 10px sans-serif'; ctx.textBaseline='middle'; ctx.textAlign='left';
+  const cy = BATTLE_Y + ARENA_STATUS_H/2;
+  ctx.fillStyle='#fbbf24'; ctx.fillText(`💰 ${b.goldEarned}`, 8, cy);
+  ctx.fillStyle='#f87171'; ctx.fillText(`⚔ ${b.killCount}`, 66, cy);
+  const scalePct = Math.round((mobStatScale(a.waveIndex, b.killCount) - 1) * 100);
+  ctx.fillStyle='#7c3aed'; ctx.fillText(`🗿${gs.caveLevel} 몹+${scalePct}%`, 116, cy);
+
+  const live = a.mobs.filter(m=>!m.dead).length;
+  ctx.fillStyle = live >= ARENA_MAX_MOBS ? '#ef4444' : '#94a3b8';
+  ctx.fillText(`👾 ${live}/${ARENA_MAX_MOBS}`, 206, cy);
+
+  // 스폰 압력 게이지 — 간격이 짧아질수록 찬다
+  const iv   = spawnInterval(a.elapsed) * (a.spawnMult||1);
+  const pres = Math.max(0, Math.min(1, (SPAWN_BASE_INTERVAL - iv) / (SPAWN_BASE_INTERVAL - 0.4)));
+  const gx = 272, gw = 128;
+  ctx.fillStyle='#1e293b'; ctx.fillRect(gx, cy-4, gw, 8);
+  ctx.fillStyle = pres > 0.75 ? '#ef4444' : pres > 0.45 ? '#f59e0b' : '#22c55e';
+  ctx.fillRect(gx, cy-4, gw*pres, 8);
+  ctx.fillStyle='#64748b'; ctx.font='bold 8px sans-serif'; ctx.textAlign='left';
+  ctx.fillText('압력', gx+gw+5, cy);
+
+  ctx.textAlign='right'; ctx.font='bold 9px sans-serif';
+  ctx.fillStyle = a.mode==='manual' ? '#c4b5fd' : '#475569';
+  ctx.fillText(a.mode==='manual' ? '수동' : '자동', CW-8, cy);
+}
+
+function renderArenaEntity(ctx, e, alpha) {
+  const r = e.radius;
+  ctx.globalAlpha = alpha;
+
+  if (e.flashTimer > 0) {
+    ctx.beginPath(); ctx.arc(e.x, e.y, r+3, 0, Math.PI*2);
+    ctx.fillStyle = e.flashColor; ctx.globalAlpha = alpha * 0.6; ctx.fill();
+    ctx.globalAlpha = alpha;
+  }
+  if (e.shield > 0) {
+    ctx.beginPath(); ctx.arc(e.x, e.y, r+3, 0, Math.PI*2);
+    ctx.strokeStyle = COLORS.shield; ctx.lineWidth = 2; ctx.stroke();
   }
 
-  if (u.flashTimer > 0) {
-    ctx.beginPath(); ctx.arc(x, y, r + 4, 0, Math.PI * 2);
-    ctx.fillStyle = u.flashColor; ctx.fill();
+  // 아군은 밝은 링을 상시 두른다 — 28마리가 겹쳐도 내 편을 즉시 찾을 수 있게
+  if (e.isPlayer) {
+    ctx.beginPath(); ctx.arc(e.x, e.y, r + 2.5, 0, Math.PI*2);
+    ctx.strokeStyle = e.isHero ? 'rgba(253,224,71,0.85)' : 'rgba(186,230,253,0.55)';
+    ctx.lineWidth = e.isHero ? 2 : 1.5; ctx.stroke();
   }
+  ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, Math.PI*2);
+  ctx.fillStyle = e.isHero ? COLORS.hero : e.color; ctx.fill();
+  // 아군은 흰 테두리, 몹은 어두운 테두리 — 겹쳐도 편이 구분된다
+  ctx.strokeStyle = e.isHero ? '#fef08a' : e.isPlayer ? '#f8fafc' : e.isBoss ? '#fbbf24' : '#0b1622';
+  ctx.lineWidth = (e.isHero || e.isBoss) ? 2 : 1.4;
+  ctx.stroke();
 
-  // 보호막 링
-  if (u.shield > 0) {
-    ctx.beginPath(); ctx.arc(x, y, r + 3.5, 0, Math.PI * 2);
-    ctx.strokeStyle = COLORS.shield; ctx.lineWidth = 2.5; ctx.stroke();
-  }
-
-  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
-  ctx.fillStyle = u.isHero ? COLORS.hero : u.color; ctx.fill();
-  ctx.strokeStyle = u.isBoss ? '#fbbf24' : u.isHero ? '#fef08a' : '#fff';
-  ctx.lineWidth = (u.isHero || u.isBoss) ? 2.5 : 1.5; ctx.stroke();
-
-  // 아이콘은 원 색을 물려받지 않도록 명시적으로 칠한다 ('✚' 같은 문자 아이콘 대응)
+  // 아이콘은 원보다 살짝 크게 — 반지름 7.5px에서 8px 글자는 읽히지 않는다
   ctx.fillStyle = '#0f172a';
-  ctx.font = `${Math.floor(r * 0.85)}px sans-serif`;
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText(u.icon, x, y + 1);
+  ctx.font = `${Math.max(11, Math.round(r*1.5))}px sans-serif`;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(e.icon, e.x, e.y+0.5);
 
-  const bw = r * 2 + 8;
-  drawHPBar(ctx, x - bw/2, y + r + 3, bw, 4, u.hp / u.maxHp);
-  if (BATTLE_UNIT_GAP >= 40 && u.maxMp > 0) {
-    drawMPBar(ctx, x - bw/2, y + r + 9, bw, 3, u.mp / u.maxMp);
+  // 엘리트·보스는 바깥 링으로 한눈에 구분
+  if (e.isElite || e.isBoss) {
+    ctx.beginPath(); ctx.arc(e.x, e.y, r+3.5, 0, Math.PI*2);
+    ctx.strokeStyle = e.isBoss ? '#fbbf24' : '#f43f5e';
+    ctx.lineWidth = 1.5; ctx.stroke();
   }
 
-  // 이름/HP는 원 옆에 — 슬롯이 촘촘해져도 아래 유닛과 겹치지 않는다
-  ctx.font = 'bold 9px sans-serif'; ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#f1f5f9';
-  if (u.isPlayer) {
-    ctx.textAlign = 'left';
-    ctx.fillText(`${u.name} ${Math.ceil(u.hp)}`, x + r + 7, y - 4);
-  } else {
-    ctx.textAlign = 'right';
-    ctx.fillText(`${u.name} ${Math.ceil(u.hp)}`, x - r - 7, y - 4);
+  // HP 바 — 다쳤을 때만 (평상시 화면을 깨끗하게)
+  if (e.hp < e.maxHp) {
+    const bw = r*2 + 4;
+    drawHPBar(ctx, e.x - bw/2, e.y + r + 2.5, bw, 3, e.hp / e.maxHp);
   }
-  if (u.shield > 0) {
-    ctx.fillStyle = COLORS.shield; ctx.font = 'bold 8px sans-serif';
-    ctx.fillText(`🛡${Math.ceil(u.shield)}`, u.isPlayer ? x + r + 7 : x - r - 7, y + 7);
-  }
-
   ctx.globalAlpha = 1;
 }
 
-// ─── HUD ─────────────────────────────────────────────────────────────────────
-function renderHUD(ctx, gs) {
-  if (gs.gameOver) {
-    const earned = calcSoulStones(gs);
-    ctx.fillStyle='rgba(0,0,0,0.82)'; ctx.fillRect(0,0,CW,CH);
-    ctx.fillStyle='#ef4444'; ctx.font='bold 28px sans-serif';
+// 결과 오버레이 — 아레나 위에만 덮는다
+function renderArenaOverlay(ctx, gs) {
+  const b = gs.arena && gs.battle;
+  const ph = gs.battle.phase;
+  if (ph === 'fighting') return;
+
+  const cx = ARENA_X + ARENA_W/2, cy = ARENA_Y + ARENA_H/2;
+  if (ph === 'won') {
+    ctx.fillStyle='rgba(0,40,0,0.72)'; ctx.fillRect(ARENA_X,ARENA_Y,ARENA_W,ARENA_H);
+    ctx.fillStyle='#22c55e'; ctx.font='bold 22px sans-serif';
     ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText('게임 오버', CW/2, CH/2-55);
-    ctx.fillStyle='#94a3b8'; ctx.font='13px sans-serif';
-    ctx.fillText(`${gs.wave}웨이브 클리어  기지 HP: ${gs.baseHP}`, CW/2, CH/2-22);
-    ctx.fillStyle='#a78bfa'; ctx.font='bold 16px sans-serif';
-    ctx.fillText(`💎 영혼석 +${earned} 획득`, CW/2, CH/2+10);
-    ctx.fillStyle='#c4b5fd'; ctx.font='12px sans-serif';
-    ctx.fillText(`보유: ${gs.soulStones + earned}  (탭하여 강화 화면으로)`, CW/2, CH/2+32);
-  } else if (gs.stageCleared) {
-    const g = gs.baseHP>=80?'S':gs.baseHP>=50?'A':gs.baseHP>=20?'B':'C';
-    const earned = calcSoulStones(gs);
-    ctx.fillStyle='rgba(0,0,0,0.82)'; ctx.fillRect(0,0,CW,CH);
-    ctx.fillStyle='#22c55e'; ctx.font='bold 28px sans-serif';
+    ctx.fillText(`웨이브 완료! +${gs.battle.goldEarned}💰`, cx, cy);
+  } else if (ph === 'retreated') {
+    ctx.fillStyle='rgba(8,30,45,0.72)'; ctx.fillRect(ARENA_X,ARENA_Y,ARENA_W,ARENA_H);
+    ctx.fillStyle='#7dd3fc'; ctx.font='bold 20px sans-serif';
     ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(`스테이지 클리어! (${g})`, CW/2, CH/2-55);
-    ctx.fillStyle='#94a3b8'; ctx.font='13px sans-serif';
-    ctx.fillText(`누적 획득 골드: ${gs.battle.totalGoldEarned}💰`, CW/2, CH/2-22);
-    ctx.fillStyle='#a78bfa'; ctx.font='bold 16px sans-serif';
-    ctx.fillText(`💎 영혼석 +${earned} 획득`, CW/2, CH/2+10);
-    ctx.fillStyle='#c4b5fd'; ctx.font='12px sans-serif';
-    ctx.fillText('탭하여 강화 화면으로', CW/2, CH/2+32);
+    ctx.fillText(`🛡 후퇴  획득 ${gs.battle.goldEarned}💰`, cx, cy);
+    ctx.fillStyle='#94a3b8'; ctx.font='11px sans-serif';
+    ctx.fillText('병력을 보존했습니다', cx, cy+24);
+  } else if (ph === 'idle_defeated' || ph === 'lost') {
+    ctx.fillStyle='rgba(40,0,0,0.62)'; ctx.fillRect(ARENA_X,ARENA_Y,ARENA_W,ARENA_H);
+    ctx.fillStyle='#ef4444'; ctx.font='bold 20px sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(`병력 전멸  획득 ${gs.battle.goldEarned}💰`, cx, cy-14);
+    const live = gs.arena.mobs.filter(e=>!e.dead).length;
+    if (live > 0) {
+      const left = Math.max(0, BREAKTHROUGH_DURATION - (wm.elapsed - (wm.wipedAt||0)));
+      ctx.fillStyle='#fca5a5'; ctx.font='bold 12px sans-serif';
+      ctx.fillText(`⚠️ ${live}마리가 기지로 돌파 중 — ${Math.ceil(left)}초`, cx, cy+14);
+    }
   }
+}
+
+// 런 종료 안내 — 탭하면 결과 화면으로 (renderHUD는 전투 페이지 위에만 그린다)
+function renderHUD(ctx, gs) {
+  if (!gs.gameOver && !gs.stageCleared) return;
+  ctx.fillStyle='rgba(0,0,0,0.82)'; ctx.fillRect(0,0,CW,CH);
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  if (gs.gameOver) {
+    ctx.fillStyle='#ef4444'; ctx.font='bold 28px sans-serif';
+    ctx.fillText('기지 함락', CW/2, CH/2-20);
+  } else {
+    ctx.fillStyle='#22c55e'; ctx.font='bold 28px sans-serif';
+    ctx.fillText('스테이지 클리어!', CW/2, CH/2-20);
+  }
+  ctx.fillStyle='#94a3b8'; ctx.font='13px sans-serif';
+  ctx.fillText('탭하여 결과 보기', CW/2, CH/2+16);
 }
 
 // ─── 업그레이드 픽 화면 ──────────────────────────────────────────────────────
@@ -738,53 +768,546 @@ function renderUpgradePick(ctx, gs) {
   });
 }
 
-// ─── 스킬 트리 화면 ──────────────────────────────────────────────────────────
-function renderMetaScreen(ctx, gs) {
-  ctx.fillStyle='rgba(4,8,20,0.97)'; ctx.fillRect(0,0,CW,CH);
+// ─── 로비 · 캠프 ─────────────────────────────────────────────────────────────
+function renderLobby(ctx, gs) {
+  const L = gs.lobby;
+  ctx.fillStyle='#080b14'; ctx.fillRect(0,0,CW,CH);
 
-  // Header
-  ctx.fillStyle='#a78bfa'; ctx.font='bold 16px sans-serif';
-  ctx.textAlign='center'; ctx.textBaseline='top';
-  ctx.fillText('💎 스킬 트리', CW/2, 10);
-  ctx.fillStyle='#f59e0b'; ctx.font='bold 12px sans-serif';
-  ctx.fillText(`보석: ${gs.soulStones}`, CW/2, 32);
+  renderLobbyHeader(ctx, gs);
+  renderLobbyTabs(ctx, gs);
 
-  // 3 tree tabs
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, LOBBY_BODY_Y, CW, LOBBY_BODY_H); ctx.clip();
+  if      (L.tab === 'sortie') renderLobbySortie(ctx, gs);
+  else if (L.tab === 'skill')  renderLobbySkill(ctx, gs);
+  else if (L.tab === 'unlock') renderLobbyUnlock(ctx, gs);
+  else                         renderLobbyRecord(ctx, gs);
+  ctx.restore();
+
+  renderSortieBar(ctx, gs);
+}
+
+function renderLobbyHeader(ctx, gs) {
+  ctx.fillStyle='#0d1220'; ctx.fillRect(0,0,CW,LOBBY_HEADER_H);
+  ctx.strokeStyle='#1e293b'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(0,LOBBY_HEADER_H-0.5); ctx.lineTo(CW,LOBBY_HEADER_H-0.5); ctx.stroke();
+
+  ctx.textBaseline='middle'; ctx.textAlign='left';
+  ctx.fillStyle='#e2e8f0'; ctx.font='bold 15px sans-serif';
+  ctx.fillText('⛺ 캠프', 12, 20);
+  ctx.fillStyle='#475569'; ctx.font='9px sans-serif';
+  ctx.fillText('다음 출격을 준비하는 곳', 12, 39);
+
+  ctx.textAlign='right';
+  ctx.fillStyle='#a78bfa'; ctx.font='bold 19px sans-serif';
+  ctx.fillText(`💎 ${gs.soulStones}`, CW-12, 20);
+  const st = gs.stats;
+  ctx.fillStyle='#475569'; ctx.font='9px sans-serif';
+  ctx.fillText(`최고 ${st.bestWave||0}웨이브 · ${st.runs||0}회 플레이`, CW-12, 39);
+}
+
+function renderLobbyTabs(ctx, gs) {
+  const L = gs.lobby;
+  gs.ui.lobbyTabBtns = [];
+  const n = LOBBY_TABS.length, tw = CW / n;
+  LOBBY_TABS.forEach((t, i) => {
+    const tx = i*tw, active = L.tab === t.id;
+    ctx.fillStyle = active ? '#141c2e' : '#0a0e18';
+    ctx.fillRect(tx, LOBBY_TAB_Y, tw, LOBBY_TAB_H);
+    if (active) { ctx.fillStyle = t.color; ctx.fillRect(tx, LOBBY_TAB_Y+LOBBY_TAB_H-2.5, tw, 2.5); }
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.font='14px sans-serif';
+    ctx.globalAlpha = active ? 1 : 0.45;
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fillText(t.icon, tx+tw/2, LOBBY_TAB_Y+15);
+    ctx.fillStyle = active ? t.color : '#64748b';
+    ctx.font='bold 9px sans-serif';
+    ctx.globalAlpha = 1;
+    ctx.fillText(t.label, tx+tw/2, LOBBY_TAB_Y+32);
+    gs.ui.lobbyTabBtns.push({x:tx, y:LOBBY_TAB_Y, w:tw, h:LOBBY_TAB_H, id:t.id});
+  });
+  ctx.strokeStyle='#1e293b'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(0,LOBBY_BODY_Y-0.5); ctx.lineTo(CW,LOBBY_BODY_Y-0.5); ctx.stroke();
+}
+
+// ── ⚔️ 출격 ─────────────────────────────────────────────────────────────────
+function renderLobbySortie(ctx, gs) {
+  let y = LOBBY_BODY_Y + 14;
+
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle='#94a3b8'; ctx.font='bold 10px sans-serif';
+  ctx.fillText('다음 런의 시작 조건', 14, y); y += 20;
+
+  // 해금된 편성
+  const th = 84;
+  roundRect(ctx,10,y,CW-20,th,7);
+  ctx.fillStyle='#0c1220'; ctx.fill(); ctx.strokeStyle='#1e293b'; ctx.lineWidth=1; ctx.stroke();
+  ctx.fillStyle='#f59e0b'; ctx.font='bold 10px sans-serif'; ctx.textBaseline='top';
+  ctx.fillText('🔓 사용 가능', 18, y+9);
+
+  const tws = unlockedTowers(), uns = unlockedUnits();
+  // 잠긴 것도 회색으로 자리를 지킨다 — 무엇이 남았는지 보여야 목표가 된다
+  const drawSlots = (label, ids, table, ty) => {
+    ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillText(label, 18, ty+8);
+    ids.forEach((id, i) => {
+      const t = table[id], on = isUnlocked(id);
+      const sx = 50 + i*32;
+      roundRect(ctx, sx, ty, 26, 26, 5);
+      ctx.fillStyle = on ? '#152238' : '#0e131e'; ctx.fill();
+      ctx.strokeStyle = on ? '#334155' : '#1a2130'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.globalAlpha = on ? 1 : 0.28;
+      ctx.font='14px sans-serif'; ctx.fillStyle='#e2e8f0';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(t.icon, sx+13, ty+13);
+      ctx.globalAlpha = 1;
+      if (!on) {
+        ctx.fillStyle='#0d1220';
+        ctx.fillRect(sx+16, ty+16, 11, 11);
+        ctx.fillStyle='#f59e0b'; ctx.font='bold 8px sans-serif';
+        ctx.fillText(`${unlockCost(id)}`, sx+21, ty+22);
+      }
+    });
+    ctx.textAlign='left'; ctx.textBaseline='top';
+  };
+  drawSlots('타워', TOWER_ORDER, TOWER_TYPES, y+22);
+  drawSlots('병력', UNIT_ORDER,  UNIT_TYPES,  y+50);
+  ctx.textAlign='right'; ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif';
+  ctx.fillText(`${tws.length}/${TOWER_ORDER.length} · ${uns.length}/${UNIT_ORDER.length}`, CW-18, y+9);
+  ctx.textAlign='left';
+  y += th + 10;
+
+  // 적용 중인 스킬
+  const sp = skillProgress(gs);
+  const sh = 62;
+  roundRect(ctx,10,y,CW-20,sh,7);
+  ctx.fillStyle='#0c1220'; ctx.fill(); ctx.strokeStyle='#1e293b'; ctx.stroke();
+  ctx.fillStyle='#a78bfa'; ctx.font='bold 10px sans-serif';
+  ctx.fillText('🌳 적용 중인 스킬', 18, y+9);
+  ctx.textAlign='right'; ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif';
+  ctx.fillText(`${sp.owned}/${sp.total}`, CW-18, y+9);
+  ctx.textAlign='left';
+  const owned = gs.skillTreeOwned || [];
+  if (owned.length) {
+    let sx = 18;
+    for (const tree of Object.values(SKILL_TREES)) {
+      for (const sk of tree.skills) {
+        if (!owned.includes(sk.id)) continue;
+        ctx.font='13px sans-serif'; ctx.fillStyle='#e2e8f0';
+        ctx.fillText(sk.icon, sx, y+28);
+        sx += 20;
+        if (sx > CW-40) break;
+      }
+    }
+  } else {
+    ctx.fillStyle='#475569'; ctx.font='10px sans-serif';
+    ctx.fillText('아직 없습니다 — 🌳 스킬 탭에서 보석을 쓰세요', 18, y+30);
+  }
+  // 진행 바
+  ctx.fillStyle='#1e293b'; ctx.fillRect(18, y+46, CW-36, 5);
+  ctx.fillStyle='#a78bfa'; ctx.fillRect(18, y+46, (CW-36)*(sp.spent/sp.totalCost), 5);
+  y += sh + 10;
+
+  // 서약
+  const pacts = PACT_DEFS.filter(p => isPactOn(p.id));
+  const ph = 62;
+  roundRect(ctx,10,y,CW-20,ph,7);
+  ctx.fillStyle = pacts.length ? '#1a0d14' : '#0c1220'; ctx.fill();
+  ctx.strokeStyle = pacts.length ? '#7f1d3a' : '#1e293b'; ctx.stroke();
+  ctx.fillStyle='#f43f5e'; ctx.font='bold 10px sans-serif';
+  ctx.fillText('📜 서약', 18, y+9);
+  ctx.textAlign='right';
+  ctx.fillStyle = pacts.length ? '#fda4af' : '#475569'; ctx.font='bold 11px sans-serif';
+  ctx.fillText(`보석 ×${pactGemMult().toFixed(2)}`, CW-18, y+9);
+  ctx.textAlign='left';
+  if (pacts.length) {
+    ctx.fillStyle='#fda4af'; ctx.font='9px sans-serif';
+    let py = y+28;
+    for (const p of pacts.slice(0,3)) { ctx.fillText(`${p.icon} ${p.name} — ${p.desc}`, 18, py); py += 12; }
+    if (pacts.length > 3) ctx.fillText(`외 ${pacts.length-3}개`, 18, py);
+  } else {
+    ctx.fillStyle='#475569'; ctx.font='10px sans-serif';
+    ctx.fillText('없음 — 🔓 해금 탭에서 난이도를 올리고 보석을 더 받을 수 있습니다', 18, y+30);
+  }
+  y += ph + 10;
+
+  // 진행 상황
+  ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif';
+  const cleared = (gs.clearedStages||[]).filter(Boolean).length;
+  ctx.fillText(`스테이지 ${cleared}/10 클리어 · 누적 처치 ${gs.stats.totalKills||0} · 누적 보석 ${gs.stats.totalGems||0}`, 14, y);
+  y += 22;
+
+  // 다음 목표 — 보석을 어디에 쓰면 좋을지 한 줄로 짚어준다
+  const nextUnlock = UNLOCK_DEFS.find(u => !isUnlocked(u.id));
+  const gh = 74;
+  roundRect(ctx,10,y,CW-20,gh,7);
+  ctx.fillStyle='#0c1220'; ctx.fill(); ctx.strokeStyle='#1e293b'; ctx.lineWidth=1; ctx.stroke();
+  ctx.fillStyle='#22c55e'; ctx.font='bold 10px sans-serif';
+  ctx.fillText('🎯 다음 목표', 18, y+9);
+  let gy = y+28;
+  if (nextUnlock) {
+    const short = gs.soulStones < nextUnlock.cost;
+    ctx.fillStyle = short ? '#64748b' : '#86efac'; ctx.font='10px sans-serif';
+    ctx.fillText(`${nextUnlock.icon} ${nextUnlock.name} 해금`, 18, gy);
+    ctx.textAlign='right';
+    ctx.fillStyle = short ? '#f59e0b' : '#22c55e'; ctx.font='bold 10px sans-serif';
+    ctx.fillText(short ? `💎 ${nextUnlock.cost - gs.soulStones} 더 필요` : `💎 ${nextUnlock.cost} — 지금 열 수 있습니다`, CW-18, gy);
+    ctx.textAlign='left';
+    gy += 17;
+  }
+  if (sp.owned < sp.total) {
+    ctx.fillStyle='#94a3b8'; ctx.font='10px sans-serif';
+    ctx.fillText(`🌳 스킬 ${sp.total - sp.owned}개 남음`, 18, gy);
+    ctx.textAlign='right'; ctx.fillStyle='#64748b'; ctx.font='bold 10px sans-serif';
+    ctx.fillText(`💎 ${sp.totalCost - sp.spent}`, CW-18, gy);
+    ctx.textAlign='left';
+    gy += 17;
+  }
+  if (!nextUnlock && sp.owned >= sp.total) {
+    ctx.fillStyle='#86efac'; ctx.font='10px sans-serif';
+    ctx.fillText('전부 열었습니다 — 📜 서약으로 난이도를 올려보세요', 18, gy);
+    gy += 17;
+  }
+  ctx.fillStyle='#475569'; ctx.font='9px sans-serif';
+  ctx.fillText(`이번 런 예상 보석 배율 ×${pactGemMult().toFixed(2)}`, 18, gy);
+}
+
+// ── 🌳 스킬 ─────────────────────────────────────────────────────────────────
+function renderLobbySkill(ctx, gs) {
+  const L = gs.lobby;
   const tabs = [
     { id:'tower',   label:'🏹 타워', color:'#22c55e' },
     { id:'hero',    label:'👑 영웅', color:'#f59e0b' },
     { id:'support', label:'⚙️ 보조', color:'#60a5fa' },
   ];
-  const tabW = (CW-16)/3, tabH = 32, tabY = 52;
-  if (!gs.ui.metaTab) gs.ui.metaTab = 'tower';
-  tabs.forEach((tab, i) => {
+  const tabW=(CW-16)/3, tabH=30, tabY=LOBBY_BODY_Y+8;
+  tabs.forEach((tab,i) => {
     const tx = 8 + i*(tabW+4);
-    const active = gs.ui.metaTab === tab.id;
-    roundRect(ctx, tx, tabY, tabW, tabH, 5);
+    const active = L.skillTree === tab.id;
+    roundRect(ctx,tx,tabY,tabW,tabH,5);
     ctx.fillStyle = active ? '#1e293b' : '#0a0d18'; ctx.fill();
     ctx.strokeStyle = active ? tab.color : '#334155'; ctx.lineWidth = active ? 2 : 1; ctx.stroke();
     ctx.fillStyle = active ? tab.color : '#64748b'; ctx.font='bold 11px sans-serif';
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(tab.label, tx+tabW/2, tabY+tabH/2);
-    if (tab.id==='tower') gs.ui.towerTabBtn = {x:tx,y:tabY,w:tabW,h:tabH};
-    else if (tab.id==='hero') gs.ui.heroTabBtn = {x:tx,y:tabY,w:tabW,h:tabH};
-    else gs.ui.supportTabBtn = {x:tx,y:tabY,w:tabW,h:tabH};
+    if (tab.id==='tower')        gs.ui.towerTabBtn   = {x:tx,y:tabY,w:tabW,h:tabH};
+    else if (tab.id==='hero')    gs.ui.heroTabBtn    = {x:tx,y:tabY,w:tabW,h:tabH};
+    else                         gs.ui.supportTabBtn = {x:tx,y:tabY,w:tabW,h:tabH};
   });
 
-  // Draw the active tree
-  const treeKey = gs.ui.metaTab || 'tower';
-  const tree = SKILL_TREES[treeKey];
   gs.ui.metaCards = [];
-  _renderSkillTree(ctx, gs, tree, 92);
+  _renderSkillTree(ctx, gs, SKILL_TREES[L.skillTree] || SKILL_TREES.tower, tabY + tabH + 14);
+}
 
-  // Start button at bottom
-  const bw=200, bh=40, bx=(CW-bw)/2, btnY=CH-52;
-  roundRect(ctx,bx,btnY,bw,bh,8);
-  ctx.fillStyle='#22c55e'; ctx.fill();
-  ctx.fillStyle='#0f172a'; ctx.font='bold 14px sans-serif';
+// ── 🔓 해금 · 서약 ──────────────────────────────────────────────────────────
+function renderLobbyUnlock(ctx, gs) {
+  gs.ui.unlockBtns = [];
+  gs.ui.pactBtns   = [];
+  let y = LOBBY_BODY_Y + 12;
+
+  const up = unlockProgress();
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle='#f59e0b'; ctx.font='bold 11px sans-serif';
+  ctx.fillText('🔓 해금', 14, y);
+  ctx.textAlign='right'; ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif';
+  ctx.fillText(`${up.count}/${up.total} · ${up.spent}/${up.totalCost}💎`, CW-14, y+1);
+  ctx.textAlign='left';
+  y += 18;
+
+  const rowH = 40;
+  for (const d of UNLOCK_DEFS) {
+    const owned = isUnlocked(d.id);
+    const can   = !owned && gs.soulStones >= d.cost;
+    roundRect(ctx,10,y,CW-20,rowH-4,6);
+    ctx.fillStyle = owned ? '#0d2018' : can ? '#141c2e' : '#0a0e18'; ctx.fill();
+    ctx.strokeStyle = owned ? '#22c55e' : can ? '#f59e0b' : '#1e293b';
+    ctx.lineWidth = owned || can ? 1.5 : 1; ctx.stroke();
+
+    ctx.globalAlpha = owned || can ? 1 : 0.5;
+    ctx.font='17px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.fillStyle='#e2e8f0';
+    ctx.fillText(d.icon, 20, y+18);
+    ctx.font='bold 11px sans-serif';
+    ctx.fillStyle = owned ? '#86efac' : '#e2e8f0';
+    ctx.fillText(d.name, 46, y+12);
+    ctx.font='9px sans-serif'; ctx.fillStyle='#64748b';
+    ctx.fillText(`${d.kind==='tower'?'타워':'병력'} · ${d.desc}`, 46, y+25);
+
+    ctx.textAlign='right'; ctx.font='bold 11px sans-serif';
+    if (owned) { ctx.fillStyle='#22c55e'; ctx.fillText('✓ 해금', CW-20, y+18); }
+    else {
+      ctx.fillStyle = can ? '#f59e0b' : '#475569';
+      ctx.fillText(`💎 ${d.cost}`, CW-20, y+18);
+      gs.ui.unlockBtns.push({x:10,y:y,w:CW-20,h:rowH-4,id:d.id,icon:d.icon});
+    }
+    ctx.globalAlpha = 1;
+    y += rowH;
+  }
+
+  y += 8;
+  ctx.textAlign='left';
+  ctx.fillStyle='#f43f5e'; ctx.font='bold 11px sans-serif';
+  ctx.fillText('📜 서약 — 난이도를 올리고 보석을 더 받는다', 14, y);
+  ctx.textAlign='right'; ctx.fillStyle='#fda4af'; ctx.font='bold 10px sans-serif';
+  ctx.fillText(`×${pactGemMult().toFixed(2)}`, CW-14, y+1);
+  ctx.textAlign='left';
+  y += 18;
+
+  const pw = (CW-26)/2, phh = 42;
+  PACT_DEFS.forEach((p,i) => {
+    const px = 10 + (i%2)*(pw+6);
+    const py = y + Math.floor(i/2)*(phh+5);
+    const on = isPactOn(p.id);
+    roundRect(ctx,px,py,pw,phh,6);
+    ctx.fillStyle = on ? '#2a0a16' : '#0a0e18'; ctx.fill();
+    ctx.strokeStyle = on ? '#f43f5e' : '#1e293b'; ctx.lineWidth = on ? 1.8 : 1; ctx.stroke();
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.font='bold 10px sans-serif'; ctx.fillStyle = on ? '#fda4af' : '#94a3b8';
+    ctx.fillText(`${p.icon} ${p.name}`, px+8, py+7);
+    ctx.font='8px sans-serif'; ctx.fillStyle = on ? '#9f6070' : '#475569';
+    ctx.fillText(p.desc, px+8, py+21);
+    ctx.textAlign='right'; ctx.font='bold 9px sans-serif';
+    ctx.fillStyle = on ? '#f43f5e' : '#475569';
+    ctx.fillText(`+${Math.round(p.gem*100)}%`, px+pw-8, py+30);
+    gs.ui.pactBtns.push({x:px,y:py,w:pw,h:phh,id:p.id});
+  });
+}
+
+// ── 📜 기록 ─────────────────────────────────────────────────────────────────
+function renderLobbyRecord(ctx, gs) {
+  const st = gs.stats;
+  let y = LOBBY_BODY_Y + 12;
+  ctx.textAlign='left'; ctx.textBaseline='top';
+
+  const rows = [
+    ['플레이 횟수',   `${st.runs||0}회`],
+    ['최고 도달',     `${st.bestWave||0}웨이브`],
+    ['최고 스테이지', `1-${Math.max(1, st.bestStage||1)}`],
+    ['누적 처치',     `${st.totalKills||0}마리`],
+    ['누적 골드',     `${st.totalGold||0}💰`],
+    ['누적 보석',     `${st.totalGems||0}💎`],
+  ];
+  ctx.fillStyle='#60a5fa'; ctx.font='bold 11px sans-serif';
+  ctx.fillText('📊 누적 기록', 14, y); y += 20;
+  rows.forEach((r,i) => {
+    const ry = y + i*22;
+    if (i%2===0) { ctx.fillStyle='#0c1220'; ctx.fillRect(10,ry-3,CW-20,21); }
+    ctx.fillStyle='#64748b'; ctx.font='10px sans-serif'; ctx.textAlign='left';
+    ctx.fillText(r[0], 18, ry+2);
+    ctx.fillStyle='#e2e8f0'; ctx.font='bold 11px sans-serif'; ctx.textAlign='right';
+    ctx.fillText(r[1], CW-18, ry+1);
+  });
+  y += rows.length*22 + 14;
+
+  // 스테이지 클리어 현황
+  ctx.textAlign='left'; ctx.fillStyle='#60a5fa'; ctx.font='bold 11px sans-serif';
+  ctx.fillText('🗺 스테이지', 14, y); y += 18;
+  const cs = gs.clearedStages || [];
+  const cw = (CW-30)/10;
+  for (let i=0; i<10; i++) {
+    const cx = 12 + i*cw;
+    roundRect(ctx,cx,y,cw-3,26,4);
+    ctx.fillStyle = cs[i] ? '#0d2a1a' : '#0a0e18'; ctx.fill();
+    ctx.strokeStyle = cs[i] ? '#22c55e' : '#1e293b'; ctx.lineWidth=1; ctx.stroke();
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle = cs[i] ? '#86efac' : '#334155'; ctx.font='bold 9px sans-serif';
+    ctx.fillText(`${i+1}`, cx+(cw-3)/2, y+13);
+  }
+  y += 38;
+
+  // 몬스터 도감
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle='#60a5fa'; ctx.font='bold 11px sans-serif';
+  const seen = gs.seenMobs || [];
+  const mobIds = Object.keys(BATTLE_MOB_TYPES);
+  ctx.fillText('📖 몬스터 도감', 14, y);
+  ctx.textAlign='right'; ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif';
+  ctx.fillText(`${seen.length}/${mobIds.length}`, CW-14, y+1);
+  ctx.textAlign='left';
+  y += 18;
+
+  const mw = (CW-26)/4, mh = 46;
+  mobIds.forEach((id,i) => {
+    const t = BATTLE_MOB_TYPES[id];
+    const mx = 10 + (i%4)*(mw+5.33);
+    const my = y + Math.floor(i/4)*(mh+5);
+    const known = seen.includes(id);
+    roundRect(ctx,mx,my,mw,mh,5);
+    ctx.fillStyle='#0a0e18'; ctx.fill();
+    ctx.strokeStyle = known ? '#334155' : '#161d2b'; ctx.lineWidth=1; ctx.stroke();
+    ctx.textAlign='center'; ctx.textBaseline='top';
+    if (known) {
+      ctx.font='16px sans-serif'; ctx.fillStyle='#e2e8f0';
+      ctx.fillText(t.icon, mx+mw/2, my+7);
+      ctx.font='bold 8px sans-serif'; ctx.fillStyle='#94a3b8';
+      ctx.fillText(t.name, mx+mw/2, my+28);
+      ctx.font='7px sans-serif'; ctx.fillStyle='#475569';
+      ctx.fillText(`HP${t.hp} ATK${t.atk}`, mx+mw/2, my+37);
+    } else {
+      ctx.font='16px sans-serif'; ctx.fillStyle='#1e293b';
+      ctx.fillText('?', mx+mw/2, my+9);
+      ctx.font='8px sans-serif'; ctx.fillStyle='#334155';
+      ctx.fillText('미발견', mx+mw/2, my+30);
+    }
+  });
+}
+
+// ── 출격 버튼 ───────────────────────────────────────────────────────────────
+function renderSortieBar(ctx, gs) {
+  const by = CH - LOBBY_SORTIE_H;
+  ctx.fillStyle='#0d1220'; ctx.fillRect(0,by,CW,LOBBY_SORTIE_H);
+  ctx.strokeStyle='#1e293b'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(0,by+0.5); ctx.lineTo(CW,by+0.5); ctx.stroke();
+
+  const bw=CW-24, bh=42, bx=12, byy=by+9;
+  roundRect(ctx,bx,byy,bw,bh,8);
+  ctx.fillStyle='#14532d'; ctx.fill();
+  ctx.strokeStyle='#22c55e'; ctx.lineWidth=2; ctx.stroke();
+  ctx.fillStyle='#fff'; ctx.font='bold 16px sans-serif';
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText('▶ 새 게임 시작', bx+bw/2, btnY+bh/2);
-  gs.ui.metaStartBtn={x:bx,y:btnY,w:bw,h:bh};
+  ctx.fillText('⚔️  출  격', CW/2, byy+bh/2);
+  gs.ui.sortieBtn = {x:bx,y:byy,w:bw,h:bh};
+}
+
+// ─── 결과 화면 ───────────────────────────────────────────────────────────────
+// v2.0까지는 게임오버에서 곧장 스킬 트리로 넘어가 "이번 런이 어땠는지"를
+// 음미할 자리가 없었다. 정산 내역을 보여주고 로비로 돌려보낸다.
+function renderResult(ctx, gs) {
+  const r = gs.runSummary;
+  ctx.fillStyle='#080b14'; ctx.fillRect(0,0,CW,CH);
+  if (!r) { gs.ui.resultBtn=null; return; }
+
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  let y = 46;
+  ctx.fillStyle = r.cleared ? '#22c55e' : '#ef4444';
+  ctx.font='bold 26px sans-serif';
+  ctx.fillText(r.cleared ? '스테이지 클리어!' : '기지 함락', CW/2, y);
+  y += 36;
+  ctx.fillStyle='#475569'; ctx.font='11px sans-serif';
+  ctx.fillText(r.cleared ? '30웨이브를 모두 막아냈습니다' : '다음엔 더 멀리 갈 수 있습니다', CW/2, y);
+  y += 30;
+
+  if (r.newBest) {
+    roundRect(ctx,(CW-160)/2,y,160,24,12);
+    ctx.fillStyle='#3b1d6e'; ctx.fill(); ctx.strokeStyle='#a78bfa'; ctx.lineWidth=1.5; ctx.stroke();
+    ctx.fillStyle='#ddd6fe'; ctx.font='bold 11px sans-serif'; ctx.textBaseline='middle';
+    ctx.fillText('🏆 최고 기록 갱신!', CW/2, y+12);
+    ctx.textBaseline='top';
+    y += 34;
+  }
+
+  // 이번 런 지표
+  const stats = [
+    ['도달',     `${r.reached}웨이브`],
+    ['처치',     `${r.kills}마리`],
+    ['획득 골드', `${r.gold}💰`],
+    ['남은 기지', `${r.baseHP}HP`],
+  ];
+  const sw = (CW-40)/4;
+  stats.forEach((st,i) => {
+    const sx = 20 + i*sw;
+    ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif';
+    ctx.fillText(st[0], sx+sw/2, y);
+    ctx.fillStyle='#e2e8f0'; ctx.font='bold 13px sans-serif';
+    ctx.fillText(st[1], sx+sw/2, y+14);
+  });
+  y += 48;
+
+  // 보석 정산 내역
+  const boxH = 40 + r.rows.length*20 + (r.mult > 1 ? 22 : 0);
+  roundRect(ctx,20,y,CW-40,boxH,8);
+  ctx.fillStyle='#0d1220'; ctx.fill(); ctx.strokeStyle='#3b2a5c'; ctx.lineWidth=1.5; ctx.stroke();
+  ctx.textAlign='left';
+  ctx.fillStyle='#a78bfa'; ctx.font='bold 11px sans-serif';
+  ctx.fillText('💎 보석 정산', 32, y+11);
+  let ry = y + 32;
+  for (const row of r.rows) {
+    ctx.fillStyle='#64748b'; ctx.font='10px sans-serif'; ctx.textAlign='left';
+    ctx.fillText(row.label, 32, ry);
+    ctx.fillStyle='#334155'; ctx.font='9px sans-serif';
+    ctx.fillText(row.note, 130, ry+1);
+    ctx.fillStyle = row.value > 0 ? '#c4b5fd' : '#334155';
+    ctx.font='bold 10px sans-serif'; ctx.textAlign='right';
+    ctx.fillText(`+${row.value}`, CW-32, ry);
+    ry += 20;
+  }
+  if (r.mult > 1) {
+    ctx.fillStyle='#f43f5e'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left';
+    ctx.fillText('📜 서약 배율', 32, ry);
+    ctx.textAlign='right';
+    ctx.fillText(`×${r.mult.toFixed(2)}`, CW-32, ry);
+  }
+  y += boxH + 14;
+
+  // 총 획득
+  ctx.textAlign='center';
+  ctx.fillStyle='#a78bfa'; ctx.font='bold 22px sans-serif';
+  ctx.fillText(`💎 +${r.gems}`, CW/2, y);
+  y += 30;
+  ctx.fillStyle='#64748b'; ctx.font='11px sans-serif';
+  ctx.fillText(`보유 ${gs.soulStones}💎`, CW/2, y);
+  y += 28;
+
+  // ── 지금 보유한 보석으로 캠프에서 할 수 있는 것 ──
+  // "그래서 다음에 뭘 하지"를 결과 화면에서 바로 보여준다
+  const affordable = UNLOCK_DEFS.filter(u => !isUnlocked(u.id) && gs.soulStones >= u.cost);
+  const nextLocked = UNLOCK_DEFS.find(u => !isUnlocked(u.id));
+  const buyable    = [];
+  for (const tree of Object.values(SKILL_TREES)) {
+    for (const sk of tree.skills) {
+      if ((gs.skillTreeOwned||[]).includes(sk.id)) continue;
+      if (sk.req && !(gs.skillTreeOwned||[]).includes(sk.req)) continue;
+      if (gs.soulStones >= sk.cost) buyable.push(sk);
+    }
+  }
+
+  const ph = 96;
+  roundRect(ctx,20,y,CW-40,ph,8);
+  ctx.fillStyle='#0c1220'; ctx.fill(); ctx.strokeStyle='#1e293b'; ctx.lineWidth=1; ctx.stroke();
+  ctx.textAlign='left';
+  ctx.fillStyle='#22c55e'; ctx.font='bold 10px sans-serif';
+  ctx.fillText('⛺ 캠프에서 지금 할 수 있는 것', 32, y+11);
+  let py = y+31;
+
+  if (affordable.length) {
+    ctx.fillStyle='#86efac'; ctx.font='10px sans-serif';
+    ctx.fillText(`🔓 해금 ${affordable.length}개`, 32, py);
+    ctx.fillStyle='#e2e8f0'; ctx.font='12px sans-serif'; ctx.textAlign='right';
+    ctx.fillText(affordable.map(u=>u.icon).join(' '), CW-32, py-1);
+    ctx.textAlign='left';
+  } else if (nextLocked) {
+    ctx.fillStyle='#64748b'; ctx.font='10px sans-serif';
+    ctx.fillText(`🔓 다음 해금 — ${nextLocked.icon} ${nextLocked.name}`, 32, py);
+    ctx.textAlign='right'; ctx.fillStyle='#f59e0b'; ctx.font='bold 10px sans-serif';
+    ctx.fillText(`💎 ${nextLocked.cost - gs.soulStones} 더`, CW-32, py);
+    ctx.textAlign='left';
+  } else {
+    ctx.fillStyle='#86efac'; ctx.font='10px sans-serif';
+    ctx.fillText('🔓 모두 해금 완료', 32, py);
+  }
+  py += 19;
+
+  ctx.fillStyle = buyable.length ? '#c4b5fd' : '#475569'; ctx.font='10px sans-serif';
+  ctx.fillText(buyable.length ? `🌳 스킬 ${buyable.length}개를 지금 찍을 수 있습니다` : '🌳 지금 찍을 수 있는 스킬 없음', 32, py);
+  py += 19;
+
+  const pactCount = PACT_DEFS.filter(p=>isPactOn(p.id)).length;
+  ctx.fillStyle='#64748b'; ctx.font='10px sans-serif';
+  ctx.fillText(pactCount ? `📜 서약 ${pactCount}개 유지 중 — 보석 ×${pactGemMult().toFixed(2)}`
+                         : '📜 서약을 걸면 보석을 최대 +87%까지 더 받습니다', 32, py);
+  ctx.textAlign='center';
+
+  // 로비 복귀
+  const bw=CW-60, bh=46, bx=30, by=CH-90;
+  roundRect(ctx,bx,by,bw,bh,9);
+  ctx.fillStyle='#1e293b'; ctx.fill(); ctx.strokeStyle='#a78bfa'; ctx.lineWidth=2; ctx.stroke();
+  ctx.fillStyle='#ddd6fe'; ctx.font='bold 15px sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('⛺ 캠프로 돌아가기', CW/2, by+bh/2);
+  gs.ui.resultBtn = {x:bx,y:by,w:bw,h:bh};
+
+  ctx.fillStyle='#334155'; ctx.font='9px sans-serif'; ctx.textBaseline='top';
+  ctx.fillText('보석은 캠프에서 스킬과 해금에 쓸 수 있습니다', CW/2, by+bh+10);
 }
 
 function _renderSkillTree(ctx, gs, tree, startY) {
@@ -1162,16 +1685,18 @@ function renderTownPageBuildingGrid(ctx, gs, startY) {
   const stripY=startY+2*(bh+gap)+4;
   roundRect(ctx,6,stripY,CW-12,44,6);
   ctx.fillStyle='#0a0d1a'; ctx.fill(); ctx.strokeStyle='#1e293b'; ctx.lineWidth=1; ctx.stroke();
-  const groups=WAVE_DEFS[gs.wave]?.battleGroups||[];
-  const uniqueTypes=[...new Set(groups.flatMap(g=>g.types))];
+  const pool=WAVE_DEFS[gs.wave]?.arenaPool||[];
+  const totalW=pool.reduce((a,[,w])=>a+w,0)||1;
   ctx.fillStyle='#64748b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
-  ctx.fillText(`웨이브 ${gs.wave+1} 등장 몬스터:`,12,stripY+14);
-  uniqueTypes.forEach((type,i)=>{
+  ctx.fillText(`웨이브 ${gs.wave+1} 아레나 스폰:`,12,stripY+14);
+  pool.forEach(([type,w],i)=>{
     const mt=BATTLE_MOB_TYPES[type]; if (!mt) return;
-    ctx.font='16px sans-serif'; ctx.textAlign='left'; ctx.fillText(mt.icon,12+i*36,stripY+30);
+    const ix=12+i*44;
+    ctx.font='15px sans-serif'; ctx.textAlign='left'; ctx.fillStyle='#e2e8f0';
+    ctx.fillText(mt.icon,ix,stripY+30);
+    ctx.font='bold 8px sans-serif'; ctx.fillStyle='#475569';
+    ctx.fillText(`${Math.round(w/totalW*100)}%`,ix+19,stripY+31);
   });
-  ctx.fillStyle='#475569'; ctx.font='10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
-  ctx.fillText(`${groups.length}그룹`,12+uniqueTypes.length*36+4,stripY+30);
 }
 
 function renderTownPageArmy(ctx, gs, startY) {
@@ -1219,27 +1744,36 @@ function renderTownPageArmy(ctx, gs, startY) {
     const ut=UNIT_TYPES[id];
     const col=i%cols, row=Math.floor(i/cols);
     const cx=6+col*(cardW+6), cy2=y+row*(cardH+6);
-    const cost=hireCost(id), canAff=gs.gold>=cost;
+    const unlocked=isUnlocked(id);
+    const cost=hireCost(id), canAff=unlocked&&gs.gold>=cost;
     roundRect(ctx,cx,cy2,cardW,cardH,6);
     ctx.fillStyle=canAff?'#1e293b':'#111827'; ctx.fill();
     ctx.strokeStyle=canAff?ut.color:'#374151'; ctx.lineWidth=1.5; ctx.stroke();
-    ctx.globalAlpha=canAff?1:0.55;
+    // 잠긴 것도 회색으로 보여준다 — 무엇을 목표로 삼을지 알 수 있도록
+    ctx.globalAlpha=unlocked?(canAff?1:0.55):0.32;
     ctx.fillStyle='#e2e8f0'; ctx.font='20px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
     ctx.fillText(ut.icon,cx+cardW/2,cy2+4);
     ctx.fillStyle=canAff?'#f1f5f9':'#64748b'; ctx.font='bold 11px sans-serif';
     ctx.fillText(ut.name,cx+cardW/2,cy2+27);
     ctx.fillStyle='#94a3b8'; ctx.font='bold 8px sans-serif';
     ctx.fillText(`ATK ${ut.atk+BONUSES.unitAtk} · HP ${ut.hp+BONUSES.unitHp}`,cx+cardW/2,cy2+40);
-    ctx.fillStyle=canAff?COLORS.gold:'#64748b'; ctx.font='bold 10px sans-serif';
-    ctx.fillText(`💰${cost}`,cx+cardW/2,cy2+50);
     ctx.globalAlpha=1;
-    gs.ui.hireCards.push({x:cx,y:cy2,w:cardW,h:cardH,typeId:id});
+    if (unlocked) {
+      ctx.globalAlpha=canAff?1:0.55;
+      ctx.fillStyle=canAff?COLORS.gold:'#64748b'; ctx.font='bold 10px sans-serif';
+      ctx.fillText(`💰${cost}`,cx+cardW/2,cy2+50);
+      ctx.globalAlpha=1;
+      gs.ui.hireCards.push({x:cx,y:cy2,w:cardW,h:cardH,typeId:id});
+    } else {
+      ctx.fillStyle='#f59e0b'; ctx.font='bold 9px sans-serif';
+      ctx.fillText(`🔒 캠프 💎${unlockCost(id)}`,cx+cardW/2,cy2+50);
+    }
   });
   y += Math.ceil(UNIT_ORDER.length/cols)*(cardH+6) + 4;
 
   // 선택한 유닛 역할 설명
   ctx.fillStyle='#475569'; ctx.font='9px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText('🛡️ 방패병은 적의 표적을 끌고 전체 보호막 · ✨ 마법사는 광역 피해',6,y);
+  ctx.fillText('🛡️ 방패병이 앞에 서서 맞습니다 · 🏹 궁수는 사거리 130으로 카이팅',6,y);
   y+=16;
 
   // ── 편성 슬롯 ────────────────────────────────────────────────────────────
@@ -1325,7 +1859,7 @@ function renderTownPageArmy(ctx, gs, startY) {
     if (nd && ry < CH-40) {
       ctx.fillStyle='#64748b'; ctx.font='10px sans-serif'; ctx.textAlign='left';
       ctx.fillText('다음 웨이브',18,ry);
-      const mobIcons=nd.battleGroups.map(g=>g.types.map(t=>(BATTLE_MOB_TYPES[t]||{}).icon||'').join('')).join(' › ');
+      const mobIcons=(nd.arenaPool||[]).map(([t])=>(BATTLE_MOB_TYPES[t]||{}).icon||'').join(' ');
       ctx.fillStyle='#f87171'; ctx.font='11px sans-serif'; ctx.textAlign='right';
       ctx.fillText(mobIcons.slice(0,34),CW-18,ry);
       ry+=18;
@@ -1333,7 +1867,7 @@ function renderTownPageArmy(ctx, gs, startY) {
 
     if (ry < CH-30) {
       ctx.fillStyle='#3f4a5c'; ctx.font='9px sans-serif'; ctx.textAlign='left';
-      ctx.fillText('전투는 1초 1틱, 5틱마다 스킬이 자동 발동됩니다.',18,ry+2);
+      ctx.fillText('하단은 실시간 아레나입니다. A로 자동/수동을 전환하세요.',18,ry+2);
       ry+=13;
       ctx.fillText('웨이브를 클리어하면 강화 카드 3장 중 1장을 고릅니다.',18,ry+2);
     }
@@ -1355,14 +1889,15 @@ function renderTownPageTowers(ctx, gs, startY) {
     const tpl=TOWER_TYPES[id];
     const bx=px0+i*(pw+pgap);
     const cost=towerBuildCost(id, gs.towers);
+    const unlocked=isUnlocked(id);
     const sel=gs.selectedTowerType===id;
-    const afford=gs.gold>=cost;
+    const afford=unlocked&&gs.gold>=cost;
     roundRect(ctx,bx,py0,pw,ph,6);
     ctx.fillStyle = sel?'#152b45' : afford?'#111c2e':'#0e1017'; ctx.fill();
     ctx.strokeStyle = sel?tpl.color : afford?'#334155':'#252b38';
     ctx.lineWidth = sel?2:1; ctx.stroke();
 
-    ctx.globalAlpha = afford?1:0.5;
+    ctx.globalAlpha = unlocked?(afford?1:0.5):0.32;
     ctx.fillStyle='#e2e8f0'; ctx.font='16px sans-serif';
     ctx.textAlign='left'; ctx.textBaseline='top';
     ctx.fillText(tpl.icon, bx+7, py0+6);
@@ -1370,13 +1905,19 @@ function renderTownPageTowers(ctx, gs, startY) {
     ctx.fillText(tpl.name, bx+29, py0+7);
     ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif';
     ctx.fillText(tpl.desc, bx+7, py0+26);
-    ctx.fillStyle = afford?COLORS.gold:'#64748b'; ctx.font='bold 10px sans-serif';
-    ctx.fillText(`${cost}💰`, bx+7, py0+38);
-    ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif'; ctx.textAlign='right';
-    ctx.fillText(`ATK ${Math.round(tpl.dmg+BONUSES.towerDmg)}`, bx+pw-7, py0+38);
     ctx.globalAlpha=1;
-
-    gs.ui.towerTypeBtns.push({x:bx,y:py0,w:pw,h:ph,typeId:id});
+    if (unlocked) {
+      ctx.globalAlpha = afford?1:0.5;
+      ctx.fillStyle = afford?COLORS.gold:'#64748b'; ctx.font='bold 10px sans-serif';
+      ctx.fillText(`${cost}💰`, bx+7, py0+38);
+      ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif'; ctx.textAlign='right';
+      ctx.fillText(`ATK ${Math.round(tpl.dmg+BONUSES.towerDmg)}`, bx+pw-7, py0+38);
+      ctx.globalAlpha=1;
+      gs.ui.towerTypeBtns.push({x:bx,y:py0,w:pw,h:ph,typeId:id});
+    } else {
+      ctx.fillStyle='#f59e0b'; ctx.font='bold 9px sans-serif'; ctx.textAlign='left';
+      ctx.fillText(`🔒 캠프에서 💎${unlockCost(id)}`, bx+7, py0+38);
+    }
   });
 
   // ── 미니 그리드 ──────────────────────────────────────────────────────────
