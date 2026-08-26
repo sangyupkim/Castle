@@ -67,7 +67,7 @@ function renderDefense(ctx, gs) {
 
   // 항로 — 이번 웨이브에 비행이 있으면 하늘길을 미리 보여준다.
   // 어디를 비워두면 안 되는지 알아야 배치를 고민할 수 있다.
-  const waveHasAir = (WAVE_DEFS[gs.wave]?.defenseEnemies || [])
+  const waveHasAir = (waveDefFor(gs.wave)?.defenseEnemies || [])
                       .some(d => (ENEMY_TYPES[d.type] || {}).flying);
   if (waveHasAir || gs.defenseEnemies.some(e => e.flying)) {
     for (const lane of [AIR_PATH_L, AIR_PATH_R]) {
@@ -418,15 +418,35 @@ function renderBriefing(ctx, gs) {
   ctx.fillStyle='#0c1421'; ctx.fillRect(0,BATTLE_Y,CW,BATTLE_H);
 
   const st  = getStageInfo(gs.wave);
-  const def = WAVE_DEFS[gs.wave] || { arenaPool:[], defenseEnemies:[] };
+  const def = waveDefFor(gs.wave) || { arenaPool:[], defenseEnemies:[] };
 
   ctx.fillStyle='#a5b4fc'; ctx.font='bold 13px sans-serif';
   ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText(`출전 브리핑 — 스테이지 ${st.stageLabel}`, 10, BATTLE_Y+9);
+  ctx.fillStyle = st.endless ? '#c4b5fd' : '#a5b4fc';
+  ctx.fillText(st.endless ? `∞ 무한 모드 — ${st.tier}층` : `출전 브리핑 — 스테이지 ${st.stageLabel}`, 10, BATTLE_Y+9);
   ctx.fillStyle='#475569'; ctx.font='bold 10px sans-serif';
-  ctx.fillText(`웨이브 ${st.waveInStage+1}/3${st.isBossStage?'  ★보스 스테이지':''}`, 10, BATTLE_Y+26);
+  ctx.fillText(st.endless ? `적 HP ×${endlessStatMult(gs.wave).toFixed(1)} · 이동 ×${endlessSpdMult(gs.wave).toFixed(2)} · 층당 보석 +${ENDLESS_GEM_PER_TIER}`
+                          : `웨이브 ${st.waveInStage+1}/3${st.isBossStage?'  ★보스 스테이지':''}`, 10, BATTLE_Y+26);
 
   let y = BATTLE_Y+44;
+
+  // ── 잔존 침입자 ──────────────────────────────────────────────────────────
+  // 지난 웨이브에 못 잡고 넘긴 적. 이번 웨이브 물량 위에 그대로 얹히므로
+  // 배치를 바꿀지 현상수배를 참을지 판단하려면 먼저 보여야 한다.
+  const carried = gs.defenseEnemies.filter(e => !e.dead && !e.reached).length;
+  if (carried > 0) {
+    const ch = 26;
+    roundRect(ctx, 6, y, CW-12, ch, 6);
+    ctx.fillStyle='rgba(120,53,15,0.40)'; ctx.fill();
+    ctx.strokeStyle='#f59e0b'; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle='#fbbf24'; ctx.font='bold 11px sans-serif';
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.fillText(`⚠️ 잔존 침입자 ${carried}기`, 12, y+ch/2);
+    ctx.fillStyle='#b45309'; ctx.font='bold 9px sans-serif'; ctx.textAlign='right';
+    ctx.fillText('지난 웨이브에 못 막은 적이 경로 위에서 계속 옵니다', CW-12, y+ch/2+1);
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    y += ch + 5;
+  }
 
   // ── 아레나 스폰 풀 ───────────────────────────────────────────────────────
   const panelH = 74;
@@ -786,20 +806,115 @@ function renderArenaOverlay(ctx, gs) {
   }
 }
 
-// 런 종료 안내 — 탭하면 결과 화면으로 (renderHUD는 전투 페이지 위에만 그린다)
+// 런 종료 안내 — renderHUD는 전투 페이지 위에만 그린다
 function renderHUD(ctx, gs) {
-  if (!gs.gameOver && !gs.stageCleared) return;
+  if (gs.gameOver)    { renderDefeatOverlay(ctx, gs); return; }
+  if (gs.stageCleared){ renderCrossroads(ctx, gs);   return; }
+  gs.ui.bankBtn = gs.ui.endlessBtn = null;
+}
+
+function renderDefeatOverlay(ctx, gs) {
+  gs.ui.bankBtn = gs.ui.endlessBtn = null;
   ctx.fillStyle='rgba(0,0,0,0.82)'; ctx.fillRect(0,0,CW,CH);
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  if (gs.gameOver) {
-    ctx.fillStyle='#ef4444'; ctx.font='bold 28px sans-serif';
-    ctx.fillText('기지 함락', CW/2, CH/2-20);
-  } else {
-    ctx.fillStyle='#22c55e'; ctx.font='bold 28px sans-serif';
-    ctx.fillText('스테이지 클리어!', CW/2, CH/2-20);
-  }
+  ctx.fillStyle='#ef4444'; ctx.font='bold 28px sans-serif';
+  ctx.fillText('기지 함락', CW/2, CH/2-20);
   ctx.fillStyle='#94a3b8'; ctx.font='13px sans-serif';
   ctx.fillText('탭하여 결과 보기', CW/2, CH/2+16);
+}
+
+// ─── 30웨이브 완주 — 갈림길 ──────────────────────────────────────────────────
+// 런의 끝이 아니라 선택지다. 지금 정산하고 확실히 챙길지,
+// 무한 모드로 더 들어가 더 벌지 — 대신 죽으면 그대로 끝난다.
+function renderCrossroads(ctx, gs) {
+  ctx.fillStyle='#050810'; ctx.fillRect(0,0,CW,CH);
+  ctx.textAlign='center'; ctx.textBaseline='top';
+
+  let y = 64;
+  ctx.fillStyle='#22c55e'; ctx.font='bold 27px sans-serif';
+  ctx.fillText('스테이지 클리어!', CW/2, y); y += 38;
+  ctx.fillStyle='#475569'; ctx.font='12px sans-serif';
+  ctx.fillText('30웨이브를 모두 막아냈습니다', CW/2, y); y += 34;
+
+  // 지금 정산하면 받을 보석
+  const bd = soulStoneBreakdown(gs);
+  ctx.fillStyle='#a78bfa'; ctx.font='bold 20px sans-serif';
+  ctx.fillText(`💎 +${bd.total}`, CW/2, y); y += 26;
+  ctx.fillStyle='#64748b'; ctx.font='11px sans-serif';
+  ctx.fillText(`지금 정산하면 받는 보석 · 보유 ${gs.soulStones}💎`, CW/2, y); y += 34;
+
+  // ── 정산하기 ──
+  const bw = CW-56, bh = 74, bx = 28;
+  roundRect(ctx, bx, y, bw, bh, 9);
+  ctx.fillStyle='#0d1929'; ctx.fill(); ctx.strokeStyle='#38bdf8'; ctx.lineWidth=2; ctx.stroke();
+  ctx.textAlign='left';
+  ctx.fillStyle='#7dd3fc'; ctx.font='bold 15px sans-serif';
+  ctx.fillText('🏳 정산하고 캠프로', bx+16, y+13);
+  ctx.fillStyle='#64748b'; ctx.font='11px sans-serif';
+  ctx.fillText(`보석 ${bd.total}개를 확실히 챙깁니다.`, bx+16, y+36);
+  ctx.fillText('안전하게 끝내고 다음 런을 준비합니다.', bx+16, y+52);
+  gs.ui.bankBtn = {x:bx, y:y, w:bw, h:bh};
+  y += bh + 14;
+
+  // ── 무한 모드 ──
+  roundRect(ctx, bx, y, bw, bh+18, 9);
+  ctx.fillStyle='#1a0d2e'; ctx.fill(); ctx.strokeStyle='#a78bfa'; ctx.lineWidth=2; ctx.stroke();
+  ctx.fillStyle='#c4b5fd'; ctx.font='bold 15px sans-serif';
+  ctx.fillText('∞ 무한 모드로 계속', bx+16, y+13);
+  ctx.fillStyle='#64748b'; ctx.font='11px sans-serif';
+  ctx.fillText(`한 층 오를 때마다 적이 ×${ENDLESS_HP_GROWTH} 강해집니다.`, bx+16, y+36);
+  ctx.fillText(`층당 보석 +${ENDLESS_GEM_PER_TIER} · 여기서부터는 죽어야 끝납니다.`, bx+16, y+52);
+  ctx.fillStyle='#f87171'; ctx.font='bold 11px sans-serif';
+  ctx.fillText('기지가 무너지면 지금까지의 보석도 그대로 정산됩니다.', bx+16, y+70);
+  gs.ui.endlessBtn = {x:bx, y:y, w:bw, h:bh+18};
+  y += bh + 18 + 22;
+
+  // 최고 기록
+  ctx.textAlign='center';
+  ctx.fillStyle='#334155'; ctx.font='10px sans-serif';
+  const best = gs.stats.bestEndless || 0;
+  ctx.fillText(best > 0 ? `최고 기록 — 무한 ${best}층` : '아직 무한 모드 기록이 없습니다', CW/2, y);
+  y += 26;
+
+  // ── 무한 층별 전망 — 얼마나 벌고 얼마나 세지는지 ────────────────────────
+  const ph2 = 104;
+  roundRect(ctx, 28, y, CW-56, ph2, 8);
+  ctx.fillStyle='#0b0f1a'; ctx.fill(); ctx.strokeStyle='#1e293b'; ctx.lineWidth=1; ctx.stroke();
+  ctx.textAlign='left'; ctx.fillStyle='#64748b'; ctx.font='bold 10px sans-serif';
+  ctx.fillText('무한 층 전망', 42, y+10);
+
+  const tiers = [5, 10, 15, 20];
+  const colW = (CW-84)/tiers.length;
+  tiers.forEach((t,i) => {
+    const cx2 = 42 + i*colW + colW/2;
+    ctx.textAlign='center';
+    ctx.fillStyle='#c4b5fd'; ctx.font='bold 11px sans-serif';
+    ctx.fillText(`∞-${t}`, cx2, y+30);
+    ctx.fillStyle='#f87171'; ctx.font='bold 10px sans-serif';
+    ctx.fillText(`적 ×${Math.pow(ENDLESS_HP_GROWTH,t).toFixed(1)}`, cx2, y+48);
+    ctx.fillStyle='#a78bfa'; ctx.font='bold 10px sans-serif';
+    ctx.fillText(`💎+${Math.floor(t*ENDLESS_GEM_PER_TIER)}`, cx2, y+64);
+  });
+  ctx.textAlign='left'; ctx.fillStyle='#334155'; ctx.font='9px sans-serif';
+  ctx.fillText('적은 지수로 오릅니다 — 어떤 편성이든 언젠가는 무너집니다.', 42, y+82);
+  y += ph2 + 14;
+
+  // ── 이번 런 요약 ────────────────────────────────────────────────────────
+  const stats = [
+    ['처치',      `${gs.battle.runKills||0}`,          '#f87171'],
+    ['획득 골드', `${gs.battle.totalGoldEarned}`,       COLORS.gold],
+    ['기지',      `${Math.ceil(gs.baseHP)}/${baseHpMax()}`, hpColor(gs.baseHP/baseHpMax())],
+    ['타워',      `${gs.towers.length}기`,              '#22c55e'],
+  ];
+  const sw2 = (CW-56)/stats.length;
+  stats.forEach((st,i) => {
+    const sx = 28 + i*sw2 + sw2/2;
+    ctx.textAlign='center';
+    ctx.fillStyle='#334155'; ctx.font='bold 9px sans-serif';
+    ctx.fillText(st[0], sx, y);
+    ctx.fillStyle=st[2]; ctx.font='bold 13px sans-serif';
+    ctx.fillText(st[1], sx, y+14);
+  });
 }
 
 // ─── 업그레이드 픽 화면 ──────────────────────────────────────────────────────
@@ -929,7 +1044,7 @@ function renderUpgradePick(ctx, gs) {
 
   // ── 다음 웨이브 예고 — 무엇을 고를지 판단할 또 하나의 근거 ──────────────
   const nextIdx = gs.wave + 1;
-  const nd = WAVE_DEFS[nextIdx];
+  const nd = waveDefFor(nextIdx);
   if (nd) {
     const npY = by2 + 6*17 + 16;
     const npH = 78;
@@ -1005,6 +1120,7 @@ function renderLobby(ctx, gs) {
   if      (L.tab === 'sortie') renderLobbySortie(ctx, gs);
   else if (L.tab === 'skill')  renderLobbySkill(ctx, gs);
   else if (L.tab === 'unlock') renderLobbyUnlock(ctx, gs);
+  else if (L.tab === 'pact')   renderLobbyPact(ctx, gs);
   else                         renderLobbyRecord(ctx, gs);
   ctx.restore();
 
@@ -1226,7 +1342,6 @@ function renderLobbySkill(ctx, gs) {
 // ── 🔓 해금 · 서약 ──────────────────────────────────────────────────────────
 function renderLobbyUnlock(ctx, gs) {
   gs.ui.unlockBtns = [];
-  gs.ui.pactBtns   = [];
   let y = LOBBY_BODY_Y + 12;
 
   const up = unlockProgress();
@@ -1268,7 +1383,12 @@ function renderLobbyUnlock(ctx, gs) {
     y += rowH;
   }
 
-  y += 8;
+}
+
+// ── 📜 서약 ─────────────────────────────────────────────────────────────────
+function renderLobbyPact(ctx, gs) {
+  gs.ui.pactBtns = [];
+  let y = LOBBY_BODY_Y + 12;
   ctx.textAlign='left';
   ctx.fillStyle='#f43f5e'; ctx.font='bold 11px sans-serif';
   ctx.fillText('📜 서약 — 난이도를 올리고 보석을 더 받는다', 14, y);
@@ -1277,24 +1397,37 @@ function renderLobbyUnlock(ctx, gs) {
   ctx.textAlign='left';
   y += 18;
 
-  const pw = (CW-26)/2, phh = 42;
-  PACT_DEFS.forEach((p,i) => {
-    const px = 10 + (i%2)*(pw+6);
-    const py = y + Math.floor(i/2)*(phh+5);
-    const on = isPactOn(p.id);
-    roundRect(ctx,px,py,pw,phh,6);
-    ctx.fillStyle = on ? '#2a0a16' : '#0a0e18'; ctx.fill();
-    ctx.strokeStyle = on ? '#f43f5e' : '#1e293b'; ctx.lineWidth = on ? 1.8 : 1; ctx.stroke();
+  // 세 갈래로 묶어서 보여준다 — 무엇을 포기하는지가 한눈에 갈리도록
+  const pRowH = 34;
+  for (const [tier, label] of Object.entries(PACT_TIERS)) {
+    const group = PACT_DEFS.filter(p => String(p.tier) === tier);
+    if (!group.length) continue;
     ctx.textAlign='left'; ctx.textBaseline='top';
-    ctx.font='bold 10px sans-serif'; ctx.fillStyle = on ? '#fda4af' : '#94a3b8';
-    ctx.fillText(`${p.icon} ${p.name}`, px+8, py+7);
-    ctx.font='8px sans-serif'; ctx.fillStyle = on ? '#9f6070' : '#475569';
-    ctx.fillText(p.desc, px+8, py+21);
-    ctx.textAlign='right'; ctx.font='bold 9px sans-serif';
-    ctx.fillStyle = on ? '#f43f5e' : '#475569';
-    ctx.fillText(`+${Math.round(p.gem*100)}%`, px+pw-8, py+30);
-    gs.ui.pactBtns.push({x:px,y:py,w:pw,h:phh,id:p.id});
-  });
+    ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif';
+    ctx.fillText(label, 14, y); y += 13;
+
+    for (const p of group) {
+      const on = isPactOn(p.id);
+      roundRect(ctx, 10, y, CW-20, pRowH-3, 5);
+      ctx.fillStyle   = on ? '#2a0a16' : '#0a0e18'; ctx.fill();
+      ctx.strokeStyle = on ? '#f43f5e' : '#1a2130'; ctx.lineWidth = on ? 1.6 : 1; ctx.stroke();
+
+      ctx.textAlign='left'; ctx.textBaseline='middle';
+      ctx.font='12px sans-serif'; ctx.fillStyle='#e2e8f0';
+      ctx.fillText(p.icon, 18, y+15);
+      ctx.font='bold 10px sans-serif'; ctx.fillStyle = on ? '#fda4af' : '#cbd5e1';
+      ctx.fillText(p.name, 38, y+10);
+      ctx.font='8px sans-serif'; ctx.fillStyle = on ? '#9f6070' : '#475569';
+      ctx.fillText(p.desc, 38, y+22);
+
+      ctx.textAlign='right'; ctx.font='bold 10px sans-serif';
+      ctx.fillStyle = on ? '#f43f5e' : '#475569';
+      ctx.fillText(`+${Math.round(p.gem*100)}%`, CW-18, y+15);
+      gs.ui.pactBtns.push({x:10,y:y,w:CW-20,h:pRowH-3,id:p.id});
+      y += pRowH;
+    }
+    y += 4;
+  }
 }
 
 // ── 📜 기록 ─────────────────────────────────────────────────────────────────
@@ -1939,10 +2072,42 @@ function renderTownPageBuildingGrid(ctx, gs, startY) {
   ctx.fillText(full ? '온전함' : `보수 ${wrCost}💰`, wbX+wbW/2, wbY+wbH/2);
   gs.ui.wallRepairBtn = full ? null : {x:wbX,y:wbY,w:wbW,h:wbH};
 
-  const stripY=wrY+wrH+5;
+  // ── 병기 연구 — 상한이 없는 마지막 사용처 ────────────────────────────────
+  // 성벽 보수는 기지 HP가 차면 막히고 타워는 Lv.5에서 막힌다.
+  // 무한 구간까지 가면 결국 골드가 남으므로, 살수록 비싸지되 끝이 없는 칸을 둔다.
+  const rsY = wrY + wrH + 5, rsH = 46;
+  roundRect(ctx,6,rsY,CW-12,rsH,6);
+  ctx.fillStyle='#0a0d1a'; ctx.fill(); ctx.strokeStyle='#164e63'; ctx.lineWidth=1; ctx.stroke();
+
+  const rsN    = gs.research || 0;
+  const rsCost = researchCost(rsN);
+  const rsAff  = gs.gold >= rsCost;
+
+  ctx.fillStyle='#22d3ee'; ctx.font='bold 11px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText('⚗️ 병기 연구', 12, rsY+8);
+  ctx.fillStyle='#475569'; ctx.font='9px sans-serif';
+  ctx.fillText(`타워 공격력 +${RESEARCH_TOWER_DMG} · 아군 공격력 +${RESEARCH_UNIT_ATK} (누적)`, 12, rsY+26);
+
+  if (rsN > 0) {
+    ctx.fillStyle='#22d3ee'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left';
+    ctx.fillText(`${rsN}단계`, 150, rsY+8);
+    ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif';
+    ctx.fillText(`타워 +${rsN*RESEARCH_TOWER_DMG} / 아군 +${rsN*RESEARCH_UNIT_ATK}`, 190, rsY+9);
+  }
+
+  const rbW=112, rbH=28, rbX=CW-12-rbW, rbY=rsY+(rsH-rbH)/2;
+  roundRect(ctx,rbX,rbY,rbW,rbH,5);
+  ctx.fillStyle = rsAff ? '#0e3a44' : '#1a1a2e'; ctx.fill();
+  ctx.strokeStyle = rsAff ? '#22d3ee' : '#334155'; ctx.lineWidth=1; ctx.stroke();
+  ctx.fillStyle = rsAff ? '#22d3ee' : '#64748b'; ctx.font='bold 10px sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(`연구 ${rsCost}💰`, rbX+rbW/2, rbY+rbH/2);
+  gs.ui.researchBtn = {x:rbX,y:rbY,w:rbW,h:rbH};
+
+  const stripY=rsY+rsH+5;
   roundRect(ctx,6,stripY,CW-12,44,6);
   ctx.fillStyle='#0a0d1a'; ctx.fill(); ctx.strokeStyle='#1e293b'; ctx.lineWidth=1; ctx.stroke();
-  const pool=WAVE_DEFS[gs.wave]?.arenaPool||[];
+  const pool=waveDefFor(gs.wave)?.arenaPool||[];
   const totalW=pool.reduce((a,[,w])=>a+w,0)||1;
   ctx.fillStyle='#64748b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
   ctx.fillText(`웨이브 ${gs.wave+1} 아레나 스폰:`,12,stripY+14);
@@ -2112,7 +2277,7 @@ function renderTownPageArmy(ctx, gs, startY) {
     ry+=18;
 
     // 다음 웨이브 미리보기
-    const nd=WAVE_DEFS[gs.wave];
+    const nd=waveDefFor(gs.wave);
     if (nd && ry < CH-40) {
       ctx.fillStyle='#64748b'; ctx.font='10px sans-serif'; ctx.textAlign='left';
       ctx.fillText('다음 웨이브',18,ry);

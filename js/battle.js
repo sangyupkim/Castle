@@ -32,7 +32,7 @@ function applyUnitStats(u, hpRatio) {
   const t = UNIT_TYPES[u.typeId];
   if (!t) return;
   const ratio = hpRatio !== undefined ? hpRatio : (u.maxHp > 0 ? u.hp / u.maxHp : 1);
-  u.maxHp     = t.hp  + BONUSES.unitHp;
+  u.maxHp     = Math.max(1, Math.round((t.hp + BONUSES.unitHp) * (BONUSES.pactUnitHpMult || 1)));
   u.atk       = t.atk + BONUSES.unitAtk;
   u.def       = t.def + BONUSES.unitDef + BONUSES.heroAura;
   u.skillAtk  = t.skillAtk  ? t.skillAtk  + BONUSES.unitAtk : 0;

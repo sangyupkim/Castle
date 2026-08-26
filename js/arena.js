@@ -56,7 +56,8 @@ function makeArenaMob(typeId, waveIndex, killCount, caveLevel, eliteBonus) {
   const t  = BATTLE_MOB_TYPES[typeId] || BATTLE_MOB_TYPES.goblin;
   const cv = CAVE_LEVELS[caveLevel] || CAVE_LEVELS[1];
   const isElite = Math.random() < ((BONUSES.eliteChance || 0) + (eliteBonus || 0));
-  const sm = mobStatScale(waveIndex, killCount) * cv.statMult * (isElite ? ELITE_STAT_MULT : 1);
+  const sm = mobStatScale(waveIndex, killCount) * endlessArenaMult(waveIndex)
+           * cv.statMult * (isElite ? ELITE_STAT_MULT : 1);
   const gm = mobGoldScale(waveIndex, killCount) * cv.goldMult * (isElite ? ELITE_GOLD_MULT : 1);
   const hp = Math.max(1, Math.round(t.hp * sm * BONUSES.mobHpMult));
 
@@ -197,7 +198,7 @@ function updateAlly(gs, u, mobs, allies, dt) {
   // 전투 이탈 회복 — 맞지 않고 버틴 시간에 값을 준다
   u.noHitFor = (u.noHitFor || 0) + dt;
   if (u.noHitFor >= ARENA_REGEN_DELAY && u.hp < u.maxHp) {
-    u.hp = Math.min(u.maxHp, u.hp + u.maxHp * ARENA_REGEN_PCT * dt);
+    u.hp = Math.min(u.maxHp, u.hp + u.maxHp * ARENA_REGEN_PCT * (BONUSES.pactRegenMult || 1) * dt);
   }
 
   // 목표: 사거리 안에서 가장 가까운 적
@@ -560,7 +561,7 @@ function hurtAlly(gs, u, dmg, color) {
 
 // ─── 웨이브 시작/종료 훅 ─────────────────────────────────────────────────────
 function startArena(gs, waveIndex) {
-  const a = gs.arena, def = WAVE_DEFS[waveIndex] || {};
+  const a = gs.arena, def = waveDefFor(waveIndex) || {};
   a.mobs = []; a.drops = []; a.shots = []; a.bursts = [];
   a.elapsed = 0;
   a.spawnTimer = 0.6;

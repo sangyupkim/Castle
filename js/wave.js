@@ -28,15 +28,18 @@ function createWaveManager() {
       this.timer   = WAVE_DURATION;
       this.wipedAt = null;
 
-      const def = WAVE_DEFS[this.waveIndex];
+      const def = waveDefFor(this.waveIndex);
 
       // 상단 스폰 큐
       const countMult = 1 + this.waveIndex * DEF_WAVE_COUNT_SCALE;
       const spawnMult = BONUSES.spawnSpeedMult || 1;
+      // 무한 구간에서는 간격을 좁히고 그만큼 마릿수를 늘린다 —
+      // 웨이브 길이는 그대로 두고 초당 도착량만 올리기 위해서다.
+      const density   = endlessDensityMult(this.waveIndex);
       this.defenseQueues = def.defenseEnemies.map(d => ({
         type: d.type,
-        remaining: Math.max(1, Math.round(d.count * countMult)),
-        interval: (d.interval / 1000) / spawnMult,
+        remaining: Math.max(1, Math.round(d.count * countMult / density)),
+        interval: (d.interval / 1000) / spawnMult * density,
         nextSpawn: 0.5
       }));
 
@@ -179,7 +182,7 @@ function createWaveManager() {
 
       // 완주하면 성벽을 조금 수리한다. 기지 HP가 내려가기만 하면
       // 공격적으로 굴리는 플레이가 구조적으로 지속 불가능해진다.
-      if (cleared) {
+      if (cleared && !BONUSES.pactNoRepair) {
         const before = gs.baseHP;
         gs.baseHP = Math.min(baseHpMax(), gs.baseHP + clearRepair(this.waveIndex));
         const healed = Math.round(gs.baseHP - before);
@@ -201,7 +204,22 @@ function createWaveManager() {
         else gs.hero.hp = Math.max(1, Math.round(heroUnit.hp));
       }
 
-      gs.defenseEnemies    = [];
+      // ── 잔존 침입자는 사라지지 않는다 ──────────────────────────────────
+      // v2.5까지는 웨이브가 끝나면 걸어오던 적을 전부 지웠다. 그런데 ∞ 경로 완주에
+      // 보스는 58초, 강철오크는 47초가 걸리고 웨이브는 60초다 — 무거운 적일수록
+      // 타워에 죽는 게 아니라 "시계에 죽어" 기지에 닿지도 못했다.
+      // 실측(∞-29, 적 ×44.7)에서 기지에 도달한 적이 0기였던 이유가 이것이고,
+      // 적 체력을 아무리 올려도 상단이 위협이 되지 않던 근본 원인이다.
+      // 이제는 남은 적이 그대로 다음 웨이브로 넘어간다 — 못 잡으면 쌓인다.
+      const survivors = gs.defenseEnemies
+        .filter(e => !e.dead && !e.reached)
+        .sort((a, b) => (b.wpIdx || 0) - (a.wpIdx || 0))
+        .slice(0, CARRYOVER_MAX);
+      for (const e of survivors) { e.slowTimer = 0; e.slowFactor = 0; e.hitFlash = 0; e.carried = true; }
+      if (survivors.length) {
+        addLog(gs.battle, `⚠️ 잔존 침입자 ${survivors.length}기가 계속 진군합니다`, '#f59e0b');
+      }
+      gs.defenseEnemies    = survivors;
       gs.projectiles       = [];
       gs.bountyPending     = false;
       this.bountyTimer     = null;
@@ -213,13 +231,14 @@ function createWaveManager() {
       gs.battle.result     = null;
       gs.battle.goldEarned = 0;
       gs.battle.floaties   = [];
-      gs.battle.maxSlots   = Math.max(1, 4 + BONUSES.maxSlotBonus);
+      gs.battle.maxSlots   = Math.max(1, Math.floor((4 + BONUSES.maxSlotBonus) * (BONUSES.pactSlotMult || 1)));
 
       gs.hero.placement = 'none';
       restHealTeam(gs.battle);       // 생존 병력 휴식 회복
 
-      const isLast = (this.waveIndex + 1 >= WAVE_DEFS.length);
-      if (!isLast) {
+      // 무한 모드에서도 강화는 계속 고른다. 30웨이브 완주 순간만 선택 화면으로 넘긴다.
+      const atCrossroads = (this.waveIndex + 1 === WAVE_DEFS.length) && !gs.endlessChosen;
+      if (!atCrossroads) {
         this.phase = 'upgradePick';
         gs.upgradePick = { active: true, cards: rollUpgradeCards(gs.activeUpgrades) };
       } else {
@@ -230,9 +249,16 @@ function createWaveManager() {
       gs.town.waveBuffs = [];
       reapplyAllBonuses(gs);
 
+      // 무한 구간은 층마다 보석이 쌓인다 — 더 들어갈 이유
+      const et = endlessTier(this.waveIndex);
+      if (et > 0) {
+        gs.endlessGems = (gs.endlessGems || 0) + ENDLESS_GEM_PER_TIER;
+        gs.stats.bestEndless = Math.max(gs.stats.bestEndless || 0, et);
+      }
+
       // 스테이지 최초 클리어 보석 (일회성)
       const stageIdx = Math.floor(this.waveIndex / 3);
-      const isLastWaveOfStage = ((this.waveIndex + 1) % 3 === 0);
+      const isLastWaveOfStage = ((this.waveIndex + 1) % 3 === 0) && et === 0;
       if (isLastWaveOfStage) {
         if (!gs.clearedStages) gs.clearedStages = new Array(10).fill(false);
         gs.stats.bestStage = Math.max(gs.stats.bestStage || 0, stageIdx + 1);
@@ -261,8 +287,11 @@ function createWaveManager() {
 
       if (this.intermissionTimer <= 0) {
         const next = this.waveIndex + 1;
-        if (next >= WAVE_DEFS.length) {
+        // 30웨이브 완주는 런의 끝이 아니라 갈림길이다 —
+        // 여기서 정산하고 캠프로 갈지, 무한 모드로 더 들어갈지 고른다.
+        if (next === WAVE_DEFS.length && !gs.endlessChosen) {
           gs.stageCleared = true;
+          gs.stats.clears = (gs.stats.clears || 0) + 1;
           SaveManager.save(gs);
         } else {
           gs.wave = next;

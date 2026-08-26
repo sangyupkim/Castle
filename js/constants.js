@@ -147,14 +147,48 @@ const UNLOCK_TOTAL_COST = UNLOCK_DEFS.reduce((a, u) => a + u.cost, 0);
 const INITIAL_UNLOCKED  = ['arrow', 'archer', 'swordsman'];
 
 // ─── 서약 (난이도를 스스로 올리고 보석 배율을 받는다) ────────────────────────
+// v2.5까지는 전부 고정값이었다 — 기지 최대 HP −20, 편성 슬롯 −1 같은.
+// 만렙 편성(기지 220, 슬롯 6)에게는 −20이 9%, −1이 17%라 아무 의미가 없었고,
+// 실측에서 13웨이브 동안 기지 HP를 8밖에 안 잃었다.
+// 배율형으로 다시 잡는다. 성장한 만큼 그대로 비례해 깎여야 서약이 작동한다.
 const PACT_DEFS = [
-  { id:'pc_hp',    name:'거친 침입자', icon:'💢', gem:0.12, desc:'상단 적 HP +25%',              apply:b=>{ b.pactDefHpMult   *= 1.25; } },
-  { id:'pc_spawn', name:'굶주린 무리', icon:'🌑', gem:0.15, desc:'아레나 스폰 간격 −15%',        apply:b=>{ b.pactSpawnMult   *= 0.85; } },
-  { id:'pc_wall',  name:'얇은 성벽',   icon:'🧱', gem:0.12, desc:'기지 최대 HP −20',             apply:b=>{ b.baseHpMax       -= 20;   } },
-  { id:'pc_purse', name:'빈 주머니',   icon:'👛', gem:0.18, desc:'시작 골드 −5 · 골드 획득 −10%', apply:b=>{ b.startGoldBonus -= 5; b.battleGoldMult *= 0.9; b.defenseGoldMult *= 0.9; } },
-  { id:'pc_rest',  name:'짧은 휴식',   icon:'😴', gem:0.10, desc:'웨이브 후 회복 30% → 10%',     apply:b=>{ b.restHealBonus   -= 0.20; } },
-  { id:'pc_solo',  name:'고독한 지휘', icon:'🕯️', gem:0.20, desc:'편성 슬롯 −1',                apply:b=>{ b.maxSlotBonus    -= 1;    } },
+  // ── 적을 강하게 ──
+  { id:'pc_hp',    name:'거친 침입자', icon:'💢', gem:0.20, tier:1,
+    desc:'상단 적 HP ×1.8',
+    apply:b=>{ b.pactDefHpMult *= 1.8; } },
+  { id:'pc_armor', name:'무쇠 가죽',   icon:'🛡️', gem:0.18, tier:1,
+    desc:'상단 적 방어력 +6 · 타워 피해 −15%',
+    apply:b=>{ b.pactArmorBonus += 6; b.pactTowerDmgMult *= 0.85; } },
+  { id:'pc_swift', name:'질주 본능',   icon:'💨', gem:0.16, tier:1,
+    desc:'상단 적 이동속도 +35%',
+    apply:b=>{ b.pactEnemySpdMult *= 1.35; } },
+  { id:'pc_swarm', name:'굶주린 무리', icon:'🌑', gem:0.22, tier:1,
+    desc:'아레나 스폰 간격 −30% · 몹 HP ×1.5',
+    apply:b=>{ b.pactSpawnMult *= 0.70; b.mobHpMult *= 1.5; } },
+
+  // ── 나를 약하게 ──
+  { id:'pc_wall',  name:'얇은 성벽',   icon:'🧱', gem:0.24, tier:2,
+    desc:'기지 최대 HP 절반 · 완주 수리 없음',
+    apply:b=>{ b.pactBaseHpMult *= 0.5; b.pactNoRepair = true; } },
+  { id:'pc_cap',   name:'봉인된 설계도', icon:'📐', gem:0.20, tier:2,
+    desc:'타워 최고 레벨 3 제한',
+    apply:b=>{ b.pactTowerLevelCap = Math.min(b.pactTowerLevelCap, 3); } },
+  { id:'pc_static',name:'멈춘 시간',   icon:'⏸️', gem:0.14, tier:2,
+    desc:'타워 과부하 사용 불가',
+    apply:b=>{ b.pactNoOverload = true; } },
+  { id:'pc_solo',  name:'고독한 지휘', icon:'🕯️', gem:0.18, tier:2,
+    desc:'편성 슬롯 절반 · 아군 HP −25%',
+    apply:b=>{ b.pactSlotMult *= 0.5; b.pactUnitHpMult *= 0.75; } },
+
+  // ── 경제를 조이기 ──
+  { id:'pc_purse', name:'빈 주머니',   icon:'👛', gem:0.20, tier:3,
+    desc:'모든 골드 획득 −40%',
+    apply:b=>{ b.battleGoldMult *= 0.6; b.defenseGoldMult *= 0.6; } },
+  { id:'pc_rest',  name:'짧은 휴식',   icon:'😴', gem:0.12, tier:3,
+    desc:'웨이브 후 회복 없음 · 전투 이탈 회복 절반',
+    apply:b=>{ b.restHealBonus -= 1; b.pactRegenMult *= 0.5; } },
 ];
+const PACT_TIERS = { 1:'적을 강하게', 2:'나를 약하게', 3:'경제를 조이기' };
 
 // 타워 레벨 1~5.
 // Lv.4~5는 후반 골드 사용처다. 격자 40칸이 다 차고 마을 강화가 바닥나면
@@ -178,9 +212,12 @@ function towerBuildCost(typeId, towers) {
 }
 // Lv.3까지는 완만하고, Lv.4부터 급격히 비싸진다
 const TOWER_HIGH_LEVEL_ESCALATION = 2.6;
+function towerLevelCap() {
+  return Math.min(TOWER_MAX_LEVEL, BONUSES.pactTowerLevelCap || TOWER_MAX_LEVEL);
+}
 function towerUpgradeCost(t) {
   const lv = t.level || 1;
-  if (lv >= TOWER_MAX_LEVEL) return null;
+  if (lv >= towerLevelCap()) return null;
   const base = TOWER_TYPES[t.typeId].cost;
   const mult = lv <= 2 ? 0.9 * lv
                        : 0.9 * lv * Math.pow(TOWER_HIGH_LEVEL_ESCALATION, lv - 2);
@@ -347,6 +384,21 @@ function rerollCost(n) {
   return Math.round(REROLL_BASE * Math.pow(REROLL_ESCALATION, Math.max(0, n || 0)));
 }
 
+// 병기 연구 — 상한 없는 마지막 사용처.
+// 성벽 보수는 체증으로 스스로 확장되지만 타워 레벨은 5에서 막히고,
+// 무한 구간에서는 수입이 계속 늘어 결국 다시 골드가 논다.
+// 살 때마다 비싸지고 효과는 그대로 쌓이는 항목을 하나 열어둔다.
+const RESEARCH_BASE = 120;
+const RESEARCH_ESCALATION = 1.45;
+// 타워 쪽을 4로 잡았더니 연구 12단계가 타워 총 DPS를 32,821 → 56,589(+72%)로 올렸다.
+// 남는 골드를 흡수하라고 연 창구가 상단을 다시 무적으로 만든 셈이다.
+// 실제로 무너지는 쪽은 아레나이므로, 무게를 아래로 옮긴다.
+const RESEARCH_TOWER_DMG = 2;    // 1회당 모든 타워 공격력 +2
+const RESEARCH_UNIT_ATK  = 4;    // 1회당 모든 아군 공격력 +4
+function researchCost(n) {
+  return Math.round(RESEARCH_BASE * Math.pow(RESEARCH_ESCALATION, Math.max(0, n || 0)));
+}
+
 const CLEAR_BONUS_BASE     = 30;   // 완주 보너스 기본
 const CLEAR_BONUS_PER_WAVE = 12;   // 웨이브당 가산
 // 완주 보상의 알맹이는 골드가 아니라 성벽 수리다.
@@ -358,9 +410,32 @@ function clearRepair(waveIndex) {
   return Math.min(CLEAR_REPAIR_MAX, CLEAR_REPAIR_BASE + Math.floor((waveIndex || 0) / 4));
 }
 
+// 기지 피해 감소는 상한을 둔다.
+// 스킬 트리만으로 65%가 쌓이고 강화 카드까지 겹치면 85%까지 간다 —
+// 이 상태에서는 기지에 닿는 모든 피해가 1/7이 되어, 적을 아무리 강하게 만들어도
+// 만렙 편성이 죽지 않는다. 실측(∞-29, 적 ×44.7)에서 한 웨이브 피해가
+// 상수 9HP로 고정돼 있던 원인 중 하나가 이것이다.
+const BASE_DEF_PCT_CAP = 0.55;
+// 웨이브가 끝나도 아직 걸어오던 적은 사라지지 않고 다음 웨이브로 넘어간다.
+// 상한은 성능과 가독성 때문이지, 밸런스 때문이 아니다.
+const CARRYOVER_MAX = 40;
+
+function baseDamageMult() {
+  return 1 - Math.min(BASE_DEF_PCT_CAP, BONUSES.baseDefPct || 0);
+}
+
 function retreatCost(remainSec) {
-  return Math.min(RETREAT_MAX,
-    Math.ceil(Math.max(0, remainSec) * RETREAT_DPS * (1 - BONUSES.baseDefPct)));
+  // 무한 구간에서는 후퇴 단가도 같이 오른다. 상수로 두면 깊은 층에서
+  // "매 웨이브 후퇴"가 전멸(층에 비례)보다 압도적으로 싸져 다시 정답이 된다.
+  //
+  // 기지 피해 감소(baseDefPct)는 여기 적용하지 않는다.
+  // 후퇴는 적이 성벽을 때린 결과가 아니라 하단을 스스로 비운 대가다.
+  // 감소율을 먹였더니 방어 스킬을 다 찍은 편성은 웨이브 시작 직후 빼도 6~10HP밖에
+  // 안 들어, 성벽 보수(+12HP)로 메우며 무한히 도는 고리가 생겼다.
+  // 신규 플레이어는 baseDefPct가 0이므로 초반 난이도는 그대로다.
+  const w = _curWaveIndex();
+  return Math.min(retreatCap(w),
+    Math.ceil(Math.max(0, remainSec) * RETREAT_DPS * endlessCapMult(w)));
 }
 function clearBonusGold(waveIndex) {
   return CLEAR_BONUS_BASE + waveIndex * CLEAR_BONUS_PER_WAVE;
@@ -374,6 +449,29 @@ const BREAKTHROUGH_MAX      = 1.8;   // 초당 상한 — 한 웨이브 전멸�
 // 아레나에서는 흔한 일이라, 전멸 3번이면 런이 끝나는 계산이 너무 가팔랐다.
 // 1.8 = 전멸 1회당 최대 27HP → 네 번은 버틴다.
 const BREAKTHROUGH_DURATION = 15;    // 돌파 지속(초). 이후 몬스터는 물러나고 상단만 남는다
+
+// 무한 구간에서는 두 상한을 함께 푼다.
+// 상한이 상수로 남아 있으면 아레나에서 매 웨이브 전멸해도 피해가 27HP로 고정돼,
+// "계속 지는데 죽지는 않는" 상태가 무한히 이어진다.
+// 다만 이 상한은 완만해야 한다 — 층당 1.10으로 잡았더니 ∞-25에서 전멸 한 번이
+// 131HP(기지의 60%)가 되어, 무한 모드가 두 웨이브 만에 끝났다.
+// 깊은 층에서도 전멸 한 번은 기지의 1/5 언저리여야 만회할 여지가 남는다.
+const ENDLESS_CAP_GROWTH = 1.03;
+const ENDLESS_CAP_MAX    = 2.5;
+function _curWaveIndex() {
+  return (typeof wm !== 'undefined' && wm) ? (wm.waveIndex || 0)
+       : (typeof gs !== 'undefined' && gs) ? (gs.wave || 0) : 0;
+}
+function endlessCapMult(waveIndex) {
+  const t = endlessTier(waveIndex);
+  return t <= 0 ? 1 : Math.min(ENDLESS_CAP_MAX, Math.pow(ENDLESS_CAP_GROWTH, t));
+}
+function breakthroughCap(waveIndex) {
+  return BREAKTHROUGH_MAX * endlessCapMult(waveIndex);
+}
+function retreatCap(waveIndex) {
+  return Math.round(RETREAT_MAX * endlessCapMult(waveIndex));
+}
 
 // 엘리트: 케이브 업그레이드로 확률 상승. 스탯 강화 + 보상 증가
 const ELITE_STAT_MULT = 1.8;
@@ -437,11 +535,88 @@ function rollArenaMob(pool) {
   return pool[0][0];
 }
 
+// ─── 무한 모드 ───────────────────────────────────────────────────────────────
+// 30웨이브를 완주해도 런이 끝나지 않는 구간.
+//
+// 실측에서 만렙 편성(스킬 27개 + 해금 전부 + 타워 30기 Lv.5)이 13웨이브 동안
+// 기지 HP를 8밖에 안 잃었다. 원인은 명확하다 — 타워 성장(스킬 누적 × 레벨 5.4배)이
+// 적 성장(웨이브당 +22%, 선형)을 압도적으로 앞지른다.
+// 선형 스케일링으로는 어떤 숫자를 넣어도 언젠가 따라잡히므로, 무한 구간은
+// 지수로 올린다. 어떤 편성이든 반드시 무너지는 지점이 생긴다.
+// 1.14로 잡았을 때 만렙 타워 30기(총 DPS 44,700)를 넘어서는 지점이 ∞-22였는데,
+// 아레나가 ∞-21에서 먼저 런을 끝냈다 — 상단 도달 0기로 끝나는 무한 모드가 됐다.
+// 상단이 아레나보다 한두 층 먼저 뚫려야 마지막에 "타워가 못 막는다"를 실제로 본다.
+const ENDLESS_HP_GROWTH    = 1.17;   // 층당 HP 배율
+const ENDLESS_DMG_GROWTH   = 1.09;   // 층당 기지 피해 배율
+const ENDLESS_SPAWN_TIGHTEN= 0.985;  // 층당 스폰 간격
+const ENDLESS_ELITE_STEP   = 0.02;   // 층당 엘리트 확률
+const ENDLESS_GEM_PER_TIER = 0.7;    // 층당 보석 (깊이 들어갈 이유)
+// 체력만 올리면 무한 구간이 실제로는 안 어려워진다.
+// ∞ 경로 완주에 보스는 58초, 강철오크는 47초가 걸리는데 웨이브는 60초다 —
+// 무거운 적일수록 "타워에 죽는" 게 아니라 "시계에 죽어" 기지에 닿지도 못한다.
+// 속도를 같이 올려야 체력 증가가 위협으로 바뀐다.
+const ENDLESS_SPD_GROWTH   = 1.035;  // 층당 이동속도 배율
+const ENDLESS_SPD_CAP      = 2.4;    // 상한 — 이 이상은 프레임 간 이동이 격자를 건너뛴다
+// 아레나는 상단보다 완만하게 올린다.
+// 두 전선에 같은 지수를 먹였더니 아레나가 8층쯤 먼저 무너져서, 상단이 뚫리기 한참 전에
+// 런이 끝났다 — 실측(∞-1~16)에서 기지 피해 100%가 아레나 전멸발 돌파였고
+// 상단 도달은 매 층 0기였다. 두 전선이 비슷한 층에서 위험해져야 조합을 고민한다.
+const ENDLESS_ARENA_GROWTH = 1.085;
+// 상단 물량 밀도. ENDLESS_SPAWN_TIGHTEN은 아레나에만 걸려 있었고(arena.js),
+// 상단 스폰 간격은 30웨이브 값에 그대로 묶여 있었다 — 그래서 적 HP를 ×23까지
+// 올려도 타워는 "한 마리씩 도착하는" 적을 계속 처리할 수 있었다.
+// 실측에서 ∞-20까지 기지 도달 0기였던 진짜 이유가 이것이다.
+// 총 체력이 아니라 초당 도착량이 상단의 한계를 정한다.
+const ENDLESS_DENSITY_STEP = 0.96;   // 층당 스폰 간격 배율
+const ENDLESS_DENSITY_MIN  = 0.40;   // 하한 — 이 이상 촘촘해지면 개체 수가 감당이 안 된다
+
+// 0이면 일반 구간, 1 이상이면 무한 몇 층인지
+function endlessTier(waveIndex) {
+  return Math.max(0, (waveIndex || 0) - WAVE_DEFS.length + 1);
+}
+function endlessStatMult(waveIndex) {
+  const t = endlessTier(waveIndex);
+  return t <= 0 ? 1 : Math.pow(ENDLESS_HP_GROWTH, t);
+}
+function endlessDmgMult(waveIndex) {
+  const t = endlessTier(waveIndex);
+  return t <= 0 ? 1 : Math.pow(ENDLESS_DMG_GROWTH, t);
+}
+function endlessArenaMult(waveIndex) {
+  const t = endlessTier(waveIndex);
+  return t <= 0 ? 1 : Math.pow(ENDLESS_ARENA_GROWTH, t);
+}
+function endlessDensityMult(waveIndex) {
+  const t = endlessTier(waveIndex);
+  return t <= 0 ? 1 : Math.max(ENDLESS_DENSITY_MIN, Math.pow(ENDLESS_DENSITY_STEP, t));
+}
+function endlessSpdMult(waveIndex) {
+  const t = endlessTier(waveIndex);
+  return t <= 0 ? 1 : Math.min(ENDLESS_SPD_CAP, Math.pow(ENDLESS_SPD_GROWTH, t));
+}
+// 무한 구간은 마지막 세 웨이브 정의를 돌려 쓴다 (스폰 풀은 그대로, 강도만 오른다)
+function waveDefFor(waveIndex) {
+  if (waveIndex < WAVE_DEFS.length) return WAVE_DEFS[waveIndex];
+  const t = endlessTier(waveIndex);
+  const base = WAVE_DEFS[WAVE_DEFS.length - 3 + ((t - 1) % 3)];
+  return {
+    defenseEnemies: base.defenseEnemies,
+    arenaPool:      base.arenaPool,
+    eliteBonus:    (base.eliteBonus || 0) + t * ENDLESS_ELITE_STEP,
+    spawnMult:     (base.spawnMult  || 1) * Math.pow(ENDLESS_SPAWN_TIGHTEN, t)
+  };
+}
+
 function getStageInfo(waveIndex) {
+  const t = endlessTier(waveIndex);
+  if (t > 0) {
+    return { stageIdx: 9, waveInStage: (t - 1) % 3, stageLabel: `∞-${t}`,
+             isBossStage: true, endless: true, tier: t };
+  }
   const stageIdx = Math.floor(waveIndex / 3);
   const waveInStage = waveIndex % 3;
   const isBossStage = stageIdx === 9;
-  return { stageIdx, waveInStage, stageLabel: `1-${stageIdx+1}`, isBossStage };
+  return { stageIdx, waveInStage, stageLabel: `1-${stageIdx+1}`, isBossStage, endless: false, tier: 0 };
 }
 
 // ─── 케이브 업그레이드 ────────────────────────────────────────────────────────

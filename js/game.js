@@ -85,6 +85,9 @@ function newState() {
     wallRepairs:0,      // 이번 런에서 성벽을 몇 번 보수했는지 (비용 체증)
     rerolls:0,          // 이번 런에서 강화 카드를 몇 번 리롤했는지
     bountyUsed:0,       // 현상수배를 몇 번 불렀는지 (강해지고 보상도 오른다)
+    endlessChosen:false,// 30웨이브 완주 후 무한 모드를 골랐는지
+    endlessGems:0,      // 무한 층에서 쌓인 보석
+    research:0,         // 병기 연구 횟수 (상한 없는 골드 사용처)
     bountyPending:false,// 이번 웨이브에 소환 예약됨
     overloadReady:0,    // 타워 과부하 재사용까지 남은 시간
     hoveredCell:null,
@@ -146,7 +149,10 @@ gs.battle = createBattle();
   gs.battle.totalGoldEarned = sv.totalGoldEarned || 0;
   gs.caveLevel  = Math.max(1, Math.min(5, sv.caveLevel||1));
   gs.wallRepairs = sv.wallRepairs || 0;
+  gs.research    = sv.research    || 0;
   gs.bountyUsed  = sv.bountyUsed  || 0;
+  gs.endlessChosen = !!sv.endlessChosen;
+  gs.endlessGems   = sv.endlessGems || 0;
   gs.rerolls     = sv.rerolls     || 0;
   if (sv.townBuildings) {
     for (const [k, v] of Object.entries(sv.townBuildings)) {
@@ -166,10 +172,10 @@ function _applyStartBonuses() {
   gs.gold     = Math.max(0, gs.gold + BONUSES.startGoldBonus);
   gs.baseHP   = Math.max(1, Math.min(baseHpMax(), gs.baseHP + BONUSES.baseHpMax));
   gs.hero.exp = Math.min(HERO_LEVELS[gs.hero.level].expNeeded - 1, gs.hero.exp + BONUSES.heroStartExp);
-  gs.battle.maxSlots = Math.max(1, 4 + BONUSES.maxSlotBonus);
+  gs.battle.maxSlots = Math.max(1, Math.floor((4 + BONUSES.maxSlotBonus) * (BONUSES.pactSlotMult || 1)));
 }
 
-function baseHpMax()     { return Math.max(20, BASE_HP_MAX + BONUSES.baseHpMax); }
+function baseHpMax()     { return Math.max(20, Math.round((BASE_HP_MAX + BONUSES.baseHpMax) * (BONUSES.pactBaseHpMult || 1))); }
 function heroMaxHp()     { return Math.round(HERO_LEVELS[gs.hero.level].hp * BONUSES.heroStatMult); }
 function heroReviveDur() { return Math.max(5, HERO_REVIVE_TIME - BONUSES.heroReviveReduction); }
 
@@ -263,8 +269,14 @@ function tap({x,y}) {
   if (gs.page === 'lobby')  { handleLobbyTap(x,y);  return; }
   if (gs.page === 'result') { handleResultTap(x,y); return; }
 
-  // 런이 끝나면 결과 화면으로. 스킬 트리는 로비에 있으므로 여기서 열지 않는다.
-  if (gs.gameOver || gs.stageCleared) { showResult(); return; }
+  // 30웨이브 완주 — 정산할지 무한 모드로 더 들어갈지 고른다
+  if (gs.stageCleared && !gs.gameOver) {
+    if (hitTest(x,y,gs.ui.bankBtn||{}))    { showResult(); return; }
+    if (hitTest(x,y,gs.ui.endlessBtn||{})) { enterEndless(); return; }
+    return;
+  }
+  // 기지 함락 — 결과 화면으로. 스킬 트리는 로비에 있으므로 여기서 열지 않는다.
+  if (gs.gameOver) { showResult(); return; }
 
   if (gs.upgradePick.active) {
     if (hitTest(x,y,gs.ui.rerollBtn||{})) {
@@ -310,7 +322,10 @@ function tap({x,y}) {
     if (cell) {
       const tw = gs.towers.find(t => t.col===cell.c && t.row===cell.r);
       if (tw) {
-        if (gs.overloadReady > 0) {
+        if (BONUSES.pactNoOverload) {
+          spawnFloaty('📜 멈춘 시간 — 과부하 봉인됨', x, y, '#f43f5e');
+          SFX.denied();
+        } else if (gs.overloadReady > 0) {
           spawnFloaty(`재사용까지 ${Math.ceil(gs.overloadReady)}초`, x, y, '#64748b');
           SFX.denied();
         } else {
@@ -414,6 +429,18 @@ function handleLobbyTap(x, y) {
     return;
   }
 
+  if (L.tab === 'pact') {
+    for (const b of gs.ui.pactBtns||[]) {
+      if (hitTest(x,y,b)) {
+        togglePact(b.id, gs);
+        spawnFloaty(isPactOn(b.id) ? '서약 체결' : '서약 해제', x, y, isPactOn(b.id) ? '#f43f5e' : '#64748b');
+        SFX.click();
+        return;
+      }
+    }
+    return;
+  }
+
   if (L.tab === 'unlock') {
     for (const b of gs.ui.unlockBtns||[]) {
       if (hitTest(x,y,b)) {
@@ -445,6 +472,20 @@ function startRun() {
 function showResult() {
   bankRunResult();
   gs.page = 'result';
+}
+
+// 무한 모드로 계속 — 여기서부터는 죽어야 끝난다
+function enterEndless() {
+  SFX.levelUp();
+  gs.endlessChosen = true;
+  gs.stageCleared  = false;
+  gs.resultBanked  = false;
+  gs.wave = WAVE_DEFS.length;
+  wm.init(gs.wave);
+  gs.waveActive = false;
+  gs.page = 'battle';
+  spawnFloaty('∞ 무한 모드 — 여기서부터는 죽어야 끝납니다', CW/2, DEFENSE_H/2, '#a78bfa');
+  SaveManager.save(gs);
 }
 
 function handleResultTap(x, y) {
@@ -541,6 +582,17 @@ function handleTownTap(x,y) {
         }
         return;
       }
+    }
+    if (hitTest(x,y,gs.ui.researchBtn||{})) {
+      const cost = researchCost(gs.research);
+      if (gs.gold < cost) { spawnFloaty('골드 부족!',x,y,'#ef4444'); SFX.denied(); return; }
+      gs.gold -= cost;
+      gs.research++;
+      reapplyAllBonuses(gs);
+      refreshTeamStats(gs.battle);
+      spawnFloaty(`⚗️ 연구 ${gs.research}단계`, CW/2, 300, '#22d3ee');
+      SFX.upgrade();
+      return;
     }
     if (hitTest(x,y,gs.ui.wallRepairBtn||{})) {
       const cost = wallRepairCost(gs.wallRepairs);
@@ -837,7 +889,7 @@ function update(dt) {
   for (const e of gs.defenseEnemies) {
     if (e.reached&&!e._counted) {
       e._counted=true;
-      const dmg = Math.max(1, Math.round(e.dmg * (1 - BONUSES.baseDefPct)));
+      const dmg = Math.max(1, Math.round(e.dmg * baseDamageMult()));
       gs.baseHP=Math.max(0,gs.baseHP-dmg);
       spawnFloaty(`-${dmg}HP`,CW/2,DEFENSE_H-25,'#ef4444');
       if (e.isBounty) addLog(gs.battle, `💰 현상수배를 놓쳤습니다 — 성벽 -${dmg}HP`, '#ef4444');
@@ -873,8 +925,8 @@ function updateBreakthrough(dt) {
   if (!live.length) { _breachAccum = 0; return; }
 
   const atkSum = live.reduce((a, e) => a + e.atk, 0);
-  const dps    = Math.min(atkSum * BREAKTHROUGH_DPS, BREAKTHROUGH_MAX);
-  _breachAccum += dps * dt * (1 - BONUSES.baseDefPct);
+  const dps    = Math.min(atkSum * BREAKTHROUGH_DPS, breakthroughCap(wm.waveIndex));
+  _breachAccum += dps * dt * baseDamageMult();
 
   if (_breachAccum >= 1) {
     const dmg = Math.floor(_breachAccum);
@@ -894,6 +946,7 @@ function bankRunResult() {
   const reached  = gs.wave + (gs.stageCleared ? 1 : 0);
   const bd       = soulStoneBreakdown(gs);
   const wasBest  = reached > (gs.stats.bestWave || 0);
+  const tier     = endlessTier(gs.wave);
 
   _soulStones += bd.total;
   gs.lastSoulEarned = bd.total;
@@ -903,7 +956,8 @@ function bankRunResult() {
   gs.stats.totalGems  = (gs.stats.totalGems || 0) + bd.total;
 
   gs.runSummary = {
-    cleared:  !!gs.stageCleared,
+    cleared:  !!gs.stageCleared || gs.endlessChosen,
+    endlessTier: tier,
     reached,
     stageLabel: getStageInfo(Math.max(0, gs.wave - (gs.stageCleared ? 0 : 0))).stageLabel,
     kills:    gs.battle.runKills || 0,
@@ -942,6 +996,9 @@ function loop(ts) {
   }
   ctx.restore();
 
+  // 런 종료·갈림길 오버레이 — 전투/마을 위에 덮는다.
+  // (로비 개편 때 이 호출이 빠져 게임오버 화면이 보이지 않았다)
+  if (gs.page!=='lobby' && gs.page!=='result') renderHUD(ctx,gs);
   if (gs.upgradePick.active && gs.page==='battle') renderUpgradePick(ctx,gs);
   drawFloaties(ctx);
   if (_paused && !_titleScreen && !tut.active && gs.page!=='lobby' && gs.page!=='result') renderPauseOverlay(ctx);

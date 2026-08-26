@@ -219,7 +219,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <div class="wrap">
 <header class="cover">
-  <div class="eyebrow">Game Design Document · v2.5 · 상단 전선 개편</div>
+  <div class="eyebrow">Game Design Document · v2.6 · 엔드게임</div>
   <h1>듀얼 프론티어</h1>
   <p class="tagline">한 화면에서 두 개의 전선을 동시에 굴리는 모바일 웹 로그라이트.
      위는 배치해서 지키고, 아래는 직접 뛰어들어 벌어온다.</p>
@@ -227,8 +227,8 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
     <div><dt>장르</dt><dd>타워디펜스 + 실시간 액션 로그라이트</dd></div>
     <div><dt>플랫폼</dt><dd>모바일 웹 (480×800 캔버스)</dd></div>
     <div><dt>1회 플레이</dt><dd>15~35분</dd></div>
-    <div><dt>현재 볼륨</dt><dd>스테이지 1 · 30웨이브</dd></div>
-    <div><dt>이번 개정</dt><dd>상단에 등급 상성 · 비행 · 현상수배 (v2.5)</dd></div>
+    <div><dt>현재 볼륨</dt><dd>스테이지 1 · 30웨이브 + ∞ 무한 모드</dd></div>
+    <div><dt>이번 개정</dt><dd>무한 모드 · 서약 재설계 · 잔존 침입자 (v2.6)</dd></div>
   </dl>
 </header>
 
@@ -794,7 +794,7 @@ v1.0의 "그룹 순환 + 보상 체감" 구조를 이 압력 곡선이 대체한
 </section>
 
 <section id="s8">
-<h2>08 — 웨이브를 끝내는 세 가지 방법 <span class="rev">v2.3 개정</span></h2>
+<h2>08 — 웨이브를 끝내는 세 가지 방법 <span class="rev">v2.6 개정</span></h2>
 <h3>완주 · 후퇴 · 전멸이 각각 다른 값을 갖도록</h3>
 <p class="lede">v2.2까지는 <strong>전멸만 벌을 받고 후퇴는 공짜였다.</strong> 병력을 지키고
 적립 골드도 챙기고 기지도 멀쩡하니, 실측에서 "일찍 후퇴하는 것이 언제나 정답"이 되어버렸다.
@@ -819,6 +819,16 @@ v1.0의 "그룹 순환 + 보상 체감" 구조를 이 압력 곡선이 대체한
 </tbody></table></div>
 <p>비용은 <strong>후퇴 버튼에 실시간으로 표시된다</strong> — <span class="mono">🛡 후퇴 -9</span>.
 14 이상이면 버튼이 붉게 변한다. 누르기 전에 값을 알아야 판단이 된다.</p>
+<div class="note">
+<p><strong>v2.6 — 후퇴 비용에는 기지 피해 감소를 적용하지 않는다.</strong>
+후퇴는 적이 성벽을 때린 결과가 아니라 하단을 스스로 비운 대가다. 방어 스킬을 다 찍으면
+감소율이 65%까지 쌓이는데, 그걸 후퇴에도 먹였더니 만렙 편성은
+<strong>웨이브 시작 직후 빼도 6~10HP</strong>밖에 안 들었다 — 성벽 보수(+12HP)로 메우며
+무한히 도는 고리였다. 신규 플레이어는 감소율이 0이므로 위 표 그대로다.</p>
+<p><strong>무한 구간에서는 단가가 층에 비례해 오른다</strong>(층당 ×1.03, 상한 2.5배).
+상수로 두면 깊은 층에서 후퇴가 전멸보다 압도적으로 싸져 다시 정답이 된다.
+∞-18에서 후퇴 19HP · 전멸 19HP로 두 선택의 값이 맞춰져 있다.</p>
+</div>
 
 <h4>완주 보상의 알맹이는 골드가 아니라 성벽 수리다</h4>
 <p>후반에는 골드가 남아돌지만 <strong>기지 HP는 언제나 모자란다.</strong> 그래서 완주 보상의
@@ -838,7 +848,7 @@ v1.0의 "그룹 순환 + 보상 체감" 구조를 이 압력 곡선이 대체한
 <div class="tw"><table>
 <thead><tr><th>항목</th><th>값</th></tr></thead>
 <tbody>
-<tr><td>초당 피해</td><td class="wrap"><span class="mono">min(생존 몹 ATK 합 × 0.03, 1.8) × (1 − 기지방어율)</span></td></tr>
+<tr><td>초당 피해</td><td class="wrap"><span class="mono">min(생존 몹 ATK 합 × 0.03, 1.8 × 무한층배율) × (1 − min(기지방어율, 0.55))</span> <span class="rev">v2.6</span></td></tr>
 <tr><td>지속</td><td class="wrap">15초 — 이후 몬스터 철수, 남은 시간은 상단만 진행</td></tr>
 <tr><td>최대 피해</td><td class="wrap">27 (후퇴 상한 14의 약 두 배)</td></tr>
 </tbody></table></div>
@@ -1010,22 +1020,39 @@ v1.0의 "그룹 순환 + 보상 체감" 구조를 이 압력 곡선이 대체한
 <strong>현행 정산식 그대로라면 첫 런에서 23~39보석이 들어와 해금표 전체가 즉시 무의미해진다</strong> —
 해금은 정산식 개편과 반드시 함께 가야 한다.</p>
 
-<h4>서약 <span class="rev">신규</span></h4>
+<h4>서약 <span class="rev">v2.6 재설계</span></h4>
 <p>난이도를 스스로 올리고 보석을 더 받는 선택. 중첩 가능하며 배율은 합산된다.</p>
+
+<div class="note">
+<p><strong>v2.5의 서약 6종은 실효가 없었다.</strong> 기지 최대 HP −20(220 중 20),
+편성 슬롯 −1(6→5), 적 HP +25% — 전부 <strong>가산이라 만렙 편성 앞에서 오차 수준</strong>이었다.
+전부 걸어도 13웨이브 무피해가 12웨이브 무피해가 될 뿐이었다.</p>
+<p>v2.6은 전부 <strong>배율형</strong>으로 다시 잡고 10종 3계열로 늘렸다.
+기지 HP를 <em>절반</em>으로, 슬롯을 <em>절반</em>으로, 적 HP를 <em>1.8배</em>로 — 성장 배수와
+같은 단위로 싸우게 만든다. 전부 걸면 보석 <strong>×2.84</strong>.</p>
+</div>
+
 <div class="tw"><table>
-<thead><tr><th>서약</th><th>효과</th><th class="num">보석</th></tr></thead>
+<caption>10종 3계열 — 전부 배율</caption>
+<thead><tr><th>계열</th><th>서약</th><th>효과</th><th class="num">보석</th></tr></thead>
 <tbody>
-<tr><td>거친 침입자</td><td class="wrap">상단 적 HP +25%</td><td class="num">+12%</td></tr>
-<tr><td>굶주린 무리</td><td class="wrap">아레나 스폰 간격 −15%</td><td class="num">+15%</td></tr>
-<tr><td>얇은 성벽</td><td class="wrap">기지 최대 HP −20</td><td class="num">+12%</td></tr>
-<tr><td>빈 주머니</td><td class="wrap">시작 골드 −5 · 골드 획득 −10%</td><td class="num">+18%</td></tr>
-<tr><td>짧은 휴식</td><td class="wrap">웨이브 후 회복 30% → 10%</td><td class="num">+10%</td></tr>
-<tr><td>고독한 지휘</td><td class="wrap">편성 슬롯 −1</td><td class="num">+20%</td></tr>
+<tr><td rowspan="4"><strong>적을<br>강하게</strong></td><td>💢 거친 침입자</td><td class="wrap">상단 적 HP <strong>×1.8</strong></td><td class="num">+20%</td></tr>
+<tr><td>🛡️ 무쇠 가죽</td><td class="wrap">상단 적 방어력 +6 · 타워 피해 −15%</td><td class="num">+18%</td></tr>
+<tr><td>💨 질주 본능</td><td class="wrap">상단 적 이동속도 +35%</td><td class="num">+16%</td></tr>
+<tr><td>🌑 굶주린 무리</td><td class="wrap">아레나 스폰 간격 −30% · 몹 HP ×1.5</td><td class="num">+22%</td></tr>
+<tr><td rowspan="4"><strong>나를<br>약하게</strong></td><td>🧱 얇은 성벽</td><td class="wrap">기지 최대 HP <strong>절반</strong> · 완주 수리 없음</td><td class="num">+24%</td></tr>
+<tr><td>📐 봉인된 설계도</td><td class="wrap">타워 최고 레벨 3 제한</td><td class="num">+20%</td></tr>
+<tr><td>⏸️ 멈춘 시간</td><td class="wrap">타워 과부하 사용 불가</td><td class="num">+14%</td></tr>
+<tr><td>🕯️ 고독한 지휘</td><td class="wrap">편성 슬롯 <strong>절반</strong> · 아군 HP −25%</td><td class="num">+18%</td></tr>
+<tr><td rowspan="2"><strong>경제를<br>조이기</strong></td><td>👛 빈 주머니</td><td class="wrap">모든 골드 획득 −40%</td><td class="num">+20%</td></tr>
+<tr><td>😴 짧은 휴식</td><td class="wrap">웨이브 후 회복 없음 · 전투 이탈 회복 절반</td><td class="num">+12%</td></tr>
+<tr class="total"><td colspan="3">전부 활성화</td><td class="num">×2.84</td></tr>
 </tbody></table></div>
 <div class="note">
 <p><strong>서약은 밸런스 문제의 해답이기도 하다.</strong> 스킬 트리를 다 열면 게임이 쉬워지는 것은
 로그라이트의 구조적 숙명이다. 서약은 그 시점의 플레이어가 <strong>스스로 난이도를 되돌려 받는</strong>
-장치이자, 콘텐츠를 더 만들지 않고 반복 플레이 수명을 늘리는 방법이다.</p>
+장치이자, 콘텐츠를 더 만들지 않고 반복 플레이 수명을 늘리는 방법이다.
+다만 <strong>서약만으로는 부족했다</strong> — 나머지 절반이 아래의 무한 모드다.</p>
 </div>
 
 <h4>저장 구조</h4>
@@ -1119,6 +1146,7 @@ v1.0의 "그룹 순환 + 보상 체감" 구조를 이 압력 곡선이 대체한
 <tbody>
 <tr><td><strong>🧱 성벽 보수</strong></td><td class="wrap">기지 HP +12</td><td class="num">70</td><td class="num">112</td><td class="num">179</td><td class="num">287</td><td class="num">459</td></tr>
 <tr><td><strong>🎲 강화 리롤</strong></td><td class="wrap">카드 3장 다시 뽑기</td><td class="num">40</td><td class="num">72</td><td class="num">130</td><td class="num">233</td><td class="num">420</td></tr>
+<tr><td><strong>⚗️ 병기 연구</strong> <span class="rev">v2.6</span></td><td class="wrap">타워 +2 · 아군 +4 공격력</td><td class="num">120</td><td class="num">174</td><td class="num">252</td><td class="num">366</td><td class="num">530</td></tr>
 <tr><td colspan="7" class="wrap" style="padding-top:10px"><strong>🗼 타워 Lv.4~5</strong> — Lv.3까지는 완만하고 그 위부터 급격히 비싸진다 (기존 Lv.3 상한을 5로 확장)</td></tr>
 <tr><td class="mono">화살탑</td><td class="wrap">Lv.5에서 피해 5.4배</td><td class="num">5</td><td class="num">9</td><td class="num">35</td><td class="num">122</td><td class="num">—</td></tr>
 <tr><td class="mono">저격탑</td><td class="wrap">사거리 1.45배</td><td class="num">23</td><td class="num">47</td><td class="num">183</td><td class="num">633</td><td class="num">—</td></tr>
@@ -1131,6 +1159,15 @@ v1.0의 "그룹 순환 + 보상 체감" 구조를 이 압력 곡선이 대체한
 <p><strong>리롤은 빌드를 밀어붙이는 값이다.</strong> 타워 특화로 가는 중에 유닛 카드 3장이
 뜨면 판이 흔들린다. 골드로 다시 뽑을 수 있게 하면 후반 잉여가 <strong>빌드 완성도</strong>로
 환전된다.</p>
+<p><strong>병기 연구는 상한이 없는 마지막 창구다</strong> <span class="rev">v2.6</span>.
+위 셋은 모두 어딘가에서 막힌다 — 성벽 보수는 기지 HP가 차면, 타워는 Lv.5에서.
+만렙 편성이 30웨이브를 돌면 <strong>골드가 12,100까지 쌓였다.</strong>
+연구는 살수록 1.45배씩 비싸지고 효과는 그대로 누적되므로, 수입이 얼마가 되든 흡수한다
+(9회까지 7,288골드).</p>
+<p><strong>무게는 아래로 실었다.</strong> 처음엔 타워 +4 / 아군 +3으로 잡았는데,
+연구 12단계가 타워 총 DPS를 <strong>32,821 → 56,589(+72%)</strong>로 올렸다 —
+남는 골드를 흡수하라고 연 창구가 상단을 다시 무적으로 만든 셈이다.
+실제로 무너지는 쪽은 아레나이므로 타워 +2 / 아군 +4로 뒤집었다.</p>
 </div>
 
 <h4>실측 — 잉여가 사라졌는가 <span class="rev">v2.4</span></h4>
@@ -1234,6 +1271,91 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
   <div><span class="v">7</span><span class="k">몹 종류 (신규 2 포함)</span></div>
   <div><span class="v">6</span><span class="k">아군 종류 (영웅 포함)</span></div>
 </div>
+
+<h3>∞ 무한 모드 — 30웨이브 이후 <span class="rev">v2.6 신규</span></h3>
+
+<p class="lede">30웨이브를 완주하면 <strong>갈림길</strong>이 나온다.
+정산하고 캠프로 돌아가 보석을 확실히 챙기거나, 무한 모드로 계속 들어가거나.
+무한 구간은 <strong>죽어야 끝난다</strong> — 대신 한 층 오를 때마다 보석이 +0.7 붙는다.</p>
+
+<h4>왜 필요했나 — 선형 스케일링은 반드시 따라잡힌다</h4>
+<p>스킬 27개와 해금 7종을 다 연 편성으로 30웨이브를 돌리면 <strong>기지 HP가 220 → 212밖에
+안 줄었다.</strong> 성장은 배수로 쌓이는데(스킬 × 타워 Lv.5 = 5.4배) 난이도는 웨이브당 +7%씩
+더해질 뿐이라, 어떤 숫자를 넣어도 언젠가 추월당한다. 무한 구간만 <strong>지수</strong>로 올린다.</p>
+
+<div class="tw"><table>
+<caption>층당 성장률 — 전선마다 다르게 잡는다</caption>
+<thead><tr><th>축</th><th class="num">층당</th><th class="num">∞-10</th><th class="num">∞-20</th><th>왜 이 값인가</th></tr></thead>
+<tbody>
+<tr><td>상단 적 HP</td><td class="num">×1.17</td><td class="num">×4.8</td><td class="num">×23.1</td><td class="wrap">타워가 먼저 뚫려야 마지막에 "못 막는다"를 본다</td></tr>
+<tr><td>상단 물량 밀도</td><td class="num">×0.96</td><td class="num">×0.66</td><td class="num">×0.44</td><td class="wrap">간격을 좁히고 그만큼 마릿수를 늘린다</td></tr>
+<tr><td>상단 이동속도</td><td class="num">×1.035</td><td class="num">×1.41</td><td class="num">×1.99</td><td class="wrap">경로 완주 시간을 줄여 "시계에 죽는" 것을 막는다</td></tr>
+<tr><td>아레나 몹</td><td class="num">×1.085</td><td class="num">×2.3</td><td class="num">×5.2</td><td class="wrap">상단보다 완만 — 두 전선이 비슷한 층에서 위험해지도록</td></tr>
+<tr><td>기지 피해 상한</td><td class="num">×1.03</td><td class="num">×1.34</td><td class="num">×1.81</td><td class="wrap">상한 2.5배까지. 전멸 한 번이 즉사가 되지 않게</td></tr>
+<tr><td>층당 보석</td><td class="num">+0.7</td><td class="num">+7</td><td class="num">+14</td><td class="wrap">깊이 들어갈 이유</td></tr>
+</tbody></table></div>
+
+<h4>같이 고친 것 ① 잔존 침입자 — 적이 "시계에 죽고" 있었다</h4>
+<p>무한 모드를 붙이고 나서도 만렙 편성이 안 죽었다. 계측해보니
+<strong>∞-29(적 ×44.7)에서 기지에 도달한 적이 0기</strong>였고, 한 웨이브 피해가
+층과 무관하게 <strong>정확히 9HP로 고정</strong>돼 있었다.</p>
+<p>원인은 체력이 아니라 <strong>보행 시간</strong>이었다.</p>
+<div class="tw"><table>
+<caption>∞ 경로 1,236px · 웨이브 60초</caption>
+<thead><tr><th>적</th><th class="num">이동</th><th class="num">경로 완주</th><th>결과</th></tr></thead>
+<tbody>
+<tr><td>고블린</td><td class="num">58.3px/s</td><td class="num">21.2초</td><td class="wrap">도착한다</td></tr>
+<tr><td>오크</td><td class="num">37.1px/s</td><td class="num">33.3초</td><td class="wrap">도착한다</td></tr>
+<tr><td>강철오크</td><td class="num">26.5px/s</td><td class="num">46.6초</td><td class="wrap">웨이브 중반 이후 스폰분은 못 온다</td></tr>
+<tr><td>던전보스</td><td class="num">21.2px/s</td><td class="num">58.3초</td><td class="wrap"><strong>사실상 절대 못 온다</strong></td></tr>
+</tbody></table></div>
+<p>무거운 적일수록 타워에 죽는 게 아니라 <strong>시계에 죽어</strong> 사라졌다.
+체력을 ×2,595까지 올려도 상단이 위협이 될 수 없던 진짜 이유다.</p>
+<p><strong>고쳤다 — 웨이브가 끝나도 아직 걸어오던 적은 사라지지 않는다.</strong>
+경로 위 위치를 그대로 유지한 채 다음 웨이브로 넘어가고, 새 물량이 그 위에 얹힌다.
+못 잡으면 쌓이고, 쌓이면 언젠가 도착한다. 준비 화면에 <span class="mono">⚠️ 잔존 침입자 N기</span>로
+표시된다 (상한 40기 — 성능·가독성 때문이지 밸런스 때문이 아니다).</p>
+
+<h4>같이 고친 것 ② 기지 피해가 상수에 막혀 있었다</h4>
+<p>두 번째 원인은 <strong>상한이 전부 상수</strong>였다는 것이다.</p>
+<ul>
+  <li><span class="mono">baseDefPct</span>에 상한이 없어 스킬 트리만으로 <strong>65%</strong>,
+      강화 카드까지 겹치면 85%가 쌓였다 — 기지에 닿는 모든 피해가 1/7이 된다</li>
+  <li><span class="mono">BREAKTHROUGH_MAX</span> 초당 1.8 — 아레나에서 28마리에게 전멸당해도 최대 27HP</li>
+  <li><span class="mono">RETREAT_MAX</span> 14 — 후퇴 비용도 고정</li>
+</ul>
+<p>세 상수가 곱해지면 <strong>어떤 층에서 어떻게 지든 한 웨이브 손실이 9HP</strong>였다.
+기지 피해 감소는 <strong>55% 상한</strong>을 두고, 돌파·후퇴 상한은 층에 비례해 푼다.
+후퇴 비용에는 기지 피해 감소를 아예 적용하지 않는다 — 후퇴는 적이 성벽을 때린 결과가 아니라
+하단을 스스로 비운 대가이고, 감소율을 먹였더니 방어 스킬을 다 찍은 편성이
+웨이브 시작 직후 빼도 6~10HP밖에 안 들어 성벽 보수(+12HP)로 메우며 무한히 도는 고리가 생겼다.</p>
+
+<h4>실측 — 만렙 편성은 이제 ∞-19에서 죽는다</h4>
+<p>스킬 27개 · 해금 7종 · 타워 34기 Lv.5 · 연구 12단계 · 케이브 최대 · 영웅 Lv.10.
+매 웨이브 과부하를 쓰고 팀 HP 45%에서 후퇴하는 드라이버로 측정했다.</p>
+<div class="tw"><table>
+<thead><tr><th class="num">층</th><th class="num">적 HP</th><th class="num">이동</th><th class="num">기지 HP</th><th class="num">웨이브 손실</th><th class="num">잔존</th></tr></thead>
+<tbody>
+<tr><td class="num">∞-1</td><td class="num">×1.2</td><td class="num">×1.03</td><td class="num">220 → 209</td><td class="num">−11</td><td class="num">0기</td></tr>
+<tr><td class="num">∞-5</td><td class="num">×2.2</td><td class="num">×1.19</td><td class="num">220 → 220</td><td class="num">0</td><td class="num">0기</td></tr>
+<tr><td class="num">∞-10</td><td class="num">×4.8</td><td class="num">×1.41</td><td class="num">217 → 202</td><td class="num">−15</td><td class="num">0기</td></tr>
+<tr><td class="num">∞-15</td><td class="num">×10.5</td><td class="num">×1.68</td><td class="num">170 → 153</td><td class="num">−17</td><td class="num">3기</td></tr>
+<tr><td class="num">∞-17</td><td class="num">×14.4</td><td class="num">×1.79</td><td class="num">136 → 118</td><td class="num">−18</td><td class="num">0기</td></tr>
+<tr class="total"><td class="num">∞-18</td><td class="num">×16.9</td><td class="num">×1.86</td><td class="num">118 → 99</td><td class="num">−19</td><td class="num"><strong>29기</strong></td></tr>
+<tr><td class="num">∞-19</td><td class="num">×19.7</td><td class="num">×1.92</td><td class="num" colspan="3"><strong>기지 함락</strong></td></tr>
+</tbody></table></div>
+<p><strong>∞-18에서 잔존이 0 → 29기로 튄다.</strong> 타워가 초당 도착량을 못 따라가기 시작한
+지점이고, 다음 층에서 그 29기가 기지에 닿아 런이 끝난다.
+30웨이브 + 19층 = <strong>49웨이브</strong> — 이전에는 죽는 지점이 아예 없었다.</p>
+
+<div class="note">
+<p><strong>후퇴와 전멸이 같은 값이 됐다.</strong> 후퇴 단가가 층에 비례해 11 → 19로 오르면서,
+매 웨이브 후퇴한 런과 매 웨이브 전멸한 런이 <strong>둘 다 ∞-18~21에서 끝났다.</strong>
+후퇴는 병력을 지키고 수입을 포기하는 선택이지, 무적을 사는 수단이 아니게 됐다.</p>
+<p><strong>신규 플레이어는 영향이 없다.</strong> 무한 구간의 모든 배율은 30웨이브 이후에만 켜지고,
+기지 피해 감소 상한과 후퇴 단가 변경은 <span class="mono">baseDefPct = 0</span>인 첫 런에서
+계산이 동일하다. 실측 첫 런 도달 웨이브 <strong>11.6</strong>(5회 평균, 이전 9.7).</p>
+</div>
 </section>
 
 <section id="s14">
@@ -1326,6 +1448,14 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
 <tr><td class="mono">TOWER_MAX_LEVEL</td><td class="num">3 → 5</td><td class="wrap"><span class="rev">v2.4</span> — Lv.4~5가 후반 골드를 흡수</td></tr>
 <tr><td class="mono">WALL_REPAIR_*</td><td class="num">+12HP · 70 · ×1.6</td><td class="wrap">신규 <span class="rev">v2.4</span> — 성벽 보수</td></tr>
 <tr><td class="mono">REROLL_*</td><td class="num">40 · ×1.8</td><td class="wrap">신규 <span class="rev">v2.4</span> — 강화 카드 리롤</td></tr>
+<tr><td class="mono">RESEARCH_*</td><td class="num">120 · ×1.45</td><td class="wrap">신규 <span class="rev">v2.6</span> — 병기 연구 (상한 없음)</td></tr>
+<tr><td class="mono">BASE_DEF_PCT_CAP</td><td class="num">0.55</td><td class="wrap">신규 <span class="rev">v2.6</span> — 기지 피해 감소 상한 (전엔 무제한, 실측 0.65~0.85)</td></tr>
+<tr><td class="mono">CARRYOVER_MAX</td><td class="num">40</td><td class="wrap">신규 <span class="rev">v2.6</span> — 다음 웨이브로 넘기는 잔존 침입자 상한</td></tr>
+<tr><td class="mono">ENDLESS_HP_GROWTH</td><td class="num">1.17</td><td class="wrap">신규 <span class="rev">v2.6</span> — 무한 층당 상단 적 HP</td></tr>
+<tr><td class="mono">ENDLESS_ARENA_GROWTH</td><td class="num">1.085</td><td class="wrap">신규 <span class="rev">v2.6</span> — 무한 층당 아레나 몹</td></tr>
+<tr><td class="mono">ENDLESS_DENSITY_STEP</td><td class="num">0.96 (하한 0.40)</td><td class="wrap">신규 <span class="rev">v2.6</span> — 무한 층당 상단 스폰 간격</td></tr>
+<tr><td class="mono">ENDLESS_SPD_GROWTH</td><td class="num">1.035 (상한 2.4)</td><td class="wrap">신규 <span class="rev">v2.6</span> — 무한 층당 상단 이동속도</td></tr>
+<tr><td class="mono">ENDLESS_CAP_GROWTH</td><td class="num">1.03 (상한 2.5)</td><td class="wrap">신규 <span class="rev">v2.6</span> — 돌파·후퇴 상한 해제율</td></tr>
 </tbody></table></div>
 </section>
 
@@ -1467,16 +1597,28 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
 <strong>같은 자리에 타워를 더 지어도 결과가 안 바뀌고, 하늘길에 대공을 놓으면 피해가 0이 된다</strong>는
 실측이 근거다.</p>
 
-<h4><span class="chip hi">높음</span> 만렙 편성이 사실상 무적 <span class="rev">v2.5 실측</span></h4>
-<p>스킬 27개 + 해금 전부를 갖춘 편성으로 돌리면 <strong>13웨이브 동안 기지 HP가 220 → 212밖에
-안 줄어든다.</strong> 상단 개편 후에도 거의 그대로다 — 타워 30기를 Lv.5까지 올리고 대공까지
-갖추면 어떤 조합도 뚫지 못한다.</p>
-<p><strong>이건 상단 콘텐츠로 풀 문제가 아니다.</strong> 로그라이트의 구조적 숙명이고,
-답은 두 가지다. ① <strong>서약을 실효화</strong> — 지금 서약은 기지 HP −20(220 중 20), 슬롯 −1(6→5)로
-만렙 상대로 너무 약하다. 배율형(적 HP ×2, 완주 수리 없음 등)으로 다시 잡아야 한다.
-② <strong>무한 모드</strong> — 30웨이브 이후 난이도가 계속 오르는 구간. 다음 개정의 본체다.</p>
-<p>같은 편성에서 <strong>골드도 12,100까지 쌓인다</strong> — v2.4의 사용처 3종으로도 이 규모는
-못 흡수한다. 서약·무한 모드와 함께 볼 항목이다.</p>
+<h4><span class="chip lo">해결</span> 만렙 편성이 사실상 무적 <span class="rev">v2.6</span></h4>
+<p>스킬 27개 + 해금 전부를 갖춘 편성이 <strong>13웨이브 동안 기지 HP를 220 → 212밖에
+안 잃었다.</strong> 죽는 지점이 아예 없었다.</p>
+<p><strong>계측해보니 원인이 예상과 달랐다.</strong> 서약이 약한 것도 맞았지만, 그보다 먼저
+두 개의 구조적 결함이 있었다.</p>
+<ol>
+  <li><strong>적이 "시계에 죽고" 있었다.</strong> ∞ 경로 완주에 강철오크 47초, 던전보스 58초가
+      걸리는데 웨이브는 60초다. 무거운 적일수록 기지에 닿기 전에 웨이브가 끝나 사라졌다 —
+      적 HP를 ×44.7까지 올려도 <strong>기지 도달 0기</strong>였다.</li>
+  <li><strong>기지 피해가 상수에 막혀 있었다.</strong> 기지 피해 감소가 무제한(실측 65%)이고
+      돌파 상한 1.8/s, 후퇴 상한 14가 전부 고정이라, 층과 무관하게
+      <strong>한 웨이브 손실이 정확히 9HP</strong>였다.</li>
+</ol>
+<p><strong>해결됨.</strong> 13절의 네 가지 — 잔존 침입자 이월 · 기지 피해 감소 55% 상한 ·
+층 비례 돌파/후퇴 상한 · 무한 구간 지수 스케일링(HP ×1.17 · 밀도 ×0.96 · 속도 ×1.035).
+서약도 10종 배율형으로 다시 잡았다(10절, 전부 걸면 보석 ×2.84).</p>
+<p><strong>결과: 같은 만렙 편성이 ∞-19(통산 49웨이브)에서 죽는다.</strong>
+∞-18에서 잔존 침입자가 0 → 29기로 튀며 상단이 붕괴하고, 다음 층에서 기지가 무너진다.
+후퇴 런과 전멸 런이 둘 다 ∞-18~21에서 끝나 <strong>지배 전략도 없다.</strong>
+첫 런 도달 웨이브는 11.6으로 오히려 조금 늘었다(이전 9.7).</p>
+<p><strong>골드 12,100 문제도 같이 풀렸다</strong> — 12절의 병기 연구(120부터 1.45배씩, 상한 없음)가
+받는다.</p>
 
 <h4><span class="chip lo">낮음</span> 편성 슬롯 4칸 vs 유닛 5종</h4>
 <p>방패병(14G)·마법사(16G)가 비싸 초반에는 궁수·검사·치유사로 고정된다.
@@ -1514,19 +1656,19 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
 <tr><td class="wrap">골드 지출처 추가 <span class="chip lo">완료</span></td><td class="wrap">성벽 보수 · 리롤 · 타워 Lv.4~5 (12절)</td></tr>
 <tr><td rowspan="2"><strong>D</strong><br>상단 개편 <span class="chip lo">완료</span></td><td class="wrap">등급 상성 · 비행 항로 · 번개탑 · 현상수배 · 과부하</td><td class="wrap">완료 (5절)</td></tr>
 <tr><td class="wrap">아레나 지형 · 장애물</td><td class="wrap">위치 선정에 의미를 더함</td></tr>
-<tr><td rowspan="2"><strong>E</strong><br>엔드게임</td><td class="wrap">서약 실효화 — 배율형으로 재설계</td><td class="wrap">만렙이 13웨이브 무피해 (16절)</td></tr>
-<tr><td class="wrap">30웨이브 이후 무한 모드</td><td class="wrap">난이도 상한과 골드 상한을 같이 푼다</td></tr>
+<tr><td rowspan="3"><strong>E</strong><br>엔드게임 <span class="chip lo">완료</span></td><td class="wrap">서약 실효화 — 10종 배율형 <span class="chip lo">완료</span></td><td class="wrap">전부 걸면 보석 ×2.84 (10절)</td></tr>
+<tr><td class="wrap">30웨이브 이후 무한 모드 <span class="chip lo">완료</span></td><td class="wrap">만렙이 ∞-19에서 사망 (13절)</td></tr>
+<tr><td class="wrap">잔존 침입자 · 상한 해제 · 병기 연구 <span class="chip lo">완료</span></td><td class="wrap">"시계에 죽던" 적과 고정 9HP 손실을 고쳤다</td></tr>
 <tr><td rowspan="2"><strong>F</strong><br>볼륨</td><td class="wrap">스테이지 2 · 영웅 고유 스킬</td><td class="wrap">엔드게임</td></tr>
 <tr><td class="wrap">BGM · 업적 · 기록</td><td class="wrap">리텐션</td></tr>
 </tbody></table></div>
 <div class="note">
-<p><strong>A · B · C · D가 끝났다.</strong> 다음은 E — 엔드게임이다.
-만렙 편성이 13웨이브 동안 기지 HP를 8밖에 안 잃는다는 실측이 나왔고,
-이건 상단·하단 콘텐츠를 더 넣어서 풀 문제가 아니다. <strong>서약을 배율형으로 다시 잡고
-30웨이브 이후 무한 모드를 붙이는 것</strong>이 순서다 — 후반 골드 상한도 같이 풀린다.</p>
-<p>그 다음이 D(상단 고유 위협 · 아레나 지형)다. 이번 개정으로 하단은 완전히 다른 게임이 됐지만
-<strong>상단은 그대로다</strong> — 두 전선의 성격을 갈라놓기 위한 의도적 선택이었으나,
-후반에 격자가 차면 상단은 완전히 자동이 된다. 비행 유닛이나 타워 무력화가 필요하다.</p>
+<p><strong>A부터 E까지 끝났다.</strong> 런에 시작과 끝이 생겼다 —
+첫 런은 11.6웨이브에서 끝나고, 만렙 편성은 ∞-19(통산 49웨이브)에서 끝난다.
+그 사이를 스킬 · 해금 · 서약 · 무한 층이 채운다.</p>
+<p><strong>남은 것은 볼륨(F)이다.</strong> 무한 모드가 난이도 상한을 풀었으므로 급하지는 않지만,
+무한 구간은 마지막 세 웨이브 정의를 돌려 쓰기 때문에 <strong>깊이 들어갈수록 보는 그림이
+똑같아진다.</strong> 스테이지 2의 아레나 지형과 상단 격자 변형이 그 단조로움을 깨는 다음 카드다.</p>
 </div>
 </section>
 

@@ -25,8 +25,12 @@ function createDefaultBonuses() {
     startGoldBonus: 0, defenseGoldMult: 1.0,
     // 유닛 공속 (실시간 전투)
     unitAtkSpdMult: 1.0,
-    // 서약 — 로비에서 스스로 거는 난이도
+    // 서약 — 로비에서 스스로 거는 난이도 (전부 배율형)
     pactDefHpMult: 1.0, pactSpawnMult: 1.0,
+    pactArmorBonus: 0, pactEnemySpdMult: 1.0, pactTowerDmgMult: 1.0,
+    pactBaseHpMult: 1.0, pactSlotMult: 1.0, pactUnitHpMult: 1.0,
+    pactRegenMult: 1.0, pactTowerLevelCap: TOWER_MAX_LEVEL,
+    pactNoRepair: false, pactNoOverload: false,
   };
 }
 
@@ -190,7 +194,7 @@ function rollUpgradeCards(taken) {
 function applyUpgradeCard(card, gs) {
   card.apply(BONUSES, gs);
   gs.activeUpgrades.push(card.id);
-  gs.battle.maxSlots = Math.max(1, 4 + BONUSES.maxSlotBonus);
+  gs.battle.maxSlots = Math.max(1, Math.floor((4 + BONUSES.maxSlotBonus) * (BONUSES.pactSlotMult || 1)));
   refreshTeamStats(gs.battle);   // 이미 고용한 병력에도 즉시 적용
 }
 
@@ -232,7 +236,8 @@ function calcSoulStones(gs) {
   const killTerm = Math.floor((gs.battle.runKills || 0) / 60);
   const reached  = gs.wave + (gs.stageCleared ? 1 : 0);
   const recTerm  = reached > (gs.stats.bestWave || 0) ? 3 : 0;   // 반복 파밍보다 더 멀리 가기
-  const base     = Math.max(1, waveTerm + caveTerm + killTerm + recTerm);
+  const endTerm  = Math.floor(gs.endlessGems || 0);              // 무한 층에서 쌓인 몫
+  const base     = Math.max(1, waveTerm + caveTerm + killTerm + recTerm + endTerm);
   return Math.max(1, Math.round(base * pactGemMult()));
 }
 
@@ -245,6 +250,8 @@ function soulStoneBreakdown(gs) {
     { label:'처치',         value:Math.floor((gs.battle.runKills||0)/60), note:`${gs.battle.runKills||0}마리 ÷ 60` },
   ];
   if (reached > (gs.stats.bestWave || 0)) rows.push({ label:'최고 기록 갱신', value:3, note:'신기록!' });
+  const et = endlessTier(gs.wave);
+  if (et > 0) rows.push({ label:'∞ 무한 돌파', value:Math.floor(gs.endlessGems||0), note:`${et}층 도달` });
   const mult = pactGemMult();
   return { rows, mult, total: calcSoulStones(gs) };
 }

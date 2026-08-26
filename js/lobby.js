@@ -16,7 +16,8 @@ const LOBBY_TABS = [
   { id:'sortie', label:'출격', icon:'⚔️', color:'#22c55e' },
   { id:'skill',  label:'스킬', icon:'🌳', color:'#a78bfa' },
   { id:'unlock', label:'해금', icon:'🔓', color:'#f59e0b' },
-  { id:'record', label:'기록', icon:'📜', color:'#60a5fa' },
+  { id:'pact',   label:'서약', icon:'📜', color:'#f43f5e' },
+  { id:'record', label:'기록', icon:'📊', color:'#60a5fa' },
 ];
 
 function createLobby() {

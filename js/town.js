@@ -198,6 +198,9 @@ function reapplyAllBonuses(gs) {
   resetBonuses();
   applySkillTree(gs);
   applyPacts();          // 서약은 스킬 트리 뒤, 마을 강화 앞에 적용한다
+  // 병기 연구 — 런 안에서 산 만큼 누적된다
+  const rn = gs.research || 0;
+  if (rn > 0) { BONUSES.towerDmg += rn * RESEARCH_TOWER_DMG; BONUSES.unitAtk += rn * RESEARCH_UNIT_ATK; }
   applyTownUpgrades(gs);
-  if (gs.battle) gs.battle.maxSlots=Math.max(1,4+BONUSES.maxSlotBonus);
+  if (gs.battle) gs.battle.maxSlots=Math.max(1,Math.floor((4+BONUSES.maxSlotBonus)*(BONUSES.pactSlotMult||1)));
 }

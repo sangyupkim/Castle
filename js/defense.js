@@ -17,10 +17,10 @@ function makeTower(col, row, typeId) {
 // 건설 시점에 스냅샷하지 않으므로, 나중에 산 강화도 기존 타워에 적용된다.
 function towerStats(t) {
   const tpl = TOWER_TYPES[t.typeId];
-  const m   = TOWER_LEVEL_MULT[t.level || 1] || TOWER_LEVEL_MULT[1];
+  const m   = TOWER_LEVEL_MULT[Math.min(t.level || 1, towerLevelCap())] || TOWER_LEVEL_MULT[1];
   const overloaded = (t.overloadUntil || 0) > 0;
   return {
-    dmg:   Math.round((tpl.dmg + BONUSES.towerDmg) * m.dmg),
+    dmg:   Math.round((tpl.dmg + BONUSES.towerDmg) * m.dmg * (BONUSES.pactTowerDmgMult || 1)),
     spd:   tpl.spd   * m.spd   * BONUSES.towerSpdMult * (overloaded ? OVERLOAD_SPD_MULT : 1),
     range: tpl.range * m.range * BONUSES.towerRangeMult,
     slow:        tpl.slow ? Math.min(0.8, tpl.slow) : 0,
@@ -41,7 +41,7 @@ let _airLaneCounter = 0;
 function makeDefenseEnemy(typeId, waveIndex, opts) {
   const tpl   = ENEMY_TYPES[typeId];
   const w     = Math.max(0, waveIndex || 0);
-  const scale = (1 + w * DEF_WAVE_HP_SCALE) * (BONUSES.pactDefHpMult || 1);
+  const scale = (1 + w * DEF_WAVE_HP_SCALE) * endlessStatMult(w) * (BONUSES.pactDefHpMult || 1);
   const hp    = Math.max(1, Math.round((opts && opts.hp) || tpl.hp * scale));
 
   // 비행은 ∞ 경로가 아니라 항로를 탄다 — 좌우를 번갈아 써서 한쪽만 막지 못하게
@@ -59,11 +59,11 @@ function makeDefenseEnemy(typeId, waveIndex, opts) {
     wpIdx: 0,
     x: start.x, y: start.y,
     hp, maxHp: hp,
-    spd: tpl.spd * ENEMY_CELL_SPD,
-    dmg: Math.round(tpl.dmg * (1 + w * 0.04)),
+    spd: tpl.spd * ENEMY_CELL_SPD * (BONUSES.pactEnemySpdMult || 1) * endlessSpdMult(w),
+    dmg: Math.round(tpl.dmg * (1 + w * 0.04) * endlessDmgMult(w)),
     reward: (opts && opts.reward) || tpl.reward,
     gems: (opts && opts.gems) || 0,
-    armor: (tpl.armor || 0) + Math.floor(w / DEF_WAVE_ARMOR_EVERY),
+    armor: (tpl.armor || 0) + Math.floor(w / DEF_WAVE_ARMOR_EVERY) + (BONUSES.pactArmorBonus || 0),
     radius: tpl.radius,
     slowTimer: 0, slowFactor: 0,
     hitFlash: 0,

@@ -94,7 +94,7 @@ function createTutorial() {
       this.step++;
       if (this.step >= TUTORIAL_STEPS.length) {
         this.active = false; this.done = true;
-        localStorage.setItem('df_tut3', '1');
+        localStorage.setItem('df_tut4', '1');
       }
     },
     current() { return TUTORIAL_STEPS[this.step] || null; }
