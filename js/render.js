@@ -471,14 +471,32 @@ function renderUIBar(ctx, gs, wm) {
 }
 
 // ─── Battle Zone ─────────────────────────────────────────────────────────────
+let _briefBottom = 0;   // 브리핑이 그린 마지막 y — 스크롤 범위 계산에 쓴다
+
 function renderBattle(ctx, gs) {
   ctx.fillStyle='#0a1520'; ctx.fillRect(0,BATTLE_Y,CW,BATTLE_H);
 
   if (wm.phase==='idle') {
-    renderBriefing(ctx, gs);
+    // 준비 화면은 층 정보가 늘면 아래가 잘린다 (층 이벤트 · 변형 · 이월 · 경로 변경…).
+    // 마을 탭과 같은 방식으로 스크롤한다 — 렌더러에 스크롤이 반영된 기준선을 넘겨
+    // 그림과 버튼 좌표가 함께 움직이게 한다.
+    const scroll = gs.briefScroll || 0;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, BATTLE_Y, CW, BATTLE_H); ctx.clip();
+    _briefBottom = BATTLE_Y;
+    renderBriefing(ctx, gs, BATTLE_Y - scroll);
+    ctx.restore();
+
+    const contentH  = (_briefBottom + scroll) - BATTLE_Y + 8;
+    const maxScroll = Math.max(0, contentH - BATTLE_H);
+    gs.briefScroll = Math.max(0, Math.min(maxScroll, scroll));
+    gs.ui.briefScroll = maxScroll > 0 ? {x:0,y:BATTLE_Y,w:CW,h:BATTLE_H,max:maxScroll} : null;
+    if (maxScroll > 0) drawScrollHint(ctx, BATTLE_Y, BATTLE_H, gs.briefScroll, maxScroll);
   } else if (wm.phase==='upgradePick') {
+    gs.ui.briefScroll = null;
     ctx.fillStyle='#080d18'; ctx.fillRect(0,BATTLE_Y,CW,BATTLE_H);
   } else {
+    gs.ui.briefScroll = null;
     renderArenaPhase(ctx,gs);
   }
   renderBattleControls(ctx, gs);
@@ -521,8 +539,9 @@ function renderBattleControls(ctx, gs) {
 }
 
 // ─── 출전 브리핑 (웨이브 대기 화면) ──────────────────────────────────────────
-function renderBriefing(ctx, gs) {
-  ctx.fillStyle='#0c1421'; ctx.fillRect(0,BATTLE_Y,CW,BATTLE_H);
+function renderBriefing(ctx, gs, top) {
+  const TOP = (top === undefined) ? BATTLE_Y : top;
+  ctx.fillStyle='#0c1421'; ctx.fillRect(0,BATTLE_Y,CW,BATTLE_H);   // 배경은 화면 고정
 
   const st  = getStageInfo(gs.wave);
   const def = waveDefFor(gs.wave) || { arenaPool:[], defenseEnemies:[] };
@@ -533,21 +552,21 @@ function renderBriefing(ctx, gs) {
   const gate = st.endless && st.isBossStage;
   if (gate) ctx.fillStyle = '#fbbf24';
   ctx.fillText(st.endless ? (gate ? `🏁 ${st.tier}층 — 관문` : `∞ ${st.tier}층`)
-                          : `훈련 — 스테이지 ${st.stageLabel}`, 10, BATTLE_Y+9);
+                          : `훈련 — 스테이지 ${st.stageLabel}`, 10, TOP+9);
   ctx.fillStyle='#475569'; ctx.font='bold 10px sans-serif';
   ctx.fillText(st.endless ? `적 HP ×${endlessStatMult(gs.wave).toFixed(1)} · 이동 ×${endlessSpdMult(gs.wave).toFixed(2)} · 이 층 보석 +${endlessGemStep(st.tier).toFixed(1)}`
-                          : `웨이브 ${st.waveInStage+1}/3${st.isBossStage?'  ★보스 스테이지':''}`, 10, BATTLE_Y+26);
+                          : `웨이브 ${st.waveInStage+1}/3${st.isBossStage?'  ★보스 스테이지':''}`, 10, TOP+26);
 
   // 최고 기록 — 지금 어디쯤인지가 무한의 유일한 좌표다
   if (st.endless) {
     const best = gs.stats.bestEndless || 0;
     ctx.textAlign='right'; ctx.fillStyle = st.tier > best ? '#22c55e' : '#334155';
     ctx.font='bold 10px sans-serif';
-    ctx.fillText(st.tier > best ? `★ 신기록 구간` : `최고 ${best}층`, CW-10, BATTLE_Y+12);
+    ctx.fillText(st.tier > best ? `★ 신기록 구간` : `최고 ${best}층`, CW-10, TOP+12);
     ctx.textAlign='left';
   }
 
-  let y = BATTLE_Y+44;
+  let y = TOP+44;
 
   // ── 경로 변경 안내 ───────────────────────────────────────────────────────
   const pc = gs.pathChanged;
@@ -802,6 +821,7 @@ function renderBriefing(ctx, gs) {
   y += 12;
   ctx.fillStyle='#3f4a5c';
   ctx.fillText('Space 시작 · A 자동/수동 · 방향키 부대 이동 · R 후퇴 · T 마을', CW/2, y);
+  _briefBottom = y + 14;
 }
 
 // ─── 실시간 아레나 ───────────────────────────────────────────────────────────

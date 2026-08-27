@@ -90,6 +90,7 @@ function newState() {
     gameOver:false, stageCleared:false, gaveUp:false,
     upgradePick: { active:false, cards:[] },
     activeUpgrades: [],
+    briefScroll: 0,     // 전투 준비 화면 스크롤
     wallRepairs:0,      // 이번 런에서 성벽을 몇 번 보수했는지 (비용 체증)
     rerolls:0,          // 이번 런에서 강화 카드를 몇 번 리롤했는지
     bountyUsed:0,       // 현상수배를 몇 번 불렀는지 (강해지고 보상도 오른다)
@@ -110,7 +111,7 @@ function newState() {
     ui:{ waveBtn:{}, hireCards:[], hiredSlots:[], specialCards:[], specialSlots:[], heroDefBtn:{}, heroBatBtn:{},
          metaCards:[], towerTabBtn:{}, heroTabBtn:{}, supportTabBtn:{},
          lobbyTabBtns:[], unlockBtns:[], pactBtns:[], sortieBtn:{}, trainBtn:null, resultBtn:{},
-         buildingScroll:null, pageScroll:null,
+         buildingScroll:null, pageScroll:null, briefScroll:null,
          pauseResumeBtn:null, pauseGiveUpBtn:null,
          backupExportBtn:null, backupImportBtn:null, backupMsg:null,
          tutSkipBtn:null, tutBackBtn:null, sigilCards:[] },
@@ -265,8 +266,8 @@ let _drag = null;      // { y0, scroll0, region }
 let _didDrag = false;
 
 function scrollRegionAt(p) {
-  // 건물 상세 목록과 마을 탭 본문이 각각 스크롤된다
-  for (const r of [gs.ui.buildingScroll, gs.ui.pageScroll]) {
+  // 건물 상세 · 마을 탭 본문 · 전투 준비 화면이 각각 스크롤된다
+  for (const r of [gs.ui.buildingScroll, gs.ui.pageScroll, gs.ui.briefScroll]) {
     if (!r) continue;
     if (p.x < r.x || p.x > r.x + r.w || p.y < r.y || p.y > r.y + r.h) continue;
     return r;
@@ -276,14 +277,16 @@ function scrollRegionAt(p) {
 function beginDrag(p) {
   _didDrag = false;
   const r = scrollRegionAt(p);
-  _drag = r ? { y0: p.y, scroll0: gs.town.scroll || 0, max: r.max } : null;
+  _drag = r ? { y0: p.y, scroll0: (r === gs.ui.briefScroll ? (gs.briefScroll||0) : (gs.town.scroll||0)),
+                max: r.max, brief: r === gs.ui.briefScroll } : null;
 }
 function moveDrag(p) {
   if (!_drag) return;
   const dy = p.y - _drag.y0;
   if (!_didDrag && Math.abs(dy) < DRAG_THRESHOLD) return;
   _didDrag = true;
-  gs.town.scroll = Math.max(0, Math.min(_drag.max, _drag.scroll0 - dy));
+  const v = Math.max(0, Math.min(_drag.max, _drag.scroll0 - dy));
+  if (_drag.brief) gs.briefScroll = v; else gs.town.scroll = v;
 }
 function endDrag() { _drag = null; }
 
@@ -314,7 +317,8 @@ canvas.addEventListener('wheel', e=>{
   const r = scrollRegionAt(pt(e));
   if (!r) return;
   e.preventDefault();
-  gs.town.scroll = Math.max(0, Math.min(r.max, (gs.town.scroll||0) + e.deltaY));
+  if (r === gs.ui.briefScroll) gs.briefScroll = Math.max(0, Math.min(r.max, (gs.briefScroll||0) + e.deltaY));
+  else                          gs.town.scroll   = Math.max(0, Math.min(r.max, (gs.town.scroll||0) + e.deltaY));
 },{passive:false});
 
 window.addEventListener('keydown', e => {
@@ -575,7 +579,7 @@ function tap({x,y}) {
 // gs.ui는 그리면서 채워지므로, 다른 페이지의 낡은 사각형이 남아 엉뚱한 탭을 먹는다.
 const _PAGE_UI_KEYS = [
   'buildingCards','wallRepairBtn','caveBtn','tabTownBtn','townBackBtn',
-  'buildingLvUpBtn','upgradeBtns','buildingScroll','pageScroll','hireCards','hiredSlots',
+  'buildingLvUpBtn','upgradeBtns','buildingScroll','pageScroll','briefScroll','hireCards','hiredSlots',
   'specialCards','specialSlots','heroDefBtn','heroBatBtn','bountyBtn','eliteBtn','towerMiniGrid',
   'lobbyTabBtns','sortieBtn','trainBtn','metaCards','unlockBtns','pactBtns','sigilCards',
   'towerTabBtn','heroTabBtn','supportTabBtn','backupExportBtn','backupImportBtn',
