@@ -142,7 +142,7 @@ function tracksUnlockedAt(def, level) {
 
 // 영웅 상점 고정 매대 — 소모품과 두루마리. 트랙 개편 때 실수로 같이 지워졌던 것을 되살린다.
 const HERO_SHOP_FIXED = [
-  { id:'potion_hp',  name:'회복 포션',    icon:'🧪', cost:12, type:'consumable', grade:'common', desc:'영웅 HP 완전 회복',             apply:gs=>{ gs.hero.hp = HERO_LEVELS[gs.hero.level].hp; } },
+  { id:'potion_hp',  name:'회복 포션',    icon:'🧪', cost:12, type:'consumable', grade:'common', desc:'영웅 HP 완전 회복',             apply:gs=>{ gs.hero.hp = heroMaxHp(); } },
   { id:'potion_mp',  name:'MP 포션',      icon:'💧', cost: 8, type:'consumable', grade:'common', desc:'이번 웨이브 MP 충전',           apply:gs=>{ gs.town.waveBuffs.push('mp_full'); } },
   { id:'scroll_atk', name:'공격 두루마리',icon:'📜', cost:15, type:'scroll',     grade:'rare',   desc:'이번 웨이브 영웅 스탯 +30%',    apply:gs=>{ gs.town.waveBuffs.push('hero_atk'); } },
   { id:'scroll_def', name:'방어 두루마리',icon:'📜', cost:15, type:'scroll',     grade:'rare',   desc:'이번 웨이브 아군 방어 +5',      apply:gs=>{ gs.town.waveBuffs.push('unit_def'); } },
@@ -198,6 +198,10 @@ function buildBuilding(id, gs) {
   if (gs.gold<def.buildCost) return false;
   gs.gold-=def.buildCost; bs.built=true; bs.level=0;
   if (id==='heroShop') refreshHeroShop(gs);
+  if (typeof tut !== 'undefined' && tut && tut.showTip) {
+    if (id === 'inn') tut.showTip('inn');
+    else              tut.showTip('town');
+  }
   return true;
 }
 
@@ -280,5 +284,8 @@ function reapplyAllBonuses(gs) {
   const rn = gs.research || 0;
   if (rn > 0) { BONUSES.towerDmg += rn * RESEARCH_TOWER_DMG; BONUSES.unitAtk += rn * RESEARCH_UNIT_ATK; }
   applyTownUpgrades(gs);
+  // 각인은 마지막에 — 스킬 트리와 마을 강화 위에 얹힌다
+  const sg = (typeof activeSigil === 'function') ? activeSigil() : null;
+  if (sg && sg.apply) sg.apply(BONUSES);
   if (gs.battle) gs.battle.maxSlots=Math.max(1,Math.floor((4+BONUSES.maxSlotBonus)*(BONUSES.pactSlotMult||1)));
 }

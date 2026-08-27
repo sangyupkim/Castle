@@ -47,6 +47,7 @@ const SaveManager = {
       pacts:          gs.pacts    || [],
       seenMobs:       gs.seenMobs || [],
       clearedGates:   gs.clearedGates || [],
+      heroSigil:      gs.heroSigil || DEFAULT_SIGIL,
       stats:          gs.stats || createStats(),
       timestamp:  Date.now()
     };

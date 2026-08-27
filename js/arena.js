@@ -314,6 +314,9 @@ function allyAttack(gs, u, target) {
   } else {
     hurtMob(gs, target, dmg, crit ? '#f43f5e' : '#fbbf24');
     if (typeof SFX !== 'undefined') SFX.hit();
+    // 🌵 가시껍질 — 근접에만 반사한다. 원거리를 섞을 이유를 만드는 게 목적이다.
+    const th = gs.arena.thorns || 0;
+    if (th > 0 && !u.dead) hurtAlly(gs, u, Math.max(1, Math.round(dmg * th)), '#84cc16');
   }
   if (BONUSES.comboChance > 0 && Math.random() < BONUSES.comboChance) {
     hurtMob(gs, target, Math.max(1, u.atk - target.def), '#fb923c');
@@ -359,6 +362,8 @@ function allySkill(gs, u, mobs, allies) {
     let hits = 0;
     for (const m of mobs) {
       if (dist(m, u) > rad + m.radius) continue;
+      // 🔥 화염 폭발은 맞은 적을 둔화시킨다 — 술사가 거리를 유지할 수 있는 이유
+      if (kind === 'nova') m.slowUntil = Math.max(m.slowUntil || 0, 2.0);
       hurtMob(gs, m, Math.max(1, u.skillAtk - m.def), u.skillColor);
       hits++;
     }
@@ -586,6 +591,7 @@ function hurtMob(gs, m, dmg, color) {
   gs.arena.drops.push({
     x: dp.x, y: dp.y, amount, life: DROP_LIFETIME, big: !!m.isBoss || !!m.isElite
   });
+  if (typeof tut !== 'undefined' && tut && tut.showTip) tut.showTip('drop');
 
   if (m.isBoss) {
     if (typeof FX !== 'undefined') { FX.ring(m.x, m.y, '#fbbf24', 22); FX.shake(5, 0.3); }
@@ -593,6 +599,45 @@ function hurtMob(gs, m, dmg, color) {
   if (BONUSES.killHeal > 0) {
     for (const u of gs.battle.ourTeam) {
       if (!u.dead) u.hp = Math.min(u.maxHp, u.hp + BONUSES.killHeal);
+    }
+  }
+
+  applyDeathAffixes(gs, m);
+}
+
+// ─── 심층 변형 — 죽는 순간에 걸리는 것들 ─────────────────────────────────────
+// 💥 폭발과 🧬 분열은 "잡으면 끝"이라는 전제를 깬다.
+// 몰아치기로 한 무더기를 한꺼번에 녹이는 편성이 여기서는 오히려 손해가 된다.
+function applyDeathAffixes(gs, m) {
+  const a = gs.arena;
+  if (m._noAffixDeath) return;      // 분열로 나온 조각은 다시 나뉘지 않는다
+
+  if (a.volatile) {
+    const r = 34 + m.radius * 1.6;
+    const dmg = Math.max(2, Math.round((m.atk || 4) * 1.2));
+    for (const u of gs.battle.ourTeam) {
+      if (u.dead) continue;
+      if (Math.hypot(u.x - m.x, u.y - m.y) > r) continue;
+      hurtAlly(gs, u, dmg, '#f97316');
+    }
+    a.bursts.push({ x:m.x, y:m.y, r, color:'#f97316', t:0, dur:0.35 });
+    if (typeof FX !== 'undefined') FX.burst(m.x, m.y, '#f97316', 8, 12);
+  }
+
+  if (a.split && (m.radius >= 8 || m.isBoss)) {
+    // 상한을 넘겨서까지 나누지는 않는다 — 화면이 읽히지 않으면 변형이 아니라 사고다
+    const live = a.mobs.filter(x => !x.dead).length;
+    const n = Math.max(0, Math.min(a.split, ARENA_MAX_MOBS - live));
+    for (let i = 0; i < n; i++) {
+      const c = makeArenaMob('goblin', a.waveIndex, gs.battle.killCount, gs.caveLevel, 0);
+      c.hp = c.maxHp = Math.max(1, Math.round(m.maxHp * 0.22));
+      c.atk = Math.max(1, Math.round((m.atk || 4) * 0.5));
+      c.name = `${m.name} 조각`;
+      c._noAffixDeath = true;
+      const ang = (Math.PI * 2 * i) / n + Math.random();
+      const p = clampToArena({ x: m.x + Math.cos(ang) * 16, y: m.y + Math.sin(ang) * 16 }, c.radius);
+      c.x = p.x; c.y = p.y;
+      a.mobs.push(c);
     }
   }
 }
@@ -635,6 +680,10 @@ function startArena(gs, waveIndex) {
   a.pool       = def.arenaPool || [['goblin', 10]];
   a.eliteBonus = def.eliteBonus || 0;
   a.spawnMult  = def.spawnMult  || 1;
+  // 심층 변형 — 몹마다 들고 다닐 필요가 없으므로 아레나에 한 벌만 둔다
+  a.thorns   = def.thorns   || 0;
+  a.split    = def.split    || 0;
+  a.volatile = def.volatile || 0;
   a.rally = null;
   a.goldCollected = 0;
   // 지형은 층마다 새로 생성된다 (훈련에는 없다 — 배우는 곳이므로 판을 비워둔다)

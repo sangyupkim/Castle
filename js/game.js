@@ -56,6 +56,7 @@ let _unlocked       = [];   // 보석으로 연 타워/유닛
 let _pacts          = [];   // 걸어둔 서약
 let _seenMobs       = [];   // 도감
 let _clearedGates   = [];   // 최초 돌파한 무한 관문 (10층 단위)
+let _heroSigil      = DEFAULT_SIGIL;   // 👑 영웅 각인 — 캠프에서 고르는 길
 let _stats          = createStats();
 
 // ─── 초기 상태 ────────────────────────────────────────────────────────────────
@@ -83,7 +84,7 @@ function newState() {
     },
     town: createTown(),
     waveActive:false,
-    gameOver:false, stageCleared:false,
+    gameOver:false, stageCleared:false, gaveUp:false,
     upgradePick: { active:false, cards:[] },
     activeUpgrades: [],
     wallRepairs:0,      // 이번 런에서 성벽을 몇 번 보수했는지 (비용 체증)
@@ -106,7 +107,8 @@ function newState() {
          metaCards:[], towerTabBtn:{}, heroTabBtn:{}, supportTabBtn:{},
          lobbyTabBtns:[], unlockBtns:[], pactBtns:[], sortieBtn:{}, trainBtn:null, resultBtn:{}, buildingScroll:null,
          pauseResumeBtn:null, pauseGiveUpBtn:null,
-         backupExportBtn:null, backupImportBtn:null, backupMsg:null },
+         backupExportBtn:null, backupImportBtn:null, backupMsg:null,
+         tutSkipBtn:null, tutBackBtn:null, sigilCards:[] },
     // 영구 데이터 참조
     get soulStones()    { return _soulStones; },
     set soulStones(v)   { _soulStones = v; },
@@ -124,6 +126,8 @@ function newState() {
     set seenMobs(v) { _seenMobs = v; },
     get clearedGates()  { return _clearedGates; },
     set clearedGates(v) { _clearedGates = v; },
+    get heroSigil()  { return _heroSigil; },
+    set heroSigil(v) { _heroSigil = v; },
     get stats()  { return _stats; },
     set stats(v) { _stats = v; },
   };
@@ -147,6 +151,7 @@ gs.battle = createBattle();
   _pacts          = sv.pacts         || [];
   _seenMobs       = sv.seenMobs      || [];
   _clearedGates   = sv.clearedGates  || [];
+  _heroSigil      = sv.heroSigil     || DEFAULT_SIGIL;
   _stats          = Object.assign(createStats(), sv.stats || {});
 
   if (!sv.inRun) return;   // 로비에서 종료했다면 런은 새로 시작한다
@@ -158,7 +163,7 @@ gs.battle = createBattle();
   gs.wave       = sv.wave   || 0;
   gs.hero.level = Math.max(1, Math.min(HERO_MAX_LEVEL, sv.heroLevel||1));
   gs.hero.exp   = sv.heroExp || 0;
-  gs.hero.hp    = HERO_LEVELS[gs.hero.level].hp;
+  gs.hero.hp    = heroMaxHp();
   gs.battle.totalGoldEarned = sv.totalGoldEarned || 0;
   gs.caveLevel  = Math.max(1, Math.min(5, sv.caveLevel||1));
   gs.wallRepairs = sv.wallRepairs || 0;
@@ -184,13 +189,16 @@ _applyStartBonuses();
 
 function _applyStartBonuses() {
   gs.gold     = Math.max(0, gs.gold + BONUSES.startGoldBonus);
+  // 각인·스킬의 HP 배율은 보너스를 적용한 뒤에야 알 수 있다.
+  // newState()는 Lv.1 기본값(80)을 넣어두므로 여기서 상한에 맞춰 채운다 — 판은 만피로 시작한다.
+  gs.hero.hp  = heroMaxHp();
   gs.baseHP   = Math.max(1, Math.min(baseHpMax(), gs.baseHP + BONUSES.baseHpMax));
   gs.hero.exp = Math.min(HERO_LEVELS[gs.hero.level].expNeeded - 1, gs.hero.exp + BONUSES.heroStartExp);
   gs.battle.maxSlots = Math.max(1, Math.floor((4 + BONUSES.maxSlotBonus) * (BONUSES.pactSlotMult || 1)) + fev('slotBonus', 0));
 }
 
 function baseHpMax()     { return Math.max(20, Math.round((BASE_HP_MAX + BONUSES.baseHpMax) * (BONUSES.pactBaseHpMult || 1))); }
-function heroMaxHp()     { return Math.round(HERO_LEVELS[gs.hero.level].hp * BONUSES.heroStatMult); }
+function heroMaxHp()     { return Math.round(HERO_LEVELS[gs.hero.level].hp * BONUSES.heroStatMult * BONUSES.sigilHeroHpMult); }
 function heroReviveDur() { return Math.max(5, HERO_REVIVE_TIME - BONUSES.heroReviveReduction); }
 
 tut.start();
@@ -358,7 +366,11 @@ function tap({x,y}) {
     _startFadeOut();
     return;
   }
-  if (tut.active)   { tut.next(); SFX.click(); return; }
+  if (tut.active) {
+    if (hitTest(x,y,gs.ui.tutSkipBtn||{})) { tut.skip(); SFX.click(); return; }
+    if (hitTest(x,y,gs.ui.tutBackBtn||{})) { tut.back(); SFX.click(); return; }
+    tut.next(); SFX.click(); return;
+  }
 
   if (gs.page === 'lobby')  { handleLobbyTap(x,y);  return; }
   if (gs.page === 'result') { handleResultTap(x,y); return; }
@@ -373,7 +385,7 @@ function tap({x,y}) {
   // 붙들고 있을 이유도 없다. 여기까지 번 보석은 그대로 정산된다.
   if (_paused && !_titleScreen && !tut.active && gs.page!=='lobby' && gs.page!=='result') {
     if (hitTest(x,y,gs.ui.pauseGiveUpBtn||{})) {
-      if (_giveUpArmed) { _giveUpArmed=false; _paused=false; showResult(); }
+      if (_giveUpArmed) { _giveUpArmed=false; _paused=false; gs.gaveUp=true; showResult(); }
       else { _giveUpArmed=true; SFX.denied(); }
       return;
     }
@@ -501,6 +513,24 @@ function handleLobbyTap(x, y) {
   if (hitTest(x,y,gs.ui.sortieBtn||{})) { startRun(endlessUnlocked() ? 'endless' : 'campaign'); return; }
 
   if (L.tab === 'skill') {
+    for (const c of gs.ui.sigilCards||[]) {
+      if (hitTest(x,y,c)) {
+        if (gs.heroSigil !== c.id) {
+          gs.heroSigil = c.id;
+          reapplyAllBonuses(gs);
+          // 이미 편성된 영웅은 새 각인으로 다시 만든다
+          if (gs.battle) {
+            const i = gs.battle.ourTeam.findIndex(u => u.isHero);
+            if (i >= 0) gs.battle.ourTeam[i] = makeHeroUnit(gs.hero);
+          }
+          SaveManager.save(gs);
+          const sg = sigilDef(c.id);
+          spawnFloaty(`${sg.icon} ${sg.name} 각인`, x, y, sg.color);
+          SFX.upgrade();
+        }
+        return;
+      }
+    }
     if (hitTest(x,y,gs.ui.towerTabBtn||{}))   { L.skillTree='tower';   SFX.click(); return; }
     if (hitTest(x,y,gs.ui.heroTabBtn||{}))    { L.skillTree='hero';    SFX.click(); return; }
     if (hitTest(x,y,gs.ui.supportTabBtn||{})) { L.skillTree='support'; SFX.click(); return; }
@@ -592,6 +622,7 @@ function resetAllProgress() {
   try {
     SaveManager.clear();
     for (let i = 1; i <= 9; i++) localStorage.removeItem('df_tut' + i);
+    clearTipMarks();
   } catch (e) {}
 
   _soulStones = 0;
@@ -599,6 +630,7 @@ function resetAllProgress() {
   _clearedStages = new Array(10).fill(false);
   _skillTreeOwned = [];
   _unlocked = [];
+  _heroSigil = DEFAULT_SIGIL;
   _pacts = [];
   _seenMobs = [];
   _clearedGates = [];
@@ -1177,6 +1209,7 @@ function bankRunResult() {
     gems:     bd.total,
     rows:     bd.rows,
     mult:     bd.mult,
+    gaveUp:   !!gs.gaveUp,
     newBest:  wasBest
   };
 
@@ -1233,7 +1266,7 @@ function frame(ts) {
   renderTutorial(ctx,tut);
   if (_titleScreen || _fadingOut) renderTitleScreen(ctx, _titleAlpha);
 
-  if (_paused && !_titleScreen && !_fadingOut) {
+  if ((_paused || tut.active) && !_titleScreen && !_fadingOut) {
     FX.update(dt); updateFloaties(dt);
   } else {
     // 로비/결과는 시뮬레이션이 없으므로 배속을 적용하지 않는다
@@ -1252,6 +1285,7 @@ function resetGame() {
   gs.town   = createTown();
   FX.clear();
   _paused   = false;
+  _giveUpArmed = false;
   _breachAccum = 0;
   // 잠긴 타워가 선택돼 있으면 화살탑으로 되돌린다
   if (!isUnlocked(gs.selectedTowerType)) gs.selectedTowerType = 'arrow';

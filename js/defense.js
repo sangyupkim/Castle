@@ -106,6 +106,7 @@ function makeDefenseEnemy(typeId, waveIndex, opts) {
 
   // 비행은 ∞ 경로가 아니라 항로를 탄다 — 좌우를 번갈아 써서 한쪽만 막지 못하게
   const flying = !!tpl.flying;
+  if (flying && typeof tut !== 'undefined' && tut && tut.showTip) tut.showTip('air');
   const path   = flying ? airPathFor(_airLaneCounter++) : THE_PATH;
   const start  = cellCenter(path[0][0], path[0][1]);
 
@@ -120,7 +121,8 @@ function makeDefenseEnemy(typeId, waveIndex, opts) {
     x: start.x, y: start.y,
     hp, maxHp: hp,
     spd: tpl.spd * ENEMY_CELL_SPD * (BONUSES.pactEnemySpdMult || 1)
-         * endlessSpdMult(w) * (mods ? (mods.spdBonus || 1) : 1),
+         * endlessSpdMult(w) * (mods ? (mods.spdBonus || 1) : 1)
+         * fev('enemySpdMult', 1),
     dmg: Math.round(tpl.dmg * (mods ? endlessDmgMult(w) : (1 + w * 0.04))),
     reward: (opts && opts.reward) || tpl.reward,
     gems: (opts && opts.gems) || 0,
@@ -129,6 +131,8 @@ function makeDefenseEnemy(typeId, waveIndex, opts) {
                  : Math.floor(w / DEF_WAVE_ARMOR_EVERY))
          + (BONUSES.pactArmorBonus || 0),
     radius: tpl.radius,
+    // 🌱 재생 — 심층 변형. 상단 적이 초당 최대체력의 일부를 되돌린다.
+    regen: mods ? (mods.regen || 0) : 0,
     slowTimer: 0, slowFactor: 0,
     hitFlash: 0,
     dead: false,
@@ -170,6 +174,8 @@ function updateDefenseEnemies(enemies, dt) {
   for (const e of enemies) {
     if (e.dead || e.reached) continue;
     if (e.hitFlash > 0) e.hitFlash = Math.max(0, e.hitFlash - dt);
+    // 🌱 재생 — 꾸준히 깎지 못하면 원점으로 돌아간다. 단발 화력보다 지속 화력을 요구한다.
+    if (e.regen > 0 && e.hp < e.maxHp) e.hp = Math.min(e.maxHp, e.hp + e.maxHp * e.regen * dt);
 
     let mult = 1;
     if (e.slowTimer > 0) {

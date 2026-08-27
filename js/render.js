@@ -329,7 +329,7 @@ function renderHeroInDefense(ctx, hero) {
   ctx.fillText('👑', hx, hy+1);
 
   // HP 바 + 레벨 뱃지
-  const hMax = Math.round(lv.hp * BONUSES.heroStatMult);
+  const hMax = Math.round(lv.hp * BONUSES.heroStatMult * BONUSES.sigilHeroHpMult);
   drawHPBar(ctx, hx-16, hy+r+2, 32, 4, hero.hp/hMax);
   ctx.fillStyle=COLORS.hero; ctx.font='bold 8px sans-serif';
   ctx.textAlign='center'; ctx.textBaseline='top';
@@ -364,7 +364,8 @@ function renderPauseOverlay(ctx) {
   ctx.fillStyle = _giveUpArmed ? '#fecaca' : '#94a3b8'; ctx.font='bold 14px sans-serif';
   ctx.fillText(_giveUpArmed ? '⚠ 정말 포기합니다 — 다시 탭' : '🏳 포기하고 정산', CW/2, y+bh/2-7);
   ctx.fillStyle = _giveUpArmed ? '#f87171' : '#475569'; ctx.font='bold 9px sans-serif';
-  ctx.fillText(`여기까지의 보석 💎${calcSoulStones(gs)}은 그대로 받습니다`, CW/2, y+bh/2+11);
+  const gaveUpGems = Math.max(1, Math.round(calcSoulStones(gs) * GIVE_UP_GEM_MULT));
+  ctx.fillText(`정산 💎${gaveUpGems}  —  끝까지 버티면 ${Math.round((1-GIVE_UP_GEM_MULT)*100)}% 더`, CW/2, y+bh/2+11);
   gs.ui.pauseGiveUpBtn = {x:bx,y:y,w:bw,h:bh};
   y += bh + 18;
 
@@ -569,7 +570,26 @@ function renderBriefing(ctx, gs) {
   // ── 이 층의 이벤트 ───────────────────────────────────────────────────────
   // 변형(적 숫자)과 달리 이벤트는 이 층 동안의 규칙을 바꾼다. 제일 먼저 보여야 한다.
   const ev = gs.floorEvent;
-  if (st.endless && ev) {
+  if (st.endless && ev && ev.parts) {
+    // 심층 — 해로운 것과 이로운 것이 함께 걸린다. 한 줄에 우겨넣으면 못 읽으므로 나눠 쓴다.
+    const eh = 46;
+    roundRect(ctx, 6, y, CW-12, eh, 6);
+    ctx.fillStyle = 'rgba(49,10,84,0.48)'; ctx.fill();
+    ctx.strokeStyle = '#a855f7'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.fillStyle='#d8b4fe'; ctx.font='bold 9px sans-serif';
+    ctx.fillText('🌑 심층 — 두 규칙이 겹칩니다', 12, y+9);
+    ev.parts.forEach((pt, i) => {
+      const py = y + 24 + i*15;
+      const col = pt.tone === 'good' ? '#4ade80' : pt.tone === 'bad' ? '#f87171' : '#fbbf24';
+      ctx.fillStyle = col; ctx.font='bold 10px sans-serif';
+      ctx.fillText(`${pt.icon} ${pt.name}`, 12, py);
+      ctx.fillStyle = '#8b7bb8'; ctx.font='9px sans-serif';
+      ctx.fillText(pt.desc, 92, py+1);
+    });
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    y += eh + 5;
+  } else if (st.endless && ev) {
     const eh = 32;
     const tone = ev.tone === 'good' ? { bg:'rgba(20,83,45,0.42)',  bd:'#22c55e', fg:'#4ade80', sub:'#15803d' }
                : ev.tone === 'bad'  ? { bg:'rgba(127,29,29,0.42)', bd:'#ef4444', fg:'#f87171', sub:'#991b1b' }
@@ -1564,7 +1584,59 @@ function renderLobbySkill(ctx, gs) {
   });
 
   gs.ui.metaCards = [];
-  _renderSkillTree(ctx, gs, SKILL_TREES[L.skillTree] || SKILL_TREES.tower, tabY + tabH + 14);
+  const treeTop = tabY + tabH + 14;
+  _renderSkillTree(ctx, gs, SKILL_TREES[L.skillTree] || SKILL_TREES.tower, treeTop);
+  // 각인은 영웅 탭 아래 빈 자리에 — 스킬 트리를 밀어내지 않는다
+  gs.ui.sigilCards = [];
+  if (L.skillTree === 'hero') renderSigilPicker(ctx, gs, treeTop + 4*(68+40) - 14);
+}
+
+// ── 👑 영웅 각인 ────────────────────────────────────────────────────────────
+// 트리는 숫자를 키우고, 각인은 영웅이 무엇을 하는지를 정한다.
+// 값을 치르지 않고 언제든 바꿀 수 있다 — 층 조합에 맞춰 갈아 끼우는 게 목적이다.
+function renderSigilPicker(ctx, gs, y) {
+  const cur = activeSigil();
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle='#f59e0b'; ctx.font='bold 11px sans-serif';
+  ctx.fillText('👑 각인 — 아레나 스킬을 정합니다', 14, y);
+  ctx.textAlign='right'; ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif';
+  ctx.fillText('언제든 바꿀 수 있습니다', CW-14, y+1);
+  ctx.textAlign='left';
+  y += 18;
+
+  const cw = (CW-32)/3, ch = 74;
+  HERO_SIGILS.forEach((sg, i) => {
+    const cx = 12 + i*(cw+4);
+    const on = sg.id === cur.id;
+    roundRect(ctx, cx, y, cw, ch, 6);
+    ctx.fillStyle = on ? '#1a1508' : '#0a0e18'; ctx.fill();
+    ctx.strokeStyle = on ? sg.color : '#1e293b'; ctx.lineWidth = on ? 2 : 1; ctx.stroke();
+    ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.font='17px sans-serif'; ctx.globalAlpha = on ? 1 : 0.5;
+    ctx.fillStyle='#e2e8f0'; ctx.fillText(sg.icon, cx+cw/2, y+7);
+    ctx.globalAlpha = 1;
+    ctx.font='bold 11px sans-serif'; ctx.fillStyle = on ? sg.color : '#64748b';
+    ctx.fillText(sg.name, cx+cw/2, y+29);
+    ctx.font='8px sans-serif'; ctx.fillStyle = on ? '#78716c' : '#334155';
+    ctx.fillText(sg.tagline, cx+cw/2, y+44);
+    ctx.font='bold 8px sans-serif'; ctx.fillStyle = on ? sg.color : '#334155';
+    ctx.fillText(sg.skill.name, cx+cw/2, y+57);
+    if (on) { ctx.fillStyle=sg.color; ctx.fillRect(cx+cw/2-9, y+ch-4, 18, 2); }
+    gs.ui.sigilCards.push({x:cx, y, w:cw, h:ch, id:sg.id});
+  });
+  y += ch + 8;
+
+  // 고른 각인의 세부 — 카드 안에 다 못 쓴 것들
+  roundRect(ctx, 12, y, CW-24, 42, 6);
+  ctx.fillStyle='#0c1220'; ctx.fill(); ctx.strokeStyle='#1e293b'; ctx.lineWidth=1; ctx.stroke();
+  ctx.textAlign='left'; ctx.textBaseline='middle';
+  ctx.fillStyle=cur.color; ctx.font='bold 10px sans-serif';
+  ctx.fillText(`${cur.skill.name} · 쿨다운 ${cur.skill.cd}초`, 20, y+13);
+  ctx.fillStyle='#64748b'; ctx.font='9px sans-serif';
+  ctx.fillText(cur.skill.desc, 20, y+28);
+  ctx.textAlign='right'; ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif';
+  ctx.fillText(cur.passive, CW-20, y+21);
+  ctx.textAlign='left'; ctx.textBaseline='top';
 }
 
 // ── 🔓 해금 · 서약 ──────────────────────────────────────────────────────────
@@ -1917,7 +1989,7 @@ function renderResult(ctx, gs) {
   y += 48;
 
   // 보석 정산 내역
-  const boxH = 40 + r.rows.length*20 + (r.mult > 1 ? 22 : 0);
+  const boxH = 40 + r.rows.length*20 + (r.mult > 1 ? 22 : 0) + (r.gaveUp ? 22 : 0);
   roundRect(ctx,20,y,CW-40,boxH,8);
   ctx.fillStyle='#0d1220'; ctx.fill(); ctx.strokeStyle='#3b2a5c'; ctx.lineWidth=1.5; ctx.stroke();
   ctx.textAlign='left';
@@ -1939,6 +2011,15 @@ function renderResult(ctx, gs) {
     ctx.fillText('📜 서약 배율', 32, ry);
     ctx.textAlign='right';
     ctx.fillText(`×${r.mult.toFixed(2)}`, CW-32, ry);
+    ry += 22;
+  }
+  if (r.gaveUp) {
+    ctx.fillStyle='#f59e0b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left';
+    ctx.fillText('🏳 중도 포기', 32, ry);
+    ctx.fillStyle='#78716c'; ctx.font='9px sans-serif';
+    ctx.fillText('끝까지 버텼다면 전액', 130, ry+1);
+    ctx.fillStyle='#f59e0b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='right';
+    ctx.fillText(`×${GIVE_UP_GEM_MULT.toFixed(2)}`, CW-32, ry);
   }
   y += boxH + 14;
 
@@ -2536,7 +2617,7 @@ function renderTownPageBuildingGrid(ctx, gs, startY) {
 function renderTownPageArmy(ctx, gs, startY) {
   const {battle,hero}=gs;
   const lv=HERO_LEVELS[hero.level];
-  const hMax=Math.round(lv.hp*BONUSES.heroStatMult);
+  const hMax=Math.round(lv.hp*BONUSES.heroStatMult*BONUSES.sigilHeroHpMult);
   let y=startY;
 
   // ── 영웅 ─────────────────────────────────────────────────────────────────
@@ -2549,7 +2630,14 @@ function renderTownPageArmy(ctx, gs, startY) {
   ctx.fillStyle=hero.dead?'#f87171':COLORS.hero; ctx.font='bold 12px sans-serif';
   ctx.fillText(hero.dead?`전사 — 부활까지 ${Math.ceil(hero.reviveTimer)}s`:`영웅  Lv.${hero.level}`,44,y+6);
   ctx.fillStyle='#cbd5e1'; ctx.font='bold 10px sans-serif';
-  ctx.fillText(`ATK ${Math.round((lv.atk+BONUSES.heroAtk)*BONUSES.heroStatMult)}   HP ${Math.ceil(hero.hp)}/${hMax}   DEF ${Math.round((lv.def+BONUSES.heroAura)*BONUSES.heroStatMult)}`,44,y+22);
+  ctx.fillText(`ATK ${Math.round((lv.atk+BONUSES.heroAtk)*BONUSES.heroStatMult*BONUSES.sigilHeroAtkMult)}   HP ${Math.ceil(hero.hp)}/${hMax}   DEF ${Math.round((lv.def+BONUSES.heroAura)*BONUSES.heroStatMult)}`,44,y+22);
+  // 지금 걸린 각인 — 캠프에서 바꾼 게 여기 반영됐는지 바로 보이게
+  const _sg = activeSigil();
+  ctx.textAlign='right'; ctx.fillStyle=_sg.color; ctx.font='bold 9px sans-serif';
+  ctx.fillText(`${_sg.icon} ${_sg.name}`, CW-12, y+6);
+  ctx.fillStyle='#475569'; ctx.font='8px sans-serif';
+  ctx.fillText(_sg.skill.name, CW-12, y+22);
+  ctx.textAlign='left';
   const maxed=hero.level>=HERO_MAX_LEVEL;
   const expR=maxed?1:hero.exp/lv.expNeeded;
   ctx.fillStyle='#1e293b'; ctx.fillRect(12,y+42,CW-28,8);
@@ -3031,24 +3119,64 @@ function renderTownPageTowers(ctx, gs, startY) {
 
 // ─── Tutorial ─────────────────────────────────────────────────────────────────
 function renderTutorial(ctx, tut) {
+  gs.ui.tutSkipBtn = null; gs.ui.tutBackBtn = null;
   if (!tut.active) return;
   const step = tut.current(); if (!step) return;
+  const isTip = !!tut.tip;
+
   ctx.fillStyle='rgba(0,0,0,0.68)'; ctx.fillRect(0,0,CW,CH);
-  const cw=340,ch=165,cx=(CW-cw)/2,cy=(CH-ch)/2;
+  const lines = step.text.split('\n');
+  const cw=340, ch=Math.max(150, 58 + lines.length*17 + 34), cx=(CW-cw)/2, cy=(CH-ch)/2;
   roundRect(ctx,cx,cy,cw,ch,10);
   ctx.fillStyle='#0f172a'; ctx.fill();
-  ctx.strokeStyle='#6366f1'; ctx.lineWidth=2; ctx.stroke();
-  ctx.fillStyle='#a5b4fc'; ctx.font='bold 14px sans-serif';
+  ctx.strokeStyle=isTip?'#22d3ee':'#6366f1'; ctx.lineWidth=2; ctx.stroke();
+
+  // 쪽지는 본 튜토리얼과 구분되게 딱지를 붙인다 — "또 시작인가" 소리를 안 듣게
+  if (isTip) {
+    ctx.fillStyle='#22d3ee'; ctx.font='bold 8px sans-serif';
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillText('처음 보는 것 · 한 번만 뜹니다', cx+14, cy+9);
+  }
+  ctx.fillStyle=isTip?'#67e8f9':'#a5b4fc'; ctx.font='bold 14px sans-serif';
   ctx.textAlign='center'; ctx.textBaseline='top';
-  ctx.fillText(step.title,CW/2,cy+13);
+  ctx.fillText(step.title,CW/2,cy+(isTip?21:13));
   ctx.fillStyle='#e2e8f0'; ctx.font='12px sans-serif';
-  step.text.split('\n').forEach((line,i)=>ctx.fillText(line,CW/2,cy+36+i*17));
-  for (let i=0;i<TUTORIAL_STEPS.length;i++) {
-    ctx.beginPath(); ctx.arc(CW/2-(TUTORIAL_STEPS.length-1)*9+i*18,cy+ch-16,4,0,Math.PI*2);
-    ctx.fillStyle=i===tut.step?'#6366f1':'#334155'; ctx.fill();
+  lines.forEach((line,i)=>ctx.fillText(line,CW/2,cy+(isTip?44:36)+i*17));
+
+  if (!isTip) {
+    for (let i=0;i<TUTORIAL_STEPS.length;i++) {
+      ctx.beginPath(); ctx.arc(CW/2-(TUTORIAL_STEPS.length-1)*9+i*18,cy+ch-16,4,0,Math.PI*2);
+      ctx.fillStyle=i===tut.step?'#6366f1':'#334155'; ctx.fill();
+    }
   }
   ctx.fillStyle='#64748b'; ctx.font='10px sans-serif';
-  ctx.textBaseline='bottom'; ctx.fillText('탭하여 계속 ▶',CW/2,cy+ch-3);
+  ctx.textBaseline='bottom';
+  ctx.fillText(isTip ? '탭하여 닫기' : '탭하여 계속 ▶', CW/2, cy+ch-3);
+
+  // 건너뛰기 / 이전 — 카드 바깥에 둬서 본문 탭(=다음)과 겹치지 않게 한다
+  if (!isTip) {
+    const bw=78, bh=26, by=cy+ch+12;
+    if (tut.step > 0) {
+      const bx=cx;
+      roundRect(ctx,bx,by,bw,bh,6);
+      ctx.fillStyle='#111827'; ctx.fill(); ctx.strokeStyle='#334155'; ctx.lineWidth=1; ctx.stroke();
+      ctx.fillStyle='#94a3b8'; ctx.font='bold 11px sans-serif';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('◀ 이전', bx+bw/2, by+bh/2);
+      gs.ui.tutBackBtn={x:bx,y:by,w:bw,h:bh};
+    }
+    const sx=cx+cw-bw;
+    roundRect(ctx,sx,by,bw,bh,6);
+    ctx.fillStyle='#111827'; ctx.fill(); ctx.strokeStyle='#334155'; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle='#94a3b8'; ctx.font='bold 11px sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('건너뛰기 ✕', sx+bw/2, by+bh/2);
+    gs.ui.tutSkipBtn={x:sx,y:by,w:bw,h:bh};
+
+    ctx.fillStyle='#334155'; ctx.font='9px sans-serif';
+    ctx.fillText(`${tut.step+1} / ${TUTORIAL_STEPS.length}`, CW/2, by+bh/2);
+  }
+  ctx.textAlign='left'; ctx.textBaseline='top';
 }
 
 // ─── 타이틀 화면 ─────────────────────────────────────────────────────────────

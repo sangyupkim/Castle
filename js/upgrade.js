@@ -21,6 +21,9 @@ function createDefaultBonuses() {
     heroAtk: 0, heroRegen: 0, heroAura: 0,
     heroExpMult: 1.0, heroInstantRevive: false,
     heroStartExp: 0, heroReviveReduction: 0, heroStatMult: 1.0,
+    // 각인 — 영웅에게만 걸리는 배율. heroStatMult와 곱해서 쓴다.
+    sigilHeroAtkMult: 1.0, sigilHeroHpMult: 1.0, sigilHeroSpdMult: 1.0,
+    sigilHeroRangeMult: 1.0, sigilSkillMult: 1.0,
     // 기지
     baseHpMax: 0, baseDefPct: 0, baseRegen: 0,
     // 자원
@@ -239,7 +242,7 @@ function buySkillNode(skillId, gs) {
 function calcSoulStones(gs) {
   const caveTerm = gs.caveLevel;
   const killTerm = Math.floor((gs.battle.runKills || 0) / 60);
-  const mult     = pactGemMult();
+  const mult     = pactGemMult() * (gs.gaveUp ? GIVE_UP_GEM_MULT : 1);
 
   if (gs.mode === 'endless') {
     const tier    = Math.max(1, gs.wave + 1);
@@ -259,7 +262,7 @@ function calcSoulStones(gs) {
 // 정산 내역 — 결과 화면에서 그대로 보여준다
 function soulStoneBreakdown(gs) {
   const rows = [];
-  const mult = pactGemMult();
+  const mult = pactGemMult();   // 서약 배율만 — 포기 감액은 따로 보여준다
 
   if (gs.mode === 'endless') {
     const tier = Math.max(1, gs.wave + 1);
@@ -269,7 +272,7 @@ function soulStoneBreakdown(gs) {
     if (tier > (gs.stats.bestEndless || 0)) {
       rows.push({ label:'최고 기록 갱신', value:Math.max(3, Math.floor(tier/4)), note:`이전 최고 ${gs.stats.bestEndless||0}층` });
     }
-    return { rows, mult, total: calcSoulStones(gs) };
+    return { rows, mult, gaveUp:!!gs.gaveUp, total: calcSoulStones(gs) };
   }
 
   const reached = gs.wave + (gs.stageCleared ? 1 : 0);
@@ -277,5 +280,5 @@ function soulStoneBreakdown(gs) {
   rows.push({ label:'케이브 레벨', value:gs.caveLevel, note:`Lv.${gs.caveLevel}` });
   rows.push({ label:'처치',        value:Math.floor((gs.battle.runKills||0)/60), note:`${gs.battle.runKills||0}마리 ÷ 60` });
   if (reached > (gs.stats.bestWave || 0)) rows.push({ label:'최고 기록 갱신', value:3, note:'신기록!' });
-  return { rows, mult, total: calcSoulStones(gs) };
+  return { rows, mult, gaveUp:!!gs.gaveUp, total: calcSoulStones(gs) };
 }

@@ -32,6 +32,7 @@ function createWaveManager() {
       this.defenseQueues = [];
       this.wipedAt   = null;
       this.bountyTimer = null;   // 현상수배 등장까지 남은 시간
+      maybeFloorTips(idx);
     },
 
     startWave(gs) {
@@ -331,4 +332,24 @@ function createWaveManager() {
       }
     }
   };
+}
+
+
+// ─── 층에 딸린 상황별 쪽지 ────────────────────────────────────────────────────
+// 설명을 시작 화면에 몰아 두는 대신, 그 일이 처음 벌어지는 층에서 한 장씩 띄운다.
+// 하나씩만 뜨므로 (tut.showTip이 겹침을 막는다) 나머지는 다음 층으로 미뤄진다.
+function maybeFloorTips(idx) {
+  if (typeof tut === 'undefined' || !tut || !tut.showTip) return;
+  if (typeof gs === 'undefined' || !gs) return;
+  const tier = endlessTier(idx);
+
+  if (tier >= DEEP_FLOOR_FROM)                          { if (tut.showTip('deep'))    return; }
+  if (tier && isGateTier(tier))                         { if (tut.showTip('gate'))    return; }
+  if (gs.pathChanged && gs.pathChanged.wave === idx)    { if (tut.showTip('path'))    return; }
+  if (gs.floorEvent)                                    { if (tut.showTip('event'))   return; }
+  if (tier && terrainCountFor(tier) > 0)                { if (tut.showTip('terrain')) return; }
+  if (idx >= 1)                                         { if (tut.showTip('endwave')) return; }
+  if (idx >= 1)                                         { if (tut.showTip('overload'))return; }
+  if (idx >= 0)                                         { if (tut.showTip('grade'))   return; }
+  if (bountyCharges(idx) > (gs.bountyUsed || 0))        { if (tut.showTip('bounty'))  return; }
 }

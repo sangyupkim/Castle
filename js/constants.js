@@ -1,7 +1,11 @@
 'use strict';
 
 // 타이틀 화면에 표기되는 버전
-const GAME_VERSION = 'v0.3.7';
+const GAME_VERSION = 'v0.3.8';
+
+// 포기하고 정산하면 보석을 깎는다. 한 판이 10~30분이라 접을 길은 있어야 하지만,
+// 접는 쪽이 늘 이득이면 아무도 마지막 층을 버티지 않는다.
+const GIVE_UP_GEM_MULT = 0.6;
 
 // ─── Canvas / Layout ────────────────────────────────────────────────────────
 const CW = 480;
@@ -491,6 +495,45 @@ const HERO_ARENA = {
   skillName:'영웅 일격', skillKind:'cleave', skillCd:6, skillRadius:60, skillMult:2.2, skillColor:'#fbbf24'
 };
 
+// ─── 👑 영웅 각인 ────────────────────────────────────────────────────────────
+// 영웅이 오래도록 "레벨만 오르는 스탯 덩어리"였다. 스킬 트리는 숫자를 키울 뿐
+// 영웅이 무엇을 하는 존재인지는 바꾸지 못했다 — 누구의 영웅이든 6초마다 같은 일격을 쳤다.
+// 각인은 캠프에서 고르는 하나의 길이다. 아레나 스킬을 통째로 갈아치우고
+// 그에 맞는 패시브를 얹는다. 값을 치르지 않고 언제든 바꿀 수 있게 뒀다 —
+// 층마다 다른 조합을 요구하는 게임에서, 각인을 잠가두면 그냥 안 쓰게 된다.
+const HERO_SIGILS = [
+  { id:'blade', name:'검성', icon:'⚔️', color:'#f87171',
+    tagline:'붙어서 벤다',
+    skill:{ name:'회전베기', kind:'spin', cd:6.5, radius:80, mult:2.9, color:'#fbbf24',
+            desc:'주변 전체를 벤다 — 가장 넓은 근접기' },
+    passive:'영웅 공격력 +15% · 공격속도 +10%',
+    apply:b=>{ b.sigilHeroAtkMult *= 1.15; b.sigilHeroSpdMult *= 1.10; } },
+
+  { id:'warden', name:'수호자', icon:'🛡️', color:'#38bdf8',
+    tagline:'앞에서 버틴다',
+    skill:{ name:'불굴의 함성', kind:'bulwark', cd:9, radius:96, mult:0, color:'#38bdf8',
+            desc:'부대 전체에 보호막 + 주변 도발' },
+    passive:'영웅 HP +30% · 아군 방어 +4',
+    apply:b=>{ b.sigilHeroHpMult *= 1.30; b.heroAura += 4; } },
+
+  { id:'sorcerer', name:'술사', icon:'🔥', color:'#a78bfa',
+    tagline:'멀리서 태운다',
+    skill:{ name:'화염 폭발', kind:'nova', cd:9.5, radius:110, mult:3.6, color:'#f97316',
+            desc:'가장 넓은 범위 · 맞은 적은 둔화' },
+    passive:'영웅 사거리 +40% · 스킬 피해 +25%',
+    apply:b=>{ b.sigilHeroRangeMult *= 1.40; b.sigilSkillMult *= 1.25; } },
+];
+const DEFAULT_SIGIL = 'blade';
+
+function sigilDef(id) {
+  return HERO_SIGILS.find(s => s.id === id) || HERO_SIGILS[0];
+}
+// 지금 걸려 있는 각인 (세이브에 남는 영구 선택)
+function activeSigil() {
+  const id = (typeof gs !== 'undefined' && gs) ? gs.heroSigil : DEFAULT_SIGIL;
+  return sigilDef(id || DEFAULT_SIGIL);
+}
+
 // ─── 아레나 몬스터 ───────────────────────────────────────────────────────────
 // behavior: 'charge' 최근접 아군 직진 · 'kite' 거리 유지 원거리 · 'dash' 주기적 돌진
 // 이속은 아군 최고(95)보다 느려야 카이팅이 성립한다 — 광견(135)만 예외.
@@ -830,7 +873,8 @@ const TERRAIN_MAX      = 76;
 // 층이 깊어질수록 지형이 늘어난다. 1~2층은 비워두고 배우게 한다.
 function terrainCountFor(tier) {
   if (tier < 3) return 0;
-  return Math.min(5, 1 + Math.floor((tier - 3) / 5));
+  const n = Math.min(5, 1 + Math.floor((tier - 3) / 5));
+  return Math.min(9, Math.round(n * fev('terrainMult', 1)));   // 🌋 지진이면 2배
 }
 
 function _rectsOverlap(a, b, pad) {
@@ -936,9 +980,9 @@ const ENDLESS_DEF_UNLOCK = [
 ];
 const ENDLESS_ARENA_UNLOCK = [
   { tier: 1,  type: 'goblin'  },
-  { tier: 3,  type: 'wolf'    },
+  { tier: 3,  type: 'hound'   },
   { tier: 6,  type: 'orc'     },
-  { tier: 9,  type: 'archer'  },
+  { tier: 9,  type: 'darkarch'},
   { tier: 13, type: 'ogre'    },
   { tier: 17, type: 'boss'    },
   { tier: 22, type: 'warlord' },
@@ -955,19 +999,36 @@ const ENDLESS_AFFIXES = [
   { id:'elite', name:'정예',   icon:'💀', desc:'정예 확률 +25%',            apply:m=>{ m.elite  += 0.25; } },
   { id:'giant', name:'거인',   icon:'🗿', desc:'대형 비중 2배 · 체력 +35%', apply:m=>{ m.largeW *= 2.4; m.hp *= 1.35; } },
   { id:'horde', name:'해일',   icon:'🌊', desc:'아레나 스폰 간격 −35%',     apply:m=>{ m.arena  *= 0.65; } },
+
+  // ── 심층 전용 (40층~) ──
+  // 여기부터는 수치를 더 올려봐야 40층과 41층이 구분되지 않는다.
+  // 배율이 아니라 "적이 다르게 행동하는" 변형을 따로 둔다.
+  { id:'regen',    name:'재생',     icon:'🌱', deep:true, desc:'상단 적이 초당 최대체력 1.5% 회복',
+    apply:m=>{ m.regen = 0.015; } },
+  { id:'thorns',   name:'가시껍질', icon:'🌵', deep:true, desc:'아레나 몹이 근접 피해 25%를 반사',
+    apply:m=>{ m.thorns = 0.25; } },
+  { id:'split',    name:'분열',     icon:'🧬', deep:true, desc:'아레나 대형이 죽으면 소형 2기로 나뉜다',
+    apply:m=>{ m.split = 2; } },
+  { id:'volatile', name:'폭발',     icon:'💥', deep:true, desc:'아레나 몹이 죽으며 주변에 피해',
+    apply:m=>{ m.volatile = 1; } },
 ];
 
-// 5층마다 변형이 하나씩 늘고, 최대 3개까지 겹친다
+const DEEP_FLOOR_FROM = 40;      // 여기부터 "심층" — 규칙이 겹치기 시작한다
+function isDeepTier(tier) { return (tier || 0) >= DEEP_FLOOR_FROM; }
+
+// 5층마다 변형이 하나씩 늘고, 심층에서 하나 더 겹친다
 function affixCountFor(tier) {
   if (tier < 5)  return 0;
   if (tier < 15) return 1;
   if (tier < 30) return 2;
-  return 3;
+  if (!isDeepTier(tier)) return 3;
+  return 4;
 }
 function affixesFor(tier) {
   const n = affixCountFor(tier);
   if (n <= 0) return [];
-  const pool = ENDLESS_AFFIXES.slice();
+  // 심층 전용 변형은 40층부터만 풀에 들어간다
+  const pool = ENDLESS_AFFIXES.filter(a => !a.deep || isDeepTier(tier));
   const out = [];
   for (let i = 0; i < n && pool.length; i++) {
     const k = Math.floor(endlessRand(tier, i + 1) * pool.length) % pool.length;
@@ -1008,28 +1069,81 @@ const FLOOR_EVENTS = [
     duration:40, goldMult:1.6 },
   { id:'greed', icon:'🪙', name:'탐욕',      tone:'mix',  w:8,  desc:'골드 ×2.5 · 적 HP +40%',
     goldMult:2.5, hpMult:1.4 },
+
+  // ── 심층 전용 (40층~) ──
+  { id:'blackout', icon:'🌑', name:'암전',   tone:'bad',  w:10, deep:true, desc:'타워 사거리 −50%',
+    towerRangeMult:0.50 },
+  { id:'quake',    icon:'🌋', name:'지진',   tone:'bad',  w:9,  deep:true, desc:'아레나 지형 2배',
+    terrainMult:2 },
+  { id:'frenzy',   icon:'🩻', name:'광란',   tone:'mix',  w:9,  deep:true, desc:'적 이동 +50% · 체력 −20%',
+    enemySpdMult:1.5, hpMult:0.80 },
+  { id:'vault',    icon:'🏺', name:'금고',   tone:'good', w:9,  deep:true, desc:'골드 획득 ×3',
+    goldMult:3 },
+  { id:'relic',    icon:'🗿', name:'유물',   tone:'good', w:7,  deep:true, desc:'이 층 보석 ×5',
+    gemMult:5 },
 ];
 const FLOOR_EVENT_FROM   = 4;     // 1~3층은 비워둔다 — 기본을 먼저 익히게
 const FLOOR_EVENT_CHANCE = 0.55;
 
-function floorEventOf(tier) {
-  if (!tier || tier < FLOOR_EVENT_FROM) return null;
-  if (endlessRand(tier, 500) >= FLOOR_EVENT_CHANCE) return null;
-  const total = FLOOR_EVENTS.reduce((a, e) => a + e.w, 0);
-  let roll = endlessRand(tier, 501) * total;
-  for (const e of FLOOR_EVENTS) {
+// 이벤트를 하나만 뽑는다. salt를 달리하면 같은 층에서 두 번 뽑을 수 있다.
+function _pickFloorEvent(tier, salt, filter) {
+  const pool = FLOOR_EVENTS.filter(e => (!e.deep || isDeepTier(tier)) && (!filter || filter(e)));
+  const total = pool.reduce((a, e) => a + e.w, 0);
+  if (!total) return null;
+  let roll = endlessRand(tier, salt) * total;
+  for (const e of pool) {
     roll -= e.w;
     if (roll <= 0) {
       if (!e.sealsTower) return e;
       // 봉인은 어떤 타워가 막히는지까지 정해야 한다
-      const pool = (typeof unlockedTowers === 'function') ? unlockedTowers() : ['arrow'];
-      const idx = Math.floor(endlessRand(tier, 502) * pool.length) % pool.length;
-      const id  = pool[idx] || 'arrow';
+      const tp = (typeof unlockedTowers === 'function') ? unlockedTowers() : ['arrow'];
+      const idx = Math.floor(endlessRand(tier, salt + 1) * tp.length) % tp.length;
+      const id  = tp[idx] || 'arrow';
       const nm  = (TOWER_TYPES[id] || {}).name || id;
       return Object.assign({}, e, { sealedTower: id, desc: `${nm}이(가) 이 층에서 침묵합니다` });
     }
   }
   return null;
+}
+
+// 두 이벤트를 한 장으로 합친다. 배율은 곱하고, 슬롯은 더하고,
+// 시간은 짧은 쪽을, 카드는 많은 쪽을 쓴다 — 나중에 뽑힌 쪽이 앞의 것을 덮지 않게.
+const _FEV_MUL = ['towerRangeMult','towerDmgMult','goldMult','gemMult','overloadCdMult','hpMult',
+                  'enemySpdMult','terrainMult'];
+function _mergeFloorEvents(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  const out = { id:`${a.id}+${b.id}`, tone:'deep', deep:true, parts:[a, b],
+                icon:`${a.icon}${b.icon}`, name:`${a.name} · ${b.name}`,
+                desc:`${a.desc} / ${b.desc}` };
+  for (const k of _FEV_MUL) {
+    const va = a[k], vb = b[k];
+    if (va === undefined && vb === undefined) continue;
+    out[k] = (va === undefined ? 1 : va) * (vb === undefined ? 1 : vb);
+  }
+  if (a.slotBonus || b.slotBonus) out.slotBonus = (a.slotBonus||0) + (b.slotBonus||0);
+  if (a.duration  || b.duration)  out.duration  = Math.min(a.duration||WAVE_DURATION, b.duration||WAVE_DURATION);
+  if (a.cards     || b.cards)     out.cards     = Math.max(a.cards||0, b.cards||0);
+  if (a.noRepair  || b.noRepair)  out.noRepair  = true;
+  const sealed = a.sealedTower || b.sealedTower;
+  if (sealed) { out.sealsTower = true; out.sealedTower = sealed; }
+  return out;
+}
+
+function floorEventOf(tier) {
+  if (!tier || tier < FLOOR_EVENT_FROM) return null;
+
+  // 심층에서는 해로운 것 하나 + 이로운 것 하나가 항상 함께 걸린다.
+  // 40층 넘어서도 계속 배율만 올리면 층이 서로 구분되지 않는다 —
+  // "이번 층은 어떤 조합인가"를 매 층 새로 판단하게 만드는 것이 목적이다.
+  if (isDeepTier(tier)) {
+    const bad  = _pickFloorEvent(tier, 501, e => e.tone === 'bad' || e.tone === 'mix');
+    const good = _pickFloorEvent(tier, 511, e => e.tone === 'good');
+    return _mergeFloorEvents(bad, good);
+  }
+
+  if (endlessRand(tier, 500) >= FLOOR_EVENT_CHANCE) return null;
+  return _pickFloorEvent(tier, 501, null);
 }
 
 // 현재 층의 이벤트에서 값 하나를 꺼낸다 (없으면 기본값)
@@ -1051,7 +1165,8 @@ function endlessWaveDef(tier) {
   if (_endlessDefCache.has(tier)) return _endlessDefCache.get(tier);
 
   const gate = isGateTier(tier);
-  const mods = { airW:1, largeW:1, armor:0, spd:1, count:1, hp:1, elite:0, arena:1 };
+  const mods = { airW:1, largeW:1, armor:0, spd:1, count:1, hp:1, elite:0, arena:1,
+                 regen:0, thorns:0, split:0, volatile:0 };
   const affixes = affixesFor(tier);
   for (const a of affixes) a.apply(mods);
   if (gate) { mods.largeW *= 2.0; mods.count *= 0.72; mods.hp *= 1.30; }
@@ -1098,7 +1213,12 @@ function endlessWaveDef(tier) {
     spawnMult:  Math.pow(ENDLESS_ARENA_TIGHTEN, tier - 1) * mods.arena,
     armorBonus: mods.armor,
     spdBonus:   mods.spd,
-    hpBonus:    mods.hp
+    hpBonus:    mods.hp,
+    // 심층 변형 — 배율이 아니라 행동을 바꾼다
+    regen:    mods.regen,
+    thorns:   mods.thorns,
+    split:    mods.split,
+    volatile: mods.volatile
   };
   _endlessDefCache.set(tier, def);
   return def;
