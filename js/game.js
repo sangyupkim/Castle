@@ -392,7 +392,7 @@ function tap({x,y}) {
       return;
     }
     if (hitTest(x,y,gs.ui.retreatBtn||{})) { wm.retreat(gs); return; }
-    if (hitTest(x,y,gs.ui.briefTownBtn||{}) || hitTest(x,y,gs.ui.uibarTownBtn||{})) { gs.page='town'; SFX.click(); return; }
+    if (hitTest(x,y,gs.ui.briefTownBtn||{})) { gs.page='town'; SFX.click(); return; }
   }
 
   // 아레나 탭 → 집결 지점 지정 (자동으로 수동 모드 전환)

@@ -419,10 +419,12 @@ function renderUIBar(ctx, gs, wm) {
   } else if (wm.phase==='intermission') {
     drawBtn(ctx,bx,by2,bw,bh,`인터미션 ${Math.ceil(wm.intermissionTimer)}s`,'#1e293b','#475569',false);
   } else {
-    drawBtn(ctx,bx,by2,bw,bh,'🏰 마을에서 준비','#1e293b','#a5b4fc',true);
+    // 마을로 가는 길은 아래 [🏰 마을] 하나뿐이다.
+    // 여기에도 같은 버튼을 두면 화면에 마을 입구가 둘이 되어 어느 쪽이 무엇인지 헷갈린다.
+    drawBtn(ctx,bx,by2,bw,bh,'⏸ 준비 중','#141c2e','#475569',false);
   }
   gs.ui.waveBtn = (wm.phase==='idle') ? null : {x:bx,y:by2,w:bw,h:bh};
-  gs.ui.uibarTownBtn = (wm.phase==='idle') ? {x:bx,y:by2,w:bw,h:bh} : null;
+  gs.ui.uibarTownBtn = null;
 }
 
 // ─── Battle Zone ─────────────────────────────────────────────────────────────
