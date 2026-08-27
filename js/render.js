@@ -174,6 +174,20 @@ function renderDefense(ctx, gs) {
     if (tower) {
       const lv=tower.level||1;
       const ax=cc.x-50, ay2=cc.y+CELL_H/2+2, aw=100, ah=22;
+      // 준비 화면에서는 정보만 — 강화·철거 버튼을 아예 그리지 않는다
+      if (ta.readonly) {
+        const st = towerStats(tower);
+        roundRect(ctx,ax,ay2,aw,ah,4); ctx.fillStyle='#0f172a'; ctx.fill();
+        ctx.strokeStyle='#475569'; ctx.lineWidth=1.5; ctx.stroke();
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillStyle= st.sealed ? '#ef4444' : '#cbd5e1'; ctx.font='bold 8px sans-serif';
+        ctx.fillText(st.sealed ? `Lv.${lv} · 🔒침묵` : `Lv.${lv} · ⚔${st.dmg} · ◎${Math.round(st.range)}`,
+                     ax+aw/2, ay2+ah/2-4);
+        ctx.fillStyle='#475569'; ctx.font='bold 7px sans-serif';
+        ctx.fillText('강화·철거는 🏰마을에서', ax+aw/2, ay2+ah/2+7);
+        gs.ui.towerUpgradeBtn=null; gs.ui.towerRemoveBtn=null;
+        return;
+      }
       roundRect(ctx,ax,ay2,aw,ah,4); ctx.fillStyle='#0f172a'; ctx.fill(); ctx.strokeStyle='#f59e0b'; ctx.lineWidth=1.5; ctx.stroke();
       ctx.fillStyle='#f59e0b'; ctx.font='bold 8px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
       ctx.fillText(`Lv.${lv}/${TOWER_MAX_LEVEL}`,ax+18,ay2+ah/2);
@@ -685,14 +699,26 @@ function renderBriefing(ctx, gs) {
   y += mh + 8;
 
   // ── 버튼 ─────────────────────────────────────────────────────────────────
-  const ready = gs.battle.ourTeam.length > 0;
+  // 이 화면은 확인용이다 — 편성·배치·현상수배는 전부 🏰마을에서 한다.
+  ctx.fillStyle='#334155'; ctx.font='bold 9px sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  ctx.fillText('타워 배치 · 병력 고용 · 현상수배는 🏰마을에서 합니다', CW/2, y);
+  y += 14;
+
+  const hasTeam = gs.battle.ourTeam.length > 0;
+  const heroSet = gs.hero.placement !== 'none' || gs.hero.dead;
+  const ready   = hasTeam && heroSet;
+  const label   = !hasTeam ? '병력이 없습니다 — 🏰마을'
+                : !heroSet ? '👑 영웅을 배치하세요 — 🏰마을'
+                : '▶ 웨이브 시작';
   const bw2 = CW-140, bh2 = 46;
   roundRect(ctx,20,y,bw2,bh2,9);
   ctx.fillStyle = ready ? '#14532d' : '#1f2937'; ctx.fill();
-  ctx.strokeStyle = ready ? '#22c55e' : '#374151'; ctx.lineWidth=2; ctx.stroke();
-  ctx.fillStyle = ready ? '#fff' : '#6b7280'; ctx.font='bold 17px sans-serif';
+  ctx.strokeStyle = ready ? '#22c55e' : (!heroSet && hasTeam ? '#f59e0b' : '#374151'); ctx.lineWidth=2; ctx.stroke();
+  ctx.fillStyle = ready ? '#fff' : (!heroSet && hasTeam ? '#fbbf24' : '#6b7280');
+  ctx.font = ready ? 'bold 17px sans-serif' : 'bold 13px sans-serif';
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText('▶ 웨이브 시작', 20+bw2/2, y+bh2/2);
+  ctx.fillText(label, 20+bw2/2, y+bh2/2);
   gs.ui.battleWaveStartBtn = ready ? {x:20,y:y,w:bw2,h:bh2} : null;
 
   const tbx = 20+bw2+10, tbw = CW-tbx-20;
@@ -703,32 +729,6 @@ function renderBriefing(ctx, gs) {
   gs.ui.briefTownBtn = {x:tbx,y:y,w:tbw,h:bh2};
   y += bh2 + 6;
 
-  // ── 💰 현상수배 소환 ─────────────────────────────────────────────────────
-  // 보석을 더 벌지 말지를 플레이어가 고른다. 강한 적을 스스로 불러오는 대가로.
-  const charges = bountyCharges(gs.wave);
-  const left    = Math.max(0, charges - gs.bountyUsed);
-  const bh3 = 34;
-  roundRect(ctx, 20, y, CW-40, bh3, 7);
-  const on = gs.bountyPending;
-  ctx.fillStyle   = on ? '#3b2a08' : left > 0 ? '#141c2e' : '#0e1017'; ctx.fill();
-  ctx.strokeStyle = on ? '#fbbf24' : left > 0 ? '#a16207' : '#252b38';
-  ctx.lineWidth   = on ? 2 : 1; ctx.stroke();
-  ctx.textAlign='left'; ctx.textBaseline='middle';
-  ctx.fillStyle = left > 0 || on ? '#fbbf24' : '#475569'; ctx.font='bold 11px sans-serif';
-  ctx.fillText(on ? '💰 현상수배 예약됨 — 탭하여 취소' : '💰 현상수배 소환', 30, y+bh3/2);
-  ctx.textAlign='right'; ctx.font='bold 9px sans-serif';
-  if (on) {
-    ctx.fillStyle='#fde68a';
-    ctx.fillText(`처치 시 💎+${bountyGems(gs.bountyUsed-1)} · 놓치면 성벽 큰 피해`, CW-30, y+bh3/2);
-  } else if (left > 0) {
-    ctx.fillStyle='#94a3b8';
-    ctx.fillText(`남은 기회 ${left} · 처치 시 💎+${bountyGems(gs.bountyUsed)}`, CW-30, y+bh3/2);
-  } else {
-    ctx.fillStyle='#475569';
-    ctx.fillText('다음 스테이지에 기회가 생깁니다', CW-30, y+bh3/2);
-  }
-  gs.ui.bountyBtn = (left > 0 || on) ? {x:20,y:y,w:CW-40,h:bh3} : null;
-  y += bh3 + 5;
 
   ctx.font='9px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
   ctx.fillStyle='#22c55e';
@@ -2325,7 +2325,9 @@ function renderTownPageBuildingGrid(ctx, gs, startY) {
   });
 
   // ── 성벽 보수 — 남는 골드를 기지 HP로 바꾸는 통로 ──────────────────────
-  const wrY = startY+2*(bh+gap)+4;
+  // 건물이 늘어나면 행 수도 늘어난다 — 고정 2행으로 두면 아래 칸과 겹친다
+  const bRows = Math.ceil(TOWN_BUILDINGS.length / 2);
+  const wrY = startY+bRows*(bh+gap)+4;
   const wrH = 46;
   roundRect(ctx,6,wrY,CW-12,wrH,6);
   ctx.fillStyle='#0a0d1a'; ctx.fill(); ctx.strokeStyle='#2a3f5f'; ctx.lineWidth=1; ctx.stroke();
@@ -2447,11 +2449,14 @@ function renderTownPageArmy(ctx, gs, startY) {
   ctx.fillText('병력 고용 — 탭하여 편성',6,y); y+=14;
   const cols=3, cardW=(CW-12-(cols-1)*6)/cols, cardH=64;
   gs.ui.hireCards=[];
-  UNIT_ORDER.forEach((id,i)=>{
+  // 일반 5종 + 여관에서 열린 특수 용병
+  const specials = availableSpecialUnits(gs);
+  const roster = UNIT_ORDER.concat(specials);
+  roster.forEach((id,i)=>{
     const ut=UNIT_TYPES[id];
     const col=i%cols, row=Math.floor(i/cols);
     const cx=6+col*(cardW+6), cy2=y+row*(cardH+6);
-    const unlocked=isUnlocked(id);
+    const unlocked = ut.special ? true : isUnlocked(id);
     const cost=hireCost(id), canAff=unlocked&&gs.gold>=cost;
     roundRect(ctx,cx,cy2,cardW,cardH,6);
     ctx.fillStyle=canAff?'#1e293b':'#111827'; ctx.fill();
@@ -2475,12 +2480,31 @@ function renderTownPageArmy(ctx, gs, startY) {
       ctx.fillStyle='#f59e0b'; ctx.font='bold 9px sans-serif';
       ctx.fillText(`🔒 캠프 💎${unlockCost(id)}`,cx+cardW/2,cy2+50);
     }
+    // 특수 용병은 테두리를 굵게 — 일반 용병과 한눈에 구분되도록
+    if (ut.special) {
+      roundRect(ctx,cx,cy2,cardW,cardH,6);
+      ctx.strokeStyle=ut.color; ctx.lineWidth=2; ctx.stroke();
+      ctx.fillStyle=ut.color; ctx.font='bold 7px sans-serif'; ctx.textAlign='left';
+      ctx.fillText('★',cx+4,cy2+4);
+      ctx.textAlign='center';
+    }
   });
-  y += Math.ceil(UNIT_ORDER.length/cols)*(cardH+6) + 4;
+  y += Math.ceil(roster.length/cols)*(cardH+6) + 4;
 
-  // 선택한 유닛 역할 설명
+  // 여관 안내 — 다음 특수 용병이 몇 레벨에 열리는지
+  const innLv = innLevel(gs);
+  const nextSp = SPECIAL_UNIT_ORDER.find(id => SPECIAL_UNIT_TYPES[id].innLevel > innLv);
   ctx.fillStyle='#475569'; ctx.font='9px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText('🛡️ 방패병이 앞에 서서 맞습니다 · 🏹 궁수는 사거리 130으로 카이팅',6,y);
+  if (innLv < 0) {
+    ctx.fillStyle='#f472b6';
+    ctx.fillText('🏨 마을에 여관을 지으면 특수 용병을 고용할 수 있습니다',6,y);
+  } else if (nextSp) {
+    const sp = SPECIAL_UNIT_TYPES[nextSp];
+    ctx.fillStyle='#f472b6';
+    ctx.fillText(`🏨 여관 Lv.${sp.innLevel+1}에서 ${sp.icon} ${sp.name} 개방 — ${sp.role}`,6,y);
+  } else {
+    ctx.fillText('★ 특수 용병을 모두 고용할 수 있습니다',6,y);
+  }
   y+=16;
 
   // ── 편성 슬롯 ────────────────────────────────────────────────────────────
@@ -2514,14 +2538,47 @@ function renderTownPageArmy(ctx, gs, startY) {
   }
   y+=slotH+10;
 
+  // ── 💰 현상수배 소환 ─────────────────────────────────────────────────────
+  // 준비 화면이 아니라 여기에 둔다 — 전투 준비는 전부 마을에서 끝나야 한다.
+  const charges = bountyCharges(gs.wave);
+  const left    = Math.max(0, charges - gs.bountyUsed);
+  const on      = gs.bountyPending;
+  const bh3 = 36;
+  roundRect(ctx, 6, y, CW-12, bh3, 7);
+  ctx.fillStyle   = on ? '#3b2a08' : left > 0 ? '#141c2e' : '#0e1017'; ctx.fill();
+  ctx.strokeStyle = on ? '#fbbf24' : left > 0 ? '#a16207' : '#252b38';
+  ctx.lineWidth   = on ? 2 : 1; ctx.stroke();
+  ctx.textAlign='left'; ctx.textBaseline='middle';
+  ctx.fillStyle = (left > 0 || on) ? '#fbbf24' : '#475569'; ctx.font='bold 11px sans-serif';
+  ctx.fillText(on ? '💰 현상수배 예약됨 — 탭하여 취소' : '💰 현상수배 소환', 14, y+bh3/2-5);
+  ctx.font='bold 9px sans-serif';
+  if (on) {
+    ctx.fillStyle='#fde68a';
+    ctx.fillText(`처치 시 💎+${bountyGems(gs.bountyUsed-1)} · 놓치면 성벽에 큰 피해`, 14, y+bh3/2+9);
+  } else if (left > 0) {
+    ctx.fillStyle='#94a3b8';
+    ctx.fillText(`남은 기회 ${left} · 처치 시 💎+${bountyGems(gs.bountyUsed)} · 대형에 강한 타워가 필요합니다`, 14, y+bh3/2+9);
+  } else {
+    ctx.fillStyle='#475569';
+    ctx.fillText('기회를 다 썼습니다 — 더 진행하면 다시 생깁니다', 14, y+bh3/2+9);
+  }
+  gs.ui.bountyBtn = (left > 0 || on) ? {x:6,y,w:CW-12,h:bh3} : null;
+  y += bh3 + 8;
+
   // ── 출전 버튼 ────────────────────────────────────────────────────────────
-  const ready=battle.ourTeam.length>0;
+  // 영웅 배치는 필수다 — 상단이든 하단이든 어딘가에는 서야 한다.
+  const hasTeam  = battle.ourTeam.length>0;
+  const heroSet  = hero.placement !== 'none' || hero.dead;
+  const ready    = hasTeam && heroSet;
+  const why = !hasTeam ? '병력을 1명 이상 고용하세요'
+            : !heroSet ? '👑 영웅을 상단 또는 하단에 배치하세요'
+            : '▶ 출전! 웨이브 시작';
   roundRect(ctx,6,y,CW-12,44,8);
   ctx.fillStyle=ready?'#15803d':'#1f2937'; ctx.fill();
-  ctx.strokeStyle=ready?'#22c55e':'#374151'; ctx.lineWidth=2; ctx.stroke();
-  ctx.fillStyle=ready?'#fff':'#6b7280'; ctx.font='bold 15px sans-serif';
+  ctx.strokeStyle=ready?'#22c55e':(!heroSet&&hasTeam?'#f59e0b':'#374151'); ctx.lineWidth=2; ctx.stroke();
+  ctx.fillStyle=ready?'#fff':(!heroSet&&hasTeam?'#fbbf24':'#6b7280'); ctx.font='bold 15px sans-serif';
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText(ready?'▶ 출전! 웨이브 시작':'병력을 1명 이상 고용하세요',6+(CW-12)/2,y+22);
+  ctx.fillText(why,6+(CW-12)/2,y+22);
   gs.ui.deployBtn={x:6,y,w:CW-12,h:44};
   y+=52;
 
@@ -2850,7 +2907,7 @@ function renderTitleScreen(ctx, alpha) {
   ctx.fillRect(0, CH-200, CW, 200);
 
   // 시작 버튼
-  const bw=220, bh=52, bx=(CW-bw)/2, by=CH-110;
+  const bw=220, bh=52, bx=(CW-bw)/2, by=CH-150;
   roundRect(ctx, bx, by, bw, bh, 26);
   const btnGrad = ctx.createLinearGradient(bx, by, bx, by+bh);
   btnGrad.addColorStop(0, '#6366f1');
@@ -2860,17 +2917,32 @@ function renderTitleScreen(ctx, alpha) {
   ctx.fillStyle = '#ffffff'; ctx.font = 'bold 18px sans-serif';
   ctx.textBaseline = 'middle';
   ctx.fillText('▶  게임 시작', CW/2, by + bh/2);
+  gs.ui.titleStartBtn = {x:bx, y:by, w:bw, h:bh};
 
-  // 탭 안내 (버튼 아래)
-  ctx.fillStyle = 'rgba(255,255,255,0.45)';
-  ctx.font = '11px sans-serif'; ctx.textBaseline = 'bottom';
-  ctx.fillText('화면을 탭하여 시작', CW/2, CH - 18);
+  // ── 리셋 버튼 ──────────────────────────────────────────────────────────
+  // 되돌릴 수 없는 조작이라 두 번 눌러야 실행된다. 한 번 누르면 경고로 바뀌고,
+  // 5초 안에 다시 누르지 않으면 저절로 풀린다.
+  const rw=160, rh=34, rx=(CW-rw)/2, ry=by+bh+12;
+  const arming = _resetArmed && (Date.now() - _resetArmedAt < 5000);
+  if (!arming) _resetArmed = false;
+  roundRect(ctx, rx, ry, rw, rh, 17);
+  ctx.fillStyle = arming ? 'rgba(127,29,29,0.92)' : 'rgba(15,23,42,0.72)'; ctx.fill();
+  ctx.strokeStyle = arming ? '#ef4444' : 'rgba(148,163,184,0.45)'; ctx.lineWidth = arming ? 2 : 1; ctx.stroke();
+  ctx.fillStyle = arming ? '#fecaca' : 'rgba(226,232,240,0.72)';
+  ctx.font = arming ? 'bold 12px sans-serif' : '12px sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(arming ? '⚠ 정말 초기화합니다 — 다시 탭' : '↺ 데이터 초기화', CW/2, ry + rh/2);
+  gs.ui.titleResetBtn = {x:rx, y:ry, w:rw, h:rh};
 
-  // 버전 표기 (시작 버튼 바로 위 우측)
-  ctx.fillStyle = 'rgba(255,255,255,0.35)';
-  ctx.font = '9px monospace';
-  ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
-  ctx.fillText('v0.2.0.0', CW - 8, by - 6);
+  // 탭 안내
+  ctx.fillStyle = 'rgba(255,255,255,0.40)';
+  ctx.font = '10px sans-serif'; ctx.textBaseline = 'bottom';
+  ctx.fillText(arming ? '다른 곳을 탭하면 취소됩니다' : '화면을 탭하여 시작', CW/2, CH - 30);
+
+  // 버전 — 눈에 띄게
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.font = 'bold 11px monospace'; ctx.textBaseline = 'bottom';
+  ctx.fillText(GAME_VERSION, CW/2, CH - 12);
 
   ctx.restore();
 }

@@ -23,9 +23,21 @@ const TUTORIAL_STEPS = [
           '훈련을 한 판 치르면 무한이 열립니다 —\n완주할 필요는 없습니다. 손에 익히는 곳입니다.'
   },
   {
+    title: '🏰 준비는 전부 마을에서',
+    text: '타워 배치 · 병력 고용 · 현상수배 —\n전부 🏰마을에서 합니다.\n\n' +
+          '웨이브 시작 화면은 확인용입니다.\n적 구성과 층 정보를 보고,\n타워를 탭하면 성능만 볼 수 있습니다.\n\n' +
+          '👑 영웅을 배치하지 않으면 시작할 수 없습니다.'
+  },
+  {
+    title: '🏨 여관',
+    text: '마을에 여관을 지으면\n웨이브가 끝날 때마다 병력이 더 회복됩니다.\n\n' +
+          '레벨을 올릴수록 특수 용병이 하나씩 열립니다 —\n🗡️도적 · ✝️성기사 · 🎯명사수\n\n' +
+          '일반 용병보다 비싸지만 확실히 강합니다.'
+  },
+  {
     title: '🏰 상단 — 배치하고 지켜본다',
     text: '적은 ∞(8자) 경로를 따라 기지로 향합니다.\n\n' +
-          '빈 격자 칸을 탭해 타워를 세우세요.\n웨이브가 시작되면 개입할 수 없습니다 —\n배치가 곧 실력입니다.\n\n' +
+          '🏰마을 › 타워배치에서 빈 칸을 탭해 세우세요.\n웨이브가 시작되면 개입할 수 없습니다 —\n배치가 곧 실력입니다.\n\n' +
           '처음엔 🏹화살탑만 열려 있습니다.'
   },
   {
@@ -117,14 +129,14 @@ function createTutorial() {
   return {
     active: false, step: 0, done: false,
     start() {
-      if (localStorage.getItem('df_tut7') === '1') { this.done = true; return; }
+      if (localStorage.getItem('df_tut8') === '1') { this.done = true; return; }
       this.active = true; this.step = 0;
     },
     next() {
       this.step++;
       if (this.step >= TUTORIAL_STEPS.length) {
         this.active = false; this.done = true;
-        localStorage.setItem('df_tut7', '1');
+        localStorage.setItem('df_tut8', '1');
       }
     },
     current() { return TUTORIAL_STEPS[this.step] || null; }

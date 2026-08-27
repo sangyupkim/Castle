@@ -35,6 +35,8 @@ resize();
 const _titleImg = new Image();
 _titleImg.src = 'assets/images/mainpage.png';
 let _titleScreen = true;  // 앱 시작 시 타이틀 화면 표시
+let _resetArmed  = false; // 리셋 버튼 1차 확인 상태
+let _resetArmedAt = 0;
 let _titleAlpha  = 1;     // 페이드아웃용
 
 // ─── 세션 설정 (런 리셋과 무관) ──────────────────────────────────────────────
@@ -259,19 +261,50 @@ function nudgeArena(dx, dy) {
   nudgeRally(gs, dx, dy);
 }
 
-function tryStartWave() {
+// 출전 조건 — 어디서 시작하든 같은 검사를 거친다
+function canStartWave(fx, fy) {
+  const px = fx !== undefined ? fx : CW/2;
+  const py = fy !== undefined ? fy : BATTLE_Y+40;
   if (!gs.battle.ourTeam.length) {
-    spawnFloaty('병력을 먼저 고용하세요!', CW/2, BATTLE_Y+40, '#ef4444');
+    spawnFloaty('병력을 먼저 고용하세요!', px, py, '#ef4444');
     SFX.denied();
     return false;
   }
+  // 영웅은 반드시 어딘가에 선다. 배치를 잊은 채 시작해 한 웨이브를 통째로
+  // 손해 보는 일이 잦아서, 시작 자체를 막는다. (전사해서 부활 중이면 예외)
+  if (gs.hero.placement === 'none' && !gs.hero.dead) {
+    spawnFloaty('👑 영웅을 배치하세요 — 🏰마을 › 출전준비', px, py, '#fbbf24');
+    SFX.denied();
+    return false;
+  }
+  return true;
+}
+
+function tryStartWave() {
+  if (!canStartWave()) return false;
   wm.startWave(gs);
   gs.waveActive = true;
   return true;
 }
 
 function tap({x,y}) {
-  if (_titleScreen) { SFX.unlock(); _startFadeOut(); return; }
+  if (_titleScreen) {
+    SFX.unlock();
+    // 리셋은 두 번 눌러야 실행된다 — 실수로 세이브를 날리지 않도록
+    if (hitTest(x, y, gs.ui.titleResetBtn || {})) {
+      if (_resetArmed && (Date.now() - _resetArmedAt < 5000)) {
+        _resetArmed = false;
+        resetAllProgress();
+      } else {
+        _resetArmed = true; _resetArmedAt = Date.now();
+        SFX.denied();
+      }
+      return;
+    }
+    _resetArmed = false;
+    _startFadeOut();
+    return;
+  }
   if (tut.active)   { tut.next(); SFX.click(); return; }
 
   if (gs.page === 'lobby')  { handleLobbyTap(x,y);  return; }
@@ -361,40 +394,19 @@ function tap({x,y}) {
   // 마을 페이지에서는 전투 화면 탭 막기
   if (gs.page==='town') { handleTownTap(x,y); return; }
 
-  // Defense grid: always tappable when not in active wave
+  // 준비 화면의 격자는 읽기 전용이다.
+  // 배치·강화·판매는 전부 🏰마을 › 타워배치에서 한다 — 준비할 곳과 확인할 곳을 갈라야
+  // "여기서 지어도 되나?"를 매번 고민하지 않는다.
   if (y<UIBAR_Y && wm.phase==='idle') {
     const cell=screenToCell(x,y);
     if (!cell) return;
-    if (gs.towers.some(t=>t.col===cell.c&&t.row===cell.r)) {
-      const tower=gs.towers.find(t=>t.col===cell.c&&t.row===cell.r);
-      gs.ui.towerAction = (gs.ui.towerAction?.col===cell.c&&gs.ui.towerAction?.row===cell.r) ? null : {col:cell.c,row:cell.r,tower};
-      return;
-    }
-    if (isBlockedCell(cell.c, cell.r)) return;
-    buildTowerAt(cell.c, cell.r, x, y);
-    return;
-  }
-
-  // Tower action buttons (rendered near tower in defense area)
-  if (gs.ui.towerAction && y<UIBAR_Y) {
-    if (hitTest(x,y,gs.ui.towerUpgradeBtn||{})) { upgradeSelectedTower(x,y); return; }
-    if (hitTest(x,y,gs.ui.towerRemoveBtn||{}))  { sellSelectedTower(x,y);    return; }
-  }
-
-  // 현상수배 소환 (준비 단계)
-  if (wm.phase==='idle' && hitTest(x,y,gs.ui.bountyBtn||{})) {
-    if (gs.bountyPending) {
-      gs.bountyPending = false;
-      spawnFloaty('소환 취소', x, y, '#64748b');
+    const tower = gs.towers.find(t=>t.col===cell.c&&t.row===cell.r);
+    if (tower) {
+      const same = gs.ui.towerAction?.col===cell.c && gs.ui.towerAction?.row===cell.r;
+      gs.ui.towerAction = same ? null : { col:cell.c, row:cell.r, tower, readonly:true };
       SFX.click();
-    } else if (gs.bountyUsed >= bountyCharges(gs.wave)) {
-      spawnFloaty('남은 소환 기회가 없습니다', x, y, '#ef4444');
-      SFX.denied();
-    } else {
-      gs.bountyPending = true;
-      gs.bountyUsed++;
-      spawnFloaty(`💰 ${gs.bountyUsed}번째 현상수배 예약`, x, y, '#fbbf24');
-      SFX.upgrade();
+    } else if (!isBlockedCell(cell.c, cell.r)) {
+      spawnFloaty('타워 배치는 🏰마을에서', CW/2, DEFENSE_H-30, '#94a3b8');
     }
     return;
   }
@@ -464,6 +476,37 @@ function handleLobbyTap(x, y) {
       }
     }
   }
+}
+
+// ─── 데이터 초기화 ───────────────────────────────────────────────────────────
+// 세이브·영구 데이터·튜토리얼 진행을 전부 지우고 처음 상태로 되돌린다.
+// 페이지를 새로 고치는 대신 메모리 상태까지 직접 되돌려야 지금 화면이 옛 값을 들고 있지 않다.
+function resetAllProgress() {
+  try {
+    SaveManager.clear();
+    for (let i = 1; i <= 9; i++) localStorage.removeItem('df_tut' + i);
+  } catch (e) {}
+
+  _soulStones = 0;
+  _metaUpgrades = {};
+  _clearedStages = new Array(10).fill(false);
+  _skillTreeOwned = [];
+  _unlocked = [];
+  _pacts = [];
+  _seenMobs = [];
+  _clearedGates = [];
+  _stats = createStats();
+
+  resetGame();               // 런 상태를 새로 만든다 (영구 데이터는 위에서 이미 비웠다)
+  gs.lobby  = createLobby();
+  gs.page   = 'lobby';
+  gs.inRun  = false;
+  gs.selectedTowerType = 'arrow';
+  applyPathVariant(0);
+
+  tut.done = false; tut.active = false; tut.step = 0;
+  _titleScreen = true; _fadingOut = false; _titleAlpha = 1;
+  if (typeof SFX !== 'undefined') SFX.levelUp();
 }
 
 // ─── 런 시작 / 종료 ──────────────────────────────────────────────────────────
@@ -652,8 +695,22 @@ function handleTownTap(x,y) {
       }
     }
     if (hitTest(x,y,gs.ui.deployBtn||{})) {
-      if (!gs.battle.ourTeam.length) { spawnFloaty('병력을 먼저 고용하세요!',x,y,'#ef4444'); SFX.denied(); return; }
+      if (!canStartWave(x,y)) return;
       gs.page='battle'; wm.startWave(gs); gs.waveActive=true;
+      return;
+    }
+    // 💰 현상수배 — 마을에서만 예약한다
+    if (hitTest(x,y,gs.ui.bountyBtn||{})) {
+      if (gs.bountyPending) {
+        gs.bountyPending = false;
+        spawnFloaty('소환 취소', x, y, '#64748b'); SFX.click();
+      } else if (gs.bountyUsed >= bountyCharges(gs.wave)) {
+        spawnFloaty('남은 소환 기회가 없습니다', x, y, '#ef4444'); SFX.denied();
+      } else {
+        gs.bountyPending = true;
+        gs.bountyUsed++;
+        spawnFloaty(`💰 ${gs.bountyUsed}번째 현상수배 예약`, x, y, '#fbbf24'); SFX.upgrade();
+      }
       return;
     }
   }

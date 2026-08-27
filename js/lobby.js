@@ -38,6 +38,23 @@ function isUnlocked(id) {
 function unlockedTowers() { return TOWER_ORDER.filter(isUnlocked); }
 function unlockedUnits()  { return UNIT_ORDER.filter(isUnlocked);  }
 
+// ─── 여관 ────────────────────────────────────────────────────────────────────
+// 특수 용병은 캠프 보석이 아니라 런 안의 여관 레벨로 열린다.
+// "이번 판에 여관을 올릴까 타워에 쓸까"가 골드 배분의 선택지가 된다.
+function innLevel(gs) {
+  const b = gs.town && gs.town.buildings && gs.town.buildings.inn;
+  return (b && b.built) ? (b.level || 0) : -1;   // -1 = 미건설
+}
+function availableSpecialUnits(gs) {
+  const lv = innLevel(gs);
+  if (lv < 0) return [];
+  return SPECIAL_UNIT_ORDER.filter(id => SPECIAL_UNIT_TYPES[id].innLevel <= lv);
+}
+// 고용 가능한 전체 목록 (일반 + 여관 특수)
+function hireableUnits(gs) {
+  return unlockedUnits().concat(availableSpecialUnits(gs));
+}
+
 function unlockCost(id) {
   const d = UNLOCK_DEFS.find(u => u.id === id);
   return d ? d.cost : 0;

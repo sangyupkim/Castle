@@ -52,6 +52,24 @@ const TOWN_BUILDINGS = [
     ]
   },
   {
+    id:'inn', name:'여관', icon:'🏨', buildCost:35, color:'#f472b6',
+    desc:'웨이브 후 회복 · 특수 용병 고용',
+    levels:[
+      { levelName:'Lv.1', upgradeCost:0, upgrades:[
+        { id:'i_rest1', name:'따뜻한 잠자리', icon:'🛏️', cost:14, maxLv:3, desc:lv=>`웨이브 후 회복 +${lv*8}%`, apply:(b,lv)=>{ b.restHealBonus += lv*0.08; } },
+        { id:'i_meal',  name:'뜨거운 식사',   icon:'🍲', cost:16, maxLv:2, desc:lv=>`아군 HP +${lv*20}`,        apply:(b,lv)=>{ b.unitHp += lv*20; } },
+      ]},
+      { levelName:'Lv.2', upgradeCost:45, upgrades:[
+        { id:'i_rest2', name:'깃털 침대',   icon:'🪶', cost:26, maxLv:3, desc:lv=>`웨이브 후 회복 +${lv*10}%`, apply:(b,lv)=>{ b.restHealBonus += lv*0.10; } },
+        { id:'i_tonic', name:'회복 물약',   icon:'🧴', cost:30, maxLv:2, desc:lv=>`전투 중 자연 회복 +${lv*40}%`, apply:(b,lv)=>{ b.regenBonus = (b.regenBonus||0) + lv*0.40; } },
+      ]},
+      { levelName:'Lv.3', upgradeCost:90, upgrades:[
+        { id:'i_rest3', name:'귀빈실',     icon:'👑', cost:44, maxLv:2, desc:lv=>`웨이브 후 회복 +${lv*14}%`, apply:(b,lv)=>{ b.restHealBonus += lv*0.14; } },
+        { id:'i_hero',  name:'영웅 대접',  icon:'🍷', cost:50, maxLv:1, desc:()=>'웨이브 후 영웅 완전 회복',   apply:(b)=>{ b.heroFullRest = true; } },
+      ]},
+    ]
+  },
+  {
     id:'cave', name:'몬스터 케이브', icon:'🗿', buildCost:0, color:'#6b7280',
     desc:'몬스터 던전을 관리합니다', alwaysBuilt:true,
     levels:[
@@ -98,6 +116,7 @@ function createTown() {
       workshop:{ built:false, level:0, upgrades:{} },
       barracks: { built:false, level:0, upgrades:{} },
       heroShop: { built:false, level:0, upgrades:{} },
+      inn:      { built:false, level:0, upgrades:{} },
       cave:     { built:true,  level:0, upgrades:{} },
     },
     equippedItems:[],
@@ -172,11 +191,18 @@ function buyShopItem(item, gs) {
   return true;
 }
 
+// 여관은 지은 것만으로 효과가 있다.
+// 업그레이드를 사야 비로소 쓸모가 생기면 "짓는 결정" 자체가 보상이 없다.
+// 기본 +12%, 레벨마다 +6% — 그 위에 개별 강화가 얹힌다.
+const INN_BASE_REST  = 0.12;
+const INN_LEVEL_REST = 0.06;
+
 function applyTownUpgrades(gs) {
   for (const def of TOWN_BUILDINGS) {
     const bs=gs.town.buildings[def.id];
     if (!bs||(!bs.built&&!def.alwaysBuilt)) continue;
     const maxLv=bs.level||0;
+    if (def.id === 'inn') BONUSES.restHealBonus += INN_BASE_REST + maxLv * INN_LEVEL_REST;
     for (let lv=0; lv<=maxLv&&lv<def.levels.length; lv++) {
       for (const upg of def.levels[lv].upgrades) {
         const n=bs.upgrades[upg.id]||0;

@@ -11,6 +11,7 @@ function createDefaultBonuses() {
     hireCostDiscount: 0, maxSlotBonus: 0,
     killHeal: 0, comboChance: 0, critChance: 0,
     healBonus: 0, shieldBonus: 0, mpRegenBonus: 0, restHealBonus: 0,
+    regenBonus: 0, heroFullRest: false,
     undying: false,
     // 케이브/전투
     battleGoldMult: 1.0, mobHpMult: 1.0, spawnSpeedMult: 1.0,

@@ -1,5 +1,8 @@
 'use strict';
 
+// 타이틀 화면에 표기되는 버전
+const GAME_VERSION = 'v0.3.3';
+
 // ─── Canvas / Layout ────────────────────────────────────────────────────────
 const CW = 480;
 const CH = 800;
@@ -417,6 +420,34 @@ const UNIT_TYPES = {
     color:'#f97316', icon:'✨', role:'뭉친 적에게 광역'
   }
 };
+// ─── 특수 용병 ───────────────────────────────────────────────────────────────
+// 여관에서만 고용할 수 있다. 골드로 사는 것은 같지만, 캠프 보석 해금과 달리
+// 런 안에서 여관을 올려야 열리므로 "이번 판에 무엇을 지을까"의 선택지가 된다.
+// 일반 용병보다 비싸고 확실히 강하다 — 후반 골드의 사용처이기도 하다.
+const SPECIAL_UNIT_TYPES = {
+  rogue: {
+    id:'rogue', name:'도적', cost:20, innLevel:0,
+    hp:88, atk:19, def:2, atkPeriod:0.60, range:28, moveSpd:112, radius:7.5,
+    skillName:'급소 찌르기', skillKind:'spin', skillAtk:34, skillCd:5, skillRadius:46, skillColor:'#f43f5e',
+    color:'#f43f5e', icon:'🗡️', role:'가장 빠른 근접 DPS · 물몸', special:true
+  },
+  paladin: {
+    id:'paladin', name:'성기사', cost:28, innLevel:1,
+    hp:265, atk:13, def:13, atkPeriod:1.10, range:26, moveSpd:70, radius:9, isTank:true,
+    skillName:'성역', skillKind:'bulwark', skillAtk:0, skillCd:7, skillRadius:120, shieldAmt:38, skillColor:'#fbbf24',
+    color:'#fbbf24', icon:'✝️', role:'방패병보다 단단하고 보호막도 크다', special:true
+  },
+  marksman: {
+    id:'marksman', name:'명사수', cost:32, innLevel:2,
+    hp:78, atk:17, def:1, atkPeriod:1.00, range:180, moveSpd:84, radius:7.5, ranged:true,
+    skillName:'관통 사격', skillKind:'volley', skillAtk:30, skillHits:4, skillCd:6, skillColor:'#22d3ee',
+    color:'#22d3ee', icon:'🎯', role:'사거리 180 · 아레나 절반을 덮는다', special:true
+  }
+};
+const SPECIAL_UNIT_ORDER = ['rogue', 'paladin', 'marksman'];
+// 일반 용병과 특수 용병을 한 표에서 찾을 수 있게 합쳐 둔다
+Object.assign(UNIT_TYPES, SPECIAL_UNIT_TYPES);
+
 const UNIT_ORDER = ['archer', 'swordsman', 'healer', 'guardian', 'mage'];
 
 const HERO_ARENA = {

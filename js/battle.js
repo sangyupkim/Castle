@@ -53,13 +53,19 @@ function refreshTeamStats(battle) {
 // 웨이브 종료 후 생존 병력 휴식 회복
 function restHealTeam(battle) {
   const pct = Math.max(0, REST_HEAL_PCT + BONUSES.restHealBonus);
+  let healed = 0;
   for (const u of battle.ourTeam) {
     if (u.dead) continue;
     u.shield = 0;
     u.undyingUsed = false;
     const before = u.hp;
-    u.hp = Math.min(u.maxHp, u.hp + Math.ceil(u.maxHp * pct));
-    if (u.hp > before) addLog(battle, `${u.name} 휴식 +${u.hp - before}HP`, '#34d399');
+    const full = u.isHero && BONUSES.heroFullRest;   // 여관 Lv.3 — 영웅 대접
+    u.hp = full ? u.maxHp : Math.min(u.maxHp, u.hp + Math.ceil(u.maxHp * pct));
+    healed += Math.max(0, u.hp - before);
+  }
+  if (healed > 0) {
+    const inn = (typeof gs !== 'undefined' && gs.town?.buildings?.inn?.built);
+    addLog(battle, `${inn ? '🏨 여관' : '휴식'} — 병력 회복 +${Math.round(healed)}HP`, '#34d399');
   }
 }
 
@@ -110,7 +116,10 @@ function hireCost(typeId) {
 function hireUnit(battle, typeId, gold) {
   const t = UNIT_TYPES[typeId];
   if (!t) return gold;
-  if (!isUnlocked(typeId)) return gold;
+  // 특수 용병은 캠프 해금이 아니라 여관 레벨로 열린다
+  if (t.special) {
+    if (typeof gs === 'undefined' || !availableSpecialUnits(gs).includes(typeId)) return gold;
+  } else if (!isUnlocked(typeId)) return gold;
   const cost = hireCost(typeId);
   const nonHero = battle.ourTeam.filter(u => !u.isHero).length;
   if (nonHero >= battle.maxSlots || gold < cost) return gold;

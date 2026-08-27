@@ -207,7 +207,7 @@ function updateAlly(gs, u, mobs, allies, dt) {
   // 전투 이탈 회복 — 맞지 않고 버틴 시간에 값을 준다
   u.noHitFor = (u.noHitFor || 0) + dt;
   if (u.noHitFor >= ARENA_REGEN_DELAY && u.hp < u.maxHp) {
-    u.hp = Math.min(u.maxHp, u.hp + u.maxHp * ARENA_REGEN_PCT * (BONUSES.pactRegenMult || 1) * dt);
+    u.hp = Math.min(u.maxHp, u.hp + u.maxHp * ARENA_REGEN_PCT * (1 + (BONUSES.regenBonus || 0)) * (BONUSES.pactRegenMult || 1) * dt);
   }
 
   // 목표: 사거리 안에서 가장 가까운 적
