@@ -1084,7 +1084,7 @@ function renderTrainingClear(ctx, gs) {
   ctx.fillStyle='#22c55e'; ctx.font='bold 27px sans-serif';
   ctx.fillText('훈련 완주!', CW/2, y); y += 38;
   ctx.fillStyle='#475569'; ctx.font='12px sans-serif';
-  ctx.fillText('30웨이브를 모두 막아냈습니다', CW/2, y); y += 40;
+  ctx.fillText(`${TRAINING_WAVES}웨이브를 모두 막아냈습니다`, CW/2, y); y += 40;
 
   // ── 무한 해금 ──
   const bw = CW-56, bx = 28, bh = 118;
@@ -1092,7 +1092,7 @@ function renderTrainingClear(ctx, gs) {
   ctx.fillStyle='#1a0d2e'; ctx.fill(); ctx.strokeStyle='#a78bfa'; ctx.lineWidth=2; ctx.stroke();
   ctx.textAlign='center';
   ctx.fillStyle='#c4b5fd'; ctx.font='bold 19px sans-serif';
-  ctx.fillText(first ? '∞ 무한이 열렸습니다' : '∞ 무한', CW/2, y+16);
+  ctx.fillText(first ? '∞ 심연이 열렸습니다' : '∞ 심연', CW/2, y+16);
   ctx.fillStyle='#8b7bb8'; ctx.font='11px sans-serif';
   ctx.fillText('1층부터 내려가며 버티는 본편입니다.', CW/2, y+46);
   ctx.fillText('층마다 적이 강해지고 새 변형이 붙습니다.', CW/2, y+64);
@@ -1105,7 +1105,7 @@ function renderTrainingClear(ctx, gs) {
   roundRect(ctx, bx, y, bw, ph, 8);
   ctx.fillStyle='#0b0f1a'; ctx.fill(); ctx.strokeStyle='#1e293b'; ctx.lineWidth=1; ctx.stroke();
   ctx.textAlign='left'; ctx.fillStyle='#64748b'; ctx.font='bold 10px sans-serif';
-  ctx.fillText('무한 층 전망', bx+14, y+10);
+  ctx.fillText('심연 층 전망', bx+14, y+10);
 
   const tiers = [10, 20, 30, 40];
   const colW = (bw-28)/tiers.length;
@@ -1425,11 +1425,11 @@ function renderLobbySortie(ctx, gs) {
     ctx.fillStyle='#a78bfa'; ctx.fillRect(18, y+rh-9, pw*prog, 4);
   } else {
     ctx.fillStyle='#64748b'; ctx.font='bold 11px sans-serif';
-    ctx.fillText('∞ 무한 — 아직 잠겨 있습니다', 18, y+13);
+    ctx.fillText('∞ 심연 — 아직 잠겨 있습니다', 18, y+13);
     ctx.fillStyle='#475569'; ctx.font='10px sans-serif';
     ctx.fillText('훈련을 한 판 치르면 열립니다 — 완주하지 않아도 됩니다.', 18, y+32);
     ctx.fillStyle='#334155'; ctx.font='9px sans-serif';
-    ctx.fillText('무한이 본편입니다 — 훈련은 손에 익히는 곳입니다.', 18, y+48);
+    ctx.fillText('심연이 본편입니다 — 훈련은 손에 익히는 곳입니다.', 18, y+48);
   }
   y += rh + 10;
 
@@ -1802,8 +1802,9 @@ function renderLobbyRecord(ctx, gs) {
   ctx.textAlign='left'; ctx.fillStyle='#60a5fa'; ctx.font='bold 11px sans-serif';
   ctx.fillText('🗺 훈련 스테이지', 14, y); y += 18;
   const cs = gs.clearedStages || [];
-  const cw = (CW-30)/10;
-  for (let i=0; i<10; i++) {
+  const nStages = Math.max(1, Math.ceil(TRAINING_WAVES / 3));   // 훈련이 짧아졌으므로 칸도 줄인다
+  const cw = (CW-30)/Math.max(4, nStages);
+  for (let i=0; i<nStages; i++) {
     const cx = 12 + i*cw;
     roundRect(ctx,cx,y,cw-3,26,4);
     ctx.fillStyle = cs[i] ? '#0d2a1a' : '#0a0e18'; ctx.fill();
@@ -1905,7 +1906,7 @@ function renderSortieBar(ctx, gs) {
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText('⚔️  훈련 시작', CW/2 - 40, byy+bh/2);
     ctx.fillStyle='#86efac'; ctx.font='bold 9px sans-serif';
-    ctx.fillText('한 판 치르면 ∞ 무한이 열립니다', CW/2 + 82, byy+bh/2+1);
+    ctx.fillText('한 판 치르면 ∞ 심연이 열립니다', CW/2 + 82, byy+bh/2+1);
     gs.ui.sortieBtn = {x:bx,y:byy,w:bw,h:bh};
     gs.ui.trainBtn  = null;
     return;
@@ -1920,7 +1921,7 @@ function renderSortieBar(ctx, gs) {
   ctx.strokeStyle='#a78bfa'; ctx.lineWidth=2; ctx.stroke();
   ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.fillStyle='#fff'; ctx.font='bold 16px sans-serif';
-  ctx.fillText('∞  무한 하강', 12+endW/2, byy+bh/2-6);
+  ctx.fillText('∞  심연 하강', 12+endW/2, byy+bh/2-6);
   const best = gs.stats.bestEndless || 0;
   ctx.fillStyle='#c4b5fd'; ctx.font='bold 9px sans-serif';
   ctx.fillText(best > 0 ? `최고 ${best}층 — 더 내려가기` : '첫 하강', 12+endW/2, byy+bh/2+11);
@@ -1934,7 +1935,7 @@ function renderSortieBar(ctx, gs) {
   ctx.fillStyle='#4ade80'; ctx.font='bold 12px sans-serif';
   ctx.fillText('⚔️ 훈련', tx+trainW/2, byy+bh/2-6);
   ctx.fillStyle='#166534'; ctx.font='bold 8px sans-serif';
-  ctx.fillText('30웨이브 · 연습', tx+trainW/2, byy+bh/2+10);
+  ctx.fillText(`${TRAINING_WAVES}웨이브 · 연습`, tx+trainW/2, byy+bh/2+10);
   gs.ui.trainBtn = {x:tx,y:byy,w:trainW,h:bh};
 }
 
@@ -1963,7 +1964,7 @@ function renderResult(ctx, gs) {
     ctx.fillText(r.cleared ? '훈련 완주!' : '기지 함락', CW/2, y);
     y += 36;
     ctx.fillStyle='#475569'; ctx.font='11px sans-serif';
-    ctx.fillText(r.cleared ? '30웨이브를 모두 막아냈습니다 — ∞ 무한이 열렸습니다'
+    ctx.fillText(r.cleared ? `${TRAINING_WAVES}웨이브를 모두 막아냈습니다 — ∞ 심연이 열렸습니다`
                            : '다음엔 더 멀리 갈 수 있습니다', CW/2, y);
     y += 30;
   }
@@ -2409,6 +2410,7 @@ function renderHeroShopScreen(ctx, gs) {
 
 
 // ─── 마을 페이지 (full-screen) ────────────────────────────────────────────────
+let _townBottom = 0;   // 탭 본문이 그린 마지막 y — 스크롤 범위 계산에 쓴다
 function renderTownPage(ctx, gs) {
   ctx.fillStyle='#080d18'; ctx.fillRect(0,0,CW,CH);
   ctx.strokeStyle='rgba(255,255,255,0.03)'; ctx.lineWidth=1;
@@ -2453,13 +2455,53 @@ function renderTownPage(ctx, gs) {
 
   const contentY=92;
   if (gs.town.screen!=='main') {
+    gs.ui.pageScroll = null;
     renderBuildingScreen(ctx,gs,gs.town.screen);
-  } else if (gs.town.tab==='town') {
-    renderTownPageBuildingGrid(ctx,gs,contentY);
-  } else if (gs.town.tab==='army') {
-    renderTownPageArmy(ctx,gs,contentY);
-  } else if (gs.town.tab==='towers') {
-    renderTownPageTowers(ctx,gs,contentY);
+    return;
+  }
+
+  // ── 탭 본문 — 스크롤된다 ──────────────────────────────────────────────────
+  // 예전에는 화면에 안 들어가는 부분을 아예 그리지 않았다(`if (y < CH-40)`).
+  // 편성이 늘거나 타워가 많아지면 전투력 요약·배치 현황이 통째로 사라졌다.
+  // 이제 잘라내는 대신 넘긴다. 렌더러에는 스크롤이 반영된 startY를 주므로
+  // 그림과 버튼 좌표가 함께 움직여 탭 판정이 어긋나지 않는다.
+  const scroll = gs.town.scroll || 0;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, contentY, CW, CH-contentY); ctx.clip();
+  _townBottom = contentY;
+  const top = contentY - scroll;
+  if (gs.town.tab==='town')        renderTownPageBuildingGrid(ctx,gs,top);
+  else if (gs.town.tab==='army')   renderTownPageArmy(ctx,gs,top);
+  else if (gs.town.tab==='towers') renderTownPageTowers(ctx,gs,top);
+  ctx.restore();
+
+  const viewH   = CH - contentY;
+  const contentH= (_townBottom + scroll) - contentY + 10;   // 스크롤을 되돌린 실제 높이
+  const maxScroll = Math.max(0, contentH - viewH);
+  gs.town.scroll = Math.max(0, Math.min(maxScroll, scroll));
+  gs.ui.pageScroll = maxScroll > 0 ? {x:0,y:contentY,w:CW,h:viewH,max:maxScroll} : null;
+
+  if (maxScroll > 0) drawScrollHint(ctx, contentY, viewH, gs.town.scroll, maxScroll);
+}
+
+// 스크롤 막대 — 더 볼 것이 남았다는 사실 자체를 알려야 한다
+function drawScrollHint(ctx, top, viewH, scroll, maxScroll) {
+  const trackH = viewH - 12;
+  const barH   = Math.max(28, trackH * (viewH / (viewH + maxScroll)));
+  const barY   = top + 6 + (trackH - barH) * (scroll / maxScroll);
+  ctx.fillStyle='rgba(148,163,184,0.12)';
+  roundRect(ctx, CW-7, top+6, 4, trackH, 2); ctx.fill();
+  ctx.fillStyle='rgba(148,163,184,0.60)';
+  roundRect(ctx, CW-7, barY, 4, barH, 2); ctx.fill();
+  // 아직 아래에 더 있다는 표시 — 막대만으로는 눈에 안 들어온다
+  if (scroll < maxScroll - 1) {
+    const g = ctx.createLinearGradient(0, top+viewH-26, 0, top+viewH);
+    g.addColorStop(0, 'rgba(8,13,24,0)'); g.addColorStop(1, 'rgba(8,13,24,0.92)');
+    ctx.fillStyle = g; ctx.fillRect(0, top+viewH-26, CW, 26);
+    ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='bottom';
+    ctx.fillText('▼ 아래로 밀어서 더 보기', CW/2, top+viewH-4);
+    ctx.textAlign='left'; ctx.textBaseline='top';
   }
 }
 
@@ -2618,6 +2660,7 @@ function renderTownPageBuildingGrid(ctx, gs, startY) {
     ctx.font='bold 8px sans-serif'; ctx.fillStyle='#475569';
     ctx.fillText(`${Math.round(w/totalW*100)}%`,ix+19,stripY+31);
   });
+  _townBottom = stripY + 44;
 }
 
 function renderTownPageArmy(ctx, gs, startY) {
@@ -2691,7 +2734,7 @@ function renderTownPageArmy(ctx, gs, startY) {
     ctx.fillStyle=canAff?'#f1f5f9':'#64748b'; ctx.font='bold 11px sans-serif';
     ctx.fillText(ut.name,cx+cardW/2,cy2+27);
     ctx.fillStyle='#94a3b8'; ctx.font='bold 8px sans-serif';
-    ctx.fillText(`ATK ${ut.atk+BONUSES.unitAtk} · HP ${ut.hp+BONUSES.unitHp}`,cx+cardW/2,cy2+40);
+    ctx.fillText(`ATK ${Math.round(ut.atk+BONUSES.unitAtk)} · HP ${Math.round((ut.hp+BONUSES.unitHp)*(BONUSES.pactUnitHpMult||1))}`,cx+cardW/2,cy2+40);
     ctx.globalAlpha=1;
     if (unlocked) {
       ctx.globalAlpha=canAff?1:0.55;
@@ -2755,7 +2798,7 @@ function renderTownPageArmy(ctx, gs, startY) {
       ctx.fillStyle=ut.color; ctx.font='bold 11px sans-serif';
       ctx.fillText(ut.name,sx+sw/2,y+25);
       ctx.fillStyle='#94a3b8'; ctx.font='bold 8px sans-serif';
-      ctx.fillText(`ATK ${ut.atk+BONUSES.unitAtk} · HP ${ut.hp+BONUSES.unitHp}`,sx+sw/2,y+38);
+      ctx.fillText(`ATK ${Math.round(ut.atk+BONUSES.unitAtk)} · HP ${Math.round((ut.hp+BONUSES.unitHp)*(BONUSES.pactUnitHpMult||1))}`,sx+sw/2,y+38);
       ctx.fillStyle=canAff?COLORS.gold:'#64748b'; ctx.font='bold 10px sans-serif';
       ctx.fillText(roomy?`💰${cost}`:'슬롯 없음',sx+sw/2,y+47);
       ctx.globalAlpha=1;
@@ -2870,9 +2913,13 @@ function renderTownPageArmy(ctx, gs, startY) {
   gs.ui.deployBtn={x:6,y,w:CW-12,h:44};
   y+=52;
 
-  // ── 팀 전투력 요약 (남는 공간 활용) ──────────────────────────────────────
-  if (y < CH-40) {
-    roundRect(ctx,6,y,CW-12,CH-y-10,7);
+  // ── 팀 전투력 요약 ───────────────────────────────────────────────────────
+  // 예전에는 "남는 공간"에 맞춰 높이를 CH-y로 잡고, 자리가 없으면 통째로 그리지 않았다.
+  // 편성이 늘면 이 상자가 화면 밖으로 밀려 아예 안 보였다 — 이제는 페이지가 스크롤되므로
+  // 높이를 내용에 맞춰 고정한다.
+  {
+    const boxH = 176;
+    roundRect(ctx,6,y,CW-12,boxH,7);
     ctx.fillStyle='#080d18'; ctx.fill(); ctx.strokeStyle='#161f30'; ctx.lineWidth=1; ctx.stroke();
     ctx.fillStyle='#94a3b8'; ctx.font='bold 11px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
     ctx.fillText('전투력 요약',14,y+9);
@@ -2908,7 +2955,7 @@ function renderTownPageArmy(ctx, gs, startY) {
 
     // 다음 웨이브 미리보기
     const nd=waveDefFor(gs.wave);
-    if (nd && ry < CH-40) {
+    if (nd) {
       ctx.fillStyle='#64748b'; ctx.font='10px sans-serif'; ctx.textAlign='left';
       ctx.fillText('다음 웨이브',18,ry);
       const mobIcons=(nd.arenaPool||[]).map(([t])=>(BATTLE_MOB_TYPES[t]||{}).icon||'').join(' ');
@@ -2917,12 +2964,11 @@ function renderTownPageArmy(ctx, gs, startY) {
       ry+=18;
     }
 
-    if (ry < CH-30) {
-      ctx.fillStyle='#3f4a5c'; ctx.font='9px sans-serif'; ctx.textAlign='left';
-      ctx.fillText('하단은 실시간 아레나입니다. A로 자동/수동을 전환하세요.',18,ry+2);
-      ry+=13;
-      ctx.fillText('웨이브를 클리어하면 강화 카드 3장 중 1장을 고릅니다.',18,ry+2);
-    }
+    ctx.fillStyle='#3f4a5c'; ctx.font='9px sans-serif'; ctx.textAlign='left';
+    ctx.fillText('하단은 실시간 아레나입니다. A로 자동/수동을 전환하세요.',18,ry+2);
+    ry+=13;
+    ctx.fillText('웨이브를 클리어하면 강화 카드 3장 중 1장을 고릅니다.',18,ry+2);
+    _townBottom = y + boxH;
   }
 }
 
@@ -3092,9 +3138,12 @@ function renderTownPageTowers(ctx, gs, startY) {
     gs.ui.towerUpgradeBtn=null; gs.ui.towerRemoveBtn=null;
   }
 
-  // ── 배치 요약 (빈 공간 활용) ─────────────────────────────────────────────
+  // ── 배치 요약 ────────────────────────────────────────────────────────────
+  // 높이를 화면 잔여분(CH-infoY)이 아니라 내용에 맞춰 잡는다 — 페이지가 스크롤되므로
   const infoY=panelY+80;
-  roundRect(ctx,6,infoY,CW-12,CH-infoY-10,7);
+  const infoH=Math.max(150, 60 + Object.keys(
+    gs.towers.reduce((m,t)=>{ m[t.typeId]=1; return m; }, {})).length*20 + 70);
+  roundRect(ctx,6,infoY,CW-12,infoH,7);
   ctx.fillStyle='#080d18'; ctx.fill(); ctx.strokeStyle='#161f30'; ctx.lineWidth=1; ctx.stroke();
   ctx.fillStyle='#94a3b8'; ctx.font='bold 11px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillText('배치 현황',14,infoY+9);
@@ -3127,6 +3176,7 @@ function renderTownPageTowers(ctx, gs, startY) {
   ctx.fillText('같은 종류를 많이 지을수록 건설비가 오릅니다.',18,ry);
   ry+=13;
   ctx.fillText('∞ 경로는 같은 칸을 두 번 지나므로 교차 지점이 가장 효율적입니다.',18,ry);
+  _townBottom = Math.max(infoY + infoH, ry + 16);
 }
 
 // ─── Tutorial ─────────────────────────────────────────────────────────────────

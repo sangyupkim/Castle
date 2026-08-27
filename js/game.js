@@ -105,7 +105,8 @@ function newState() {
     floaties:[],
     ui:{ waveBtn:{}, hireCards:[], hiredSlots:[], specialCards:[], specialSlots:[], heroDefBtn:{}, heroBatBtn:{},
          metaCards:[], towerTabBtn:{}, heroTabBtn:{}, supportTabBtn:{},
-         lobbyTabBtns:[], unlockBtns:[], pactBtns:[], sortieBtn:{}, trainBtn:null, resultBtn:{}, buildingScroll:null,
+         lobbyTabBtns:[], unlockBtns:[], pactBtns:[], sortieBtn:{}, trainBtn:null, resultBtn:{},
+         buildingScroll:null, pageScroll:null,
          pauseResumeBtn:null, pauseGiveUpBtn:null,
          backupExportBtn:null, backupImportBtn:null, backupMsg:null,
          tutSkipBtn:null, tutBackBtn:null, sigilCards:[] },
@@ -237,7 +238,7 @@ function _applyStartBonuses() {
   gs.hero.hp  = heroMaxHp();
   gs.baseHP   = Math.max(1, Math.min(baseHpMax(), gs.baseHP + BONUSES.baseHpMax));
   gs.hero.exp = Math.min(HERO_LEVELS[gs.hero.level].expNeeded - 1, gs.hero.exp + BONUSES.heroStartExp);
-  gs.battle.maxSlots = Math.max(1, Math.floor((4 + BONUSES.maxSlotBonus) * (BONUSES.pactSlotMult || 1)) + fev('slotBonus', 0));
+  recalcMaxSlots(gs);
 }
 
 function baseHpMax()     { return Math.max(20, Math.round((BASE_HP_MAX + BONUSES.baseHpMax) * (BONUSES.pactBaseHpMult || 1))); }
@@ -260,10 +261,13 @@ let _drag = null;      // { y0, scroll0, region }
 let _didDrag = false;
 
 function scrollRegionAt(p) {
-  const r = gs.ui.buildingScroll;
-  if (!r) return null;
-  if (p.x < r.x || p.x > r.x + r.w || p.y < r.y || p.y > r.y + r.h) return null;
-  return r;
+  // 건물 상세 목록과 마을 탭 본문이 각각 스크롤된다
+  for (const r of [gs.ui.buildingScroll, gs.ui.pageScroll]) {
+    if (!r) continue;
+    if (p.x < r.x || p.x > r.x + r.w || p.y < r.y || p.y > r.y + r.h) continue;
+    return r;
+  }
+  return null;
 }
 function beginDrag(p) {
   _didDrag = false;
@@ -567,7 +571,7 @@ function tap({x,y}) {
 // gs.ui는 그리면서 채워지므로, 다른 페이지의 낡은 사각형이 남아 엉뚱한 탭을 먹는다.
 const _PAGE_UI_KEYS = [
   'buildingCards','researchBtn','wallRepairBtn','caveBtn','tabTownBtn','townBackBtn',
-  'buildingLvUpBtn','upgradeBtns','buildingScroll','hireCards','hiredSlots',
+  'buildingLvUpBtn','upgradeBtns','buildingScroll','pageScroll','hireCards','hiredSlots',
   'specialCards','specialSlots','heroDefBtn','heroBatBtn','bountyBtn','towerMiniGrid',
   'lobbyTabBtns','sortieBtn','trainBtn','metaCards','unlockBtns','pactBtns','sigilCards',
   'towerTabBtn','heroTabBtn','supportTabBtn','backupExportBtn','backupImportBtn',
@@ -744,7 +748,7 @@ function startRun(mode) {
   gs.page  = 'battle';
   wm.init(0);
   if (gs.mode === 'endless') {
-    spawnFloaty('∞ 무한 — 죽어야 끝납니다', CW/2, DEFENSE_H/2, '#a78bfa');
+    spawnFloaty('∞ 심연 — 죽어야 끝납니다', CW/2, DEFENSE_H/2, '#a78bfa');
   }
   SaveManager.save(gs);
 }
@@ -786,9 +790,9 @@ function handleTownTap(x,y) {
   // Building sub-screen
   if (t.screen!=='main') {
     // Tab buttons work even inside sub-screen
-    if (hitTest(x,y,gs.ui.tabTownBtn||{}))   { t.screen='main'; t.tab='town'; return; }
-    if (hitTest(x,y,gs.ui.tabArmyBtn||{}))   { t.screen='main'; t.tab='army'; return; }
-    if (hitTest(x,y,gs.ui.tabTowersBtn||{})) { t.screen='main'; t.tab='towers'; gs.ui.towerAction=null; return; }
+    if (hitTest(x,y,gs.ui.tabTownBtn||{}))   { t.screen='main'; t.tab='town';   t.scroll=0; return; }
+    if (hitTest(x,y,gs.ui.tabArmyBtn||{}))   { t.screen='main'; t.tab='army';   t.scroll=0; return; }
+    if (hitTest(x,y,gs.ui.tabTowersBtn||{})) { t.screen='main'; t.tab='towers'; t.scroll=0; gs.ui.towerAction=null; return; }
     if (hitTest(x,y,gs.ui.townBackBtn||{})) { t.screen='main'; t.scroll=0; return; }
     if (t.screen==='heroShop') {
       for (const btn of gs.ui.shopItemBtns||[]) {
@@ -816,9 +820,9 @@ function handleTownTap(x,y) {
   }
 
   // Tab switching
-  if (hitTest(x,y,gs.ui.tabTownBtn||{})) { t.tab='town'; return; }
-  if (hitTest(x,y,gs.ui.tabArmyBtn||{})) { t.tab='army'; return; }
-  if (hitTest(x,y,gs.ui.tabTowersBtn||{})) { t.tab='towers'; gs.ui.towerAction=null; return; }
+  if (hitTest(x,y,gs.ui.tabTownBtn||{})) { t.tab='town';   t.scroll=0; return; }
+  if (hitTest(x,y,gs.ui.tabArmyBtn||{})) { t.tab='army';   t.scroll=0; return; }
+  if (hitTest(x,y,gs.ui.tabTowersBtn||{})) { t.tab='towers'; t.scroll=0; gs.ui.towerAction=null; return; }
 
   // Towers tab
   if (t.tab==='towers') {

@@ -254,7 +254,7 @@ function createWaveManager() {
       gs.battle.result     = null;
       gs.battle.goldEarned = 0;
       gs.battle.floaties   = [];
-      gs.battle.maxSlots   = Math.max(1, Math.floor((4 + BONUSES.maxSlotBonus) * (BONUSES.pactSlotMult || 1)) + fev('slotBonus', 0));
+      recalcMaxSlots(gs);
 
       gs.hero.placement = 'none';
       // 아래 절반이 아레나 → 준비 화면으로 바뀐다. 연타 중이던 손가락이
@@ -265,7 +265,7 @@ function createWaveManager() {
       refreshInnOffers(gs);          // 여관에 새 손님이 온다
 
       // 훈련 마지막 웨이브만 강화 없이 결과로 넘긴다. 무한은 매 층 강화를 고른다.
-      const atCampaignEnd = (gs.mode !== 'endless') && (this.waveIndex + 1 >= WAVE_DEFS.length);
+      const atCampaignEnd = (gs.mode !== 'endless') && (this.waveIndex + 1 >= TRAINING_WAVES);
       if (!atCampaignEnd) {
         this.phase = 'upgradePick';
         gs.upgradePick = { active: true, cards: rollUpgradeCards(gs.activeUpgrades, fev('cards', 3)) };
@@ -296,7 +296,9 @@ function createWaveManager() {
         }
       }
 
-      // 스테이지 최초 클리어 보석 (훈련 전용, 일회성)
+      // 훈련 스테이지 진행 기록. 보석은 여기서 주지 않는다 —
+      // 1-2쯤에서 17보석이 모여 영웅 스킬을 전부 찍을 수 있었다는 보고가 있었다.
+      // 훈련은 손에 익히는 곳이지 성장을 버는 곳이 아니다. 정산은 완주할 때 한 번뿐이다.
       const stageIdx = Math.floor(this.waveIndex / 3);
       const isLastWaveOfStage = ((this.waveIndex + 1) % 3 === 0) && et === 0;
       if (isLastWaveOfStage) {
@@ -304,10 +306,7 @@ function createWaveManager() {
         gs.stats.bestStage = Math.max(gs.stats.bestStage || 0, stageIdx + 1);
         if (!gs.clearedStages[stageIdx]) {
           gs.clearedStages[stageIdx] = true;
-          const gems = (stageIdx === 9) ? 2 : 1;
-          gs.soulStones += gems;
-          gs.stats.totalGems = (gs.stats.totalGems || 0) + gems;
-          addLog(gs.battle, `★ 1-${stageIdx+1} 클리어! 보석 +${gems}`, '#a78bfa');
+          addLog(gs.battle, `★ 1-${stageIdx+1} 클리어!`, '#a78bfa');
         }
       }
 
@@ -328,8 +327,8 @@ function createWaveManager() {
 
       if (this.intermissionTimer <= 0) {
         const next = this.waveIndex + 1;
-        // 훈련은 30웨이브에서 끝난다 (완주 = 무한 해금). 무한은 끝이 없다.
-        if (gs.mode !== 'endless' && next >= WAVE_DEFS.length) {
+        // 훈련은 TRAINING_WAVES에서 끝난다 (완주 = 심연 해금). 심연은 끝이 없다.
+        if (gs.mode !== 'endless' && next >= TRAINING_WAVES) {
           gs.stageCleared = true;
           gs.stats.clears = (gs.stats.clears || 0) + 1;
           SaveManager.save(gs);

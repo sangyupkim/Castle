@@ -107,17 +107,20 @@ const UPGRADE_CARDS = [
     apply: b => { b.heroStatMult *= 1.2; b.heroAtk += 5; } },
 
   // ── 기지 ──────────────────────────────────────────────────────────────────
-  { id:'b_heal',    name:'성벽 보수',     desc:'기지 HP +20 회복',     grade:'common', icon:'🏰', cat:'base',
+  // once — 집는 순간에만 일어나는 것. 다시 계산할 때 되풀이하면 안 된다.
+  // persist — 다시 계산할 때 되살려야 하는 지속 효과.
+  { id:'b_heal',    name:'성벽 보수',     desc:'기지 HP +20 회복',     grade:'common', icon:'🏰', cat:'base', once:true,
     apply: (b, gs) => { gs.baseHP = Math.min(BASE_HP_MAX + b.baseHpMax, gs.baseHP + 20); } },
   { id:'b_fort',    name:'견고한 기지',   desc:'기지 최대HP +20, 즉시 회복', grade:'rare', icon:'🏰', cat:'base',
+    persist: b => { b.baseHpMax += 20; },
     apply: (b, gs) => { b.baseHpMax += 20; gs.baseHP = Math.min(BASE_HP_MAX + b.baseHpMax, gs.baseHP + 20); } },
   { id:'b_wall',    name:'철옹성',        desc:'기지 피해 -20%',       grade:'epic',   icon:'🏰', cat:'base',
     apply: b => { b.baseDefPct += 0.2; } },
 
   // ── 자원 ──────────────────────────────────────────────────────────────────
-  { id:'r_gold1',   name:'황금 손길',     desc:'즉시 골드 +15',        grade:'common', icon:'💰', cat:'resource',
+  { id:'r_gold1',   name:'황금 손길',     desc:'즉시 골드 +15',        grade:'common', icon:'💰', cat:'resource', once:true,
     apply: (b, gs) => { gs.gold += 15; } },
-  { id:'r_gold2',   name:'보물 창고',     desc:'즉시 골드 +35',        grade:'rare',   icon:'💰', cat:'resource',
+  { id:'r_gold2',   name:'보물 창고',     desc:'즉시 골드 +35',        grade:'rare',   icon:'💰', cat:'resource', once:true,
     apply: (b, gs) => { gs.gold += 35; } },
   { id:'r_discount',name:'무기 할인',     desc:'병력 고용비용 -1',     grade:'common', icon:'💰', cat:'resource',
     apply: b => { b.hireCostDiscount += 1; } },
@@ -198,10 +201,30 @@ function rollUpgradeCards(taken, count) {
 
 // ─── 카드 효과 적용 ───────────────────────────────────────────────────────────
 function applyUpgradeCard(card, gs) {
-  card.apply(BONUSES, gs);
+  card.apply(BONUSES, gs);        // 즉시 효과(회복·골드)는 여기서 딱 한 번
   gs.activeUpgrades.push(card.id);
-  gs.battle.maxSlots = Math.max(1, Math.floor((4 + BONUSES.maxSlotBonus) * (BONUSES.pactSlotMult || 1)));
-  refreshTeamStats(gs.battle);   // 이미 고용한 병력에도 즉시 적용
+  reapplyAllBonuses(gs);          // 방금 집은 것까지 포함해 전부 다시 계산
+  refreshTeamStats(gs.battle);    // 이미 고용한 병력에도 즉시 적용
+}
+
+// 편성 슬롯 — 네 군데에서 제각기 계산하고 있었고 그중 둘만 층 이벤트를 반영했다
+function recalcMaxSlots(gs) {
+  if (!gs || !gs.battle) return;
+  gs.battle.maxSlots = Math.max(1,
+    Math.floor((4 + BONUSES.maxSlotBonus) * (BONUSES.pactSlotMult || 1)) + fev('slotBonus', 0));
+}
+
+// ─── 이번 판에 집은 강화 카드를 BONUSES에 되살린다 ───────────────────────────
+// reapplyAllBonuses()가 resetBonuses()로 시작하는데 여기가 빠져 있었다.
+// 웨이브가 시작될 때마다 reapply가 돌므로, 집은 카드는 다음 웨이브에 통째로 사라졌다 —
+// 용병 슬롯이 한 판만 늘었다가 되돌아가던 것이 이것이고, 실은 모든 카드가 그랬다.
+function applyRunUpgrades(gs) {
+  for (const id of (gs.activeUpgrades || [])) {
+    const c = UPGRADE_CARDS.find(x => x.id === id);
+    if (!c) continue;
+    if (c.persist)      c.persist(BONUSES);
+    else if (!c.once)   c.apply(BONUSES, gs);
+  }
 }
 
 // ─── 스킬 트리를 BONUSES에 반영 ──────────────────────────────────────────────
@@ -252,11 +275,9 @@ function calcSoulStones(gs) {
     return Math.max(1, Math.round(base * mult));
   }
 
-  const waveTerm = Math.floor(gs.wave * 0.5);
-  const reached  = gs.wave + (gs.stageCleared ? 1 : 0);
-  const recTerm  = reached > (gs.stats.bestWave || 0) ? 3 : 0;
-  const base     = Math.max(1, waveTerm + caveTerm + killTerm + recTerm);
-  return Math.max(1, Math.round(base * mult));
+  // 훈련 정산 — 아주 적게. 훈련은 심연으로 가기 전에 조작을 익히는 6웨이브짜리 과정이고,
+  // 여기서 보석이 모이면 본편을 시작하기도 전에 영구 성장이 끝나 버린다.
+  return gs.stageCleared ? TRAINING_CLEAR_GEMS : TRAINING_QUIT_GEMS;
 }
 
 // 정산 내역 — 결과 화면에서 그대로 보여준다
@@ -275,10 +296,8 @@ function soulStoneBreakdown(gs) {
     return { rows, mult, gaveUp:!!gs.gaveUp, total: calcSoulStones(gs) };
   }
 
-  const reached = gs.wave + (gs.stageCleared ? 1 : 0);
-  rows.push({ label:'도달 웨이브', value:Math.floor(gs.wave * 0.5), note:`${gs.wave}웨이브 × 0.5` });
-  rows.push({ label:'케이브 레벨', value:gs.caveLevel, note:`Lv.${gs.caveLevel}` });
-  rows.push({ label:'처치',        value:Math.floor((gs.battle.runKills||0)/60), note:`${gs.battle.runKills||0}마리 ÷ 60` });
-  if (reached > (gs.stats.bestWave || 0)) rows.push({ label:'최고 기록 갱신', value:3, note:'신기록!' });
+  rows.push({ label: gs.stageCleared ? '훈련 완주' : '훈련 중단',
+              value: gs.stageCleared ? TRAINING_CLEAR_GEMS : TRAINING_QUIT_GEMS,
+              note: '훈련은 익히는 곳입니다 — 보석은 심연에서 법니다' });
   return { rows, mult, gaveUp:!!gs.gaveUp, total: calcSoulStones(gs) };
 }

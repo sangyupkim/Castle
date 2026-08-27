@@ -219,7 +219,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <div class="wrap">
 <header class="cover">
-  <div class="eyebrow">Game Design Document · v3.9 · 전선마다 다른 수확</div>
+  <div class="eyebrow">Game Design Document · v4.0 · 심연 · 짧아진 훈련</div>
   <h1>듀얼 프론티어</h1>
   <p class="tagline">한 화면에서 두 개의 전선을 동시에 굴리는 모바일 웹 로그라이트.
      끝은 없다 — 얼마나 깊이 내려갔는지가 기록이다.</p>
@@ -228,7 +228,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
     <div><dt>플랫폼</dt><dd>모바일 웹 (480×800 캔버스)</dd></div>
     <div><dt>1회 하강</dt><dd>10~30분 (도달 층에 비례)</dd></div>
     <div><dt>현재 볼륨</dt><dd>훈련 30웨이브 + ∞ 무한 (알고리즘 생성)</dd></div>
-    <div><dt>이번 개정</dt><dd>상단은 EXP · 하단은 골드, 서로 소량씩 (v3.9)</dd></div>
+    <div><dt>이번 개정</dt><dd>탭 스크롤 · 강화 카드 유실 · 훈련 6웨이브 · ∞ 심연 (v4.0)</dd></div>
   </dl>
 </header>
 
@@ -1538,6 +1538,86 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
 </tbody></table></div>
 
 
+
+<h3>화면 아래가 잘려 안 보였다 <span class="rev">v4.0</span></h3>
+
+<p class="lede">플레이 보고: <strong>"스크롤 밑으로 인터페이스들이 내려갔는데 하단 내용을 볼 수가 없어."</strong></p>
+
+<p>스크롤이 없었을 뿐 아니라, 코드가 <strong>자리가 없으면 아예 그리지 않고 있었다.</strong></p>
+<div class="note"><p><span class="mono">if (y &lt; CH-40) { … }</span> — 전투력 요약 전체를 이 조건으로 감쌌고,
+상자 높이도 <span class="mono">CH-y-10</span>, 즉 "화면 잔여분"으로 잡았다.
+편성이 늘어 <span class="mono">y</span>가 밀리면 요약이 통째로 사라졌다.</p></div>
+
+<p>잘라내는 대신 <strong>넘기도록</strong> 바꿨다.</p>
+<ul>
+<li>마을 3탭 본문 전체가 스크롤된다(<span class="mono">gs.ui.pageScroll</span>).
+드래그·휠 모두 건물 상세가 쓰던 배관을 그대로 쓴다.</li>
+<li>상자 높이를 내용에 맞춰 고정했다 — <span class="mono">CH-y</span> 계산을 걷어냈다.</li>
+<li>렌더러에 <strong>스크롤이 반영된 startY</strong>를 넘긴다.
+그림과 버튼 좌표가 같은 값에서 나오므로 탭 판정이 어긋나지 않는다.
+헤더를 침범하지 않도록 본문에 클립을 건다.</li>
+<li>오른쪽 스크롤 막대와 아래쪽 <strong>▼ 아래로 밀어서 더 보기</strong> 그림자.
+<em>더 볼 것이 있다</em>는 사실 자체를 알려야 한다.</li>
+</ul>
+<p>측정 — 만렙 편성 기준 출전준비 탭 본문이 868px, 보이는 높이가 708px.
+<strong>78px가 잘려 있었다.</strong></p>
+
+<h3>강화 카드가 다음 웨이브에 사라지고 있었다 <span class="rev">v4.0</span></h3>
+
+<p class="lede">보고는 <strong>"스테이지 클리어로 용병 슬롯을 얻었는데 처음 얻었을 때만
+하나 늘어나 있고 다음 판부터 다시 줄어들어 있어"</strong>였는데, 파보니 훨씬 컸다.</p>
+
+<p><span class="mono">reapplyAllBonuses()</span>는 <span class="mono">resetBonuses()</span>로 시작해
+스킬 트리 · 서약 · 연구 · 마을 강화 · 각인을 차례로 얹는다.
+<strong>이번 판에 집은 강화 카드(<span class="mono">gs.activeUpgrades</span>)만 빠져 있었다.</strong>
+그리고 <span class="mono">wm.startWave()</span>가 웨이브마다 이 함수를 부른다.</p>
+
+<div class="note"><p><strong>즉 강화 카드는 집은 그 웨이브에만 효과가 있고 다음 웨이브에 전부 사라졌다.</strong>
+웨이브마다 3장 중 1장을 고르는 이 게임의 런 성장축이 통째로 헛돌고 있었다 —
+슬롯은 화면에 숫자로 떠서 눈에 띄었을 뿐이다.</p></div>
+
+<p><span class="mono">applyRunUpgrades(gs)</span>를 추가했다.
+되풀이하면 안 되는 카드가 있어서 표시를 갈랐다.</p>
+<div class="tw"><table>
+<thead><tr><th>표시</th><th class="wrap">뜻</th><th class="wrap">예</th></tr></thead>
+<tbody>
+<tr><td class="mono">once</td><td class="wrap">집는 순간만</td><td class="wrap">🏰 성벽 보수(+20 회복) · 💰 황금 손길(+15골드)</td></tr>
+<tr><td class="mono">persist</td><td class="wrap">지속분만 되살림</td><td class="wrap">🏰 견고한 기지 — 최대HP +20은 유지, 즉시 회복은 한 번</td></tr>
+<tr><td>(없음)</td><td class="wrap"><span class="mono">apply</span> 그대로 재생</td><td class="wrap">나머지 전부</td></tr>
+</tbody></table></div>
+<p>실측 — 슬롯 4 → 5, 재계산 후에도 5. 타워 공격력 +3 유지. 골드 카드는 25에서 안 늘어남.
+겸사겸사 네 군데에 흩어져 있던(그중 둘만 층 이벤트를 반영하던) 슬롯 계산을
+<span class="mono">recalcMaxSlots(gs)</span> 하나로 모았다.</p>
+
+<h3>훈련은 짧고 가난해야 한다 <span class="rev">v4.0</span></h3>
+
+<p class="lede">보고: <strong>"1-2쯤에서 보석이 17이었는데 그걸로 영웅 업글이 모두 다 됐어."</strong>
+그리고 <strong>"튜토리얼의 스테이지 수를 대폭 줄여줘, 10분 정도로."</strong></p>
+
+<div class="tw"><table>
+<caption>훈련에서 나오는 보석</caption>
+<thead><tr><th></th><th class="wrap">이전</th><th class="wrap">지금</th></tr></thead>
+<tbody>
+<tr><td>스테이지 클리어</td><td class="wrap">개당 1~2 (총 11)</td><td class="num"><strong>0</strong></td></tr>
+<tr><td>완주 정산</td><td class="wrap">웨이브×0.5 + 케이브 + 처치 + 신기록</td><td class="num"><strong>2</strong></td></tr>
+<tr><td>중단 정산</td><td class="wrap">위와 동일</td><td class="num"><strong>1</strong></td></tr>
+</tbody></table></div>
+<p>본편을 시작하기도 전에 영구 성장이 끝나면 안 된다. 훈련은 익히는 곳이지 버는 곳이 아니다.</p>
+<p>길이는 <span class="mono">TRAINING_WAVES = 6</span> — 30웨이브는 30분이 넘어
+본편에 닿기 전에 지친다. 실측 <strong>약 6분</strong>(마을을 둘러보면 8~10분).
+<span class="mono">WAVE_DEFS</span>의 나머지 항목은 남겼다 — 곡선의 참고이자 늘리고 싶을 때의 여유다.</p>
+
+<h3>"무한 모드"에서 "∞ 심연"으로 <span class="rev">v4.0</span></h3>
+<p class="lede">보고: <strong>"무한모드는 이름이 서브컨텐츠 같은 이름이야."</strong> 맞는 말이다.</p>
+<p>이 게임의 본편인데 <em>모드</em>가 붙어 있으면 곁다리로 읽힌다.
+<strong>∞ 심연</strong>으로 바꿨다 — 이미 쓰고 있던 어휘(하강 · 층 · 심층 · 관문)와 이어지고,
+"내려간다"는 이 게임의 동사와 같은 결이다.
+건물의 <strong>♾️ 무한 강화</strong>는 다른 것이라 그대로 뒀다.</p>
+
+<h3>덤 — 병력 HP가 276.40000000000003 <span class="rev">v4.0</span></h3>
+<p>고용 카드의 스탯 미리보기가 반올림 없이 그대로 찍히고 있었다.
+실제 유닛(<span class="mono">applyUnitStats</span>)은 반올림하므로 표시만 어긋난 것인데,
+그 김에 미리보기에 빠져 있던 서약 배율도 함께 반영했다.</p>
 
 <h3>전선마다 다른 것을 준다 <span class="rev">v3.9</span></h3>
 

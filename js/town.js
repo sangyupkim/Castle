@@ -284,8 +284,9 @@ function reapplyAllBonuses(gs) {
   const rn = gs.research || 0;
   if (rn > 0) { BONUSES.towerDmg += rn * RESEARCH_TOWER_DMG; BONUSES.unitAtk += rn * RESEARCH_UNIT_ATK; }
   applyTownUpgrades(gs);
+  applyRunUpgrades(gs);   // 이번 판에 집은 강화 카드
   // 각인은 마지막에 — 스킬 트리와 마을 강화 위에 얹힌다
   const sg = (typeof activeSigil === 'function') ? activeSigil() : null;
   if (sg && sg.apply) sg.apply(BONUSES);
-  if (gs.battle) gs.battle.maxSlots=Math.max(1,Math.floor((4+BONUSES.maxSlotBonus)*(BONUSES.pactSlotMult||1)));
+  recalcMaxSlots(gs);
 }
