@@ -408,16 +408,26 @@ function renderUIBar(ctx, gs, wm) {
     ctx.fillText(`웨이브 ${si.waveInStage+1}/3`, 30, cy-12);
   }
 
-  // 타이머
+  // 타이머 — 이제 "몹이 나오는 시간"이다.
+  // 다 나온 뒤에는 판을 비울 때까지 계속되므로 그 상태를 따로 알려준다.
+  const cleaning = wm.phase==='active' && wm.timer <= 0;
   const tv = wm.phase==='active'       ? Math.ceil(wm.timer)
            : wm.phase==='intermission' ? Math.ceil(wm.intermissionTimer)
            : waveDuration();
-  const tlabel = wm.phase==='intermission'
-    ? `준비 ${tv}s`
-    : `${String(Math.floor(tv/60)).padStart(2,'0')}:${String(tv%60).padStart(2,'0')}`;
-  ctx.fillStyle = wm.phase==='active' && tv<=10 ? '#ef4444' : COLORS.gold;
+  let tlabel;
+  if (cleaning) {
+    const leftTop = gs.defenseEnemies.filter(e=>!e.dead&&!e.reached).length;
+    const leftBot = gs.arena.mobs.filter(m=>!m.dead).length;
+    tlabel = `정리 중 ${leftTop+leftBot}`;
+  } else if (wm.phase==='intermission') {
+    tlabel = `준비 ${tv}s`;
+  } else {
+    tlabel = `${String(Math.floor(tv/60)).padStart(2,'0')}:${String(tv%60).padStart(2,'0')}`;
+  }
+  ctx.fillStyle = cleaning ? '#22d3ee'
+                : (wm.phase==='active' && tv<=10 ? '#ef4444' : COLORS.gold);
   ctx.font='bold 13px monospace'; ctx.textAlign='left';
-  ctx.fillText(`⏱ ${tlabel}`, 8, cy+4);
+  ctx.fillText(`${cleaning?'🧹':'⏱'} ${tlabel}`, 8, cy+4);
 
   ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif';
   ctx.fillText(`누적 ${gs.battle.totalGoldEarned}💰 · 💎${gs.soulStones}`, 8, cy+19);

@@ -28,6 +28,7 @@ function createWaveManager() {
       }
       this.phase     = 'idle';
       this.timer     = waveDuration();
+      this.cleanup   = 0;
       this.elapsed   = 0;
       this.defenseQueues = [];
       this.wipedAt   = null;
@@ -41,6 +42,7 @@ function createWaveManager() {
       this.phase   = 'active';
       this.elapsed = 0;
       this.timer   = waveDuration();
+      this.cleanup = 0;      // 스폰이 끝난 뒤 흐른 시간
       this.wipedAt = null;
 
       const def = waveDefFor(this.waveIndex);
@@ -106,6 +108,8 @@ function createWaveManager() {
 
       this.elapsed += dt;
       this.timer = Math.max(0, waveDuration() - this.elapsed);
+      const spawnOver = this.timer <= 0;
+      if (spawnOver) this.cleanup += dt;
 
       // 상단 적 스폰
       for (const q of this.defenseQueues) {
@@ -156,17 +160,28 @@ function createWaveManager() {
         }
       }
 
-      // 종료 조건 — 웨이브는 타이머로만 끝난다.
-      // 상단을 일찍 막았다고 해서 하단 자원 확보 시간까지 잘리면 안 된다.
-      // 양쪽 다 더 진행될 여지가 없을 때만 조기 종료한다.
-      const defDone = this.defenseQueues.every(q => q.remaining <= 0) &&
-                      gs.defenseEnemies.every(e => e.dead || e.reached);
-      const batOver = (gs.battle.phase === 'retreated') ||
-                      (gs.battle.phase === 'idle_defeated' && gs.arena.mobs.length === 0);
+      // ── 종료 조건 ──
+      // 타이머는 "몹이 나오는 시간"이다. 그 시간이 끝나도 판에 몹이 남아 있으면
+      // 웨이브는 계속된다 — 양쪽 다 비어야 끝난다.
+      //   상단: 스폰이 끝나고 경로 위에 살아 있는 적이 없다 (죽었거나 기지에 닿았다)
+      //   하단: 몹이 다 죽었거나, 후퇴했거나, 전멸해서 더 진행될 여지가 없다
+      const defClear = this.defenseQueues.every(q => q.remaining <= 0) &&
+                       !gs.defenseEnemies.some(e => !e.dead && !e.reached);
+      const arenaClear = !gs.arena.mobs.some(m => !m.dead);
+      const batClear = (gs.battle.phase === 'retreated') ||
+                       (gs.battle.phase === 'idle_defeated' && arenaClear) ||
+                       (spawnOver && arenaClear);
 
-      if (this.timer <= 0 || (defDone && batOver)) {
+      // 안 죽는 조합에 걸려도 영원히 끌지는 않는다
+      if (this.cleanup >= WAVE_CLEANUP_MAX) {
+        for (const e of gs.defenseEnemies) if (!e.dead && !e.reached) e.reached = true;
+        if (gs.arena.mobs.length) clearArena(gs);
+        addLog(gs.battle, '⏱ 정리 시간이 끝났습니다', '#64748b');
         this.endWave(gs);
+        return;
       }
+
+      if (spawnOver && defClear && batClear) this.endWave(gs);
     },
 
     endWave(gs) {

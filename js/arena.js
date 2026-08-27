@@ -140,6 +140,8 @@ function createArena() {
 function updateArenaSpawn(gs, dt) {
   const a = gs.arena, b = gs.battle;
   if (b.phase !== 'fighting') return;
+  // 스폰 시간이 끝나면 더 나오지 않는다 — 남은 것을 정리하면 웨이브가 끝난다
+  if (typeof wm !== 'undefined' && wm && wm.timer <= 0) return;
 
   a.spawnTimer -= dt;
   if (a.spawnTimer > 0) return;

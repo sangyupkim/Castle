@@ -1,7 +1,7 @@
 'use strict';
 
 // 타이틀 화면에 표기되는 버전
-const GAME_VERSION = 'v0.5.0';
+const GAME_VERSION = 'v0.5.1';
 
 // 포기하고 정산하면 보석을 깎는다. 한 판이 10~30분이라 접을 길은 있어야 하지만,
 // 접는 쪽이 늘 이득이면 아무도 마지막 층을 버티지 않는다.
@@ -201,6 +201,16 @@ const SPAWN_MIN_GAP    = 0.28;  // 아무리 많아도 이보다 촘촘히는 �
 // 상단은 60초 내내 손이 바쁠 이유가 있어야 하는 곳이라, 도착 간격을 1.3초까지 좁힌다.
 // 마릿수가 늘어난 만큼 마리당 보상은 buildSpawnPlan의 rewardMult가 자동으로 낮춘다.
 const SPAWN_TARGET_GAP = 1.3;   // 이보다 뜸하면 상단이 비어 보인다 — 마릿수를 채운다
+
+// 다만 훈련 첫 웨이브까지 1.3초로 채우면 화살탑 한 기로는 손도 못 댄다 —
+// 1-1은 타워 한 기로 막을 수 있어야 하는 곳이다. 처음 세 웨이브만 성기게 잡고
+// 그 뒤로는 곧장 기본값으로 붙인다.
+const OPENING_TARGET_GAPS = [4.5, 3.2, 2.2];
+function spawnTargetGap(waveIndex) {
+  const t = waveIndex || 0;
+  if (isEndlessRun()) return SPAWN_TARGET_GAP;   // 심연은 첫 층부터 본편이다
+  return t < OPENING_TARGET_GAPS.length ? OPENING_TARGET_GAPS[t] : SPAWN_TARGET_GAP;
+}
 // 마지막 스폰 시각 (웨이브 길이 대비).
 // 기본은 "마지막 한 마리가 웨이브가 끝날 때 기지에 닿도록" 역산한 시각이지만,
 // 그대로 두면 고블린 웨이브는 39초에 스폰이 끊기고 타워가 남은 것을 다 잡아버려
@@ -233,13 +243,14 @@ function buildSpawnPlan(defenseEnemies, waveIndex, opts) {
   const window = Math.max(1, dur - Math.min.apply(null, groups.map(g => g.walk)) - SPAWN_FIRST_AT);
   const total  = groups.reduce((a, g) => a + g.count, 0);
   // 창은 넓은데 마릿수가 적으면 뜸해서 비어 보인다 — 구성 비율은 지키고 전체를 늘린다
+  const target = spawnTargetGap(waveIndex);
   const gap = window / Math.max(1, total);
   // 마릿수를 늘렸으면 마리당 보상을 그만큼 낮춘다.
   // 바꾼 것은 "어떻게 보이는가"이지 "얼마를 버는가"가 아니다 —
   // 이 보정이 없으면 1-1 웨이브 하나가 4배를 벌어들여 골드 조이기가 통째로 풀린다.
   let fill = 1;
-  if (gap > SPAWN_TARGET_GAP) {
-    fill = gap / SPAWN_TARGET_GAP;
+  if (gap > target) {
+    fill = gap / target;
     for (const g of groups) g.count = Math.max(1, Math.round(g.count * fill));
   }
   const rewardMult = 1 / fill;
@@ -835,9 +846,11 @@ const TRAINING_QUIT_GEMS  = 1;   // 중간에 접음
 
 const WAVE_DEFS = [
   // ── 1-1 : 고블린 입문 · 기본 조작 ────────────────────────────────────────
-  { defenseEnemies:[{type:'goblin',count:4,interval:2000}], arenaPool:[['goblin',10]] },
-  { defenseEnemies:[{type:'goblin',count:5,interval:1800}], arenaPool:[['goblin',10]] },
-  { defenseEnemies:[{type:'goblin',count:6,interval:1600}], arenaPool:[['goblin',10]] },
+  // 1-1은 영웅 하나로 하단을 정리할 수 있어야 한다 — 버는 돈은 적지만 손에 익히는 곳이다.
+  // spawnMult는 아레나 스폰 간격 배수다 (클수록 뜸하게 나온다).
+  { defenseEnemies:[{type:'goblin',count:4,interval:2000}], arenaPool:[['goblin',10]], spawnMult:4.2 },
+  { defenseEnemies:[{type:'goblin',count:5,interval:1800}], arenaPool:[['goblin',10]], spawnMult:2.6 },
+  { defenseEnemies:[{type:'goblin',count:6,interval:1600}], arenaPool:[['goblin',10]], spawnMult:1.7 },
   // ── 1-2 : 광견 등장 · 수동 조작의 첫 필요 ────────────────────────────────
   { defenseEnemies:[{type:'goblin',count:6,interval:1500},{type:'runner',count:2,interval:3000}], arenaPool:[['goblin',10],['hound',3]] },
   { defenseEnemies:[{type:'goblin',count:7,interval:1400},{type:'runner',count:3,interval:2600}], arenaPool:[['goblin',9],['hound',5]] },
@@ -1290,7 +1303,16 @@ function fev(key, dflt) {
   const e = (typeof gs !== 'undefined' && gs) ? gs.floorEvent : null;
   return (e && e[key] !== undefined) ? e[key] : dflt;
 }
+// 이 시간은 이제 "웨이브 길이"가 아니라 "몹이 나오는 시간"이다.
+// 예전에는 타이머가 0이 되면 경로 위에 몹이 남아 있어도 웨이브가 끝났다 —
+// 서리탑으로 느리게 만들수록 손해를 보는 이상한 규칙이었고,
+// 잘 막을수록 마지막 몹이 기지에 닿지 못해 처치 보상도 놓쳤다.
+// 이제 스폰이 끝난 뒤에도 판이 빌 때까지 계속된다.
 function waveDuration() { return fev('duration', WAVE_DURATION); }
+
+// 정리 구간의 상한. 안 죽는 조합이 걸려도 웨이브가 영원히 끝나지는 않게 한다.
+// 여기 걸리면 남은 상단 몹은 기지에 닿은 것으로, 하단 몹은 물러난 것으로 친다.
+const WAVE_CLEANUP_MAX = 90;
 
 // 10층마다 관문 — 물량이 줄고 대형·보스가 몰려온다. 조합이 안 맞으면 여기서 막힌다.
 function isGateTier(tier) { return tier > 0 && tier % 10 === 0; }
