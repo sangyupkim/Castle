@@ -2661,7 +2661,13 @@ function renderTownPageArmy(ctx, gs, startY) {
   drawBtn(ctx,6+btnW2+8,y,btnW2,btnH2,pBat?'✅ 하단 전투 배치':'하단 전투 배치',pBat?'#4c1d95':'#1e293b',pBat?'#a78bfa':'#f87171',!hero.dead);
   gs.ui.heroDefBtn={x:6,y,w:btnW2,h:btnH2};
   gs.ui.heroBatBtn={x:6+btnW2+8,y,w:btnW2,h:btnH2};
-  y+=btnH2+10;
+  // 어느 쪽이든 반대쪽 몫도 들어온다 — 고르는 것은 비중이지 포기가 아니다
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  ctx.fillStyle='#64748b'; ctx.font='8px sans-serif';
+  ctx.fillText('EXP 많이 · 골드 조금', 6+btnW2/2, y+btnH2+3);
+  ctx.fillText('골드 많이 · EXP 조금', 6+btnW2+8+btnW2/2, y+btnH2+3);
+  ctx.textAlign='left';
+  y+=btnH2+20;
 
   // ── 병력 고용 (5종, 2열 그리드) ─────────────────────────────────────────
   ctx.fillStyle='#64748b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';

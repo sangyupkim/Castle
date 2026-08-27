@@ -602,6 +602,14 @@ function hurtMob(gs, m, dmg, color) {
     }
   }
 
+  // 하단에서도 영웅이 큰다. 아레나는 처치 수가 훨씬 많으므로 한 마리 값을 낮춘다.
+  // 영웅이 상단에 서 있어도 소량은 들어온다 — 반대쪽 전선의 몫이다.
+  if (typeof grantHeroExp === 'function') {
+    const bt = BATTLE_MOB_TYPES[m.typeId];
+    const base = (bt ? bt.goldReward : 2) * ARENA_EXP_BASE;
+    grantHeroExp(base, 'battle', false, m.x, m.y);
+  }
+
   applyDeathAffixes(gs, m);
 }
 

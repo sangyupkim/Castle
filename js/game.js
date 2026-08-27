@@ -1045,9 +1045,18 @@ function drawFloaties(ctx) {
 }
 
 // ─── 상단 처치 보상 ──────────────────────────────────────────────────────────
+// 상단 골드는 한 마리에 1골드도 안 되는 경우가 많다.
+// 마리마다 올림하면 축소가 통째로 무효가 되므로(실측: 23% → 14%밖에 안 줄었다)
+// 소수점을 모아 두었다가 1이 넘을 때만 지급한다.
+let _defGoldFrac = 0;
+
 function onDefenseKill(e, byHero) {
   const tpl  = ENEMY_TYPES[e.typeId] || {};
-  const gold = Math.max(1, Math.round((e.reward || 1) * BONUSES.defenseGoldMult));
+  // 상단은 막는 곳이지 버는 곳이 아니다 — 현상수배만 값을 그대로 받는다
+  const scale = e.isBounty ? 1 : DEFENSE_GOLD_SCALE;
+  _defGoldFrac += (e.reward || 1) * BONUSES.defenseGoldMult * scale;
+  const gold = Math.floor(_defGoldFrac);
+  _defGoldFrac -= gold;
 
   // 현상수배 — 잡아야만 보석이 들어온다
   if (e.gems > 0) {
@@ -1063,17 +1072,30 @@ function onDefenseKill(e, byHero) {
   gs.battle.totalGoldEarned += gold;
   gs.battle.runKills = (gs.battle.runKills || 0) + 1;
   gs.stats.totalKills++;
-  spawnFloaty(`+${gold}💰`, e.x, e.y - 14, COLORS.gold);
+  if (gold > 0) spawnFloaty(`+${gold}💰`, e.x, e.y - 14, COLORS.gold);
   FX.burst(e.x, e.y, tpl.color || '#fff', 12, 14);
   SFX.kill();
 
-  // 영웅이 상단에 있으면 EXP. 직접 처치는 전액, 타워 처치는 40%
-  if (gs.hero.placement === 'defense' && !gs.hero.dead) {
-    const exp = (tpl.reward || 2) * BONUSES.heroExpMult * (byHero ? 1 : 0.4);
-    if (exp >= 1) {
-      heroGainExp(exp);
-      spawnFloaty(`EXP+${Math.floor(exp)}`, gs.hero.defX, gs.hero.defY - 26, '#f59e0b');
-    }
+  grantHeroExp(tpl.reward || 2, 'defense', !!byHero, e.x, e.y);
+}
+
+// ─── 영웅 경험치 ─────────────────────────────────────────────────────────────
+// 상단·하단 어느 쪽 처치든 여기로 모인다.
+// 영웅이 서 있는 전선이면 많이, 반대쪽이면 소량 — 배치는 비중을 고르는 일이지
+// 한쪽을 통째로 포기하는 일이 아니다.
+function grantHeroExp(baseReward, side, direct, fx, fy) {
+  const hero = gs.hero;
+  if (hero.dead || hero.placement === 'none') return;
+  const home = (hero.placement === side);
+  const rate = home ? (direct ? HERO_EXP_DIRECT : HERO_EXP_ASSIST) : HERO_EXP_AWAY;
+  const exp  = (baseReward || 0) * rate * BONUSES.heroExpMult;
+  if (exp <= 0) return;
+  heroGainExp(exp);
+  // 소수점짜리까지 띄우면 화면이 숫자로 뒤덮인다 — 눈에 띄는 것만 알린다
+  if (exp >= 1 && home) {
+    const x = (fx !== undefined) ? fx : CW / 2;
+    const y = (fy !== undefined) ? fy : DEFENSE_H / 2;
+    spawnFloaty(`EXP+${Math.floor(exp)}`, x, y - 22, '#f59e0b');
   }
 }
 
@@ -1386,6 +1408,7 @@ function resetGame() {
   _paused   = false;
   _giveUpArmed = false;
   _breachAccum = 0;
+  _defGoldFrac = 0;
   // 잠긴 타워가 선택돼 있으면 화살탑으로 되돌린다
   if (!isUnlocked(gs.selectedTowerType)) gs.selectedTowerType = 'arrow';
   refreshHeroShop(gs);

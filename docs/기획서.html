@@ -219,7 +219,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <div class="wrap">
 <header class="cover">
-  <div class="eyebrow">Game Design Document · v3.8 · 두 전선의 길이</div>
+  <div class="eyebrow">Game Design Document · v3.9 · 전선마다 다른 수확</div>
   <h1>듀얼 프론티어</h1>
   <p class="tagline">한 화면에서 두 개의 전선을 동시에 굴리는 모바일 웹 로그라이트.
      끝은 없다 — 얼마나 깊이 내려갔는지가 기록이다.</p>
@@ -228,7 +228,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
     <div><dt>플랫폼</dt><dd>모바일 웹 (480×800 캔버스)</dd></div>
     <div><dt>1회 하강</dt><dd>10~30분 (도달 층에 비례)</dd></div>
     <div><dt>현재 볼륨</dt><dd>훈련 30웨이브 + ∞ 무한 (알고리즘 생성)</dd></div>
-    <div><dt>이번 개정</dt><dd>도착 시각으로 짜는 상단 스폰 편성 (v3.8)</dd></div>
+    <div><dt>이번 개정</dt><dd>상단은 EXP · 하단은 골드, 서로 소량씩 (v3.9)</dd></div>
   </dl>
 </header>
 
@@ -1538,6 +1538,57 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
 </tbody></table></div>
 
 
+
+<h3>전선마다 다른 것을 준다 <span class="rev">v3.9</span></h3>
+
+<p class="lede">요청: <strong>"상단 처치 골드는 진짜 소량만, 대신 하단에서 싸울 때도
+영웅이 소량의 경험치를 얻게. 어느 쪽 비중이 높냐에 따라 배치하되 반대의 보너스도 얻게."</strong></p>
+
+<h4>한쪽이 EXP를 독점하고 있었다</h4>
+<p>영웅 배치는 두 갈래인데, <strong>상단에 세우면 EXP가 들어오고 하단에 세우면 0이었다.</strong>
+그래서 배치가 "이번 층에 어디가 급한가"가 아니라 "영웅을 키울 거냐 말 거냐"가 됐다 —
+<strong>답이 하나뿐인 선택은 선택이 아니다.</strong></p>
+<p>골드 쪽도 어정쩡했다. 실측하니 상단이 전체 수입의 <strong>23%</strong>였다 —
+막는 곳이면서 버는 곳이기도 한 애매한 위치.</p>
+
+<div class="tw"><table>
+<caption>지금</caption>
+<thead><tr><th></th><th class="wrap">골드</th><th class="wrap">영웅 EXP</th></tr></thead>
+<tbody>
+<tr><td><strong>상단</strong> 타워디펜스</td><td class="wrap">극소량 — 전체 수입의 7~8%</td><td class="wrap">배치 시 직접 처치 <span class="mono">1.00</span> · 타워 처치 <span class="mono">0.40</span></td></tr>
+<tr><td><strong>하단</strong> 아레나</td><td class="wrap">주 수입</td><td class="wrap">배치 시 <span class="mono">0.40</span></td></tr>
+<tr class="total"><td>반대쪽 전선</td><td class="wrap">—</td><td class="wrap"><strong><span class="mono">0.15</span></strong> ← "반대의 보너스"</td></tr>
+</tbody></table></div>
+
+<p>상단·하단 두 갈래로 흩어져 있던 계산을
+<span class="mono">grantHeroExp(baseReward, side, direct)</span> 하나로 모았다.
+영웅이 서 있는 전선이면 많이, 반대쪽이면 소량 — 어느 쪽에 서든 양쪽에서 들어온다.</p>
+
+<h4>헛디딘 곳 — 올림이 축소를 먹었다</h4>
+<p><span class="mono">DEFENSE_GOLD_SCALE = 0.25</span>를 넣고 재보니 상단 비중이
+23%에서 <strong>14%밖에</strong> 안 줄었다. <span class="mono">Math.max(1, …)</span>가 걸려 있어서,
+<strong>이미 1골드짜리가 된 적은 아무리 곱해도 1골드</strong>였다 —
+v3.8의 <span class="mono">rewardMult</span>가 초반 적 보상을 이미 1까지 내려둔 상태였다.</p>
+<p>소수점을 모아 두었다가 1이 넘을 때만 지급하도록 바꿨다(<span class="mono">_defGoldFrac</span>).
+0골드 처치에는 골드 플로티를 띄우지 않는다 — 상단은 원래 푼돈이다.</p>
+
+<h4>실측 — 배치별 수확</h4>
+<p>같은 드라이버로 1-1부터 돌려 웨이브당으로 정규화했다.</p>
+<div class="tw"><table>
+<thead><tr><th>배치</th><th class="num">웨이브당 EXP</th><th class="num">웨이브당 골드</th><th class="num">상단 골드 비중</th></tr></thead>
+<tbody>
+<tr><td>👑 상단</td><td class="num"><strong>70</strong></td><td class="num">116</td><td class="num">8%</td></tr>
+<tr><td>👑 하단</td><td class="num">44</td><td class="num"><strong>136</strong></td><td class="num">7%</td></tr>
+</tbody></table></div>
+<p>상단은 EXP가 59% 많고, 하단은 골드가 많으면서 더 오래 버틴다(웨이브 10 대 6).
+하단 배치의 EXP는 <strong>0에서 44로</strong> 올라왔다 — 이게 "반대의 보너스"다.</p>
+<div class="note"><p><span class="mono">ARENA_EXP_BASE</span>는 실측으로 맞춰 0.70에 놓았다.
+처음 1.40으로 잡았을 때는 하단이 EXP까지 앞서서 <strong>문제가 반대 방향으로 뒤집혔다</strong> —
+독점하는 쪽이 바뀌었을 뿐 선택이 없기는 마찬가지였다.</p></div>
+<p>편성 화면의 배치 버튼 아래에 <strong>EXP 많이 · 골드 조금</strong> /
+<strong>골드 많이 · EXP 조금</strong>을 적어 고르기 전에 보이게 했다.</p>
+<p><strong>곡선.</strong> 무한 첫 판 12층(직전 11층) · 훈련 드라이버 웨이브 8(동일) ·
+1-1 웨이브 2 시작 골드 32 · 프레임 16.7ms.</p>
 
 <h3>두 전선의 길이가 달랐다 <span class="rev">v3.8</span></h3>
 
