@@ -45,18 +45,21 @@ function createWaveManager() {
 
       const def = waveDefFor(this.waveIndex);
 
-      // 상단 스폰 큐
+      // ── 상단 스폰 편성 ──
+      // 예전에는 웨이브 정의에 적힌 간격을 그대로 썼는데, 그러면 초반 웨이브가
+      // 28초쯤에 상단을 다 비우고 남은 30초를 아레나만 돌았다. 두 전선의 길이가 달랐다.
+      // 이제는 "마지막 한 마리가 60초에 기지에 닿는다"를 기준으로 역산한다 —
+      // 웨이브 정의의 interval은 더 이상 쓰지 않고, 마릿수와 구성만 읽는다.
       const countMult = 1 + this.waveIndex * DEF_WAVE_COUNT_SCALE;
+      // 스폰속도 보너스와 무한 밀도는 간격이 아니라 마릿수로 받는다.
+      // 간격을 건드리면 도착 시각이 흐트러져 위 원칙이 깨진다.
       const spawnMult = BONUSES.spawnSpeedMult || 1;
-      // 무한 구간에서는 간격을 좁히고 그만큼 마릿수를 늘린다 —
-      // 웨이브 길이는 그대로 두고 초당 도착량만 올리기 위해서다.
       const density   = endlessDensityMult(this.waveIndex);
-      this.defenseQueues = def.defenseEnemies.map(d => ({
-        type: d.type,
-        remaining: Math.max(1, Math.round(d.count * countMult / density)),
-        interval: (d.interval / 1000) / spawnMult * density,
-        nextSpawn: 0.5
-      }));
+      this.defenseQueues = buildSpawnPlan(def.defenseEnemies, this.waveIndex, {
+        duration:  waveDuration(),
+        countMult: countMult,
+        extraMult: spawnMult / Math.max(0.01, density)
+      });
 
       // 예약해둔 현상수배는 웨이브 시작 조금 뒤에 등장한다
       this.bountyTimer = gs.bountyPending ? BOUNTY_SPAWN_DELAY : null;
@@ -109,7 +112,7 @@ function createWaveManager() {
         if (q.remaining <= 0) continue;
         q.nextSpawn -= dt;
         if (q.nextSpawn <= 0) {
-          gs.defenseEnemies.push(makeDefenseEnemy(q.type, this.waveIndex));
+          gs.defenseEnemies.push(makeDefenseEnemy(q.type, this.waveIndex, { rewardMult: q.rewardMult }));
           q.remaining--;
           q.nextSpawn = q.interval;
         }

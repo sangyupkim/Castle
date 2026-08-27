@@ -5,7 +5,7 @@
 // 설치할 때 통째로 캐시에 넣고 그 뒤로는 캐시에서 바로 준다.
 //
 // 버전을 올리면 새 캐시를 만들고 옛 캐시를 지운다 — 게임을 고칠 때마다 CACHE만 올리면 된다.
-const CACHE = 'dual-frontier-v0.3.9';
+const CACHE = 'dual-frontier-v0.4.0';
 
 const SHELL = [
   '.', 'index.html', 'manifest.webmanifest',

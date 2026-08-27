@@ -219,7 +219,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <div class="wrap">
 <header class="cover">
-  <div class="eyebrow">Game Design Document · v3.7 · 플레이 보고 반영</div>
+  <div class="eyebrow">Game Design Document · v3.8 · 두 전선의 길이</div>
   <h1>듀얼 프론티어</h1>
   <p class="tagline">한 화면에서 두 개의 전선을 동시에 굴리는 모바일 웹 로그라이트.
      끝은 없다 — 얼마나 깊이 내려갔는지가 기록이다.</p>
@@ -228,7 +228,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
     <div><dt>플랫폼</dt><dd>모바일 웹 (480×800 캔버스)</dd></div>
     <div><dt>1회 하강</dt><dd>10~30분 (도달 층에 비례)</dd></div>
     <div><dt>현재 볼륨</dt><dd>훈련 30웨이브 + ∞ 무한 (알고리즘 생성)</dd></div>
-    <div><dt>이번 개정</dt><dd>세이브 유실 · 마을 튕김 · 안내 끄기 · 영웅 결장 (v3.7)</dd></div>
+    <div><dt>이번 개정</dt><dd>도착 시각으로 짜는 상단 스폰 편성 (v3.8)</dd></div>
   </dl>
 </header>
 
@@ -1538,6 +1538,72 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
 </tbody></table></div>
 
 
+
+<h3>두 전선의 길이가 달랐다 <span class="rev">v3.8</span></h3>
+
+<p class="lede">플레이 보고: <strong>"타워디펜스는 금방 끝나고 아래쪽 아레나는 60초 동안
+진행되는 게 밸런스가 안 맞는 것 같아."</strong> 맞는 지적이었고, 재보니 생각보다 심했다.</p>
+
+<div class="tw"><table>
+<caption>마지막 적이 기지에 닿는 시각 (수정 전)</caption>
+<thead><tr><th>웨이브</th><th class="num">1</th><th class="num">3</th><th class="num">6</th><th class="num">9</th><th class="num">12</th><th class="num">21</th><th class="num">30</th></tr></thead>
+<tbody>
+<tr><td>도착</td><td class="num">27.7초</td><td class="num">31.3초</td><td class="num">34.7초</td><td class="num">46.6초</td><td class="num">62.1초</td><td class="num">74.1초</td><td class="num">107.8초</td></tr>
+</tbody></table></div>
+
+<p>초반은 <strong>28초에 상단이 텅 비고 남은 32초를 아레나만</strong> 돌았고,
+후반은 반대로 넘쳐서 웨이브가 끝나도 절반이 경로 위에 남았다.
+원인은 단순하다 — 웨이브 정의에 적힌 <span class="mono">interval</span>을 그대로 썼는데,
+그 숫자는 <strong>"기지에 언제 닿는가"와 아무 상관이 없었다.</strong>
+고블린은 경로 1,236px를 58px/s로 걸어 21초가 걸리고 보스는 58초가 걸리는데,
+스폰 간격은 그 사실을 모르는 채로 손으로 적혀 있었다.</p>
+
+<h4>스폰을 시각이 아니라 도착으로 짠다</h4>
+<p><span class="mono">buildSpawnPlan()</span>이 웨이브마다 일정을 새로 계산한다.
+웨이브 정의에서는 <strong>구성과 마릿수만</strong> 읽고
+<span class="mono">interval</span>은 더 이상 쓰지 않는다.</p>
+<ol>
+<li><strong>도보 시간을 먼저 잰다.</strong> <span class="mono">pathTravelTime()</span>이
+현재 경로 길이를 그 종류의 실효 속도(무한 배율 · 서약 · 층 이벤트 포함)로 나눈다.
+경로는 층마다 바뀌므로 경로 배열을 키로 캐시한다.</li>
+<li><strong>마지막 스폰 = 웨이브 길이 − 도보 시간.</strong> 마지막 한 마리가 60초에 닿는다.</li>
+<li><strong>뜸하면 채운다.</strong> 스폰 창을 마릿수로 나눈 간격이
+<span class="mono">SPAWN_TARGET_GAP</span>(2.2초)보다 크면
+구성 비율을 지킨 채 전체 마릿수를 늘린다.</li>
+<li><strong>꼬리를 메운다.</strong> 빠른 적(도보가 웨이브의 절반 미만)은 웨이브의 80%까지
+계속 내보낸다. 2번만 지키면 39초에 스폰이 끊기고 타워가 남은 것을 다 잡아버려
+마지막 15초가 다시 텅 빈다 — 실측에서 확인했다.
+늦게 나온 놈은 다음 층으로 넘어간다(이월 시스템이 받는다).</li>
+<li><strong>느린 적은 몰리지 않게.</strong> 도보 58초짜리 보스는 2번대로면 1.7초 안에 다 쏟아진다.
+하한을 웨이브의 55%로 둬서 벽이 되지 않게 한다.</li>
+</ol>
+
+<h4>실측 — 1웨이브 상단이 비어 있는 시간</h4>
+<p>같은 편성(화살탑 2기 + 궁수 + 영웅)으로 1웨이브를 끝까지 돌려 매 초 경로 위 개체 수를 셌다.</p>
+<div class="tw"><table>
+<thead><tr><th></th><th class="num">빈 시간</th><th class="wrap">초당 경로 위 개체 수 (0→60초)</th></tr></thead>
+<tbody>
+<tr><td>이전</td><td class="num"><strong>63%</strong></td><td class="mono wrap">111000001110000111100001110000011100001111000000000000</td></tr>
+<tr class="total"><td>지금</td><td class="num"><strong>6~11%</strong></td><td class="mono wrap">111111111111111111111111111111111211211211222222222000</td></tr>
+</tbody></table></div>
+
+<h4>마릿수를 늘렸으면 보상은 낮춘다</h4>
+<p>여기서 한 번 헛디뎠다. 채우기만 넣고 재보니 1-1 웨이브 2 시작 골드가
+27에서 <strong>67</strong>로 뛰었다 — v3.2에서 조인 골드 경제가 통째로 풀린 것이다.</p>
+<p>바꾼 것은 <em>어떻게 보이는가</em>이지 <em>얼마를 버는가</em>가 아니다.
+채우기 배율만큼 <strong>마리당 보상을 나눈다</strong>(<span class="mono">rewardMult</span>).
+17마리가 1골드씩 주면 4마리가 3골드씩 주던 것과 같다.</p>
+<div class="tw"><table>
+<caption>웨이브별 시작 골드</caption>
+<thead><tr><th>웨이브</th><th class="num">2</th><th class="num">3</th><th class="num">4</th><th class="num">5</th><th class="num">6</th></tr></thead>
+<tbody>
+<tr><td>v3.2 기준</td><td class="num">26</td><td class="num">117</td><td class="num">245</td><td class="num">370</td><td class="num">254</td></tr>
+<tr class="total"><td>지금</td><td class="num">27</td><td class="num">132</td><td class="num">271</td><td class="num">400</td><td class="num">272</td></tr>
+</tbody></table></div>
+
+<div class="note"><p><strong>곡선은 그대로다.</strong> 무한 첫 판(강화 없음) 11층 — 직전과 동일.
+무한 만렙 30층 — 직전 31층으로 시드 편차 범위.
+프레임 중앙값 16.7ms / p95 16.9ms.</p></div>
 
 <h3>세이브가 판을 절반만 담고 있었다 <span class="rev">v3.7</span></h3>
 

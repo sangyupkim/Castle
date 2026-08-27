@@ -1,7 +1,7 @@
 'use strict';
 
 // 타이틀 화면에 표기되는 버전
-const GAME_VERSION = 'v0.3.9';
+const GAME_VERSION = 'v0.4.0';
 
 // 포기하고 정산하면 보석을 깎는다. 한 판이 10~30분이라 접을 길은 있어야 하지만,
 // 접는 쪽이 늘 이득이면 아무도 마지막 층을 버티지 않는다.
@@ -142,6 +142,101 @@ function nearestFreeCell(col, row, occupied) {
 const AIR_PATH_L = [[4,0],[1,1],[0,3],[0,5],[2,6],[4,6]];
 const AIR_PATH_R = [[4,0],[7,1],[8,3],[8,5],[6,6],[4,6]];
 function airPathFor(n) { return (n % 2 === 0) ? AIR_PATH_L : AIR_PATH_R; }
+
+// ─── 도보 시간 ───────────────────────────────────────────────────────────────
+// 스폰 시각을 "언제 나오나"가 아니라 "언제 기지에 닿나"로 잡기 위해 필요하다.
+// 상단이 20초 만에 비고 남은 40초를 아레나만 돌던 문제가 여기서 시작됐다.
+function pathPixelLength(path) {
+  let len = 0;
+  for (let i = 0; i < path.length - 1; i++) {
+    const a = cellCenter(path[i][0], path[i][1]);
+    const b = cellCenter(path[i + 1][0], path[i + 1][1]);
+    len += Math.hypot(b.x - a.x, b.y - a.y);
+  }
+  return len;
+}
+
+// 경로가 층마다 바뀌므로 캐시는 경로 배열을 키로 잡는다
+let _pathLenCache = new WeakMap();
+function currentPathLength(flying) {
+  const path = flying ? AIR_PATH_L : THE_PATH;
+  let v = _pathLenCache.get(path);
+  if (v === undefined) { v = pathPixelLength(path); _pathLenCache.set(path, v); }
+  return v;
+}
+
+// 이 웨이브에서 이 종류가 시작점에서 기지까지 걷는 데 걸리는 시간(초).
+// makeDefenseEnemy의 속도 계산과 같은 배율을 써야 예측이 맞는다.
+function pathTravelTime(typeId, waveIndex) {
+  const tpl = ENEMY_TYPES[typeId] || ENEMY_TYPES.goblin;
+  const mods = (typeof endlessMods === 'function') ? endlessMods(waveIndex) : null;
+  const spd = tpl.spd * ENEMY_CELL_SPD
+            * (BONUSES.pactEnemySpdMult || 1)
+            * endlessSpdMult(waveIndex)
+            * (mods ? (mods.spdBonus || 1) : 1)
+            * fev('enemySpdMult', 1);
+  return currentPathLength(!!tpl.flying) / Math.max(1, spd);
+}
+
+// ─── 스폰 편성 ───────────────────────────────────────────────────────────────
+const SPAWN_FIRST_AT   = 0.6;   // 첫 마리가 나오는 시각
+const SPAWN_MIN_GAP    = 0.28;  // 아무리 많아도 이보다 촘촘히는 안 나온다
+const SPAWN_TARGET_GAP = 2.2;   // 이보다 뜸하면 상단이 비어 보인다 — 마릿수를 채운다
+// 마지막 스폰 시각 (웨이브 길이 대비).
+// 기본은 "마지막 한 마리가 웨이브가 끝날 때 기지에 닿도록" 역산한 시각이지만,
+// 그대로 두면 고블린 웨이브는 39초에 스폰이 끊기고 타워가 남은 것을 다 잡아버려
+// 마지막 15초가 텅 빈다. 실측에서 상단이 비어 있는 시간이 31%였다.
+//   FILL — 빠른 적(도보가 웨이브의 절반 미만)은 여기까지 계속 내보낸다.
+//          늦게 나온 놈은 60초 안에 못 닿지만, 그건 다음 층으로 넘어간다.
+//   MIN  — 느린 대형이 전부 초반 2초에 쏟아지는 벽이 되지 않게 한다.
+//   CAP  — 아무리 그래도 웨이브가 끝나기 직전에 새로 내보내지는 않는다.
+const SPAWN_LAST_FILL  = 0.80;
+const SPAWN_LAST_MIN   = 0.55;
+const SPAWN_LAST_CAP   = 0.92;
+
+// 웨이브 하나의 상단 스폰 일정을 짠다.
+// 원칙: 마지막 한 마리가 웨이브가 끝나는 순간 기지에 닿는다.
+// 그래야 상단과 하단(60초 고정)이 같은 길이로 굴러간다.
+function buildSpawnPlan(defenseEnemies, waveIndex, opts) {
+  const o        = opts || {};
+  const dur      = o.duration || WAVE_DURATION;
+  const countMul = o.countMult || 1;
+  const extraMul = o.extraMult || 1;   // 밀도·스폰속도 보정 — 간격이 아니라 마릿수로 받는다
+
+  const groups = defenseEnemies.map(d => ({
+    type: d.type,
+    count: Math.max(1, Math.round(d.count * countMul * extraMul)),
+    walk: pathTravelTime(d.type, waveIndex)
+  }));
+  if (!groups.length) return [];
+
+  // 가장 빠른(=가장 늦게까지 내보낼 수 있는) 종류를 기준으로 이 웨이브의 스폰 창을 잡는다
+  const window = Math.max(1, dur - Math.min.apply(null, groups.map(g => g.walk)) - SPAWN_FIRST_AT);
+  const total  = groups.reduce((a, g) => a + g.count, 0);
+  // 창은 넓은데 마릿수가 적으면 뜸해서 비어 보인다 — 구성 비율은 지키고 전체를 늘린다
+  const gap = window / Math.max(1, total);
+  // 마릿수를 늘렸으면 마리당 보상을 그만큼 낮춘다.
+  // 바꾼 것은 "어떻게 보이는가"이지 "얼마를 버는가"가 아니다 —
+  // 이 보정이 없으면 1-1 웨이브 하나가 4배를 벌어들여 골드 조이기가 통째로 풀린다.
+  let fill = 1;
+  if (gap > SPAWN_TARGET_GAP) {
+    fill = gap / SPAWN_TARGET_GAP;
+    for (const g of groups) g.count = Math.max(1, Math.round(g.count * fill));
+  }
+  const rewardMult = 1 / fill;
+
+  return groups.map(g => {
+    // 원칙은 "마지막 한 마리가 웨이브가 끝날 때 기지에 닿는다".
+    // 빠른 적은 거기서 더 늘려 후반 공백을 메우고, 느린 적은 초반 몰림만 막는다.
+    let lastSpawn = Math.max(SPAWN_FIRST_AT, dur - g.walk);
+    lastSpawn = Math.max(lastSpawn, dur * (g.walk < dur * 0.5 ? SPAWN_LAST_FILL : SPAWN_LAST_MIN));
+    lastSpawn = Math.min(lastSpawn, dur * SPAWN_LAST_CAP);
+    const interval  = g.count > 1
+      ? Math.max(SPAWN_MIN_GAP, (lastSpawn - SPAWN_FIRST_AT) / (g.count - 1))
+      : 0;
+    return { type: g.type, remaining: g.count, interval, nextSpawn: SPAWN_FIRST_AT, rewardMult };
+  });
+}
 
 function cellCenter(col, row) {
   return {

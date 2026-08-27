@@ -124,7 +124,9 @@ function makeDefenseEnemy(typeId, waveIndex, opts) {
          * endlessSpdMult(w) * (mods ? (mods.spdBonus || 1) : 1)
          * fev('enemySpdMult', 1),
     dmg: Math.round(tpl.dmg * (mods ? endlessDmgMult(w) : (1 + w * 0.04))),
-    reward: (opts && opts.reward) || tpl.reward,
+    // rewardMult — 스폰 편성이 마릿수를 부풀린 만큼 마리당 보상을 낮춘다
+    reward: (opts && opts.reward) ||
+            Math.max(1, Math.round(tpl.reward * ((opts && opts.rewardMult) || 1))),
     gems: (opts && opts.gems) || 0,
     armor: (tpl.armor || 0)
          + (mods ? (mods.armorBonus || 0) + Math.floor(w / 4)
