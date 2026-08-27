@@ -236,9 +236,9 @@ function createWaveManager() {
       gs.hero.placement = 'none';
       restHealTeam(gs.battle);       // 생존 병력 휴식 회복
 
-      // 무한 모드에서도 강화는 계속 고른다. 30웨이브 완주 순간만 선택 화면으로 넘긴다.
-      const atCrossroads = (this.waveIndex + 1 === WAVE_DEFS.length) && !gs.endlessChosen;
-      if (!atCrossroads) {
+      // 훈련 마지막 웨이브만 강화 없이 결과로 넘긴다. 무한은 매 층 강화를 고른다.
+      const atCampaignEnd = (gs.mode !== 'endless') && (this.waveIndex + 1 >= WAVE_DEFS.length);
+      if (!atCampaignEnd) {
         this.phase = 'upgradePick';
         gs.upgradePick = { active: true, cards: rollUpgradeCards(gs.activeUpgrades) };
       } else {
@@ -249,14 +249,26 @@ function createWaveManager() {
       gs.town.waveBuffs = [];
       reapplyAllBonuses(gs);
 
-      // 무한 구간은 층마다 보석이 쌓인다 — 더 들어갈 이유
+      // 무한은 층마다 보석이 쌓이고, 깊이 들어갈수록 층당 몫이 커진다
       const et = endlessTier(this.waveIndex);
       if (et > 0) {
-        gs.endlessGems = (gs.endlessGems || 0) + ENDLESS_GEM_PER_TIER;
+        gs.endlessGems = (gs.endlessGems || 0) + endlessGemStep(et);
         gs.stats.bestEndless = Math.max(gs.stats.bestEndless || 0, et);
+        // 관문(10층 단위) 최초 돌파는 일회성 보상
+        if (isGateTier(et)) {
+          gs.clearedGates = gs.clearedGates || [];
+          if (!gs.clearedGates.includes(et)) {
+            gs.clearedGates.push(et);
+            const bonus = ENDLESS_GATE_BONUS + Math.floor(et / 10) * ENDLESS_GATE_BONUS_STEP;
+            gs.soulStones += bonus;
+            gs.stats.totalGems = (gs.stats.totalGems || 0) + bonus;
+            addLog(gs.battle, `🏁 ${et}층 관문 최초 돌파! 보석 +${bonus}`, '#a78bfa');
+            spawnFloaty(`🏁 ${et}층 돌파 · 💎+${bonus}`, CW/2, DEFENSE_H/2, '#a78bfa');
+          }
+        }
       }
 
-      // 스테이지 최초 클리어 보석 (일회성)
+      // 스테이지 최초 클리어 보석 (훈련 전용, 일회성)
       const stageIdx = Math.floor(this.waveIndex / 3);
       const isLastWaveOfStage = ((this.waveIndex + 1) % 3 === 0) && et === 0;
       if (isLastWaveOfStage) {
@@ -287,9 +299,8 @@ function createWaveManager() {
 
       if (this.intermissionTimer <= 0) {
         const next = this.waveIndex + 1;
-        // 30웨이브 완주는 런의 끝이 아니라 갈림길이다 —
-        // 여기서 정산하고 캠프로 갈지, 무한 모드로 더 들어갈지 고른다.
-        if (next === WAVE_DEFS.length && !gs.endlessChosen) {
+        // 훈련은 30웨이브에서 끝난다 (완주 = 무한 해금). 무한은 끝이 없다.
+        if (gs.mode !== 'endless' && next >= WAVE_DEFS.length) {
           gs.stageCleared = true;
           gs.stats.clears = (gs.stats.clears || 0) + 1;
           SaveManager.save(gs);

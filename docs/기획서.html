@@ -219,16 +219,16 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <div class="wrap">
 <header class="cover">
-  <div class="eyebrow">Game Design Document · v2.6 · 엔드게임</div>
+  <div class="eyebrow">Game Design Document · v3.0 · 무한이 본편</div>
   <h1>듀얼 프론티어</h1>
   <p class="tagline">한 화면에서 두 개의 전선을 동시에 굴리는 모바일 웹 로그라이트.
-     위는 배치해서 지키고, 아래는 직접 뛰어들어 벌어온다.</p>
+     끝은 없다 — 얼마나 깊이 내려갔는지가 기록이다.</p>
   <dl class="meta">
     <div><dt>장르</dt><dd>타워디펜스 + 실시간 액션 로그라이트</dd></div>
     <div><dt>플랫폼</dt><dd>모바일 웹 (480×800 캔버스)</dd></div>
-    <div><dt>1회 플레이</dt><dd>15~35분</dd></div>
-    <div><dt>현재 볼륨</dt><dd>스테이지 1 · 30웨이브 + ∞ 무한 모드</dd></div>
-    <div><dt>이번 개정</dt><dd>무한 모드 · 서약 재설계 · 잔존 침입자 (v2.6)</dd></div>
+    <div><dt>1회 하강</dt><dd>10~30분 (도달 층에 비례)</dd></div>
+    <div><dt>현재 볼륨</dt><dd>훈련 30웨이브 + ∞ 무한 (알고리즘 생성)</dd></div>
+    <div><dt>이번 개정</dt><dd>무한을 본편으로 · 훈련은 연습으로 (v3.0)</dd></div>
   </dl>
 </header>
 
@@ -292,7 +292,54 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 </section>
 
 <section id="s2">
-<h2>02 — 이번 개정의 배경 <span class="rev">v2.0 · v2.1</span></h2>
+<h2>02 — 이번 개정의 배경 <span class="rev">v2.0 · v2.1 · v3.0</span></h2>
+
+<h3>v3.0 — 무한이 본편이 된다 <span class="rev">구조 전환</span></h3>
+
+<p class="lede">v2.6까지 이 게임은 <strong>30웨이브짜리 캠페인 + 연장전</strong>이었다.
+v3.0에서 뒤집는다 — <strong>무한이 본편이고, 30웨이브는 연습이다.</strong></p>
+
+<h4>진단 — 본편에 닿기까지 30분이 낭비였다</h4>
+<p>v2.6 실측에서 만렙 편성이 ∞-19까지 갔다. 통산 <strong>49웨이브</strong>인데,
+그중 앞의 30웨이브는 <strong>결과가 이미 정해진 구간</strong>이었다 —
+같은 적이 같은 순서로 나오고, 만렙 편성은 기지 HP를 거의 잃지 않는다.
+매 판 30분(3배속 10분)을 알던 길로 걸어야 진짜 게임이 시작됐다.</p>
+<div class="note">
+<p><strong>이건 로그라이트가 흔히 겪는 문제이고, 웹게임에서는 더 치명적이다.</strong>
+브라우저에서 잠깐 켜는 게임의 강점은 "짧게 자주"인데, 본편 진입에 고정 비용 30분이 붙으면
+그 강점이 사라진다. 스테이지를 더 만들어 붙이는 것도 답이 아니다 —
+손으로 쓴 웨이브는 유한하고, 다 소비하면 다시 같은 자리다.</p>
+</div>
+
+<h4>해법 — 두 모드로 가른다</h4>
+<div class="tw"><table>
+<thead><tr><th>모드</th><th>역할</th><th>길이</th><th>끝나는 방식</th></tr></thead>
+<tbody>
+<tr><td><strong>⚔️ 훈련</strong></td><td class="wrap">손에 익히는 곳. 손으로 쓴 30웨이브</td><td class="wrap">최대 30웨이브</td><td class="wrap">완주하거나 기지 함락</td></tr>
+<tr class="total"><td><strong>∞ 무한</strong></td><td class="wrap"><strong>본편.</strong> 1층부터 내려가며 버틴다</td><td class="wrap">끝이 없다</td><td class="wrap">기지 함락 — 도달 층이 기록</td></tr>
+</tbody></table></div>
+<p><strong>무한은 1층부터 시작하는 독립 곡선이다.</strong> "30웨이브를 통과해야 열리는 연장전"이 아니라
+그 자체로 처음부터 끝까지다. 그래서 시작 자원 문제가 없고, 신규든 만렙이든
+<strong>같은 1층에서 출발해 도달 층만 달라진다</strong> — 기록 비교가 성립한다.</p>
+<p><strong>해금 조건은 "완주"가 아니라 "한 판 치르기"다.</strong>
+완주를 걸면 신규 플레이어는 열지 못한다 — 첫 런 도달이 11웨이브인데 훈련은 30웨이브라,
+본편에 들어가려고 연습을 수십 번 반복하는 꼴이 된다. 그건 이 개편이 없애려던 바로 그 낭비다.</p>
+
+<h4>핵심 루프</h4>
+<div class="tw"><table>
+<thead><tr><th>단계</th><th>하는 일</th></tr></thead>
+<tbody>
+<tr><td>1. 하강</td><td class="wrap">1층부터 내려간다. 층마다 적이 강해지고 변형이 붙는다</td></tr>
+<tr><td>2. 함락</td><td class="wrap">언젠가 반드시 죽는다. 도달 층이 기록으로 남는다</td></tr>
+<tr><td>3. 정산</td><td class="wrap">깊이 간 만큼 💎보석 — 층당 몫이 깊이에 비례해 커진다</td></tr>
+<tr><td>4. 강화</td><td class="wrap">캠프에서 스킬 · 해금 · 서약</td></tr>
+<tr><td>5. 다시 하강</td><td class="wrap">지난번보다 한 층 더</td></tr>
+</tbody></table></div>
+<p>콘텐츠를 계속 만들지 않아도 되는 구조다. 층 정의는 손으로 쓰지 않고
+<strong>층 번호 하나에서 전부 생성한다</strong> — 자세한 것은 13절.</p>
+
+<h2 style="border:0;padding:0;margin:44px 0 0;font-size:0">이전 개정</h2>
+<h3>v2.0 · v2.1 — 이전 진단</h3>
 <h3>두 가지 진단</h3>
 <p class="lede">이 문서는 두 번의 진단을 담는다. <strong>v2.0</strong>은 웨이브 60초가 비어 있다는
 문제(아래), <strong>v2.1</strong>은 런과 런 사이가 비어 있다는 문제(10절)를 다룬다.
@@ -378,7 +425,13 @@ v2.1은 웨이브 밖(런과 런 사이)을 채운다. 구현 순서로는 <stro
 </section>
 
 <section id="s3">
-<h2>03 — 코어 루프</h2>
+<h2>03 — 코어 루프 <span class="rev">v3.0 개정</span></h2>
+<div class="note">
+<p><strong>v3.0에서 루프의 바깥 껍질이 바뀌었다.</strong> "스테이지를 클리어한다"가 아니라
+<strong>"지난번보다 한 층 더 내려간다"</strong>가 반복의 동기다.
+아래 설명하는 웨이브 60초 구조와 3계층 성장은 그대로 유효하고,
+달라진 것은 그 위에 얹히는 목표다 — 자세한 것은 2절과 13절.</p>
+</div>
 <h3>웨이브 · 스테이지 · 런 · 로비의 4계층</h3>
 <div class="loops">
   <div class="loop">
@@ -1272,90 +1325,106 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
   <div><span class="v">6</span><span class="k">아군 종류 (영웅 포함)</span></div>
 </div>
 
-<h3>∞ 무한 모드 — 30웨이브 이후 <span class="rev">v2.6 신규</span></h3>
+<h3>∞ 무한 — 본편 <span class="rev">v3.0</span></h3>
 
-<p class="lede">30웨이브를 완주하면 <strong>갈림길</strong>이 나온다.
-정산하고 캠프로 돌아가 보석을 확실히 챙기거나, 무한 모드로 계속 들어가거나.
-무한 구간은 <strong>죽어야 끝난다</strong> — 대신 한 층 오를 때마다 보석이 +0.7 붙는다.</p>
+<p class="lede">1층부터 내려가며 버틴다. <strong>클리어는 없다</strong> — 도달 층이 곧 기록이다.
+층 정의는 손으로 쓰지 않는다. <strong>층 번호 하나에서 전부 생성한다</strong>:
+적 구성 · 물량 · 간격 · 변형 · 스탯 곡선.</p>
 
-<h4>왜 필요했나 — 선형 스케일링은 반드시 따라잡힌다</h4>
-<p>스킬 27개와 해금 7종을 다 연 편성으로 30웨이브를 돌리면 <strong>기지 HP가 220 → 212밖에
-안 줄었다.</strong> 성장은 배수로 쌓이는데(스킬 × 타워 Lv.5 = 5.4배) 난이도는 웨이브당 +7%씩
-더해질 뿐이라, 어떤 숫자를 넣어도 언젠가 추월당한다. 무한 구간만 <strong>지수</strong>로 올린다.</p>
-
+<h4>성장 곡선 — 선형과 지수를 겹친다</h4>
+<p>선형만 쓰면 어떤 숫자를 넣어도 성장 배수에 반드시 따라잡힌다.
+지수만 쓰면 1~10층이 전부 똑같이 시시하다. 그래서 둘을 곱한다.</p>
+<div class="fx"><span class="mono">배율(t) = (1 + (t−1) × 0.09) × 지수<sup>(t−1)</sup></span></div>
 <div class="tw"><table>
-<caption>층당 성장률 — 전선마다 다르게 잡는다</caption>
-<thead><tr><th>축</th><th class="num">층당</th><th class="num">∞-10</th><th class="num">∞-20</th><th>왜 이 값인가</th></tr></thead>
+<caption>축마다 지수를 다르게 — 두 전선이 비슷한 층에서 위험해지도록</caption>
+<thead><tr><th>축</th><th class="num">지수</th><th class="num">10층</th><th class="num">20층</th><th class="num">30층</th><th>왜</th></tr></thead>
 <tbody>
-<tr><td>상단 적 HP</td><td class="num">×1.17</td><td class="num">×4.8</td><td class="num">×23.1</td><td class="wrap">타워가 먼저 뚫려야 마지막에 "못 막는다"를 본다</td></tr>
-<tr><td>상단 물량 밀도</td><td class="num">×0.96</td><td class="num">×0.66</td><td class="num">×0.44</td><td class="wrap">간격을 좁히고 그만큼 마릿수를 늘린다</td></tr>
-<tr><td>상단 이동속도</td><td class="num">×1.035</td><td class="num">×1.41</td><td class="num">×1.99</td><td class="wrap">경로 완주 시간을 줄여 "시계에 죽는" 것을 막는다</td></tr>
-<tr><td>아레나 몹</td><td class="num">×1.085</td><td class="num">×2.3</td><td class="num">×5.2</td><td class="wrap">상단보다 완만 — 두 전선이 비슷한 층에서 위험해지도록</td></tr>
-<tr><td>기지 피해 상한</td><td class="num">×1.03</td><td class="num">×1.34</td><td class="num">×1.81</td><td class="wrap">상한 2.5배까지. 전멸 한 번이 즉사가 되지 않게</td></tr>
-<tr><td>층당 보석</td><td class="num">+0.7</td><td class="num">+7</td><td class="num">+14</td><td class="wrap">깊이 들어갈 이유</td></tr>
+<tr><td>상단 적 HP</td><td class="num">1.055</td><td class="num">×2.9</td><td class="num">×7.5</td><td class="num">×17.1</td><td class="wrap">가장 가파르다 — 타워가 먼저 뚫려야 한다</td></tr>
+<tr><td>아레나 몹</td><td class="num">1.040</td><td class="num">×2.6</td><td class="num">×5.7</td><td class="num">×11.3</td><td class="wrap">완만 — 같은 지수면 아레나가 한참 먼저 무너진다</td></tr>
+<tr><td>상단 물량 밀도</td><td class="num">0.975</td><td class="num">×0.80</td><td class="num">×0.62</td><td class="num">×0.48</td><td class="wrap">간격을 좁히고 마릿수를 그만큼 늘린다</td></tr>
+<tr><td>상단 이동속도</td><td class="num">1.022</td><td class="num">×1.22</td><td class="num">×1.51</td><td class="num">×1.88</td><td class="wrap">경로 완주 시간을 줄인다 (아래 참고)</td></tr>
+<tr><td>기지 피해</td><td class="num">1.035</td><td class="num">×1.36</td><td class="num">×1.92</td><td class="num">×2.71</td><td class="wrap">한 마리가 닿았을 때의 대가</td></tr>
 </tbody></table></div>
-
-<h4>같이 고친 것 ① 잔존 침입자 — 적이 "시계에 죽고" 있었다</h4>
-<p>무한 모드를 붙이고 나서도 만렙 편성이 안 죽었다. 계측해보니
-<strong>∞-29(적 ×44.7)에서 기지에 도달한 적이 0기</strong>였고, 한 웨이브 피해가
-층과 무관하게 <strong>정확히 9HP로 고정</strong>돼 있었다.</p>
-<p>원인은 체력이 아니라 <strong>보행 시간</strong>이었다.</p>
-<div class="tw"><table>
-<caption>∞ 경로 1,236px · 웨이브 60초</caption>
-<thead><tr><th>적</th><th class="num">이동</th><th class="num">경로 완주</th><th>결과</th></tr></thead>
-<tbody>
-<tr><td>고블린</td><td class="num">58.3px/s</td><td class="num">21.2초</td><td class="wrap">도착한다</td></tr>
-<tr><td>오크</td><td class="num">37.1px/s</td><td class="num">33.3초</td><td class="wrap">도착한다</td></tr>
-<tr><td>강철오크</td><td class="num">26.5px/s</td><td class="num">46.6초</td><td class="wrap">웨이브 중반 이후 스폰분은 못 온다</td></tr>
-<tr><td>던전보스</td><td class="num">21.2px/s</td><td class="num">58.3초</td><td class="wrap"><strong>사실상 절대 못 온다</strong></td></tr>
-</tbody></table></div>
-<p>무거운 적일수록 타워에 죽는 게 아니라 <strong>시계에 죽어</strong> 사라졌다.
-체력을 ×2,595까지 올려도 상단이 위협이 될 수 없던 진짜 이유다.</p>
-<p><strong>고쳤다 — 웨이브가 끝나도 아직 걸어오던 적은 사라지지 않는다.</strong>
-경로 위 위치를 그대로 유지한 채 다음 웨이브로 넘어가고, 새 물량이 그 위에 얹힌다.
-못 잡으면 쌓이고, 쌓이면 언젠가 도착한다. 준비 화면에 <span class="mono">⚠️ 잔존 침입자 N기</span>로
-표시된다 (상한 40기 — 성능·가독성 때문이지 밸런스 때문이 아니다).</p>
-
-<h4>같이 고친 것 ② 기지 피해가 상수에 막혀 있었다</h4>
-<p>두 번째 원인은 <strong>상한이 전부 상수</strong>였다는 것이다.</p>
-<ul>
-  <li><span class="mono">baseDefPct</span>에 상한이 없어 스킬 트리만으로 <strong>65%</strong>,
-      강화 카드까지 겹치면 85%가 쌓였다 — 기지에 닿는 모든 피해가 1/7이 된다</li>
-  <li><span class="mono">BREAKTHROUGH_MAX</span> 초당 1.8 — 아레나에서 28마리에게 전멸당해도 최대 27HP</li>
-  <li><span class="mono">RETREAT_MAX</span> 14 — 후퇴 비용도 고정</li>
-</ul>
-<p>세 상수가 곱해지면 <strong>어떤 층에서 어떻게 지든 한 웨이브 손실이 9HP</strong>였다.
-기지 피해 감소는 <strong>55% 상한</strong>을 두고, 돌파·후퇴 상한은 층에 비례해 푼다.
-후퇴 비용에는 기지 피해 감소를 아예 적용하지 않는다 — 후퇴는 적이 성벽을 때린 결과가 아니라
-하단을 스스로 비운 대가이고, 감소율을 먹였더니 방어 스킬을 다 찍은 편성이
-웨이브 시작 직후 빼도 6~10HP밖에 안 들어 성벽 보수(+12HP)로 메우며 무한히 도는 고리가 생겼다.</p>
-
-<h4>실측 — 만렙 편성은 이제 ∞-19에서 죽는다</h4>
-<p>스킬 27개 · 해금 7종 · 타워 34기 Lv.5 · 연구 12단계 · 케이브 최대 · 영웅 Lv.10.
-매 웨이브 과부하를 쓰고 팀 HP 45%에서 후퇴하는 드라이버로 측정했다.</p>
-<div class="tw"><table>
-<thead><tr><th class="num">층</th><th class="num">적 HP</th><th class="num">이동</th><th class="num">기지 HP</th><th class="num">웨이브 손실</th><th class="num">잔존</th></tr></thead>
-<tbody>
-<tr><td class="num">∞-1</td><td class="num">×1.2</td><td class="num">×1.03</td><td class="num">220 → 209</td><td class="num">−11</td><td class="num">0기</td></tr>
-<tr><td class="num">∞-5</td><td class="num">×2.2</td><td class="num">×1.19</td><td class="num">220 → 220</td><td class="num">0</td><td class="num">0기</td></tr>
-<tr><td class="num">∞-10</td><td class="num">×4.8</td><td class="num">×1.41</td><td class="num">217 → 202</td><td class="num">−15</td><td class="num">0기</td></tr>
-<tr><td class="num">∞-15</td><td class="num">×10.5</td><td class="num">×1.68</td><td class="num">170 → 153</td><td class="num">−17</td><td class="num">3기</td></tr>
-<tr><td class="num">∞-17</td><td class="num">×14.4</td><td class="num">×1.79</td><td class="num">136 → 118</td><td class="num">−18</td><td class="num">0기</td></tr>
-<tr class="total"><td class="num">∞-18</td><td class="num">×16.9</td><td class="num">×1.86</td><td class="num">118 → 99</td><td class="num">−19</td><td class="num"><strong>29기</strong></td></tr>
-<tr><td class="num">∞-19</td><td class="num">×19.7</td><td class="num">×1.92</td><td class="num" colspan="3"><strong>기지 함락</strong></td></tr>
-</tbody></table></div>
-<p><strong>∞-18에서 잔존이 0 → 29기로 튄다.</strong> 타워가 초당 도착량을 못 따라가기 시작한
-지점이고, 다음 층에서 그 29기가 기지에 닿아 런이 끝난다.
-30웨이브 + 19층 = <strong>49웨이브</strong> — 이전에는 죽는 지점이 아예 없었다.</p>
-
 <div class="note">
-<p><strong>후퇴와 전멸이 같은 값이 됐다.</strong> 후퇴 단가가 층에 비례해 11 → 19로 오르면서,
-매 웨이브 후퇴한 런과 매 웨이브 전멸한 런이 <strong>둘 다 ∞-18~21에서 끝났다.</strong>
-후퇴는 병력을 지키고 수입을 포기하는 선택이지, 무적을 사는 수단이 아니게 됐다.</p>
-<p><strong>신규 플레이어는 영향이 없다.</strong> 무한 구간의 모든 배율은 30웨이브 이후에만 켜지고,
-기지 피해 감소 상한과 후퇴 단가 변경은 <span class="mono">baseDefPct = 0</span>인 첫 런에서
-계산이 동일하다. 실측 첫 런 도달 웨이브 <strong>11.6</strong>(5회 평균, 이전 9.7).</p>
+<p><strong>속도를 같이 올리는 이유는 v2.6에서 계측한 것이다.</strong>
+∞ 경로는 1,236px이고 한 층은 60초인데, 던전보스는 완주에 58.3초가 걸린다 —
+체력만 올리면 무거운 적은 타워에 죽는 게 아니라 <strong>시계에 죽어</strong> 기지에 닿지도 못한다.
+<strong>총 체력이 아니라 초당 도착량이 상단의 한계를 정한다.</strong></p>
 </div>
+
+<h4>적 구성 — 층에 따라 합류하고, 오래된 적은 비중이 준다</h4>
+<div class="tw"><table>
+<thead><tr><th>층</th><th class="num">1</th><th class="num">3</th><th class="num">5</th><th class="num">8</th><th class="num">11</th><th class="num">15</th><th class="num">19</th></tr></thead>
+<tbody>
+<tr><td>상단 합류</td><td class="wrap">고블린</td><td class="wrap">늑대</td><td class="wrap">오크</td><td class="wrap">박쥐<br><span class="mono">A</span></td><td class="wrap">강철오크<br><span class="mono">L</span></td><td class="wrap">비룡<br><span class="mono">A</span></td><td class="wrap">던전보스<br><span class="mono">L</span></td></tr>
+<tr><td>아레나 합류</td><td class="wrap">고블린</td><td class="wrap">광견</td><td class="wrap">오크<span class="mono">(6)</span></td><td class="wrap">다크아처<span class="mono">(9)</span></td><td class="wrap">오우거<span class="mono">(13)</span></td><td class="wrap">보스<span class="mono">(17)</span></td><td class="wrap">마왕<span class="mono">(22)</span></td></tr>
+</tbody></table></div>
+<p>가중치는 <span class="mono">max(0.22, 1.55 − 나이×0.035)</span>다. 갓 합류한 적이 비중을 크게 차지하고
+오래된 적은 줄어들되 <strong>0이 되지는 않는다</strong> — 소형 물량은 끝까지 상성 판단거리로 남아야 한다.
+매 층 ±20% 정도 흔들어 같은 구간에서도 그림이 조금씩 달라진다.</p>
+
+<h4>층 변형 — 같은 곡선을 올리기만 하면 40층과 41층이 구분되지 않는다</h4>
+<div class="tw"><table>
+<thead><tr><th>변형</th><th>효과</th><th>변형</th><th>효과</th></tr></thead>
+<tbody>
+<tr><td>🕊 창공</td><td class="wrap">비행 비중 2.4배</td><td>💀 정예</td><td class="wrap">정예 확률 +25%</td></tr>
+<tr><td>🛡 강철</td><td class="wrap">적 방어력 +8</td><td>🗿 거인</td><td class="wrap">대형 비중 2.4배 · 체력 +35%</td></tr>
+<tr><td>💨 폭주</td><td class="wrap">이동속도 +30%</td><td>🌊 해일</td><td class="wrap">아레나 스폰 간격 −35%</td></tr>
+<tr><td>🐝 무리</td><td class="wrap">물량 +60% · 체력 −30%</td><td colspan="2" class="wrap">5층부터 1개 · 15층부터 2개 · 30층부터 3개</td></tr>
+</tbody></table></div>
+<p><strong>변형은 결정적이다.</strong> 층 번호를 씨앗으로 뽑으므로 같은 27층은 누가 언제 가도 같은 27층이다 —
+그래야 기록에 의미가 생긴다. 준비 화면에 이번 층의 변형이 먼저 뜬다.</p>
+
+<h4>🏁 관문 — 10층마다</h4>
+<p>물량이 −28%로 줄고 <strong>대형 비중이 2배, 체력 +30%</strong>가 된다.
+물량으로 뭉개던 조합이 여기서 막힌다 — 대형에 강한 타워(💣대포 · 🎯저격)가 없으면 통과가 어렵다.
+최초 돌파에는 일회성 보석이 붙는다 (<span class="mono">6 + 관문번호÷10 × 4</span> — 10층 +10, 20층 +14, 30층 +18).</p>
+
+<h4>보석 — 깊이에 값을 매긴다</h4>
+<div class="fx"><span class="mono">층당 보석 = 0.35 + (층 − 1) × 0.055</span></div>
+<p>정액으로 주면 20층에서 40층으로 가는 <strong>열 배 어려운 구간이 정확히 두 배 값어치</strong>밖에 안 돼서
+더 내려갈 이유가 사라진다. 층당 몫이 깊이에 비례해 커져야 기록 경신이 보상이 된다.</p>
+<div class="tw"><table>
+<thead><tr><th class="num">도달 층</th><th class="num">10</th><th class="num">20</th><th class="num">30</th><th class="num">40</th><th class="num">50</th></tr></thead>
+<tbody>
+<tr><td>누적 보석</td><td class="num">6</td><td class="num">17</td><td class="num">34</td><td class="num">57</td><td class="num">85</td></tr>
+<tr><td>관문 보너스 누적</td><td class="num">+10</td><td class="num">+24</td><td class="num">+42</td><td class="num">+64</td><td class="num">+90</td></tr>
+</tbody></table></div>
+
+<h4>실측 — 세 단계 모두 죽는다</h4>
+<p>같은 드라이버(매 층 과부하 · 팀 HP 40%에서 후퇴 · 남는 골드는 타워→성벽→연구)로
+성장 단계만 바꿔 측정했다.</p>
+<div class="tw"><table>
+<thead><tr><th>단계</th><th>스킬 · 해금</th><th class="num">도달 층</th><th class="num">보석</th><th class="num">관문</th><th class="num">한 판 길이<br>(3배속)</th></tr></thead>
+<tbody>
+<tr><td><strong>신규</strong></td><td class="wrap">0 · 0</td><td class="num">11층</td><td class="num">17💎</td><td class="num">1</td><td class="num">약 4분</td></tr>
+<tr><td><strong>중간</strong></td><td class="wrap">14 · 3</td><td class="num">20층</td><td class="num">43💎</td><td class="num">1</td><td class="num">약 7분</td></tr>
+<tr class="total"><td><strong>만렙</strong></td><td class="wrap">27 · 7</td><td class="num">27층</td><td class="num">67💎</td><td class="num">2</td><td class="num">약 9분</td></tr>
+</tbody></table></div>
+<div class="note">
+<p><strong>세 단계가 단조롭게 벌어지고, 셋 다 죽는다.</strong> v2.6까지 만렙 편성은
+죽는 지점이 아예 없었다(13웨이브 동안 220 → 212). 지금은 성장이 곧 <strong>도달 층</strong>으로
+환산된다 — 11 → 20 → 27.</p>
+<p><strong>이 숫자는 천장이 아니라 바닥이다.</strong> 드라이버는 강화를 무작위로 고르고,
+타워를 기계적으로 놓고, 아레나를 수동 조작하지 않고, 현상수배를 부르지 않는다.
+사람이 잘 하면 같은 편성으로 더 내려갈 수 있어야 하고, <strong>그 여지가 곧 기록 경쟁의 공간</strong>이다.</p>
+<p><strong>보석 수급.</strong> 첫 하강 17💎, 소비처는 스킬 48 + 해금 52 = 100.
+4~6회 하강이면 전부 열리고, 그 다음은 서약(최대 ×2.84)이 난이도와 수입을 같이 올린다.</p>
+</div>
+
+<h4>훈련 — 손에 익히는 곳</h4>
+<p>손으로 쓴 30웨이브는 그대로 남는다. 다만 역할이 바뀌었다 —
+<strong>본편으로 가는 관문이 아니라 연습장</strong>이다.
+완주하지 않아도 <strong>한 판 치르면 무한이 열린다.</strong></p>
+<div class="tw"><table>
+<thead><tr><th></th><th>훈련</th><th>무한</th></tr></thead>
+<tbody>
+<tr><td>길이</td><td class="wrap">최대 30웨이브</td><td class="wrap">끝이 없다</td></tr>
+<tr><td>웨이브 정의</td><td class="wrap">손으로 쓴 30개 (13절 위)</td><td class="wrap">층 번호에서 생성</td></tr>
+<tr><td>스탯</td><td class="wrap">웨이브당 선형</td><td class="wrap">선형 × 지수</td></tr>
+<tr><td>보석</td><td class="wrap">도달 웨이브 × 0.5</td><td class="wrap">층당 적립 (깊이 비례)</td></tr>
+<tr><td>기록</td><td class="wrap">최고 웨이브</td><td class="wrap"><strong>최고 층 · 돌파한 관문</strong></td></tr>
+</tbody></table></div>
 </section>
 
 <section id="s14">
@@ -1659,16 +1728,18 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
 <tr><td rowspan="3"><strong>E</strong><br>엔드게임 <span class="chip lo">완료</span></td><td class="wrap">서약 실효화 — 10종 배율형 <span class="chip lo">완료</span></td><td class="wrap">전부 걸면 보석 ×2.84 (10절)</td></tr>
 <tr><td class="wrap">30웨이브 이후 무한 모드 <span class="chip lo">완료</span></td><td class="wrap">만렙이 ∞-19에서 사망 (13절)</td></tr>
 <tr><td class="wrap">잔존 침입자 · 상한 해제 · 병기 연구 <span class="chip lo">완료</span></td><td class="wrap">"시계에 죽던" 적과 고정 9HP 손실을 고쳤다</td></tr>
-<tr><td rowspan="2"><strong>F</strong><br>볼륨</td><td class="wrap">스테이지 2 · 영웅 고유 스킬</td><td class="wrap">엔드게임</td></tr>
-<tr><td class="wrap">BGM · 업적 · 기록</td><td class="wrap">리텐션</td></tr>
+<tr><td rowspan="2"><strong>F</strong><br>무한이 본편 <span class="chip lo">완료</span></td><td class="wrap">훈련/무한 두 모드로 분리 <span class="chip lo">완료</span></td><td class="wrap">본편 진입에 붙던 고정 30분을 없앴다 (2절)</td></tr>
+<tr><td class="wrap">알고리즘 층 생성 · 변형 7종 · 관문 <span class="chip lo">완료</span></td><td class="wrap">신규 11층 / 중간 20층 / 만렙 27층 (13절)</td></tr>
+<tr><td rowspan="2"><strong>G</strong><br>다음</td><td class="wrap">깊은 층의 단조로움 — 지형 변화 · 층 이벤트</td><td class="wrap">40층 이후 그림이 반복된다</td></tr>
+<tr><td class="wrap">영웅 고유 스킬 · BGM · 업적</td><td class="wrap">리텐션</td></tr>
 </tbody></table></div>
 <div class="note">
-<p><strong>A부터 E까지 끝났다.</strong> 런에 시작과 끝이 생겼다 —
-첫 런은 11.6웨이브에서 끝나고, 만렙 편성은 ∞-19(통산 49웨이브)에서 끝난다.
-그 사이를 스킬 · 해금 · 서약 · 무한 층이 채운다.</p>
-<p><strong>남은 것은 볼륨(F)이다.</strong> 무한 모드가 난이도 상한을 풀었으므로 급하지는 않지만,
-무한 구간은 마지막 세 웨이브 정의를 돌려 쓰기 때문에 <strong>깊이 들어갈수록 보는 그림이
-똑같아진다.</strong> 스테이지 2의 아레나 지형과 상단 격자 변형이 그 단조로움을 깨는 다음 카드다.</p>
+<p><strong>A부터 F까지 끝났다.</strong> 게임의 형태가 정해졌다 —
+<strong>무한이 본편이고 도달 층이 기록이다.</strong> 신규 11층, 중간 20층, 만렙 27층으로
+성장이 곧 깊이로 환산되고, 층은 손으로 쓰지 않고 생성하므로 콘텐츠가 마르지 않는다.</p>
+<p><strong>남은 것은 깊은 층의 단조로움(G)이다.</strong> 변형 7종과 합류 순서로 20~30층까지는
+그림이 계속 바뀌지만, 적 종류를 다 쓰고 나면 결국 같은 구성이 배율만 올라간다.
+층 이벤트(경로 변형 · 아레나 지형 · 일시적 규칙)가 다음 카드다.</p>
 </div>
 </section>
 

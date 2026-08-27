@@ -41,7 +41,11 @@ let _airLaneCounter = 0;
 function makeDefenseEnemy(typeId, waveIndex, opts) {
   const tpl   = ENEMY_TYPES[typeId];
   const w     = Math.max(0, waveIndex || 0);
-  const scale = (1 + w * DEF_WAVE_HP_SCALE) * endlessStatMult(w) * (BONUSES.pactDefHpMult || 1);
+  // 훈련은 웨이브당 선형, 무한은 층 곡선 + 그 층의 변형. 둘을 겹쳐 쓰지 않는다.
+  const mods  = endlessMods(w);
+  const scale = (mods ? endlessStatMult(w) * (mods.hpBonus || 1)
+                      : (1 + w * DEF_WAVE_HP_SCALE))
+              * (BONUSES.pactDefHpMult || 1);
   const hp    = Math.max(1, Math.round((opts && opts.hp) || tpl.hp * scale));
 
   // 비행은 ∞ 경로가 아니라 항로를 탄다 — 좌우를 번갈아 써서 한쪽만 막지 못하게
@@ -59,11 +63,15 @@ function makeDefenseEnemy(typeId, waveIndex, opts) {
     wpIdx: 0,
     x: start.x, y: start.y,
     hp, maxHp: hp,
-    spd: tpl.spd * ENEMY_CELL_SPD * (BONUSES.pactEnemySpdMult || 1) * endlessSpdMult(w),
-    dmg: Math.round(tpl.dmg * (1 + w * 0.04) * endlessDmgMult(w)),
+    spd: tpl.spd * ENEMY_CELL_SPD * (BONUSES.pactEnemySpdMult || 1)
+         * endlessSpdMult(w) * (mods ? (mods.spdBonus || 1) : 1),
+    dmg: Math.round(tpl.dmg * (mods ? endlessDmgMult(w) : (1 + w * 0.04))),
     reward: (opts && opts.reward) || tpl.reward,
     gems: (opts && opts.gems) || 0,
-    armor: (tpl.armor || 0) + Math.floor(w / DEF_WAVE_ARMOR_EVERY) + (BONUSES.pactArmorBonus || 0),
+    armor: (tpl.armor || 0)
+         + (mods ? (mods.armorBonus || 0) + Math.floor(w / 4)
+                 : Math.floor(w / DEF_WAVE_ARMOR_EVERY))
+         + (BONUSES.pactArmorBonus || 0),
     radius: tpl.radius,
     slowTimer: 0, slowFactor: 0,
     hitFlash: 0,

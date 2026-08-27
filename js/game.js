@@ -52,6 +52,7 @@ let _skillTreeOwned = [];
 let _unlocked       = [];   // 보석으로 연 타워/유닛
 let _pacts          = [];   // 걸어둔 서약
 let _seenMobs       = [];   // 도감
+let _clearedGates   = [];   // 최초 돌파한 무한 관문 (10층 단위)
 let _stats          = createStats();
 
 // ─── 초기 상태 ────────────────────────────────────────────────────────────────
@@ -85,7 +86,7 @@ function newState() {
     wallRepairs:0,      // 이번 런에서 성벽을 몇 번 보수했는지 (비용 체증)
     rerolls:0,          // 이번 런에서 강화 카드를 몇 번 리롤했는지
     bountyUsed:0,       // 현상수배를 몇 번 불렀는지 (강해지고 보상도 오른다)
-    endlessChosen:false,// 30웨이브 완주 후 무한 모드를 골랐는지
+    mode:'campaign',    // 'campaign'(훈련 30웨이브) | 'endless'(본편, 죽어야 끝난다)
     endlessGems:0,      // 무한 층에서 쌓인 보석
     research:0,         // 병기 연구 횟수 (상한 없는 골드 사용처)
     bountyPending:false,// 이번 웨이브에 소환 예약됨
@@ -96,7 +97,7 @@ function newState() {
     floaties:[],
     ui:{ waveBtn:{}, hireCards:[], hiredSlots:[], heroDefBtn:{}, heroBatBtn:{},
          metaCards:[], towerTabBtn:{}, heroTabBtn:{}, supportTabBtn:{},
-         lobbyTabBtns:[], unlockBtns:[], pactBtns:[], sortieBtn:{}, resultBtn:{} },
+         lobbyTabBtns:[], unlockBtns:[], pactBtns:[], sortieBtn:{}, trainBtn:null, resultBtn:{} },
     // 영구 데이터 참조
     get soulStones()    { return _soulStones; },
     set soulStones(v)   { _soulStones = v; },
@@ -112,6 +113,8 @@ function newState() {
     set pacts(v) { _pacts = v; },
     get seenMobs()  { return _seenMobs; },
     set seenMobs(v) { _seenMobs = v; },
+    get clearedGates()  { return _clearedGates; },
+    set clearedGates(v) { _clearedGates = v; },
     get stats()  { return _stats; },
     set stats(v) { _stats = v; },
   };
@@ -134,6 +137,7 @@ gs.battle = createBattle();
   _unlocked       = sv.unlocked      || [];
   _pacts          = sv.pacts         || [];
   _seenMobs       = sv.seenMobs      || [];
+  _clearedGates   = sv.clearedGates  || [];
   _stats          = Object.assign(createStats(), sv.stats || {});
 
   if (!sv.inRun) return;   // 로비에서 종료했다면 런은 새로 시작한다
@@ -151,7 +155,7 @@ gs.battle = createBattle();
   gs.wallRepairs = sv.wallRepairs || 0;
   gs.research    = sv.research    || 0;
   gs.bountyUsed  = sv.bountyUsed  || 0;
-  gs.endlessChosen = !!sv.endlessChosen;
+  gs.mode          = sv.mode === 'endless' ? 'endless' : 'campaign';
   gs.endlessGems   = sv.endlessGems || 0;
   gs.rerolls     = sv.rerolls     || 0;
   if (sv.townBuildings) {
@@ -269,12 +273,8 @@ function tap({x,y}) {
   if (gs.page === 'lobby')  { handleLobbyTap(x,y);  return; }
   if (gs.page === 'result') { handleResultTap(x,y); return; }
 
-  // 30웨이브 완주 — 정산할지 무한 모드로 더 들어갈지 고른다
-  if (gs.stageCleared && !gs.gameOver) {
-    if (hitTest(x,y,gs.ui.bankBtn||{}))    { showResult(); return; }
-    if (hitTest(x,y,gs.ui.endlessBtn||{})) { enterEndless(); return; }
-    return;
-  }
+  // 훈련 완주 — 무한이 열린다
+  if (gs.stageCleared && !gs.gameOver) { showResult(); return; }
   // 기지 함락 — 결과 화면으로. 스킬 트리는 로비에 있으므로 여기서 열지 않는다.
   if (gs.gameOver) { showResult(); return; }
 
@@ -413,7 +413,9 @@ function handleLobbyTap(x, y) {
   for (const b of gs.ui.lobbyTabBtns || []) {
     if (hitTest(x,y,b)) { L.tab = b.id; SFX.click(); return; }
   }
-  if (hitTest(x,y,gs.ui.sortieBtn||{})) { startRun(); return; }
+  // 출격은 두 갈래 — 해금 전에는 sortieBtn 하나가 훈련이다
+  if (hitTest(x,y,gs.ui.trainBtn||{}))  { startRun('campaign'); return; }
+  if (hitTest(x,y,gs.ui.sortieBtn||{})) { startRun(endlessUnlocked() ? 'endless' : 'campaign'); return; }
 
   if (L.tab === 'skill') {
     if (hitTest(x,y,gs.ui.towerTabBtn||{}))   { L.skillTree='tower';   SFX.click(); return; }
@@ -461,31 +463,31 @@ function handleLobbyTap(x, y) {
 }
 
 // ─── 런 시작 / 종료 ──────────────────────────────────────────────────────────
-function startRun() {
+function startRun(mode) {
   SFX.click();
   resetGame();
+  gs.mode  = (mode === 'endless' && endlessUnlocked()) ? 'endless' : 'campaign';
   gs.inRun = true;
   gs.page  = 'battle';
+  wm.init(0);
+  if (gs.mode === 'endless') {
+    spawnFloaty('∞ 무한 — 죽어야 끝납니다', CW/2, DEFENSE_H/2, '#a78bfa');
+  }
   SaveManager.save(gs);
+}
+
+// 훈련을 한 판 치러 봤으면 무한이 열린다 — 완주가 아니라 "한 번 해보기"다.
+// 완주를 조건으로 걸면 신규 플레이어는 열지 못한다. 첫 런 도달이 11웨이브인데
+// 훈련은 30웨이브라, 본편에 들어가려고 연습을 수십 번 반복하는 꼴이 된다.
+// 그건 이번 개편이 없애려던 바로 그 낭비다.
+function endlessUnlocked() {
+  const st = gs.stats || {};
+  return (st.runs || 0) > 0 || (st.clears || 0) > 0 || (st.bestEndless || 0) > 0;
 }
 
 function showResult() {
   bankRunResult();
   gs.page = 'result';
-}
-
-// 무한 모드로 계속 — 여기서부터는 죽어야 끝난다
-function enterEndless() {
-  SFX.levelUp();
-  gs.endlessChosen = true;
-  gs.stageCleared  = false;
-  gs.resultBanked  = false;
-  gs.wave = WAVE_DEFS.length;
-  wm.init(gs.wave);
-  gs.waveActive = false;
-  gs.page = 'battle';
-  spawnFloaty('∞ 무한 모드 — 여기서부터는 죽어야 끝납니다', CW/2, DEFENSE_H/2, '#a78bfa');
-  SaveManager.save(gs);
 }
 
 function handleResultTap(x, y) {
@@ -943,23 +945,28 @@ function bankRunResult() {
   if (gs.resultBanked) return;
   gs.resultBanked = true;
 
+  const endless  = gs.mode === 'endless';
   const reached  = gs.wave + (gs.stageCleared ? 1 : 0);
+  // 무한에서 기록은 "도달 층"이다 — 마지막으로 발을 디딘 층까지 쳐준다
+  const tier     = endless ? Math.max(1, gs.wave + 1) : 0;
   const bd       = soulStoneBreakdown(gs);
-  const wasBest  = reached > (gs.stats.bestWave || 0);
-  const tier     = endlessTier(gs.wave);
+  const wasBest  = endless ? (tier > (gs.stats.bestEndless || 0))
+                           : (reached > (gs.stats.bestWave || 0));
 
   _soulStones += bd.total;
   gs.lastSoulEarned = bd.total;
   gs.stats.runs++;
-  gs.stats.bestWave  = Math.max(gs.stats.bestWave, reached);
+  if (endless) gs.stats.bestEndless = Math.max(gs.stats.bestEndless || 0, tier);
+  else         gs.stats.bestWave    = Math.max(gs.stats.bestWave || 0, reached);
   gs.stats.totalGold += gs.battle.totalGoldEarned;
   gs.stats.totalGems  = (gs.stats.totalGems || 0) + bd.total;
 
   gs.runSummary = {
-    cleared:  !!gs.stageCleared || gs.endlessChosen,
+    endless,
+    cleared:  !!gs.stageCleared,
     endlessTier: tier,
     reached,
-    stageLabel: getStageInfo(Math.max(0, gs.wave - (gs.stageCleared ? 0 : 0))).stageLabel,
+    stageLabel: endless ? `${tier}층` : getStageInfo(gs.wave).stageLabel,
     kills:    gs.battle.runKills || 0,
     gold:     gs.battle.totalGoldEarned,
     baseHP:   Math.ceil(gs.baseHP),

@@ -56,9 +56,16 @@ function makeArenaMob(typeId, waveIndex, killCount, caveLevel, eliteBonus) {
   const t  = BATTLE_MOB_TYPES[typeId] || BATTLE_MOB_TYPES.goblin;
   const cv = CAVE_LEVELS[caveLevel] || CAVE_LEVELS[1];
   const isElite = Math.random() < ((BONUSES.eliteChance || 0) + (eliteBonus || 0));
-  const sm = mobStatScale(waveIndex, killCount) * endlessArenaMult(waveIndex)
+  // 훈련은 웨이브 선형, 무한은 층 곡선. 처치 누적분은 두 모드 모두 적용된다.
+  const endless = endlessTier(waveIndex) > 0;
+  const base = endless ? endlessArenaMult(waveIndex)
+                       : (1 + (waveIndex || 0) * WAVE_STAT_SCALE);
+  const sm = base * (1 + (killCount || 0) * KILL_SCALE)
            * cv.statMult * (isElite ? ELITE_STAT_MULT : 1);
-  const gm = mobGoldScale(waveIndex, killCount) * cv.goldMult * (isElite ? ELITE_GOLD_MULT : 1);
+  const goldBase = endless ? (1 + endlessTier(waveIndex) * WAVE_GOLD_SCALE)
+                           : (1 + (waveIndex || 0) * WAVE_GOLD_SCALE);
+  const gm = goldBase * (1 + (killCount || 0) * KILL_SCALE)
+           * cv.goldMult * (isElite ? ELITE_GOLD_MULT : 1);
   const hp = Math.max(1, Math.round(t.hp * sm * BONUSES.mobHpMult));
 
   return {

@@ -230,28 +230,49 @@ function buySkillNode(skillId, gs) {
 // 1-1만 넘긴 첫 런이 39보석을 줬다 — 스킬 트리 전체가 48보석인데.
 // 영구 성장이 두 번째 런 전에 끝나는 문제라, 소비처(스킬 48 + 해금 52 = 100)에
 // 맞춰 6~9런 규모로 다시 잡았다.
+// 무한이 본편이 되면서 정산도 갈렸다.
+//   훈련 — 도달 웨이브 위주. 손에 익히는 곳이므로 수입이 크지 않다.
+//   무한 — 층당 적립이 본체고, 깊이 갈수록 층당 몫이 커진다.
 function calcSoulStones(gs) {
-  const waveTerm = Math.floor(gs.wave * 0.5);
   const caveTerm = gs.caveLevel;
   const killTerm = Math.floor((gs.battle.runKills || 0) / 60);
+  const mult     = pactGemMult();
+
+  if (gs.mode === 'endless') {
+    const tier    = Math.max(1, gs.wave + 1);
+    const endTerm = Math.floor(gs.endlessGems || 0);
+    const recTerm = tier > (gs.stats.bestEndless || 0) ? Math.max(3, Math.floor(tier / 4)) : 0;
+    const base    = Math.max(1, endTerm + caveTerm + killTerm + recTerm);
+    return Math.max(1, Math.round(base * mult));
+  }
+
+  const waveTerm = Math.floor(gs.wave * 0.5);
   const reached  = gs.wave + (gs.stageCleared ? 1 : 0);
-  const recTerm  = reached > (gs.stats.bestWave || 0) ? 3 : 0;   // 반복 파밍보다 더 멀리 가기
-  const endTerm  = Math.floor(gs.endlessGems || 0);              // 무한 층에서 쌓인 몫
-  const base     = Math.max(1, waveTerm + caveTerm + killTerm + recTerm + endTerm);
-  return Math.max(1, Math.round(base * pactGemMult()));
+  const recTerm  = reached > (gs.stats.bestWave || 0) ? 3 : 0;
+  const base     = Math.max(1, waveTerm + caveTerm + killTerm + recTerm);
+  return Math.max(1, Math.round(base * mult));
 }
 
 // 정산 내역 — 결과 화면에서 그대로 보여준다
 function soulStoneBreakdown(gs) {
-  const reached = gs.wave + (gs.stageCleared ? 1 : 0);
-  const rows = [
-    { label:'도달 웨이브',  value:Math.floor(gs.wave * 0.5),           note:`${gs.wave}웨이브 × 0.5` },
-    { label:'케이브 레벨',  value:gs.caveLevel,                        note:`Lv.${gs.caveLevel}` },
-    { label:'처치',         value:Math.floor((gs.battle.runKills||0)/60), note:`${gs.battle.runKills||0}마리 ÷ 60` },
-  ];
-  if (reached > (gs.stats.bestWave || 0)) rows.push({ label:'최고 기록 갱신', value:3, note:'신기록!' });
-  const et = endlessTier(gs.wave);
-  if (et > 0) rows.push({ label:'∞ 무한 돌파', value:Math.floor(gs.endlessGems||0), note:`${et}층 도달` });
+  const rows = [];
   const mult = pactGemMult();
+
+  if (gs.mode === 'endless') {
+    const tier = Math.max(1, gs.wave + 1);
+    rows.push({ label:'∞ 도달 층',   value:Math.floor(gs.endlessGems||0), note:`${tier}층 · 깊을수록 층당 몫이 큽니다` });
+    rows.push({ label:'케이브 레벨', value:gs.caveLevel, note:`Lv.${gs.caveLevel}` });
+    rows.push({ label:'처치',        value:Math.floor((gs.battle.runKills||0)/60), note:`${gs.battle.runKills||0}마리 ÷ 60` });
+    if (tier > (gs.stats.bestEndless || 0)) {
+      rows.push({ label:'최고 기록 갱신', value:Math.max(3, Math.floor(tier/4)), note:`이전 최고 ${gs.stats.bestEndless||0}층` });
+    }
+    return { rows, mult, total: calcSoulStones(gs) };
+  }
+
+  const reached = gs.wave + (gs.stageCleared ? 1 : 0);
+  rows.push({ label:'도달 웨이브', value:Math.floor(gs.wave * 0.5), note:`${gs.wave}웨이브 × 0.5` });
+  rows.push({ label:'케이브 레벨', value:gs.caveLevel, note:`Lv.${gs.caveLevel}` });
+  rows.push({ label:'처치',        value:Math.floor((gs.battle.runKills||0)/60), note:`${gs.battle.runKills||0}마리 ÷ 60` });
+  if (reached > (gs.stats.bestWave || 0)) rows.push({ label:'최고 기록 갱신', value:3, note:'신기록!' });
   return { rows, mult, total: calcSoulStones(gs) };
 }

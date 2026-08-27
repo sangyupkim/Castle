@@ -1,11 +1,13 @@
 'use strict';
 
+// v8 — 무한이 본편이 되면서 mode · clearedGates · bestEndless가 추가됐다.
 // v7 — 로비 도입으로 unlocked · pacts · seenMobs가 추가됐다.
 // 구 세이브(v6)는 전투 모델이 통째로 바뀌어 이어 쓸 수 없으므로 폐기한다.
-const SAVE_KEY = 'dualfrontier_v7';
+const SAVE_KEY = 'dualfrontier_v8';
 
 function createStats() {
-  return { runs:0, bestWave:0, bestStage:0, totalKills:0, totalGold:0, totalGems:0, wavesCleared:0 };
+  return { runs:0, bestWave:0, bestStage:0, bestEndless:0, clears:0,
+           totalKills:0, totalGold:0, totalGems:0, wavesCleared:0 };
 }
 
 const SaveManager = {
@@ -29,7 +31,7 @@ const SaveManager = {
       wallRepairs: gs.wallRepairs || 0,
       research:    gs.research || 0,
       bountyUsed:  gs.bountyUsed || 0,
-      endlessChosen: !!gs.endlessChosen,
+      mode:       gs.mode || 'campaign',
       endlessGems:   gs.endlessGems || 0,
       rerolls:     gs.rerolls || 0,
       totalGoldEarned: gs.battle ? gs.battle.totalGoldEarned : 0,
@@ -43,6 +45,7 @@ const SaveManager = {
       unlocked:       gs.unlocked || [],
       pacts:          gs.pacts    || [],
       seenMobs:       gs.seenMobs || [],
+      clearedGates:   gs.clearedGates || [],
       stats:          gs.stats || createStats(),
       timestamp:  Date.now()
     };

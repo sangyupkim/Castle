@@ -464,7 +464,7 @@ function _curWaveIndex() {
 }
 function endlessCapMult(waveIndex) {
   const t = endlessTier(waveIndex);
-  return t <= 0 ? 1 : Math.min(ENDLESS_CAP_MAX, Math.pow(ENDLESS_CAP_GROWTH, t));
+  return t <= 0 ? 1 : Math.min(ENDLESS_CAP_MAX, Math.pow(ENDLESS_CAP_GROWTH, t - 1));
 }
 function breakthroughCap(waveIndex) {
   return BREAKTHROUGH_MAX * endlessCapMult(waveIndex);
@@ -541,77 +541,224 @@ function rollArenaMob(pool) {
 // 실측에서 만렙 편성(스킬 27개 + 해금 전부 + 타워 30기 Lv.5)이 13웨이브 동안
 // 기지 HP를 8밖에 안 잃었다. 원인은 명확하다 — 타워 성장(스킬 누적 × 레벨 5.4배)이
 // 적 성장(웨이브당 +22%, 선형)을 압도적으로 앞지른다.
-// 선형 스케일링으로는 어떤 숫자를 넣어도 언젠가 따라잡히므로, 무한 구간은
-// 지수로 올린다. 어떤 편성이든 반드시 무너지는 지점이 생긴다.
-// 1.14로 잡았을 때 만렙 타워 30기(총 DPS 44,700)를 넘어서는 지점이 ∞-22였는데,
-// 아레나가 ∞-21에서 먼저 런을 끝냈다 — 상단 도달 0기로 끝나는 무한 모드가 됐다.
-// 상단이 아레나보다 한두 층 먼저 뚫려야 마지막에 "타워가 못 막는다"를 실제로 본다.
-const ENDLESS_HP_GROWTH    = 1.17;   // 층당 HP 배율
-const ENDLESS_DMG_GROWTH   = 1.09;   // 층당 기지 피해 배율
-const ENDLESS_SPAWN_TIGHTEN= 0.985;  // 층당 스폰 간격
-const ENDLESS_ELITE_STEP   = 0.02;   // 층당 엘리트 확률
-const ENDLESS_GEM_PER_TIER = 0.7;    // 층당 보석 (깊이 들어갈 이유)
-// 체력만 올리면 무한 구간이 실제로는 안 어려워진다.
-// ∞ 경로 완주에 보스는 58초, 강철오크는 47초가 걸리는데 웨이브는 60초다 —
-// 무거운 적일수록 "타워에 죽는" 게 아니라 "시계에 죽어" 기지에 닿지도 못한다.
-// 속도를 같이 올려야 체력 증가가 위협으로 바뀐다.
-const ENDLESS_SPD_GROWTH   = 1.035;  // 층당 이동속도 배율
-const ENDLESS_SPD_CAP      = 2.4;    // 상한 — 이 이상은 프레임 간 이동이 격자를 건너뛴다
-// 아레나는 상단보다 완만하게 올린다.
-// 두 전선에 같은 지수를 먹였더니 아레나가 8층쯤 먼저 무너져서, 상단이 뚫리기 한참 전에
-// 런이 끝났다 — 실측(∞-1~16)에서 기지 피해 100%가 아레나 전멸발 돌파였고
-// 상단 도달은 매 층 0기였다. 두 전선이 비슷한 층에서 위험해져야 조합을 고민한다.
-const ENDLESS_ARENA_GROWTH = 1.085;
-// 상단 물량 밀도. ENDLESS_SPAWN_TIGHTEN은 아레나에만 걸려 있었고(arena.js),
-// 상단 스폰 간격은 30웨이브 값에 그대로 묶여 있었다 — 그래서 적 HP를 ×23까지
-// 올려도 타워는 "한 마리씩 도착하는" 적을 계속 처리할 수 있었다.
-// 실측에서 ∞-20까지 기지 도달 0기였던 진짜 이유가 이것이다.
-// 총 체력이 아니라 초당 도착량이 상단의 한계를 정한다.
-const ENDLESS_DENSITY_STEP = 0.96;   // 층당 스폰 간격 배율
-const ENDLESS_DENSITY_MIN  = 0.40;   // 하한 — 이 이상 촘촘해지면 개체 수가 감당이 안 된다
+// ─── ∞ 무한 모드 ─────────────────────────────────────────────────────────────
+// v3.0에서 무한 모드가 메인 콘텐츠가 됐다.
+//
+// v2.6까지 무한은 "30웨이브를 완주해야 열리는 연장전"이었다. 그런데 만렙 편성이
+// ∞-19까지 가는 데 통산 49웨이브 — 그중 앞의 30웨이브는 결과가 이미 정해진
+// 구간이었다. 매 런 30분을 알던 길로 걸어야 진짜 게임이 시작됐다.
+//
+// 그래서 무한을 1층부터 시작하는 독립 모드로 떼어냈다.
+//   훈련(캠페인 30웨이브) — 손에 익히는 곳. 한 번 완주하면 무한이 열린다.
+//   무한 — 죽어야 끝나는 본편. 도달 층이 곧 기록이고, 나온 보석으로 강해져서 다시 내려간다.
+//
+// 층 정의는 손으로 쓰지 않는다. tier 하나에서 전부 생성한다 — 그래야 진짜로 끝이 없다.
 
-// 0이면 일반 구간, 1 이상이면 무한 몇 층인지
+// 성장 곡선: 초반은 완만한 선형, 후반은 지수가 지배한다.
+// 선형만 쓰면 반드시 따라잡히고, 지수만 쓰면 1~10층이 지루하게 똑같다.
+const ENDLESS_LINEAR   = 0.09;    // 층당 가산
+const ENDLESS_EXP      = 1.055;   // 층당 배율
+const ENDLESS_ARENA_EXP= 1.040;   // 아레나는 완만하게 — 두 전선이 비슷한 층에서 위험해지도록
+const ENDLESS_DMG_EXP  = 1.035;   // 기지에 넣는 피해
+const ENDLESS_SPD_EXP  = 1.022;   // 이동속도
+const ENDLESS_SPD_CAP  = 2.4;     // 상한 — 이 이상은 프레임 간 이동이 격자를 건너뛴다
+const ENDLESS_DENSITY_STEP = 0.975;  // 층당 상단 스폰 간격
+const ENDLESS_DENSITY_MIN  = 0.40;   // 하한 — 이 이상 촘촘해지면 개체 수가 감당이 안 된다
+const ENDLESS_ARENA_TIGHTEN= 0.99;   // 층당 아레나 스폰 간격
+const ENDLESS_ELITE_STEP   = 0.012;  // 층당 정예 확률
+
+// ─── 보석 ────────────────────────────────────────────────────────────────────
+// 층당 몫이 깊이에 따라 커진다. 정액이면 20층에서 40층으로 가는 열 배 어려운 구간이
+// 정확히 두 배 값어치밖에 안 돼서, 더 내려갈 이유가 사라진다.
+const ENDLESS_GEM_BASE      = 0.35;   // 층당 기본
+const ENDLESS_GEM_ACCEL     = 0.055;  // 층당 가산 — 깊이의 값
+const ENDLESS_GATE_BONUS      = 6;    // 관문(10층 단위) 최초 돌파
+const ENDLESS_GATE_BONUS_STEP = 4;    // 관문마다 증가
+function endlessGemStep(tier) {
+  return ENDLESS_GEM_BASE + Math.max(0, (tier || 1) - 1) * ENDLESS_GEM_ACCEL;
+}
+// t층까지 내려갔을 때 쌓이는 총량 (표시용 — 실제 적립은 층마다 endlessGemStep)
+function endlessGemTotal(tier) {
+  const t = Math.max(0, tier || 0);
+  return t * ENDLESS_GEM_BASE + ENDLESS_GEM_ACCEL * t * (t - 1) / 2;
+}
+
+// 1층이 기준(×1)이고 거기서부터 오른다
+function endlessCurve(tier, exp) {
+  const n = Math.max(0, (tier || 1) - 1);
+  return (1 + n * ENDLESS_LINEAR) * Math.pow(exp, n);
+}
+
+function isEndlessRun() {
+  return (typeof gs !== 'undefined' && gs && gs.mode === 'endless');
+}
+// 무한 런에서는 웨이브 인덱스가 곧 층(0-based → 1층부터). 훈련에서는 0.
 function endlessTier(waveIndex) {
-  return Math.max(0, (waveIndex || 0) - WAVE_DEFS.length + 1);
+  return isEndlessRun() ? (waveIndex || 0) + 1 : 0;
 }
 function endlessStatMult(waveIndex) {
   const t = endlessTier(waveIndex);
-  return t <= 0 ? 1 : Math.pow(ENDLESS_HP_GROWTH, t);
-}
-function endlessDmgMult(waveIndex) {
-  const t = endlessTier(waveIndex);
-  return t <= 0 ? 1 : Math.pow(ENDLESS_DMG_GROWTH, t);
+  return t <= 0 ? 1 : endlessCurve(t, ENDLESS_EXP);
 }
 function endlessArenaMult(waveIndex) {
   const t = endlessTier(waveIndex);
-  return t <= 0 ? 1 : Math.pow(ENDLESS_ARENA_GROWTH, t);
+  return t <= 0 ? 1 : endlessCurve(t, ENDLESS_ARENA_EXP);
 }
-function endlessDensityMult(waveIndex) {
+function endlessDmgMult(waveIndex) {
   const t = endlessTier(waveIndex);
-  return t <= 0 ? 1 : Math.max(ENDLESS_DENSITY_MIN, Math.pow(ENDLESS_DENSITY_STEP, t));
+  return t <= 0 ? 1 : Math.pow(ENDLESS_DMG_EXP, t - 1);
 }
 function endlessSpdMult(waveIndex) {
   const t = endlessTier(waveIndex);
-  return t <= 0 ? 1 : Math.min(ENDLESS_SPD_CAP, Math.pow(ENDLESS_SPD_GROWTH, t));
+  return t <= 0 ? 1 : Math.min(ENDLESS_SPD_CAP, Math.pow(ENDLESS_SPD_EXP, t - 1));
 }
-// 무한 구간은 마지막 세 웨이브 정의를 돌려 쓴다 (스폰 풀은 그대로, 강도만 오른다)
-function waveDefFor(waveIndex) {
-  if (waveIndex < WAVE_DEFS.length) return WAVE_DEFS[waveIndex];
+function endlessDensityMult(waveIndex) {
   const t = endlessTier(waveIndex);
-  const base = WAVE_DEFS[WAVE_DEFS.length - 3 + ((t - 1) % 3)];
-  return {
-    defenseEnemies: base.defenseEnemies,
-    arenaPool:      base.arenaPool,
-    eliteBonus:    (base.eliteBonus || 0) + t * ENDLESS_ELITE_STEP,
-    spawnMult:     (base.spawnMult  || 1) * Math.pow(ENDLESS_SPAWN_TIGHTEN, t)
+  return t <= 0 ? 1 : Math.max(ENDLESS_DENSITY_MIN, Math.pow(ENDLESS_DENSITY_STEP, t - 1));
+}
+
+// ─── 결정적 난수 ─────────────────────────────────────────────────────────────
+// 층 구성과 변형은 무작위로 "보이되" 층 번호만으로 결정돼야 한다.
+// 같은 27층은 누가 언제 가도 같은 27층이어야 기록에 의미가 생긴다.
+function endlessRand(tier, salt) {
+  let x = ((tier | 0) * 2654435761 + (salt | 0) * 40503 + 0x9E3779B9) >>> 0;
+  x ^= x << 13; x >>>= 0;
+  x ^= x >>> 17;
+  x ^= x << 5;  x >>>= 0;
+  return x / 4294967296;
+}
+
+// ─── 적 해금 순서 ────────────────────────────────────────────────────────────
+// 층이 깊어지면 새 적이 합류하고, 오래된 적은 비중이 서서히 줄어든다.
+// 사라지지는 않는다 — 소형 물량은 끝까지 상성 판단거리로 남아야 한다.
+const ENDLESS_DEF_UNLOCK = [
+  { tier: 1,  type: 'goblin' },
+  { tier: 3,  type: 'runner' },
+  { tier: 5,  type: 'orc'    },
+  { tier: 8,  type: 'bat'    },
+  { tier: 11, type: 'brute'  },
+  { tier: 15, type: 'wyvern' },
+  { tier: 19, type: 'boss'   },
+];
+const ENDLESS_ARENA_UNLOCK = [
+  { tier: 1,  type: 'goblin'  },
+  { tier: 3,  type: 'wolf'    },
+  { tier: 6,  type: 'orc'     },
+  { tier: 9,  type: 'archer'  },
+  { tier: 13, type: 'ogre'    },
+  { tier: 17, type: 'boss'    },
+  { tier: 22, type: 'warlord' },
+];
+
+// ─── 층 변형 ─────────────────────────────────────────────────────────────────
+// 같은 곡선을 계속 올리기만 하면 40층과 41층이 구분되지 않는다.
+// 층마다 성격을 하나씩 붙여, "이번엔 뭘 세워야 하나"를 다시 묻게 만든다.
+const ENDLESS_AFFIXES = [
+  { id:'sky',   name:'창공',   icon:'🕊',  desc:'비행 비중 2배',            apply:m=>{ m.airW   *= 2.4; } },
+  { id:'iron',  name:'강철',   icon:'🛡',  desc:'적 방어력 +8',             apply:m=>{ m.armor  += 8;   } },
+  { id:'rush',  name:'폭주',   icon:'💨', desc:'이동속도 +30%',            apply:m=>{ m.spd    *= 1.30; } },
+  { id:'swarm', name:'무리',   icon:'🐝', desc:'물량 +60% · 체력 −30%',     apply:m=>{ m.count  *= 1.60; m.hp *= 0.70; } },
+  { id:'elite', name:'정예',   icon:'💀', desc:'정예 확률 +25%',            apply:m=>{ m.elite  += 0.25; } },
+  { id:'giant', name:'거인',   icon:'🗿', desc:'대형 비중 2배 · 체력 +35%', apply:m=>{ m.largeW *= 2.4; m.hp *= 1.35; } },
+  { id:'horde', name:'해일',   icon:'🌊', desc:'아레나 스폰 간격 −35%',     apply:m=>{ m.arena  *= 0.65; } },
+];
+
+// 5층마다 변형이 하나씩 늘고, 최대 3개까지 겹친다
+function affixCountFor(tier) {
+  if (tier < 5)  return 0;
+  if (tier < 15) return 1;
+  if (tier < 30) return 2;
+  return 3;
+}
+function affixesFor(tier) {
+  const n = affixCountFor(tier);
+  if (n <= 0) return [];
+  const pool = ENDLESS_AFFIXES.slice();
+  const out = [];
+  for (let i = 0; i < n && pool.length; i++) {
+    const k = Math.floor(endlessRand(tier, i + 1) * pool.length) % pool.length;
+    out.push(pool.splice(k, 1)[0]);
+  }
+  return out;
+}
+
+// 10층마다 관문 — 물량이 줄고 대형·보스가 몰려온다. 조합이 안 맞으면 여기서 막힌다.
+function isGateTier(tier) { return tier > 0 && tier % 10 === 0; }
+
+// ─── 층 생성 ─────────────────────────────────────────────────────────────────
+const _endlessDefCache = new Map();
+function endlessWaveDef(tier) {
+  if (_endlessDefCache.has(tier)) return _endlessDefCache.get(tier);
+
+  const gate = isGateTier(tier);
+  const mods = { airW:1, largeW:1, armor:0, spd:1, count:1, hp:1, elite:0, arena:1 };
+  const affixes = affixesFor(tier);
+  for (const a of affixes) a.apply(mods);
+  if (gate) { mods.largeW *= 2.0; mods.count *= 0.72; mods.hp *= 1.30; }
+
+  // 상단 구성 — 해금된 적에 가중치를 매기고 상위 4종을 쓴다
+  const unlocked = ENDLESS_DEF_UNLOCK.filter(u => tier >= u.tier);
+  const weighted = unlocked.map((u, i) => {
+    const tpl = ENEMY_TYPES[u.type] || {};
+    const age = tier - u.tier;
+    // 갓 나온 적일수록 비중이 크고, 오래되면 줄지만 0이 되지는 않는다
+    let w = Math.max(0.22, 1.55 - age * 0.035);
+    if (tpl.flying)        w *= mods.airW;
+    if (tpl.cls === 'large') w *= mods.largeW;
+    w *= 0.85 + endlessRand(tier, 40 + i) * 0.45;   // 층마다 조금씩 흔든다
+    return { type: u.type, w, tpl };
+  }).sort((a, b) => b.w - a.w).slice(0, 4);
+
+  const wSum = weighted.reduce((a, x) => a + x.w, 0) || 1;
+  // 층당 총 마릿수 — 완만하게 늘되 밀도(간격)가 실제 압력을 만든다
+  const totalCount = Math.round((10 + tier * 0.85) * mods.count);
+
+  const defenseEnemies = weighted.map(x => {
+    const share = x.w / wSum;
+    const count = Math.max(1, Math.round(totalCount * share));
+    // 무거운 적일수록 간격을 넓게 — 60초 안에 다 나오도록 맞춘다
+    const spread = (x.tpl.cls === 'large') ? 3.2 : (x.tpl.flying ? 1.4 : 1.0);
+    const interval = Math.max(280, Math.round((52000 / Math.max(1, count)) * spread * 0.42));
+    return { type: x.type, count, interval };
+  });
+
+  // 아레나 풀 — 상단과 같은 방식이되 종류를 더 섞는다
+  const aUnlocked = ENDLESS_ARENA_UNLOCK.filter(u => tier >= u.tier);
+  const arenaPool = aUnlocked.map((u, i) => {
+    const age = tier - u.tier;
+    let w = Math.max(1, Math.round((14 - age * 0.35) * (0.8 + endlessRand(tier, 70 + i) * 0.5)));
+    return [u.type, w];
+  }).slice(-5);
+
+  const def = {
+    tier, gate, affixes,
+    defenseEnemies,
+    arenaPool,
+    eliteBonus: tier * ENDLESS_ELITE_STEP + mods.elite,
+    spawnMult:  Math.pow(ENDLESS_ARENA_TIGHTEN, tier - 1) * mods.arena,
+    armorBonus: mods.armor,
+    spdBonus:   mods.spd,
+    hpBonus:    mods.hp
   };
+  _endlessDefCache.set(tier, def);
+  return def;
+}
+
+function waveDefFor(waveIndex) {
+  if (isEndlessRun()) return endlessWaveDef((waveIndex || 0) + 1);
+  return WAVE_DEFS[Math.min(waveIndex || 0, WAVE_DEFS.length - 1)];
+}
+// 층 변형이 개별 적 스탯에 얹는 값 — defense.js가 읽는다
+function endlessMods(waveIndex) {
+  if (!isEndlessRun()) return null;
+  return endlessWaveDef((waveIndex || 0) + 1);
 }
 
 function getStageInfo(waveIndex) {
   const t = endlessTier(waveIndex);
   if (t > 0) {
-    return { stageIdx: 9, waveInStage: (t - 1) % 3, stageLabel: `∞-${t}`,
-             isBossStage: true, endless: true, tier: t };
+    return { stageIdx: 9, waveInStage: 0, stageLabel: `${t}층`,
+             isBossStage: isGateTier(t), endless: true, tier: t };
   }
   const stageIdx = Math.floor(waveIndex / 3);
   const waveInStage = waveIndex % 3;
@@ -664,12 +811,6 @@ const WAVE_STAT_SCALE = 0.07;   // 웨이브 1당 몹 스탯 +7%
 const KILL_SCALE      = 0.006;  // 처치 1회당 +0.6% (웨이브 내 완만한 가속)
 const WAVE_GOLD_SCALE = 0.06;   // 웨이브 1당 보상 +6%
 
-function mobStatScale(waveIndex, killCount) {
-  return (1 + (waveIndex || 0) * WAVE_STAT_SCALE) * (1 + (killCount || 0) * KILL_SCALE);
-}
-function mobGoldScale(waveIndex, killCount) {
-  return (1 + (waveIndex || 0) * WAVE_GOLD_SCALE) * (1 + (killCount || 0) * KILL_SCALE);
-}
 
 // 웨이브 종료 후 생존 병력이 회복하는 최대 HP 비율
 const REST_HEAL_PCT    = 0.30;

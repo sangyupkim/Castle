@@ -13,8 +13,14 @@ const TUTORIAL_STEPS = [
   {
     title: '⛺ 캠프에서 시작합니다',
     text: '게임을 켜면 먼저 캠프입니다.\n\n' +
-          '런에서 모은 💎보석으로\n스킬을 찍고 새 타워·병력을 해금한 뒤\n[출격]으로 들어갑니다.\n\n' +
-          '런은 언제나 끝나지만, 캠프에 쌓인 것은 남습니다.'
+          '하강에서 모은 💎보석으로\n스킬을 찍고 새 타워·병력을 해금한 뒤\n다시 내려갑니다.\n\n' +
+          '한 판은 언제나 끝나지만, 캠프에 쌓인 것은 남습니다.'
+  },
+  {
+    title: '∞ 무한이 본편입니다',
+    text: '이 게임에 클리어는 없습니다.\n얼마나 깊이 내려갔는지가 기록입니다.\n\n' +
+          '층마다 적이 강해지고 새 변형이 붙습니다.\n죽으면 그때까지의 층수만큼 보석을 받고,\n그 보석으로 강해져 다시 내려갑니다.\n\n' +
+          '훈련을 한 판 치르면 무한이 열립니다 —\n완주할 필요는 없습니다. 손에 익히는 곳입니다.'
   },
   {
     title: '🏰 상단 — 배치하고 지켜본다',
@@ -76,9 +82,15 @@ const TUTORIAL_STEPS = [
           '일찍 뺄수록 비쌉니다. 10초 남기고 빼면 3HP,\n50초 남기고 빼면 15HP.'
   },
   {
+    title: '🏁 관문과 기록',
+    text: '무한은 10층마다 관문입니다.\n물량이 줄고 대형이 몰려옵니다 —\n조합이 안 맞으면 여기서 막힙니다.\n\n' +
+          '관문을 처음 넘으면 보석이 따로 붙고,\n그 기록은 캠프에 남습니다.\n\n' +
+          '깊이 갈수록 층당 보석이 커집니다.'
+  },
+  {
     title: '출발!',
     text: '🏰 마을에서 병력을 고용하고\n[웨이브 시작]을 누르세요.\n\n' +
-          '한 웨이브는 60초, 3웨이브가 한 스테이지입니다.\n\n' +
+          '한 층은 60초입니다. 먼저 훈련을 완주하고,\n그다음부터는 무한으로 내려가세요.\n\n' +
           'Space 시작 · A 자동/수동 · R 후퇴 · T 마을 · S 배속'
   }
 ];
@@ -87,14 +99,14 @@ function createTutorial() {
   return {
     active: false, step: 0, done: false,
     start() {
-      if (localStorage.getItem('df_tut4') === '1') { this.done = true; return; }
+      if (localStorage.getItem('df_tut5') === '1') { this.done = true; return; }
       this.active = true; this.step = 0;
     },
     next() {
       this.step++;
       if (this.step >= TUTORIAL_STEPS.length) {
         this.active = false; this.done = true;
-        localStorage.setItem('df_tut4', '1');
+        localStorage.setItem('df_tut5', '1');
       }
     },
     current() { return TUTORIAL_STEPS[this.step] || null; }

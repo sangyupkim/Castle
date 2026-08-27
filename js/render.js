@@ -311,7 +311,13 @@ function renderUIBar(ctx, gs, wm) {
   ctx.textAlign='left'; ctx.textBaseline='middle';
   ctx.fillText(`${si.stageLabel}`, 8, cy-13);
   ctx.fillStyle='#94a3b8'; ctx.font='bold 9px sans-serif';
-  ctx.fillText(`웨이브 ${si.waveInStage+1}/3`, 30, cy-12);
+  if (si.endless) {
+    const bst = gs.stats.bestEndless || 0;
+    ctx.fillStyle = si.tier > bst ? '#4ade80' : '#94a3b8';
+    ctx.fillText(si.tier > bst ? '신기록' : `최고 ${bst}`, 42, cy-12);
+  } else {
+    ctx.fillText(`웨이브 ${si.waveInStage+1}/3`, 30, cy-12);
+  }
 
   // 타이머
   const tv = wm.phase==='active'       ? Math.ceil(wm.timer)
@@ -423,12 +429,52 @@ function renderBriefing(ctx, gs) {
   ctx.fillStyle='#a5b4fc'; ctx.font='bold 13px sans-serif';
   ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillStyle = st.endless ? '#c4b5fd' : '#a5b4fc';
-  ctx.fillText(st.endless ? `∞ 무한 모드 — ${st.tier}층` : `출전 브리핑 — 스테이지 ${st.stageLabel}`, 10, BATTLE_Y+9);
+  const gate = st.endless && st.isBossStage;
+  if (gate) ctx.fillStyle = '#fbbf24';
+  ctx.fillText(st.endless ? (gate ? `🏁 ${st.tier}층 — 관문` : `∞ ${st.tier}층`)
+                          : `훈련 — 스테이지 ${st.stageLabel}`, 10, BATTLE_Y+9);
   ctx.fillStyle='#475569'; ctx.font='bold 10px sans-serif';
-  ctx.fillText(st.endless ? `적 HP ×${endlessStatMult(gs.wave).toFixed(1)} · 이동 ×${endlessSpdMult(gs.wave).toFixed(2)} · 층당 보석 +${ENDLESS_GEM_PER_TIER}`
+  ctx.fillText(st.endless ? `적 HP ×${endlessStatMult(gs.wave).toFixed(1)} · 이동 ×${endlessSpdMult(gs.wave).toFixed(2)} · 이 층 보석 +${endlessGemStep(st.tier).toFixed(1)}`
                           : `웨이브 ${st.waveInStage+1}/3${st.isBossStage?'  ★보스 스테이지':''}`, 10, BATTLE_Y+26);
 
+  // 최고 기록 — 지금 어디쯤인지가 무한의 유일한 좌표다
+  if (st.endless) {
+    const best = gs.stats.bestEndless || 0;
+    ctx.textAlign='right'; ctx.fillStyle = st.tier > best ? '#22c55e' : '#334155';
+    ctx.font='bold 10px sans-serif';
+    ctx.fillText(st.tier > best ? `★ 신기록 구간` : `최고 ${best}층`, CW-10, BATTLE_Y+12);
+    ctx.textAlign='left';
+  }
+
   let y = BATTLE_Y+44;
+
+  // ── 이 층의 변형 ─────────────────────────────────────────────────────────
+  // 같은 곡선을 올리기만 하면 40층과 41층이 구분되지 않는다.
+  // 층마다 붙는 성격을 먼저 보여줘야 "이번엔 뭘 세우지"를 묻게 된다.
+  const affixes = (def.affixes || []);
+  if (st.endless && (affixes.length || gate)) {
+    const ah = 30;
+    roundRect(ctx, 6, y, CW-12, ah, 6);
+    ctx.fillStyle = gate ? 'rgba(120,53,15,0.35)' : 'rgba(76,29,149,0.30)'; ctx.fill();
+    ctx.strokeStyle = gate ? '#f59e0b' : '#7c3aed'; ctx.lineWidth=1; ctx.stroke();
+    let ax = 12;
+    if (gate) {
+      ctx.fillStyle='#fbbf24'; ctx.font='bold 10px sans-serif';
+      ctx.textAlign='left'; ctx.textBaseline='middle';
+      ctx.fillText('🏁 관문 · 대형 집중', ax, y+ah/2);
+      ax += 108;
+    }
+    affixes.forEach(a => {
+      ctx.fillStyle='#c4b5fd'; ctx.font='bold 10px sans-serif';
+      ctx.textAlign='left'; ctx.textBaseline='middle';
+      ctx.fillText(`${a.icon} ${a.name}`, ax, y+ah/2-5);
+      ctx.fillStyle='#6d5b9e'; ctx.font='bold 8px sans-serif';
+      ctx.fillText(a.desc, ax, y+ah/2+7);
+      ax += Math.max(72, ctx.measureText(a.desc).width + 14);
+    });
+    ctx.textBaseline='top';
+    y += ah + 5;
+  }
 
   // ── 잔존 침입자 ──────────────────────────────────────────────────────────
   // 지난 웨이브에 못 잡고 넘긴 적. 이번 웨이브 물량 위에 그대로 얹히므로
@@ -688,7 +734,10 @@ function renderArenaStatusBar(ctx, gs) {
   const cy = BATTLE_Y + ARENA_STATUS_H/2;
   ctx.fillStyle='#fbbf24'; ctx.fillText(`💰 ${b.goldEarned}`, 8, cy);
   ctx.fillStyle='#f87171'; ctx.fillText(`⚔ ${b.killCount}`, 66, cy);
-  const scalePct = Math.round((mobStatScale(a.waveIndex, b.killCount) - 1) * 100);
+  // 아레나 몹 강화율 — 무한은 층 곡선, 훈련은 웨이브 선형. 둘 다 처치 누적을 얹는다.
+  const aBase = endlessTier(a.waveIndex) > 0 ? endlessArenaMult(a.waveIndex)
+                                             : (1 + (a.waveIndex||0) * WAVE_STAT_SCALE);
+  const scalePct = Math.round((aBase * (1 + (b.killCount||0) * KILL_SCALE) - 1) * 100);
   ctx.fillStyle='#7c3aed'; ctx.fillText(`🗿${gs.caveLevel} 몹+${scalePct}%`, 116, cy);
 
   const live = a.mobs.filter(m=>!m.dead).length;
@@ -809,7 +858,7 @@ function renderArenaOverlay(ctx, gs) {
 // 런 종료 안내 — renderHUD는 전투 페이지 위에만 그린다
 function renderHUD(ctx, gs) {
   if (gs.gameOver)    { renderDefeatOverlay(ctx, gs); return; }
-  if (gs.stageCleared){ renderCrossroads(ctx, gs);   return; }
+  if (gs.stageCleared){ renderTrainingClear(ctx, gs); return; }
   gs.ui.bankBtn = gs.ui.endlessBtn = null;
 }
 
@@ -823,101 +872,66 @@ function renderDefeatOverlay(ctx, gs) {
   ctx.fillText('탭하여 결과 보기', CW/2, CH/2+16);
 }
 
-// ─── 30웨이브 완주 — 갈림길 ──────────────────────────────────────────────────
-// 런의 끝이 아니라 선택지다. 지금 정산하고 확실히 챙길지,
-// 무한 모드로 더 들어가 더 벌지 — 대신 죽으면 그대로 끝난다.
-function renderCrossroads(ctx, gs) {
+// ─── 훈련 완주 — 무한이 열린다 ───────────────────────────────────────────────
+// v3.0에서 갈림길이 사라졌다. 훈련 30웨이브는 손에 익히는 곳이고,
+// 완주하면 본편인 무한이 열린다. 이후로는 캠프에서 바로 무한으로 내려간다.
+function renderTrainingClear(ctx, gs) {
   ctx.fillStyle='#050810'; ctx.fillRect(0,0,CW,CH);
   ctx.textAlign='center'; ctx.textBaseline='top';
 
-  let y = 64;
+  const first = (gs.stats.clears || 0) <= 1;
+
+  let y = 76;
   ctx.fillStyle='#22c55e'; ctx.font='bold 27px sans-serif';
-  ctx.fillText('스테이지 클리어!', CW/2, y); y += 38;
+  ctx.fillText('훈련 완주!', CW/2, y); y += 38;
   ctx.fillStyle='#475569'; ctx.font='12px sans-serif';
-  ctx.fillText('30웨이브를 모두 막아냈습니다', CW/2, y); y += 34;
+  ctx.fillText('30웨이브를 모두 막아냈습니다', CW/2, y); y += 40;
 
-  // 지금 정산하면 받을 보석
-  const bd = soulStoneBreakdown(gs);
-  ctx.fillStyle='#a78bfa'; ctx.font='bold 20px sans-serif';
-  ctx.fillText(`💎 +${bd.total}`, CW/2, y); y += 26;
-  ctx.fillStyle='#64748b'; ctx.font='11px sans-serif';
-  ctx.fillText(`지금 정산하면 받는 보석 · 보유 ${gs.soulStones}💎`, CW/2, y); y += 34;
-
-  // ── 정산하기 ──
-  const bw = CW-56, bh = 74, bx = 28;
-  roundRect(ctx, bx, y, bw, bh, 9);
-  ctx.fillStyle='#0d1929'; ctx.fill(); ctx.strokeStyle='#38bdf8'; ctx.lineWidth=2; ctx.stroke();
-  ctx.textAlign='left';
-  ctx.fillStyle='#7dd3fc'; ctx.font='bold 15px sans-serif';
-  ctx.fillText('🏳 정산하고 캠프로', bx+16, y+13);
-  ctx.fillStyle='#64748b'; ctx.font='11px sans-serif';
-  ctx.fillText(`보석 ${bd.total}개를 확실히 챙깁니다.`, bx+16, y+36);
-  ctx.fillText('안전하게 끝내고 다음 런을 준비합니다.', bx+16, y+52);
-  gs.ui.bankBtn = {x:bx, y:y, w:bw, h:bh};
-  y += bh + 14;
-
-  // ── 무한 모드 ──
-  roundRect(ctx, bx, y, bw, bh+18, 9);
+  // ── 무한 해금 ──
+  const bw = CW-56, bx = 28, bh = 118;
+  roundRect(ctx, bx, y, bw, bh, 10);
   ctx.fillStyle='#1a0d2e'; ctx.fill(); ctx.strokeStyle='#a78bfa'; ctx.lineWidth=2; ctx.stroke();
-  ctx.fillStyle='#c4b5fd'; ctx.font='bold 15px sans-serif';
-  ctx.fillText('∞ 무한 모드로 계속', bx+16, y+13);
-  ctx.fillStyle='#64748b'; ctx.font='11px sans-serif';
-  ctx.fillText(`한 층 오를 때마다 적이 ×${ENDLESS_HP_GROWTH} 강해집니다.`, bx+16, y+36);
-  ctx.fillText(`층당 보석 +${ENDLESS_GEM_PER_TIER} · 여기서부터는 죽어야 끝납니다.`, bx+16, y+52);
-  ctx.fillStyle='#f87171'; ctx.font='bold 11px sans-serif';
-  ctx.fillText('기지가 무너지면 지금까지의 보석도 그대로 정산됩니다.', bx+16, y+70);
-  gs.ui.endlessBtn = {x:bx, y:y, w:bw, h:bh+18};
-  y += bh + 18 + 22;
-
-  // 최고 기록
   ctx.textAlign='center';
-  ctx.fillStyle='#334155'; ctx.font='10px sans-serif';
-  const best = gs.stats.bestEndless || 0;
-  ctx.fillText(best > 0 ? `최고 기록 — 무한 ${best}층` : '아직 무한 모드 기록이 없습니다', CW/2, y);
-  y += 26;
+  ctx.fillStyle='#c4b5fd'; ctx.font='bold 19px sans-serif';
+  ctx.fillText(first ? '∞ 무한이 열렸습니다' : '∞ 무한', CW/2, y+16);
+  ctx.fillStyle='#8b7bb8'; ctx.font='11px sans-serif';
+  ctx.fillText('1층부터 내려가며 버티는 본편입니다.', CW/2, y+46);
+  ctx.fillText('층마다 적이 강해지고 새 변형이 붙습니다.', CW/2, y+64);
+  ctx.fillStyle='#a78bfa'; ctx.font='bold 11px sans-serif';
+  ctx.fillText('깊이 갈수록 층당 보석이 커집니다 — 그게 다음 판의 힘입니다.', CW/2, y+88);
+  y += bh + 22;
 
-  // ── 무한 층별 전망 — 얼마나 벌고 얼마나 세지는지 ────────────────────────
-  const ph2 = 104;
-  roundRect(ctx, 28, y, CW-56, ph2, 8);
+  // ── 층 전망 ──
+  const ph = 108;
+  roundRect(ctx, bx, y, bw, ph, 8);
   ctx.fillStyle='#0b0f1a'; ctx.fill(); ctx.strokeStyle='#1e293b'; ctx.lineWidth=1; ctx.stroke();
   ctx.textAlign='left'; ctx.fillStyle='#64748b'; ctx.font='bold 10px sans-serif';
-  ctx.fillText('무한 층 전망', 42, y+10);
+  ctx.fillText('무한 층 전망', bx+14, y+10);
 
-  const tiers = [5, 10, 15, 20];
-  const colW = (CW-84)/tiers.length;
+  const tiers = [10, 20, 30, 40];
+  const colW = (bw-28)/tiers.length;
   tiers.forEach((t,i) => {
-    const cx2 = 42 + i*colW + colW/2;
+    const cx2 = bx+14 + i*colW + colW/2;
     ctx.textAlign='center';
-    ctx.fillStyle='#c4b5fd'; ctx.font='bold 11px sans-serif';
-    ctx.fillText(`∞-${t}`, cx2, y+30);
+    ctx.fillStyle = isGateTier(t) ? '#fbbf24' : '#c4b5fd';
+    ctx.font='bold 12px sans-serif';
+    ctx.fillText(`${t}층`, cx2, y+30);
     ctx.fillStyle='#f87171'; ctx.font='bold 10px sans-serif';
-    ctx.fillText(`적 ×${Math.pow(ENDLESS_HP_GROWTH,t).toFixed(1)}`, cx2, y+48);
+    ctx.fillText(`적 ×${endlessCurve(t, ENDLESS_EXP).toFixed(1)}`, cx2, y+50);
     ctx.fillStyle='#a78bfa'; ctx.font='bold 10px sans-serif';
-    ctx.fillText(`💎+${Math.floor(t*ENDLESS_GEM_PER_TIER)}`, cx2, y+64);
+    ctx.fillText(`💎${Math.floor(endlessGemTotal(t))}`, cx2, y+68);
   });
   ctx.textAlign='left'; ctx.fillStyle='#334155'; ctx.font='9px sans-serif';
-  ctx.fillText('적은 지수로 오릅니다 — 어떤 편성이든 언젠가는 무너집니다.', 42, y+82);
-  y += ph2 + 14;
+  ctx.fillText('10층마다 관문 — 최초 돌파에 보석이 따로 붙습니다.', bx+14, y+86);
+  y += ph + 20;
 
-  // ── 이번 런 요약 ────────────────────────────────────────────────────────
-  const stats = [
-    ['처치',      `${gs.battle.runKills||0}`,          '#f87171'],
-    ['획득 골드', `${gs.battle.totalGoldEarned}`,       COLORS.gold],
-    ['기지',      `${Math.ceil(gs.baseHP)}/${baseHpMax()}`, hpColor(gs.baseHP/baseHpMax())],
-    ['타워',      `${gs.towers.length}기`,              '#22c55e'],
-  ];
-  const sw2 = (CW-56)/stats.length;
-  stats.forEach((st,i) => {
-    const sx = 28 + i*sw2 + sw2/2;
-    ctx.textAlign='center';
-    ctx.fillStyle='#334155'; ctx.font='bold 9px sans-serif';
-    ctx.fillText(st[0], sx, y);
-    ctx.fillStyle=st[2]; ctx.font='bold 13px sans-serif';
-    ctx.fillText(st[1], sx, y+14);
-  });
+  ctx.textAlign='center';
+  ctx.fillStyle='#94a3b8'; ctx.font='13px sans-serif';
+  ctx.fillText('탭하여 정산', CW/2, y);
+
+  gs.ui.bankBtn = gs.ui.endlessBtn = null;
 }
 
-// ─── 업그레이드 픽 화면 ──────────────────────────────────────────────────────
 function renderUpgradePick(ctx, gs) {
   // 강화 선택은 온전히 집중해야 하는 결정이다 — 뒤 화면을 완전히 가린다
   ctx.fillStyle='#050810'; ctx.fillRect(0,0,CW,CH);
@@ -1054,7 +1068,9 @@ function renderUpgradePick(ctx, gs) {
     const nst = getStageInfo(nextIdx);
     ctx.textAlign='left'; ctx.textBaseline='top';
     ctx.fillStyle='#94a3b8'; ctx.font='bold 10px sans-serif';
-    ctx.fillText(`다음 — 스테이지 ${nst.stageLabel} 웨이브 ${nst.waveInStage+1}/3`, 32, npY+9);
+    ctx.fillText(nst.endless
+        ? `다음 — ${nst.stageLabel}${nst.isBossStage ? '  🏁관문' : ''}${(nd.affixes||[]).length ? '  ' + nd.affixes.map(a=>a.icon+a.name).join(' ') : ''}`
+        : `다음 — 스테이지 ${nst.stageLabel} 웨이브 ${nst.waveInStage+1}/3`, 32, npY+9);
     ctx.textAlign='right'; ctx.fillStyle='#22c55e'; ctx.font='bold 9px sans-serif';
     ctx.fillText(`★완주 +${clearBonusGold(nextIdx)}💰 · 성벽 +${clearRepair(nextIdx)}`, CW-32, npY+10);
 
@@ -1143,7 +1159,9 @@ function renderLobbyHeader(ctx, gs) {
   ctx.fillText(`💎 ${gs.soulStones}`, CW-12, 20);
   const st = gs.stats;
   ctx.fillStyle='#475569'; ctx.font='9px sans-serif';
-  ctx.fillText(`최고 ${st.bestWave||0}웨이브 · ${st.runs||0}회 플레이`, CW-12, 39);
+  ctx.fillText((st.bestEndless||0) > 0
+      ? `∞ 최고 ${st.bestEndless}층 · ${st.runs||0}회 하강`
+      : `최고 ${st.bestWave||0}웨이브 · ${st.runs||0}회 플레이`, CW-12, 39);
 }
 
 function renderLobbyTabs(ctx, gs) {
@@ -1172,11 +1190,49 @@ function renderLobbyTabs(ctx, gs) {
 
 // ── ⚔️ 출격 ─────────────────────────────────────────────────────────────────
 function renderLobbySortie(ctx, gs) {
-  let y = LOBBY_BODY_Y + 14;
-
+  let y = LOBBY_BODY_Y + 12;
   ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillStyle='#94a3b8'; ctx.font='bold 10px sans-serif';
-  ctx.fillText('다음 런의 시작 조건', 14, y); y += 20;
+
+  // ── 기록 배너 — 이 게임의 점수판 ────────────────────────────────────────
+  const best = gs.stats.bestEndless || 0;
+  const open = endlessUnlocked();
+  const rh = 64;
+  roundRect(ctx,10,y,CW-20,rh,8);
+  ctx.fillStyle = open ? '#1a1033' : '#0c1220'; ctx.fill();
+  ctx.strokeStyle = open ? '#7c3aed' : '#1e293b'; ctx.lineWidth=1; ctx.stroke();
+
+  if (open) {
+    ctx.fillStyle='#8b7bb8'; ctx.font='bold 9px sans-serif';
+    ctx.fillText('∞ 최고 도달 층', 18, y+10);
+    ctx.fillStyle='#c4b5fd'; ctx.font='bold 30px sans-serif';
+    ctx.fillText(`${best}`, 18, y+24);
+    const wBest = ctx.measureText(`${best}`).width;
+    ctx.fillStyle='#6d5b9e'; ctx.font='bold 12px sans-serif';
+    ctx.fillText('층', 20+wBest, y+42);
+
+    // 다음 관문까지
+    const nextGate = (Math.floor(best/10)+1)*10;
+    ctx.textAlign='right';
+    ctx.fillStyle='#fbbf24'; ctx.font='bold 10px sans-serif';
+    ctx.fillText(`다음 관문 ${nextGate}층`, CW-18, y+12);
+    ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif';
+    ctx.fillText(`돌파 시 💎+${ENDLESS_GATE_BONUS + Math.floor(nextGate/10)*ENDLESS_GATE_BONUS_STEP}`, CW-18, y+28);
+    ctx.fillStyle='#334155'; ctx.font='9px sans-serif';
+    ctx.fillText(`관문 ${(gs.clearedGates||[]).length}개 돌파`, CW-18, y+44);
+    ctx.textAlign='left';
+    // 진행 바 — 다음 관문까지
+    const pw = CW-36, prog = (best % 10) / 10;
+    ctx.fillStyle='#1e293b'; ctx.fillRect(18, y+rh-9, pw, 4);
+    ctx.fillStyle='#a78bfa'; ctx.fillRect(18, y+rh-9, pw*prog, 4);
+  } else {
+    ctx.fillStyle='#64748b'; ctx.font='bold 11px sans-serif';
+    ctx.fillText('∞ 무한 — 아직 잠겨 있습니다', 18, y+13);
+    ctx.fillStyle='#475569'; ctx.font='10px sans-serif';
+    ctx.fillText('훈련을 한 판 치르면 열립니다 — 완주하지 않아도 됩니다.', 18, y+32);
+    ctx.fillStyle='#334155'; ctx.font='9px sans-serif';
+    ctx.fillText('무한이 본편입니다 — 훈련은 손에 익히는 곳입니다.', 18, y+48);
+  }
+  y += rh + 10;
 
   // 해금된 편성
   const th = 84;
@@ -1273,8 +1329,7 @@ function renderLobbySortie(ctx, gs) {
 
   // 진행 상황
   ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif';
-  const cleared = (gs.clearedStages||[]).filter(Boolean).length;
-  ctx.fillText(`스테이지 ${cleared}/10 클리어 · 누적 처치 ${gs.stats.totalKills||0} · 누적 보석 ${gs.stats.totalGems||0}`, 14, y);
+  ctx.fillText(`관문 ${(gs.clearedGates||[]).length}개 돌파 · 누적 처치 ${gs.stats.totalKills||0} · 누적 보석 ${gs.stats.totalGems||0}`, 14, y);
   y += 22;
 
   // 다음 목표 — 보석을 어디에 쓰면 좋을지 한 줄로 짚어준다
@@ -1305,11 +1360,11 @@ function renderLobbySortie(ctx, gs) {
   }
   if (!nextUnlock && sp.owned >= sp.total) {
     ctx.fillStyle='#86efac'; ctx.font='10px sans-serif';
-    ctx.fillText('전부 열었습니다 — 📜 서약으로 난이도를 올려보세요', 18, gy);
+    ctx.fillText('전부 열었습니다 — 📜 서약으로 난이도를 올려 더 깊이 내려가세요', 18, gy);
     gy += 17;
   }
   ctx.fillStyle='#475569'; ctx.font='9px sans-serif';
-  ctx.fillText(`이번 런 예상 보석 배율 ×${pactGemMult().toFixed(2)}`, 18, gy);
+  ctx.fillText(`이번 하강 예상 보석 배율 ×${pactGemMult().toFixed(2)}`, 18, gy);
 }
 
 // ── 🌳 스킬 ─────────────────────────────────────────────────────────────────
@@ -1436,10 +1491,46 @@ function renderLobbyRecord(ctx, gs) {
   let y = LOBBY_BODY_Y + 12;
   ctx.textAlign='left'; ctx.textBaseline='top';
 
+  // ── 무한 최고 기록 — 이 게임의 점수판 ────────────────────────────────────
+  const best = st.bestEndless || 0;
+  const gates = gs.clearedGates || [];
+  const bh = 58;
+  roundRect(ctx,10,y,CW-20,bh,8);
+  ctx.fillStyle='#1a1033'; ctx.fill(); ctx.strokeStyle='#7c3aed'; ctx.lineWidth=1; ctx.stroke();
+  ctx.fillStyle='#8b7bb8'; ctx.font='bold 9px sans-serif';
+  ctx.fillText('∞ 최고 도달 층', 18, y+9);
+  ctx.fillStyle='#c4b5fd'; ctx.font='bold 26px sans-serif';
+  ctx.fillText(`${best}`, 18, y+22);
+  const bw2 = ctx.measureText(`${best}`).width;
+  ctx.fillStyle='#6d5b9e'; ctx.font='bold 11px sans-serif';
+  ctx.fillText('층', 20+bw2, y+37);
+  ctx.textAlign='right'; ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif';
+  ctx.fillText(`${st.runs||0}회 하강 · 관문 ${gates.length}개 돌파`, CW-18, y+11);
+  ctx.fillStyle='#334155'; ctx.font='9px sans-serif';
+  ctx.fillText(`훈련 최고 ${st.bestWave||0}웨이브`, CW-18, y+38);
+  ctx.textAlign='left';
+  y += bh + 12;
+
+  // ── 관문 기록 ────────────────────────────────────────────────────────────
+  ctx.fillStyle='#fbbf24'; ctx.font='bold 11px sans-serif';
+  ctx.fillText('🏁 관문', 14, y); y += 18;
+  const gateList = [10,20,30,40,50,60,70,80];
+  const gw = (CW-30)/gateList.length;
+  gateList.forEach((g,i) => {
+    const cx = 12 + i*gw, on = gates.includes(g);
+    roundRect(ctx,cx,y,gw-3,26,4);
+    ctx.fillStyle = on ? '#2a1f05' : '#0a0e18'; ctx.fill();
+    ctx.strokeStyle = on ? '#f59e0b' : '#1e293b'; ctx.lineWidth=1; ctx.stroke();
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle = on ? '#fbbf24' : '#334155'; ctx.font='bold 9px sans-serif';
+    ctx.fillText(`${g}`, cx+(gw-3)/2, y+13);
+  });
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  y += 38;
+
   const rows = [
     ['플레이 횟수',   `${st.runs||0}회`],
-    ['최고 도달',     `${st.bestWave||0}웨이브`],
-    ['최고 스테이지', `1-${Math.max(1, st.bestStage||1)}`],
+    ['훈련 최고',     `${st.bestWave||0}웨이브`],
     ['누적 처치',     `${st.totalKills||0}마리`],
     ['누적 골드',     `${st.totalGold||0}💰`],
     ['누적 보석',     `${st.totalGems||0}💎`],
@@ -1458,7 +1549,7 @@ function renderLobbyRecord(ctx, gs) {
 
   // 스테이지 클리어 현황
   ctx.textAlign='left'; ctx.fillStyle='#60a5fa'; ctx.font='bold 11px sans-serif';
-  ctx.fillText('🗺 스테이지', 14, y); y += 18;
+  ctx.fillText('🗺 훈련 스테이지', 14, y); y += 18;
   const cs = gs.clearedStages || [];
   const cw = (CW-30)/10;
   for (let i=0; i<10; i++) {
@@ -1510,20 +1601,57 @@ function renderLobbyRecord(ctx, gs) {
 }
 
 // ── 출격 버튼 ───────────────────────────────────────────────────────────────
+// 출격은 두 갈래다. 무한이 본편이므로 넓고 밝게, 훈련은 옆에 작게 둔다.
 function renderSortieBar(ctx, gs) {
   const by = CH - LOBBY_SORTIE_H;
   ctx.fillStyle='#0d1220'; ctx.fillRect(0,by,CW,LOBBY_SORTIE_H);
   ctx.strokeStyle='#1e293b'; ctx.lineWidth=1;
   ctx.beginPath(); ctx.moveTo(0,by+0.5); ctx.lineTo(CW,by+0.5); ctx.stroke();
 
-  const bw=CW-24, bh=42, bx=12, byy=by+9;
-  roundRect(ctx,bx,byy,bw,bh,8);
-  ctx.fillStyle='#14532d'; ctx.fill();
-  ctx.strokeStyle='#22c55e'; ctx.lineWidth=2; ctx.stroke();
-  ctx.fillStyle='#fff'; ctx.font='bold 16px sans-serif';
+  const open = endlessUnlocked();
+  const bh = 42, byy = by + 9;
+
+  if (!open) {
+    // 아직 훈련을 못 끝냈다 — 선택지를 만들지 않는다
+    const bw = CW-24, bx = 12;
+    roundRect(ctx,bx,byy,bw,bh,8);
+    ctx.fillStyle='#14532d'; ctx.fill();
+    ctx.strokeStyle='#22c55e'; ctx.lineWidth=2; ctx.stroke();
+    ctx.fillStyle='#fff'; ctx.font='bold 15px sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('⚔️  훈련 시작', CW/2 - 40, byy+bh/2);
+    ctx.fillStyle='#86efac'; ctx.font='bold 9px sans-serif';
+    ctx.fillText('한 판 치르면 ∞ 무한이 열립니다', CW/2 + 82, byy+bh/2+1);
+    gs.ui.sortieBtn = {x:bx,y:byy,w:bw,h:bh};
+    gs.ui.trainBtn  = null;
+    return;
+  }
+
+  const trainW = 132, gap = 8;
+  const endW = CW - 24 - trainW - gap;
+
+  // ∞ 무한 — 본편
+  roundRect(ctx,12,byy,endW,bh,8);
+  ctx.fillStyle='#2e1065'; ctx.fill();
+  ctx.strokeStyle='#a78bfa'; ctx.lineWidth=2; ctx.stroke();
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText('⚔️  출  격', CW/2, byy+bh/2);
-  gs.ui.sortieBtn = {x:bx,y:byy,w:bw,h:bh};
+  ctx.fillStyle='#fff'; ctx.font='bold 16px sans-serif';
+  ctx.fillText('∞  무한 하강', 12+endW/2, byy+bh/2-6);
+  const best = gs.stats.bestEndless || 0;
+  ctx.fillStyle='#c4b5fd'; ctx.font='bold 9px sans-serif';
+  ctx.fillText(best > 0 ? `최고 ${best}층 — 더 내려가기` : '첫 하강', 12+endW/2, byy+bh/2+11);
+  gs.ui.sortieBtn = {x:12,y:byy,w:endW,h:bh};
+
+  // 훈련 — 연습
+  const tx = 12 + endW + gap;
+  roundRect(ctx,tx,byy,trainW,bh,8);
+  ctx.fillStyle='#0f1e17'; ctx.fill();
+  ctx.strokeStyle='#22c55e'; ctx.lineWidth=1; ctx.stroke();
+  ctx.fillStyle='#4ade80'; ctx.font='bold 12px sans-serif';
+  ctx.fillText('⚔️ 훈련', tx+trainW/2, byy+bh/2-6);
+  ctx.fillStyle='#166534'; ctx.font='bold 8px sans-serif';
+  ctx.fillText('30웨이브 · 연습', tx+trainW/2, byy+bh/2+10);
+  gs.ui.trainBtn = {x:tx,y:byy,w:trainW,h:bh};
 }
 
 // ─── 결과 화면 ───────────────────────────────────────────────────────────────
@@ -1536,13 +1664,25 @@ function renderResult(ctx, gs) {
 
   ctx.textAlign='center'; ctx.textBaseline='top';
   let y = 46;
-  ctx.fillStyle = r.cleared ? '#22c55e' : '#ef4444';
-  ctx.font='bold 26px sans-serif';
-  ctx.fillText(r.cleared ? '스테이지 클리어!' : '기지 함락', CW/2, y);
-  y += 36;
-  ctx.fillStyle='#475569'; ctx.font='11px sans-serif';
-  ctx.fillText(r.cleared ? '30웨이브를 모두 막아냈습니다' : '다음엔 더 멀리 갈 수 있습니다', CW/2, y);
-  y += 30;
+  if (r.endless) {
+    // 무한은 도달 층이 곧 성적표다 — 제목 자리를 층수에 내준다
+    ctx.fillStyle='#c4b5fd'; ctx.font='bold 13px sans-serif';
+    ctx.fillText('∞ 하강 종료', CW/2, y); y += 20;
+    ctx.fillStyle='#a78bfa'; ctx.font='bold 46px sans-serif';
+    ctx.fillText(`${r.endlessTier}층`, CW/2, y); y += 52;
+    ctx.fillStyle='#475569'; ctx.font='11px sans-serif';
+    ctx.fillText(`이전 최고 ${gs.stats.bestEndless||0}층 · 여기까지 버텼습니다`, CW/2, y);
+    y += 28;
+  } else {
+    ctx.fillStyle = r.cleared ? '#22c55e' : '#ef4444';
+    ctx.font='bold 26px sans-serif';
+    ctx.fillText(r.cleared ? '훈련 완주!' : '기지 함락', CW/2, y);
+    y += 36;
+    ctx.fillStyle='#475569'; ctx.font='11px sans-serif';
+    ctx.fillText(r.cleared ? '30웨이브를 모두 막아냈습니다 — ∞ 무한이 열렸습니다'
+                           : '다음엔 더 멀리 갈 수 있습니다', CW/2, y);
+    y += 30;
+  }
 
   if (r.newBest) {
     roundRect(ctx,(CW-160)/2,y,160,24,12);
@@ -1555,7 +1695,7 @@ function renderResult(ctx, gs) {
 
   // 이번 런 지표
   const stats = [
-    ['도달',     `${r.reached}웨이브`],
+    ['도달',     r.endless ? `${r.endlessTier}층` : `${r.reached}웨이브`],
     ['처치',     `${r.kills}마리`],
     ['획득 골드', `${r.gold}💰`],
     ['남은 기지', `${r.baseHP}HP`],
