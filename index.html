@@ -5,6 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>듀얼 프론티어</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%8F%B0%3C/text%3E%3C/svg%3E">
+
+<!-- 설치형(PWA) — 크롬에서 [앱 설치]로 홈 화면/바탕화면에 올릴 수 있다 -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0a0a0f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="듀얼 프론티어">
+<link rel="apple-touch-icon" href="assets/images/icon-192.png">
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html {
@@ -44,5 +53,14 @@ body {
 <script src="js/tutorial.js"></script>
 <script src="js/render.js"></script>
 <script src="js/game.js"></script>
+<script>
+// 서비스 워커 — 오프라인 실행과 설치를 가능하게 한다.
+// file://로 열었을 때(데스크톱 Electron 포함)는 등록되지 않으므로 조건을 건다.
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+</script>
 </body>
 </html>
