@@ -104,24 +104,27 @@ const TOWN_BUILDINGS = [
   },
   {
     id:'inn', name:'여관', icon:'🏨', buildCost:35, color:'#f472b6',
-    desc:'회복 · 특수 용병 고용',
+    desc:'웨이브 후 회복 · 특수 용병',
     lvCost:40, lvMult:1.72,
+    // 여관이 하는 일은 둘뿐이다 — 웨이브가 끝난 뒤의 회복, 그리고 특수 용병.
+    // 예전에는 '뜨거운 식사'(아군 최대 HP)가 있었는데 병영의 '체력 단련'과 같은 값을 올려서,
+    // 두 건물이 같은 일을 하고 있었다. 겹치면 어느 쪽을 올릴지가 선택이 아니라 계산이 된다.
     tracks:[
+      // ── 회복 ──
       { id:'i_rest', name:'따뜻한 잠자리', icon:'🛏️', unlockLv:0, cost:12, costMult:1.44, step:0.03, growth:0.10,
         desc:v=>`웨이브 후 회복 +${pct(v)}`,                 apply:(b,v)=>{ b.restHealBonus += v; } },
-      { id:'i_meal', name:'뜨거운 식사',   icon:'🍲', unlockLv:0, cost:15, costMult:1.44, step:16,   growth:0.18,
-        desc:v=>`아군 최대 HP +${Math.round(v)}`,            apply:(b,v)=>{ b.unitHp += v; } },
-      { id:'i_tonic',name:'회복 물약',     icon:'🧴', unlockLv:1, cost:26, costMult:1.50, step:0.09, growth:0.08, maxLv:8,
-        desc:v=>`전투 중 자연 회복 +${pct(v)}`,              apply:(b,v)=>{ b.regenBonus += v; } },
-      // 특수 용병 — 여관의 본체
-      { id:'i_luck', name:'소문난 주점',   icon:'🍺', unlockLv:1, cost:28, costMult:1.52, step:0.06, growth:0.08, maxLv:8,
+      { id:'i_hero', name:'영웅 대접',     icon:'🍷', unlockLv:4, cost:70, costMult:2.0,  step:1,    growth:0,    maxLv:1,
+        desc:()=>'웨이브 후 영웅 완전 회복',                  apply:(b)=>{ b.heroFullRest = true; } },
+      // ── 특수 용병 ──
+      { id:'i_luck', name:'소문난 주점',   icon:'🍺', unlockLv:0, cost:28, costMult:1.52, step:0.06, growth:0.08, maxLv:8,
         desc:v=>`특수 용병 등장 확률 +${pct(v)}`,            apply:(b,v)=>{ b.specialChance += v; } },
+      { id:'i_fame', name:'명성',          icon:'📜', unlockLv:1, cost:30, costMult:1.50, step:0.08, growth:0.10,
+        desc:v=>`특수 용병 능력치 +${pct(v)}`,               apply:(b,v)=>{ b.specialUnitMult += v; } },
       { id:'i_slot', name:'별관 증축',     icon:'🚪', unlockLv:2, cost:55, costMult:2.05, step:1,    growth:0,    maxLv:4,
         desc:v=>`특수 용병 슬롯 +${Math.round(v)}`,          apply:(b,v)=>{ b.specialSlotBonus += Math.round(v); } },
-      { id:'i_hero', name:'영웅 대접',     icon:'🍷', unlockLv:5, cost:70, costMult:2.0,  step:1,    growth:0,    maxLv:1,
-        desc:()=>'웨이브 후 영웅 완전 회복',                  apply:(b)=>{ b.heroFullRest = true; } },
       { id:'i_inf',  name:'끝없는 환대',   icon:'♾️', unlockLv:BUILDING_MAX_LEVEL-1, cost:160, costMult:1.25, step:0.03, growth:0.05, maxLv:Infinity,
-        desc:v=>`웨이브 후 회복 +${pct(v)}`,                 apply:(b,v)=>{ b.restHealBonus += v; } },
+        desc:v=>`웨이브 후 회복 +${pct(v)} · 특수 용병 +${pct(v*2)}`,
+        apply:(b,v)=>{ b.restHealBonus += v; b.specialUnitMult += v*2; } },
     ]
   },
   {
@@ -280,9 +283,6 @@ function reapplyAllBonuses(gs) {
   resetBonuses();
   applySkillTree(gs);
   applyPacts();          // 서약은 스킬 트리 뒤, 마을 강화 앞에 적용한다
-  // 병기 연구 — 런 안에서 산 만큼 누적된다
-  const rn = gs.research || 0;
-  if (rn > 0) { BONUSES.towerDmg += rn * RESEARCH_TOWER_DMG; BONUSES.unitAtk += rn * RESEARCH_UNIT_ATK; }
   applyTownUpgrades(gs);
   applyRunUpgrades(gs);   // 이번 판에 집은 강화 카드
   // 각인은 마지막에 — 스킬 트리와 마을 강화 위에 얹힌다

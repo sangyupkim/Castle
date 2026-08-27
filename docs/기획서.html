@@ -219,7 +219,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <div class="wrap">
 <header class="cover">
-  <div class="eyebrow">Game Design Document · v4.0 · 심연 · 짧아진 훈련</div>
+  <div class="eyebrow">Game Design Document · v4.1 · 건물마다 하는 일</div>
   <h1>듀얼 프론티어</h1>
   <p class="tagline">한 화면에서 두 개의 전선을 동시에 굴리는 모바일 웹 로그라이트.
      끝은 없다 — 얼마나 깊이 내려갔는지가 기록이다.</p>
@@ -228,7 +228,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
     <div><dt>플랫폼</dt><dd>모바일 웹 (480×800 캔버스)</dd></div>
     <div><dt>1회 하강</dt><dd>10~30분 (도달 층에 비례)</dd></div>
     <div><dt>현재 볼륨</dt><dd>훈련 30웨이브 + ∞ 무한 (알고리즘 생성)</dd></div>
-    <div><dt>이번 개정</dt><dd>탭 스크롤 · 강화 카드 유실 · 훈련 6웨이브 · ∞ 심연 (v4.0)</dd></div>
+    <div><dt>이번 개정</dt><dd>여관 재정리 · 병기 연구 삭제 · 특수 용병 강화 (v4.1)</dd></div>
   </dl>
 </header>
 
@@ -1538,6 +1538,45 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
 </tbody></table></div>
 
 
+
+<h3>건물마다 하는 일을 하나씩 <span class="rev">v4.1</span></h3>
+
+<p class="lede">플레이 보고: <strong>"여관에 체력증가, 병영에 체력증가는 겹치는 것 같아.
+마을의 병기연구는 삭제해줘 — 업그레이드는 건물을 짓고 거기서 하는 게 맞는 것 같아."</strong></p>
+
+<h4>겹치던 것 — 여관 '뜨거운 식사'</h4>
+<p>병영의 <strong>💪 체력 단련</strong>과 여관의 <strong>🍲 뜨거운 식사</strong>가
+둘 다 <span class="mono">unitHp</span>를 올리고 있었다.
+값이 같으면 어느 쪽을 올릴지가 <strong>선택이 아니라 계산</strong>이 된다 — 싼 쪽을 사면 그만이다.
+여관에서 뺐고, 이제 <span class="mono">unitHp</span>의 출처는 병영뿐이다.</p>
+
+<h4>여관을 여관이 하는 일로 좁혔다</h4>
+<div class="tw"><table>
+<thead><tr><th>트랙</th><th class="num">열림</th><th class="wrap">하는 일</th></tr></thead>
+<tbody>
+<tr><td>🛏️ 따뜻한 잠자리</td><td class="num">Lv.1</td><td class="wrap">웨이브 후 회복 +3%/단계</td></tr>
+<tr><td>🍺 소문난 주점</td><td class="num">Lv.1</td><td class="wrap">특수 용병 등장 확률 +6%/단계</td></tr>
+<tr class="total"><td>📜 <strong>명성</strong> (신규)</td><td class="num">Lv.2</td><td class="wrap"><strong>특수 용병 능력치 +8%/단계</strong></td></tr>
+<tr><td>🚪 별관 증축</td><td class="num">Lv.3</td><td class="wrap">특수 용병 전용 슬롯 +1</td></tr>
+<tr><td>🍷 영웅 대접</td><td class="num">Lv.5</td><td class="wrap">웨이브 후 영웅 완전 회복</td></tr>
+<tr><td>♾️ 끝없는 환대</td><td class="num">Lv.10</td><td class="wrap">회복 + 특수 용병 능력치</td></tr>
+</tbody></table></div>
+<p>빠진 것은 🍲 뜨거운 식사(병영과 중복)와 🧴 회복 물약(전투 <em>중</em> 자연 회복 —
+"웨이브가 끝난 뒤의 회복"이 아니다). 그 자리에 요청하신 <strong>특수 용병 강화</strong>를 넣었다.
+지금까지 특수 용병은 등장 확률과 슬롯만 있고 <strong>강해질 방법이 없었다.</strong></p>
+<div class="note"><p><span class="mono">BONUSES.specialUnitMult</span>는
+<span class="mono">UNIT_TYPES[id].special</span>인 유닛의 ATK · HP · DEF · 스킬에만 곱한다.
+실측 — 명성 5단계(×1.48)에서 🗡️도적 ATK 19→28 · HP 88→130, 일반 궁수는 그대로.</p></div>
+
+<h4>병기 연구 삭제</h4>
+<p>마을 메인 화면에 있던 ⚗️ 병기 연구(타워 +2 / 아군 +4, 비용 ×1.38)를 없앴다.
+<strong>같은 일을 공방의 '날붙이 연마'와 병영의 '전투 훈련'이 이미 하고 있었고</strong>,
+건물 밖에 강화가 하나 떠 있으니 "강화는 건물에서 한다"는 규칙이 흐려졌다.
+무한 골드 사용처 역할은 각 건물의 ♾️ 트랙이 이미 맡고 있다.</p>
+<p>상수 · 세이브 필드 · 탭 핸들러 · 보너스 적용까지 함께 걷어냈다.
+기존 세이브의 <span class="mono">research</span> 값은 무시된다.</p>
+<p><strong>곡선.</strong> 심연 첫 판 11층 · 만렙 31층 — 둘 다 직전과 같다.
+연구가 먹던 골드가 건물 트랙으로 흘러가 값이 상쇄됐다.</p>
 
 <h3>화면 아래가 잘려 안 보였다 <span class="rev">v4.0</span></h3>
 

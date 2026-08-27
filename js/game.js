@@ -96,7 +96,6 @@ function newState() {
     floorEvent:null,    // 이 층에만 걸리는 규칙 변화
     innOffers:[],       // 이번 웨이브에 여관에 와 있는 특수 용병
     endlessGems:0,      // 무한 층에서 쌓인 보석
-    research:0,         // 병기 연구 횟수 (상한 없는 골드 사용처)
     bountyPending:false,// 이번 웨이브에 소환 예약됨
     overloadReady:0,    // 타워 과부하 재사용까지 남은 시간
     hoveredCell:null,
@@ -170,7 +169,6 @@ let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적�
   gs.battle.totalGoldEarned = sv.totalGoldEarned || 0;
   gs.caveLevel  = Math.max(1, Math.min(5, sv.caveLevel||1));
   gs.wallRepairs = sv.wallRepairs || 0;
-  gs.research    = sv.research    || 0;
   gs.bountyUsed  = sv.bountyUsed  || 0;
   gs.mode          = sv.mode === 'endless' ? 'endless' : 'campaign';
   gs.runSeed       = sv.runSeed || 0;
@@ -570,7 +568,7 @@ function tap({x,y}) {
 // 페이지가 바뀌면 지난 화면의 버튼 좌표를 지운다.
 // gs.ui는 그리면서 채워지므로, 다른 페이지의 낡은 사각형이 남아 엉뚱한 탭을 먹는다.
 const _PAGE_UI_KEYS = [
-  'buildingCards','researchBtn','wallRepairBtn','caveBtn','tabTownBtn','townBackBtn',
+  'buildingCards','wallRepairBtn','caveBtn','tabTownBtn','townBackBtn',
   'buildingLvUpBtn','upgradeBtns','buildingScroll','pageScroll','hireCards','hiredSlots',
   'specialCards','specialSlots','heroDefBtn','heroBatBtn','bountyBtn','towerMiniGrid',
   'lobbyTabBtns','sortieBtn','trainBtn','metaCards','unlockBtns','pactBtns','sigilCards',
@@ -872,17 +870,6 @@ function handleTownTap(x,y) {
         }
         return;
       }
-    }
-    if (hitTest(x,y,gs.ui.researchBtn||{})) {
-      const cost = researchCost(gs.research);
-      if (gs.gold < cost) { spawnFloaty('골드 부족!',x,y,'#ef4444'); SFX.denied(); return; }
-      gs.gold -= cost;
-      gs.research++;
-      reapplyAllBonuses(gs);
-      refreshTeamStats(gs.battle);
-      spawnFloaty(`⚗️ 연구 ${gs.research}단계`, CW/2, 300, '#22d3ee');
-      SFX.upgrade();
-      return;
     }
     if (hitTest(x,y,gs.ui.wallRepairBtn||{})) {
       const cost = wallRepairCost(gs.wallRepairs);

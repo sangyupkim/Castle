@@ -32,10 +32,12 @@ function applyUnitStats(u, hpRatio) {
   const t = UNIT_TYPES[u.typeId];
   if (!t) return;
   const ratio = hpRatio !== undefined ? hpRatio : (u.maxHp > 0 ? u.hp / u.maxHp : 1);
-  u.maxHp     = Math.max(1, Math.round((t.hp + BONUSES.unitHp) * (BONUSES.pactUnitHpMult || 1)));
-  u.atk       = t.atk + BONUSES.unitAtk;
-  u.def       = t.def + BONUSES.unitDef + BONUSES.heroAura;
-  u.skillAtk  = t.skillAtk  ? t.skillAtk  + BONUSES.unitAtk : 0;
+  // 🏨 여관의 '명성' — 특수 용병에게만 붙는 배율
+  const sp = t.special ? (BONUSES.specialUnitMult || 1) : 1;
+  u.maxHp     = Math.max(1, Math.round((t.hp + BONUSES.unitHp) * (BONUSES.pactUnitHpMult || 1) * sp));
+  u.atk       = Math.round((t.atk + BONUSES.unitAtk) * sp);
+  u.def       = Math.round((t.def + BONUSES.unitDef + BONUSES.heroAura) * sp);
+  u.skillAtk  = t.skillAtk  ? Math.round((t.skillAtk + BONUSES.unitAtk) * sp) : 0;
   u.healAmt   = t.healAmt   ? t.healAmt   + BONUSES.healBonus   : 0;
   u.shieldAmt = t.shieldAmt ? t.shieldAmt + BONUSES.shieldBonus : 0;
   u.hp        = Math.max(1, Math.min(u.maxHp, Math.round(u.maxHp * ratio)));

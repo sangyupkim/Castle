@@ -1,7 +1,7 @@
 'use strict';
 
 // 타이틀 화면에 표기되는 버전
-const GAME_VERSION = 'v0.4.2';
+const GAME_VERSION = 'v0.4.3';
 
 // 포기하고 정산하면 보석을 깎는다. 한 판이 10~30분이라 접을 길은 있어야 하지만,
 // 접는 쪽이 늘 이득이면 아무도 마지막 층을 버티지 않는다.
@@ -708,21 +708,6 @@ const REROLL_BASE = 22;
 const REROLL_ESCALATION = 1.6;
 function rerollCost(n) {
   return Math.round(REROLL_BASE * Math.pow(REROLL_ESCALATION, Math.max(0, n || 0)));
-}
-
-// 병기 연구 — 상한 없는 마지막 사용처.
-// 성벽 보수는 체증으로 스스로 확장되지만 타워 레벨은 5에서 막히고,
-// 무한 구간에서는 수입이 계속 늘어 결국 다시 골드가 논다.
-// 살 때마다 비싸지고 효과는 그대로 쌓이는 항목을 하나 열어둔다.
-const RESEARCH_BASE = 60;
-const RESEARCH_ESCALATION = 1.38;
-// 타워 쪽을 4로 잡았더니 연구 12단계가 타워 총 DPS를 32,821 → 56,589(+72%)로 올렸다.
-// 남는 골드를 흡수하라고 연 창구가 상단을 다시 무적으로 만든 셈이다.
-// 실제로 무너지는 쪽은 아레나이므로, 무게를 아래로 옮긴다.
-const RESEARCH_TOWER_DMG = 2;    // 1회당 모든 타워 공격력 +2
-const RESEARCH_UNIT_ATK  = 4;    // 1회당 모든 아군 공격력 +4
-function researchCost(n) {
-  return Math.round(RESEARCH_BASE * Math.pow(RESEARCH_ESCALATION, Math.max(0, n || 0)));
 }
 
 const CLEAR_BONUS_BASE     = 12;   // 완주 보너스 기본

@@ -29,7 +29,6 @@ const SaveManager = {
       heroExp:    gs.hero.exp,
       caveLevel:  gs.caveLevel,
       wallRepairs: gs.wallRepairs || 0,
-      research:    gs.research || 0,
       bountyUsed:  gs.bountyUsed || 0,
       mode:       gs.mode || 'campaign',
       runSeed:    gs.runSeed || 0,

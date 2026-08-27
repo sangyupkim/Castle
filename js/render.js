@@ -2613,39 +2613,9 @@ function renderTownPageBuildingGrid(ctx, gs, startY) {
   ctx.fillText(full ? '온전함' : `보수 ${wrCost}💰`, wbX+wbW/2, wbY+wbH/2);
   gs.ui.wallRepairBtn = full ? null : {x:wbX,y:wbY,w:wbW,h:wbH};
 
-  // ── 병기 연구 — 상한이 없는 마지막 사용처 ────────────────────────────────
-  // 성벽 보수는 기지 HP가 차면 막히고 타워는 Lv.5에서 막힌다.
-  // 무한 구간까지 가면 결국 골드가 남으므로, 살수록 비싸지되 끝이 없는 칸을 둔다.
-  const rsY = wrY + wrH + 5, rsH = 46;
-  roundRect(ctx,6,rsY,CW-12,rsH,6);
-  ctx.fillStyle='#0a0d1a'; ctx.fill(); ctx.strokeStyle='#164e63'; ctx.lineWidth=1; ctx.stroke();
+  gs.ui.researchBtn = null;   // 병기 연구는 없앴다 — 강화는 건물 안에서 한다
 
-  const rsN    = gs.research || 0;
-  const rsCost = researchCost(rsN);
-  const rsAff  = gs.gold >= rsCost;
-
-  ctx.fillStyle='#22d3ee'; ctx.font='bold 11px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText('⚗️ 병기 연구', 12, rsY+8);
-  ctx.fillStyle='#475569'; ctx.font='9px sans-serif';
-  ctx.fillText(`타워 공격력 +${RESEARCH_TOWER_DMG} · 아군 공격력 +${RESEARCH_UNIT_ATK} (누적)`, 12, rsY+26);
-
-  if (rsN > 0) {
-    ctx.fillStyle='#22d3ee'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left';
-    ctx.fillText(`${rsN}단계`, 150, rsY+8);
-    ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif';
-    ctx.fillText(`타워 +${rsN*RESEARCH_TOWER_DMG} / 아군 +${rsN*RESEARCH_UNIT_ATK}`, 190, rsY+9);
-  }
-
-  const rbW=112, rbH=28, rbX=CW-12-rbW, rbY=rsY+(rsH-rbH)/2;
-  roundRect(ctx,rbX,rbY,rbW,rbH,5);
-  ctx.fillStyle = rsAff ? '#0e3a44' : '#1a1a2e'; ctx.fill();
-  ctx.strokeStyle = rsAff ? '#22d3ee' : '#334155'; ctx.lineWidth=1; ctx.stroke();
-  ctx.fillStyle = rsAff ? '#22d3ee' : '#64748b'; ctx.font='bold 10px sans-serif';
-  ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText(`연구 ${rsCost}💰`, rbX+rbW/2, rbY+rbH/2);
-  gs.ui.researchBtn = {x:rbX,y:rbY,w:rbW,h:rbH};
-
-  const stripY=rsY+rsH+5;
+  const stripY = wrY + wrH + 5;
   roundRect(ctx,6,stripY,CW-12,44,6);
   ctx.fillStyle='#0a0d1a'; ctx.fill(); ctx.strokeStyle='#1e293b'; ctx.lineWidth=1; ctx.stroke();
   const pool=waveDefFor(gs.wave)?.arenaPool||[];
