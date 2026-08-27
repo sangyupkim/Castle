@@ -219,7 +219,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <div class="wrap">
 <header class="cover">
-  <div class="eyebrow">Game Design Document · v3.4 · 마을 재설계</div>
+  <div class="eyebrow">Game Design Document · v3.5 · 전체 점검</div>
   <h1>듀얼 프론티어</h1>
   <p class="tagline">한 화면에서 두 개의 전선을 동시에 굴리는 모바일 웹 로그라이트.
      끝은 없다 — 얼마나 깊이 내려갔는지가 기록이다.</p>
@@ -228,7 +228,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
     <div><dt>플랫폼</dt><dd>모바일 웹 (480×800 캔버스)</dd></div>
     <div><dt>1회 하강</dt><dd>10~30분 (도달 층에 비례)</dd></div>
     <div><dt>현재 볼륨</dt><dd>훈련 30웨이브 + ∞ 무한 (알고리즘 생성)</dd></div>
-    <div><dt>이번 개정</dt><dd>건물 10레벨 · ♾️무한 강화 · 여관 손님 (v3.4)</dd></div>
+    <div><dt>이번 개정</dt><dd>전체 화면 점검 · 세이브 백업 · 포기하고 정산 (v3.5)</dd></div>
   </dl>
 </header>
 
@@ -1538,6 +1538,61 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
 </tbody></table></div>
 
 
+
+<h3>전체 점검 — 화면 단위로 훑기 <span class="rev">v3.5</span></h3>
+
+<p class="lede">새 기능을 얹기 전에 <strong>지금까지 만든 것이 실제로 동작하는지</strong>부터 봤다.
+헤드리스 Chromium을 412×915 모바일 화면으로 띄우고, 로비 5탭 · 마을 3탭 ·
+건물 상세 5종(건설 직후와 만렙) · 층 6종(1·5·10·18·30·45) · 전투 구동 · 결과 화면을
+차례로 그리며 프레임에서 던져진 예외를 모았다.</p>
+
+<div class="tw"><table>
+<caption>점검에서 나온 것</caption>
+<thead><tr><th>증상</th><th class="wrap">원인</th><th class="wrap">조치</th></tr></thead>
+<tbody>
+<tr><td>영웅 상점이 그려지다 죽음</td><td class="wrap"><span class="mono">HERO_SHOP_FIXED</span>가 트랙 개편(v3.4) 때 같이 지워짐</td><td class="wrap">상수 복원</td></tr>
+<tr><td>케이브 업그레이드가 안 눌림</td><td class="wrap">버튼이 케이브 카드 안에 있는데 <span class="mono">handleTownTap</span>이 카드 루프에서 먼저 <span class="mono">return</span></td><td class="wrap">버튼 판정을 카드 루프보다 앞으로</td></tr>
+<tr><td>작은 버튼이 잘 안 눌림</td><td class="wrap">표시 배율 0.858 — 캔버스 22px 버튼이 화면에서 19px (권장 44px)</td><td class="wrap"><span class="mono">hitTest</span>에 4px 여유</td></tr>
+<tr><td>판을 중간에 접을 수 없음</td><td class="wrap">한 판이 10~30분인데 초반에 망해도 끝까지 봐야 했다</td><td class="wrap">일시정지에 [포기하고 정산]</td></tr>
+<tr><td>기록이 사라질 수 있음</td><td class="wrap">세이브가 localStorage에만 있어 캐시를 지우면 끝</td><td class="wrap">백업 코드 내보내기/복원</td></tr>
+</tbody></table></div>
+
+<p>프레임은 30타워 + 아레나 가동 상태에서 <strong>중앙값 16.7ms / p95 16.9ms</strong> —
+60fps에 여유가 있다.</p>
+
+<h4>터치 판정 — 그리는 크기와 누르는 크기를 나눈다</h4>
+<p>캔버스 480×800을 폭 412 화면에 맞추면 배율이 <strong>0.858</strong>이다.
+캔버스에서 22px로 그린 버튼이 손가락에는 19px로 닿는다 — 권장치의 절반도 안 된다.
+버튼을 전부 키우면 목록이 화면 밖으로 밀리므로, <strong>그리는 사각형은 그대로 두고
+판정만 넓혔다.</strong></p>
+<div class="note"><p><span class="mono">hitTest</span>가 폭 60 미만 · 높이 34 미만인
+사각형에만 사방 <span class="mono">TOUCH_PAD = 4</span>씩 여유를 더한다.
+캔버스 22px 버튼은 판정이 30px이 되어 화면에서 26px로 닿는다.</p></div>
+<p>여유를 작은 사각형에만 주는 것이 요점이다. 강화 트랙처럼 세로로 붙어 있는
+목록 행에 전부 4px씩 주면 <strong>서로 겹쳐서 엉뚱한 행이 눌린다.</strong></p>
+
+<h4>🏳 포기하고 정산</h4>
+<p>무한 한 판이 10~30분이다. 초반 층에서 편성을 잘못 짰다는 걸 5층쯤에서 알아도
+기지가 함락될 때까지 붙들고 있어야 했다 — <strong>재도전이 이 게임의 본체인데
+재도전으로 가는 길이 막혀 있었다.</strong></p>
+<p>일시정지 오버레이를 안내문 한 줄에서 두 버튼짜리 화면으로 바꿨다.
+포기는 되돌릴 수 없으므로 <strong>두 번 눌러야 하고</strong>, 버튼에
+<span class="mono">여기까지의 보석 💎N은 그대로 받습니다</span>로 지금 받게 될 수를 미리 적는다.
+정산은 함락과 같은 경로(<span class="mono">showResult</span>)를 탄다 — 층 기록도 그대로 남는다.</p>
+
+<h4>💾 세이브 백업</h4>
+<p>무한 최고 층이 이 게임의 점수판인데, 그 점수판이 <strong>브라우저 캐시 하나에
+매달려</strong> 있었다. 캐시를 지우거나 폰을 바꾸면 끝이다. 기록 탭 하단에 두 버튼을 뒀다.</p>
+<ul>
+<li><strong>백업 코드 복사</strong> — 지금 상태를 저장한 뒤
+<span class="mono">DF1.&lt;검사값&gt;.&lt;base64&gt;</span> 한 줄로 클립보드에 복사한다.
+클립보드가 막힌 환경(비 HTTPS 등)에서는 <span class="mono">prompt</span>로 코드를 직접 띄운다.</li>
+<li><strong>코드로 복원</strong> — 붙여넣기 → 태그 · djb2 검사값 · JSON 파싱을 차례로 확인하고
+<strong>세 관문을 다 통과할 때만</strong> 덮어쓴다. 오타 난 코드로 세이브를 깨뜨리지 않는다.
+복원 뒤에는 페이지를 다시 켠다 — 메모리에 흩어진 전역을 하나하나 되돌리는 것보다 확실하다.</li>
+</ul>
+<p>캔버스 게임이라 텍스트 입력 칸이 없다. 클립보드와
+<span class="mono">prompt</span>가 입력 칸 없이 문자열을 주고받는 가장 짧은 길이다.</p>
 
 <h3>마을 재설계 — 10레벨과 무한 강화 <span class="rev">v3.4</span></h3>
 

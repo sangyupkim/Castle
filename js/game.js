@@ -37,13 +37,14 @@ _titleImg.src = 'assets/images/mainpage.png';
 let _titleScreen = true;  // 앱 시작 시 타이틀 화면 표시
 let _resetArmed  = false; // 리셋 버튼 1차 확인 상태
 let _resetArmedAt = 0;
+let _giveUpArmed = false;  // 포기 1차 확인
 let _titleAlpha  = 1;     // 페이드아웃용
 
 // ─── 세션 설정 (런 리셋과 무관) ──────────────────────────────────────────────
 let _paused   = false;
 let _speedIdx = 0;
 function gameSpeed() { return SPEED_STEPS[_speedIdx]; }
-function togglePause() { _paused = !_paused; SFX.click(); }
+function togglePause() { _paused = !_paused; _giveUpArmed = false; SFX.click(); }
 function cycleSpeed()  { _speedIdx = (_speedIdx + 1) % SPEED_STEPS.length; SFX.click(); }
 
 // ─── 영구 데이터 (런 초기화 후에도 유지) ─────────────────────────────────────
@@ -103,7 +104,9 @@ function newState() {
     floaties:[],
     ui:{ waveBtn:{}, hireCards:[], hiredSlots:[], specialCards:[], specialSlots:[], heroDefBtn:{}, heroBatBtn:{},
          metaCards:[], towerTabBtn:{}, heroTabBtn:{}, supportTabBtn:{},
-         lobbyTabBtns:[], unlockBtns:[], pactBtns:[], sortieBtn:{}, trainBtn:null, resultBtn:{}, buildingScroll:null },
+         lobbyTabBtns:[], unlockBtns:[], pactBtns:[], sortieBtn:{}, trainBtn:null, resultBtn:{}, buildingScroll:null,
+         pauseResumeBtn:null, pauseGiveUpBtn:null,
+         backupExportBtn:null, backupImportBtn:null, backupMsg:null },
     // 영구 데이터 참조
     get soulStones()    { return _soulStones; },
     set soulStones(v)   { _soulStones = v; },
@@ -365,6 +368,20 @@ function tap({x,y}) {
   // 기지 함락 — 결과 화면으로. 스킬 트리는 로비에 있으므로 여기서 열지 않는다.
   if (gs.gameOver) { showResult(); return; }
 
+  // 일시정지 중에는 재개 / 포기만 받는다.
+  // 한 판이 10~30분이라 중간에 접어야 할 때가 있고, 초반에 망한 판을 끝까지
+  // 붙들고 있을 이유도 없다. 여기까지 번 보석은 그대로 정산된다.
+  if (_paused && !_titleScreen && !tut.active && gs.page!=='lobby' && gs.page!=='result') {
+    if (hitTest(x,y,gs.ui.pauseGiveUpBtn||{})) {
+      if (_giveUpArmed) { _giveUpArmed=false; _paused=false; showResult(); }
+      else { _giveUpArmed=true; SFX.denied(); }
+      return;
+    }
+    if (hitTest(x,y,gs.ui.pauseResumeBtn||{})) { _giveUpArmed=false; togglePause(); return; }
+    _giveUpArmed=false;
+    return;
+  }
+
   if (gs.upgradePick.active) {
     if (hitTest(x,y,gs.ui.rerollBtn||{})) {
       const cost = rerollCost(gs.rerolls);
@@ -509,6 +526,12 @@ function handleLobbyTap(x, y) {
     return;
   }
 
+  if (L.tab === 'record') {
+    if (hitTest(x,y,gs.ui.backupExportBtn||{})) { exportSaveCode(); return; }
+    if (hitTest(x,y,gs.ui.backupImportBtn||{})) { importSaveCode(); return; }
+    return;
+  }
+
   if (L.tab === 'unlock') {
     for (const b of gs.ui.unlockBtns||[]) {
       if (hitTest(x,y,b)) {
@@ -526,6 +549,40 @@ function handleLobbyTap(x, y) {
       }
     }
   }
+}
+
+// ─── 세이브 백업 ─────────────────────────────────────────────────────────────
+// 캔버스 게임이라 텍스트 입력 칸이 없다. 클립보드와 prompt로 대신한다.
+function _backupMsg(text, color) { gs.ui.backupMsg = { text, color, until: Date.now() + 4000 }; }
+
+function exportSaveCode() {
+  SaveManager.save(gs);            // 지금 상태까지 담아서 내보낸다
+  const code = SaveManager.exportCode();
+  if (!code) { _backupMsg('내보낼 기록이 없습니다', '#ef4444'); SFX.denied(); return; }
+  const done = () => { _backupMsg('\u2705 백업 코드를 클립보드에 복사했습니다', '#22c55e'); SFX.upgrade(); };
+  // 클립보드가 막힌 환경(비 HTTPS 등)에서는 코드를 직접 띄워 준다
+  const fallback = () => {
+    _backupMsg('\u26A0 클립보드 실패 — 코드를 직접 복사하세요', '#f59e0b');
+    try { window.prompt('백업 코드 (전체 선택 후 복사)', code); } catch (e) {}
+  };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(code).then(done).catch(fallback);
+    } else fallback();
+  } catch (e) { fallback(); }
+}
+
+function importSaveCode() {
+  let code = null;
+  try { code = window.prompt('백업 코드를 붙여넣으세요 (현재 기록은 덮어써집니다)', ''); }
+  catch (e) { _backupMsg('이 환경에서는 붙여넣기를 열 수 없습니다', '#ef4444'); return; }
+  if (code === null) return;       // 취소
+  const r = SaveManager.importCode(code);
+  if (!r.ok) { _backupMsg('\u274C ' + r.err, '#ef4444'); SFX.denied(); return; }
+  _backupMsg('\u2705 복원 완료 — 다시 불러옵니다\u2026', '#22c55e');
+  SFX.levelUp();
+  // 메모리에 흩어진 전역들을 일일이 되돌리는 것보다 다시 켜는 쪽이 확실하다
+  setTimeout(() => { try { location.reload(); } catch (e) {} }, 700);
 }
 
 // ─── 데이터 초기화 ───────────────────────────────────────────────────────────
@@ -676,6 +733,17 @@ function handleTownTap(x,y) {
   }
 
   if (t.tab==='town') {
+    // 케이브 업그레이드 버튼은 케이브 카드 안에 그려진다.
+    // 카드 루프보다 먼저 봐야 카드가 탭을 먹어버리지 않는다.
+    if (hitTest(x,y,gs.ui.caveBtn||{})) {
+      const nextLv=gs.caveLevel+1;
+      if (nextLv<=CAVE_MAX_LEVEL) {
+        const cost=CAVE_LEVELS[nextLv].upgradeCost;
+        if (gs.gold>=cost) { gs.gold-=cost; gs.caveLevel=nextLv; spawnFloaty(`🗿 케이브 Lv.${nextLv}!`,CW/2,300,'#a78bfa'); SFX.upgrade(); }
+        else { spawnFloaty('골드 부족!',x,y,'#ef4444'); SFX.denied(); }
+      }
+      return;
+    }
     for (const card of gs.ui.buildingCards||[]) {
       if (hitTest(x,y,card)) {
         if (!card.built) {
@@ -709,15 +777,6 @@ function handleTownTap(x,y) {
       gs.baseHP = Math.min(baseHpMax(), gs.baseHP + WALL_REPAIR_AMOUNT);
       spawnFloaty(`🧱 성벽 +${Math.round(gs.baseHP-before)}HP`, CW/2, 300, '#22c55e');
       SFX.upgrade();
-      return;
-    }
-    if (hitTest(x,y,gs.ui.caveBtn||{})) {
-      const nextLv=gs.caveLevel+1;
-      if (nextLv<=CAVE_MAX_LEVEL) {
-        const cost=CAVE_LEVELS[nextLv].upgradeCost;
-        if (gs.gold>=cost) { gs.gold-=cost; gs.caveLevel=nextLv; spawnFloaty(`🗿 케이브 Lv.${nextLv}!`,CW/2,300,'#a78bfa'); }
-        else spawnFloaty('골드 부족!',x,y,'#ef4444');
-      }
       return;
     }
   }
@@ -832,7 +891,18 @@ function sellSelectedTower(x, y) {
   SFX.sell();
 }
 
-function hitTest(x,y,r){ return r&&x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.h; }
+// 손가락은 마우스 커서보다 굵다. 이 게임의 버튼은 세로 22px가 많은데,
+// 화면 폭 412 기준으로 캔버스 1px이 0.86px이라 실제로는 19px밖에 안 된다 —
+// 권장 터치 크기(48px)의 절반도 못 미친다.
+// 그림은 그대로 두고 판정만 넓힌다. 작은 버튼일수록 손이 조금 빗나가도 눌리게.
+// 여백은 4px로 얕게 둔다 — 세로로 붙어 있는 목록에서 옆 항목까지 먹지 않도록.
+const TOUCH_PAD = 4;
+function hitTest(x,y,r){
+  if (!r || !r.w || !r.h) return false;
+  const px = r.w < 60 ? TOUCH_PAD : 0;
+  const py = r.h < 34 ? TOUCH_PAD : 0;
+  return x>=r.x-px && x<=r.x+r.w+px && y>=r.y-py && y<=r.y+r.h+py;
+}
 
 function screenToCell(x,y) {
   const c=Math.floor((x-GRID_OX)/CELL_W), r=Math.floor((y-GRID_OY)/CELL_H);

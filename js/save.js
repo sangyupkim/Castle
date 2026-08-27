@@ -57,3 +57,45 @@ const SaveManager = {
     try { localStorage.removeItem(SAVE_KEY); } catch(e) {}
   }
 };
+
+// ── 세이브 백업 ───────────────────────────────────────────────────────────────
+// 기록이 브라우저 localStorage에만 있어서, 캐시를 지우거나 폰을 바꾸면 통째로
+// 사라진다. 무한 최고 기록이 이 게임의 점수판인 이상 그건 너무 아프다.
+// 짧은 문자열 하나로 뽑아 두었다가 다시 붙여넣을 수 있게 한다.
+const BACKUP_TAG = 'DF1';
+
+function _bkEnc(s) { return btoa(unescape(encodeURIComponent(s))).replace(/=+$/, ''); }
+function _bkDec(s) { return decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(/_/g, '/')))); }
+// djb2 — 오타 난 코드를 먹고 세이브를 깨뜨리지 않기 위한 최소한의 검사
+function _bkSum(s) {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = (((h * 33) ^ s.charCodeAt(i)) >>> 0);
+  return h.toString(36);
+}
+
+SaveManager.hasSave = function () {
+  try { return !!localStorage.getItem(SAVE_KEY); } catch (e) { return false; }
+};
+
+SaveManager.exportCode = function () {
+  const raw = localStorage.getItem(SAVE_KEY);
+  if (!raw) return null;
+  const body = _bkEnc(raw);
+  return `${BACKUP_TAG}.${_bkSum(raw)}.${body}`;
+};
+
+// 성공하면 {ok:true}, 실패하면 {ok:false, err:'사람이 읽을 이유'}
+SaveManager.importCode = function (code) {
+  const txt = String(code || '').trim().replace(/\s+/g, '');
+  if (!txt) return { ok:false, err:'코드가 비어 있습니다' };
+  const parts = txt.split('.');
+  if (parts.length !== 3 || parts[0] !== BACKUP_TAG) return { ok:false, err:'듀얼 프론티어 백업 코드가 아닙니다' };
+  let raw;
+  try { raw = _bkDec(parts[2]); } catch (e) { return { ok:false, err:'코드가 손상됐습니다' }; }
+  if (_bkSum(raw) !== parts[1]) return { ok:false, err:'코드가 손상됐습니다 (검사값 불일치)' };
+  let data;
+  try { data = JSON.parse(raw); } catch (e) { return { ok:false, err:'코드가 손상됐습니다' }; }
+  if (!data || typeof data !== 'object' || !data.stats) return { ok:false, err:'세이브 내용을 알아볼 수 없습니다' };
+  try { localStorage.setItem(SAVE_KEY, raw); } catch (e) { return { ok:false, err:'저장 공간에 쓸 수 없습니다' }; }
+  return { ok:true, best:(data.stats.bestEndless||0), stones:(data.soulStones||0) };
+};

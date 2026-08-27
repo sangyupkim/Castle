@@ -338,12 +338,38 @@ function renderHeroInDefense(ctx, hero) {
 
 // ─── 일시정지 오버레이 ───────────────────────────────────────────────────────
 function renderPauseOverlay(ctx) {
-  ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(0,0,CW,CH);
-  ctx.fillStyle='#e2e8f0'; ctx.font='bold 30px sans-serif';
+  ctx.fillStyle='rgba(0,0,0,0.72)'; ctx.fillRect(0,0,CW,CH);
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText('⏸ 일시정지', CW/2, CH/2-12);
-  ctx.fillStyle='#94a3b8'; ctx.font='12px sans-serif';
-  ctx.fillText('P 키 또는 ⏸ 버튼으로 재개', CW/2, CH/2+18);
+  ctx.fillStyle='#e2e8f0'; ctx.font='bold 28px sans-serif';
+  ctx.fillText('⏸ 일시정지', CW/2, CH/2-96);
+
+  const st = getStageInfo(gs.wave);
+  ctx.fillStyle='#64748b'; ctx.font='12px sans-serif';
+  ctx.fillText(st.endless ? `∞ ${st.tier}층 진행 중` : `훈련 ${st.stageLabel}`, CW/2, CH/2-66);
+
+  // 재개
+  const bw=220, bh=48, bx=(CW-bw)/2;
+  let y = CH/2-30;
+  roundRect(ctx,bx,y,bw,bh,10);
+  ctx.fillStyle='#14532d'; ctx.fill(); ctx.strokeStyle='#22c55e'; ctx.lineWidth=2; ctx.stroke();
+  ctx.fillStyle='#fff'; ctx.font='bold 16px sans-serif';
+  ctx.fillText('▶ 계속하기', CW/2, y+bh/2);
+  gs.ui.pauseResumeBtn = {x:bx,y:y,w:bw,h:bh};
+  y += bh + 14;
+
+  // 포기 — 되돌릴 수 없으니 두 번 눌러야 한다
+  roundRect(ctx,bx,y,bw,bh,10);
+  ctx.fillStyle = _giveUpArmed ? '#7f1d1d' : '#1f2937'; ctx.fill();
+  ctx.strokeStyle = _giveUpArmed ? '#ef4444' : '#475569'; ctx.lineWidth = _giveUpArmed ? 2 : 1; ctx.stroke();
+  ctx.fillStyle = _giveUpArmed ? '#fecaca' : '#94a3b8'; ctx.font='bold 14px sans-serif';
+  ctx.fillText(_giveUpArmed ? '⚠ 정말 포기합니다 — 다시 탭' : '🏳 포기하고 정산', CW/2, y+bh/2-7);
+  ctx.fillStyle = _giveUpArmed ? '#f87171' : '#475569'; ctx.font='bold 9px sans-serif';
+  ctx.fillText(`여기까지의 보석 💎${calcSoulStones(gs)}은 그대로 받습니다`, CW/2, y+bh/2+11);
+  gs.ui.pauseGiveUpBtn = {x:bx,y:y,w:bw,h:bh};
+  y += bh + 18;
+
+  ctx.fillStyle='#334155'; ctx.font='11px sans-serif';
+  ctx.fillText('P 키 또는 ⏸ 버튼으로도 재개됩니다', CW/2, y);
 }
 
 // ─── UI Bar ──────────────────────────────────────────────────────────────────
@@ -1745,6 +1771,39 @@ function renderLobbyRecord(ctx, gs) {
       ctx.fillText('미발견', mx+mw/2, my+30);
     }
   });
+  y += Math.ceil(mobIds.length/4)*(mh+5) + 14;
+
+  // ── 세이브 백업 ──────────────────────────────────────────────────────────
+  // 기록이 이 브라우저 안에만 있다는 걸 알려 주고, 빠져나갈 길을 준다.
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle='#60a5fa'; ctx.font='bold 11px sans-serif';
+  ctx.fillText('\uD83D\uDCBE 세이브 백업', 14, y); y += 17;
+  ctx.fillStyle='#475569'; ctx.font='9px sans-serif';
+  ctx.fillText('기록은 이 브라우저에만 저장됩니다. 캐시를 지우면 사라집니다.', 14, y); y += 15;
+
+  const kw = (CW-30)/2, kh = 34;
+  const mk = (bx2, label, sub, col, dim) => {
+    roundRect(ctx,bx2,y,kw,kh,6);
+    ctx.fillStyle = dim ? '#0a0e18' : '#111c2e'; ctx.fill();
+    ctx.strokeStyle = dim ? '#1e293b' : col; ctx.lineWidth=1; ctx.stroke();
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle = dim ? '#334155' : col; ctx.font='bold 11px sans-serif';
+    ctx.fillText(label, bx2+kw/2, y+12);
+    ctx.fillStyle = dim ? '#1e293b' : '#475569'; ctx.font='8px sans-serif';
+    ctx.fillText(sub, bx2+kw/2, y+25);
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    return {x:bx2,y:y,w:kw,h:kh};
+  };
+  const hasSave = SaveManager.hasSave();   // 매 프레임 통째로 인코딩하지 않는다
+  gs.ui.backupExportBtn = mk(12, '\uD83D\uDCCB 백업 코드 복사', hasSave?'클립보드로 내보내기':'저장된 기록 없음', '#22d3ee', !hasSave);
+  gs.ui.backupImportBtn = mk(18+kw, '\uD83D\uDCE5 코드로 복원', '붙여넣어 되살리기', '#f59e0b', false);
+  y += kh + 8;
+
+  if (gs.ui.backupMsg && Date.now() < gs.ui.backupMsg.until) {
+    ctx.textAlign='center'; ctx.fillStyle=gs.ui.backupMsg.color; ctx.font='bold 10px sans-serif';
+    ctx.fillText(gs.ui.backupMsg.text, CW/2, y);
+    ctx.textAlign='left';
+  }
 }
 
 // ── 출격 버튼 ───────────────────────────────────────────────────────────────

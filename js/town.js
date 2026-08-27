@@ -140,6 +140,14 @@ function tracksUnlockedAt(def, level) {
   return (def.tracks || []).filter(t => (t.unlockLv || 0) === level);
 }
 
+// 영웅 상점 고정 매대 — 소모품과 두루마리. 트랙 개편 때 실수로 같이 지워졌던 것을 되살린다.
+const HERO_SHOP_FIXED = [
+  { id:'potion_hp',  name:'회복 포션',    icon:'🧪', cost:12, type:'consumable', grade:'common', desc:'영웅 HP 완전 회복',             apply:gs=>{ gs.hero.hp = HERO_LEVELS[gs.hero.level].hp; } },
+  { id:'potion_mp',  name:'MP 포션',      icon:'💧', cost: 8, type:'consumable', grade:'common', desc:'이번 웨이브 MP 충전',           apply:gs=>{ gs.town.waveBuffs.push('mp_full'); } },
+  { id:'scroll_atk', name:'공격 두루마리',icon:'📜', cost:15, type:'scroll',     grade:'rare',   desc:'이번 웨이브 영웅 스탯 +30%',    apply:gs=>{ gs.town.waveBuffs.push('hero_atk'); } },
+  { id:'scroll_def', name:'방어 두루마리',icon:'📜', cost:15, type:'scroll',     grade:'rare',   desc:'이번 웨이브 아군 방어 +5',      apply:gs=>{ gs.town.waveBuffs.push('unit_def'); } },
+];
+
 const HERO_EQUIPMENT_POOL = [
   { id:'sword_iron',   name:'강철 검',        icon:'⚔️', cost:30, grade:'common', slot:'무기',   desc:'영웅 ATK +8',                    apply:b=>{ b.heroAtk += 8; } },
   { id:'sword_silver', name:'은빛 검',        icon:'⚔️', cost:55, grade:'rare',   slot:'무기',   desc:'영웅 ATK +18, 스탯 +10%',        apply:b=>{ b.heroAtk += 18; b.heroStatMult *= 1.10; } },
