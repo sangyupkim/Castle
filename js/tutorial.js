@@ -82,6 +82,18 @@ const TUTORIAL_STEPS = [
           '일찍 뺄수록 비쌉니다. 10초 남기고 빼면 3HP,\n50초 남기고 빼면 15HP.'
   },
   {
+    title: '🗺 매 판 다른 판이 깔립니다',
+    text: '무한은 판마다 시드가 다릅니다.\n같은 층이라도 나오는 적과 층 변형이 달라집니다.\n\n' +
+          '아레나에는 지형이 깔립니다 —\n🪨 바위는 못 지나가고 화살도 막습니다\n🌿 수렁은 느려지고, 🔺 가시는 서 있으면 깎입니다\n\n' +
+          '지형은 적에게도 똑같이 적용됩니다. 끼고 싸우세요.'
+  },
+  {
+    title: '🛤 경로는 관문에서 바뀝니다',
+    text: '10층마다 상단 ∞ 경로가 통째로 바뀝니다.\n한 층 전에 격자에 점선으로 미리 보입니다.\n\n' +
+          '새 경로에 깔린 타워는 사라지지 않습니다 —\n인접한 빈 칸으로 옮겨지고 레벨도 그대로입니다.\n(옮길 자리가 없을 때만 전액 환불)\n\n' +
+          '두 경로가 겹치는 칸에 지으면 아예 안 옮겨집니다.'
+  },
+  {
     title: '🏁 관문과 기록',
     text: '무한은 10층마다 관문입니다.\n물량이 줄고 대형이 몰려옵니다 —\n조합이 안 맞으면 여기서 막힙니다.\n\n' +
           '관문을 처음 넘으면 보석이 따로 붙고,\n그 기록은 캠프에 남습니다.\n\n' +
@@ -99,14 +111,14 @@ function createTutorial() {
   return {
     active: false, step: 0, done: false,
     start() {
-      if (localStorage.getItem('df_tut5') === '1') { this.done = true; return; }
+      if (localStorage.getItem('df_tut6') === '1') { this.done = true; return; }
       this.active = true; this.step = 0;
     },
     next() {
       this.step++;
       if (this.step >= TUTORIAL_STEPS.length) {
         this.active = false; this.done = true;
-        localStorage.setItem('df_tut5', '1');
+        localStorage.setItem('df_tut6', '1');
       }
     },
     current() { return TUTORIAL_STEPS[this.step] || null; }

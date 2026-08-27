@@ -12,6 +12,18 @@ function createWaveManager() {
 
     init(idx) {
       this.waveIndex = idx;
+      // 이 층의 경로를 적용한다. 관문에서 바뀌면 새 경로에 깔린 타워를 옮긴다.
+      if (typeof gs !== 'undefined' && gs && gs.towers) {
+        // 안내는 바뀐 그 층에서만 — 다음 층으로 넘어가면 지운다
+        if (gs.pathChanged && gs.pathChanged.wave !== idx) gs.pathChanged = null;
+        const rel = applyPathForFloor(gs, idx);
+        if (rel) {
+          gs.pathChanged = { moved: rel.moved, refunded: rel.refunded, gold: rel.gold, wave: idx, at: Date.now() };
+          if (rel.moved)    addLog(gs.battle, `🛤 경로가 바뀌었습니다 — 타워 ${rel.moved}기 이설`, '#38bdf8');
+          if (rel.refunded) addLog(gs.battle, `🛤 자리가 없는 타워 ${rel.refunded}기 환불 +${rel.gold}💰`, COLORS.gold);
+          if (typeof SFX !== 'undefined') SFX.upgrade();
+        }
+      }
       this.phase     = 'idle';
       this.timer     = WAVE_DURATION;
       this.elapsed   = 0;

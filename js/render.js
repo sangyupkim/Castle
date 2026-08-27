@@ -88,6 +88,42 @@ function renderDefense(ctx, gs) {
 
   drawPathFlow(ctx, THE_PATH, 'rgba(239,68,68,0.4)');
 
+  // ── 다음 경로 예고 ───────────────────────────────────────────────────────
+  // 관문에서 경로가 바뀐다. 미리 보여줘야 두 경로가 함께 쓰는 칸에 지어둘 수 있고,
+  // 그러면 경로 변경이 사고가 아니라 준비할 수 있는 일이 된다.
+  if (wm && wm.phase === 'idle') {
+    const prev = nextPathPreview(gs, gs.wave);
+    if (prev) {
+      ctx.strokeStyle = 'rgba(34,211,238,0.42)';
+      ctx.lineWidth = 2.5; ctx.setLineDash([4, 5]);
+      ctx.beginPath();
+      prev.cells.forEach(([c, r], i) => {
+        const pt = cellCenter(c, r);
+        if (i === 0) ctx.moveTo(pt.x, pt.y); else ctx.lineTo(pt.x, pt.y);
+      });
+      ctx.stroke(); ctx.setLineDash([]);
+      // 다음 경로에만 있는 칸 = 지금 지으면 옮겨질 자리
+      const cur = PATH_CELLS;
+      ctx.fillStyle = 'rgba(34,211,238,0.16)';
+      for (const [c, r] of prev.cells) {
+        if (cur.has(`${c},${r}`)) continue;
+        ctx.fillRect(GRID_OX + c*CELL_W + 1, GRID_OY + r*CELL_H + 1, CELL_W-2, CELL_H-2);
+      }
+    }
+  }
+
+  // ── 방금 이설된 타워 표시 ────────────────────────────────────────────────
+  const relAge = gs.pathChanged ? (Date.now() - gs.pathChanged.at) / 1000 : 99;
+  if (relAge < 6) {
+    for (const t of gs.towers) {
+      if (!t.relocatedAt || Date.now() - t.relocatedAt > 6000) continue;
+      const cc = cellCenter(t.col, t.row);
+      const pulse = 0.35 + 0.35 * Math.sin(Date.now() / 220);
+      ctx.strokeStyle = `rgba(56,189,248,${pulse})`; ctx.lineWidth = 2;
+      ctx.strokeRect(GRID_OX + t.col*CELL_W + 2, GRID_OY + t.row*CELL_H + 2, CELL_W-4, CELL_H-4);
+    }
+  }
+
   // 기지 셀 - idle 상태에서 마을 입장 힌트
   if (wm && wm.phase==='idle') {
     const bx2=GRID_OX+4*CELL_W+1, by2=GRID_OY+6*CELL_H+1;
@@ -448,6 +484,40 @@ function renderBriefing(ctx, gs) {
 
   let y = BATTLE_Y+44;
 
+  // ── 경로 변경 안내 ───────────────────────────────────────────────────────
+  const pc = gs.pathChanged;
+  if (pc && pc.wave === gs.wave) {
+    const ph2 = 26;
+    roundRect(ctx, 6, y, CW-12, ph2, 6);
+    ctx.fillStyle='rgba(8,47,73,0.55)'; ctx.fill();
+    ctx.strokeStyle='#0891b2'; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle='#22d3ee'; ctx.font='bold 11px sans-serif';
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.fillText('🛤 경로가 바뀌었습니다', 12, y+ph2/2);
+    ctx.fillStyle='#0e7490'; ctx.font='bold 9px sans-serif'; ctx.textAlign='right';
+    ctx.fillText(pc.refunded
+        ? `타워 ${pc.moved}기 이설 · ${pc.refunded}기 환불 +${pc.gold}💰`
+        : `타워 ${pc.moved}기를 인접 칸으로 옮겼습니다 (레벨 유지)`, CW-12, y+ph2/2+1);
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    y += ph2 + 5;
+  }
+
+  // ── 다음 층 경로 예고 ────────────────────────────────────────────────────
+  const nextPath = nextPathPreview(gs, gs.wave);
+  if (nextPath) {
+    const nh = 26;
+    roundRect(ctx, 6, y, CW-12, nh, 6);
+    ctx.fillStyle='rgba(8,47,73,0.35)'; ctx.fill();
+    ctx.strokeStyle='#155e75'; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle='#67e8f9'; ctx.font='bold 11px sans-serif';
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.fillText('🛤 다음 층에서 경로가 바뀝니다', 12, y+nh/2);
+    ctx.fillStyle='#0e7490'; ctx.font='bold 9px sans-serif'; ctx.textAlign='right';
+    ctx.fillText('격자에 점선으로 표시 · 겹치는 칸에 지으면 안 옮겨집니다', CW-12, y+nh/2+1);
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    y += nh + 5;
+  }
+
   // ── 이 층의 변형 ─────────────────────────────────────────────────────────
   // 같은 곡선을 올리기만 하면 40층과 41층이 구분되지 않는다.
   // 층마다 붙는 성격을 먼저 보여줘야 "이번엔 뭘 세우지"를 묻게 된다.
@@ -643,6 +713,51 @@ function renderBriefing(ctx, gs) {
 }
 
 // ─── 실시간 아레나 ───────────────────────────────────────────────────────────
+// ─── 지형 ────────────────────────────────────────────────────────────────────
+// 개체보다 아래에 깔고, 종류를 색과 무늬로 구분한다.
+// 좁은 화면이라 아이콘을 얹을 자리가 없어서 무늬로 읽히게 했다:
+//   바위 — 채워진 덩어리에 사선 하이라이트
+//   수렁 — 가로 물결
+//   가시 — 삼각 톱니
+function renderArenaTerrain(ctx, a) {
+  const ter = a.terrain;
+  if (!ter || !ter.length) return;
+  for (const t of ter) {
+    const d = TERRAIN_DEFS[t.kind] || TERRAIN_DEFS.rock;
+    roundRect(ctx, t.x, t.y, t.w, t.h, 5);
+    ctx.fillStyle = d.fill; ctx.fill();
+    ctx.strokeStyle = d.edge; ctx.lineWidth = 1.5; ctx.stroke();
+
+    ctx.save();
+    ctx.beginPath(); roundRect(ctx, t.x, t.y, t.w, t.h, 5); ctx.clip();
+    ctx.strokeStyle = d.edge; ctx.globalAlpha = 0.45; ctx.lineWidth = 1;
+
+    if (t.kind === 'rock') {
+      ctx.beginPath();
+      for (let o = -t.h; o < t.w; o += 11) {
+        ctx.moveTo(t.x + o, t.y + t.h); ctx.lineTo(t.x + o + t.h, t.y);
+      }
+      ctx.stroke();
+    } else if (t.kind === 'mud') {
+      ctx.beginPath();
+      for (let yy = t.y + 6; yy < t.y + t.h; yy += 9) {
+        ctx.moveTo(t.x, yy);
+        for (let xx = t.x; xx < t.x + t.w; xx += 10) ctx.quadraticCurveTo(xx + 5, yy - 3, xx + 10, yy);
+      }
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      for (let yy = t.y + 8; yy < t.y + t.h + 8; yy += 10) {
+        for (let xx = t.x + 2; xx < t.x + t.w - 2; xx += 9) {
+          ctx.moveTo(xx, yy); ctx.lineTo(xx + 4.5, yy - 7); ctx.lineTo(xx + 9, yy);
+        }
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
 function renderArenaPhase(ctx, gs) {
   const a = gs.arena, b = gs.battle;
 
@@ -667,6 +782,8 @@ function renderArenaPhase(ctx, gs) {
 
   ctx.save();
   ctx.beginPath(); ctx.rect(ARENA_X, ARENA_Y, ARENA_W, ARENA_H); ctx.clip();
+
+  renderArenaTerrain(ctx, a);
 
   // 집결 지점
   if (a.mode==='manual' && a.rally) {

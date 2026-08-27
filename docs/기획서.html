@@ -219,7 +219,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <div class="wrap">
 <header class="cover">
-  <div class="eyebrow">Game Design Document · v3.0 · 무한이 본편</div>
+  <div class="eyebrow">Game Design Document · v3.1 · 다양성</div>
   <h1>듀얼 프론티어</h1>
   <p class="tagline">한 화면에서 두 개의 전선을 동시에 굴리는 모바일 웹 로그라이트.
      끝은 없다 — 얼마나 깊이 내려갔는지가 기록이다.</p>
@@ -228,7 +228,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
     <div><dt>플랫폼</dt><dd>모바일 웹 (480×800 캔버스)</dd></div>
     <div><dt>1회 하강</dt><dd>10~30분 (도달 층에 비례)</dd></div>
     <div><dt>현재 볼륨</dt><dd>훈련 30웨이브 + ∞ 무한 (알고리즘 생성)</dd></div>
-    <div><dt>이번 개정</dt><dd>무한을 본편으로 · 훈련은 연습으로 (v3.0)</dd></div>
+    <div><dt>이번 개정</dt><dd>런 시드 · 아레나 지형 · 경로 변형 (v3.1)</dd></div>
   </dl>
 </header>
 
@@ -1412,6 +1412,89 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
 4~6회 하강이면 전부 열리고, 그 다음은 서약(최대 ×2.84)이 난이도와 수입을 같이 올린다.</p>
 </div>
 
+
+<h3>단조로움을 깨는 세 가지 <span class="rev">v3.1</span></h3>
+
+<p class="lede">층 생성만으로는 부족했다. 층 번호로만 결정하면 같은 27층은 <strong>영원히 같은 27층</strong>이고,
+아레나는 빈 직사각형이라 어디서 싸우든 똑같고, 상단 경로가 하나뿐이라 최적 배치도 하나뿐이었다.</p>
+
+<h4>① 런 시드 — 판마다 다른 판</h4>
+<p>층 구성과 변형을 <strong>층 번호 + 런 시드</strong>로 뽑는다. 판을 새로 시작할 때마다 시드가 바뀌므로
+같은 층이라도 나오는 적과 붙는 변형이 달라진다.</p>
+<div class="tw"><table>
+<caption>같은 층, 다른 시드 — 실측</caption>
+<thead><tr><th class="num">층</th><th>시드 111</th><th>시드 222</th><th>시드 333</th></tr></thead>
+<tbody>
+<tr><td class="num">8</td><td class="wrap">🛡강철<br><span class="mono">오크5 박쥐4 고블린4 늑대4</span></td><td class="wrap">💀정예<br><span class="mono">박쥐5 늑대5 오크4 고블린3</span></td><td class="wrap">🌊해일<br><span class="mono">박쥐5 오크5 고블린4 늑대3</span></td></tr>
+<tr><td class="num">16</td><td class="wrap">💀정예 🕊창공<br><span class="mono">비룡10 박쥐9 강철오크3</span></td><td class="wrap">🕊창공 💀정예<br><span class="mono">비룡9 박쥐8 늑대3</span></td><td class="wrap">🌊해일 💨폭주<br><span class="mono">강철오크7 비룡6 늑대6</span></td></tr>
+<tr><td class="num">24</td><td class="wrap">🛡강철 🗿거인<br><span class="mono">던전보스14 강철오크8</span></td><td class="wrap">🗿거인 💨폭주<br><span class="mono">던전보스13 강철오크9</span></td><td class="wrap">🕊창공 🌊해일<br><span class="mono">비룡13 박쥐9 던전보스5</span></td></tr>
+</tbody></table></div>
+<div class="note">
+<p><strong>난이도 곡선은 시드를 타지 않는다.</strong> 배율·물량·밀도는 층 번호만으로 정해지고,
+시드는 <strong>구성과 변형만</strong> 흔든다. 그래서 판마다 그림이 달라져도 같은 층의 무게는 같고,
+도달 층 기록이 여전히 비교 가능하다.</p>
+</div>
+
+<h4>② 아레나 지형 — 어디서 싸울지가 판단거리가 된다</h4>
+<p>빈 직사각형에서는 어느 자리든 똑같다. 지형이 들어가면 위치 선정에 의미가 생긴다.</p>
+<div class="tw"><table>
+<thead><tr><th>지형</th><th>효과</th><th>쓰임</th></tr></thead>
+<tbody>
+<tr><td>🪨 <strong>바위</strong></td><td class="wrap">통과 불가 · <strong>화살도 막는다</strong></td><td class="wrap">엄폐물이자 장애물 — 원거리 몹을 끊거나, 반대로 내 궁수를 막는다</td></tr>
+<tr><td>🌿 <strong>수렁</strong></td><td class="wrap">이동속도 −52%</td><td class="wrap">통과는 되지만 쫓기는 중이면 치명적</td></tr>
+<tr><td>🔺 <strong>가시</strong></td><td class="wrap">초당 최대 HP의 1.4%</td><td class="wrap">비율 피해라 탱커에게 더 아프다</td></tr>
+</tbody></table></div>
+<p>층과 런 시드로 생성한다. 1~2층은 비워두고, 그 뒤로 5층마다 하나씩 늘어 최대 5개.
+<strong>아군과 몹에 똑같이 적용된다</strong> — 지형을 끼고 싸우는 것이 곧 조작의 여지다.</p>
+<p>제약 조건 셋: 중앙 반경 74px(아군 시작 자리)은 비운다 · 벽에서 22px 떨어뜨린다(밀려나도 아레나를 벗어나지 않게) ·
+서로 16px 이상 띄운다. 스폰 지점도 지형 위를 피한다.</p>
+
+<h4>③ 경로 변형 — 최적 배치를 리셋한다</h4>
+<p>∞ 경로가 하나뿐이면 몇 판만 지나도 같은 자리에 같은 타워를 놓게 된다.
+<strong>관문(10층)마다 경로가 통째로 바뀐다.</strong></p>
+<div class="tw"><table>
+<thead><tr><th>변형</th><th>모양</th><th class="num">지을 수 있는 칸</th><th>성격</th></tr></thead>
+<tbody>
+<tr><td><strong>0 기본 ∞</strong></td><td class="wrap">8자</td><td class="num">39</td><td class="wrap">1~10층 고정 — 배우는 구간</td></tr>
+<tr><td><strong>1 넓은 ∞</strong></td><td class="wrap">판 바깥을 크게</td><td class="num">35</td><td class="wrap">안쪽이 넓게 비어 사거리 짧은 타워가 불리</td></tr>
+<tr><td><strong>2 뱀</strong></td><td class="wrap">S자로 세 번 훑음</td><td class="num">37</td><td class="wrap">세로줄 하나에 몰아 지으면 세 번 때린다</td></tr>
+<tr><td><strong>3 나선</strong></td><td class="wrap">바깥 한 바퀴 후 안으로</td><td class="num">36</td><td class="wrap">중앙 타워가 강해진다</td></tr>
+</tbody></table></div>
+<p>어느 변형이 언제 나오는지는 <strong>런 시드가 정한 순열</strong>을 따른다.
+연속으로 같은 경로는 나오지 않는다 — 실측 예: 시드 222는 <span class="mono">v0 → v3 → v2 → v1 → v0 → v3</span>.</p>
+
+<h4>경로가 바뀌면 기존 타워는 어떻게 되나</h4>
+<div class="note">
+<p><strong>부수지 않는다.</strong> Lv.5까지 올린 타워를 예고 없이 잃으면, 플레이어가 통제할 수 없는 일로
+벌을 받는 꼴이 된다. 세 단계로 잡았다.</p>
+</div>
+<div class="tw"><table>
+<thead><tr><th class="num">단계</th><th>규칙</th><th>이유</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td class="wrap"><strong>관문에서만 바뀐다</strong> (10층마다)</td><td class="wrap">아무 때나 바뀌면 배치 계획 자체가 성립하지 않는다</td></tr>
+<tr><td class="num">2</td><td class="wrap"><strong>한 층 전에 예고</strong> — 격자에 점선, 새로 경로가 될 칸을 하이라이트</td><td class="wrap">두 경로가 함께 쓰는 칸에 미리 지으면 아예 안 옮겨진다</td></tr>
+<tr><td class="num">3</td><td class="wrap"><strong>인접 빈 칸으로 자동 이설</strong> — 레벨·투자금 유지<br>자리가 없을 때만 전액 환불</td><td class="wrap">투자가 날아가지 않는다. 바뀌는 건 <em>커버리지</em>지 자산이 아니다</td></tr>
+</tbody></table></div>
+<p>이설된 타워는 6초간 파란 테두리로 표시되고, 준비 화면에 몇 기가 옮겨졌는지 뜬다.</p>
+
+<h4>실측 — 자산 손실 0, 난이도 변화 없음</h4>
+<div class="tw"><table>
+<thead><tr><th class="num">층</th><th class="num">경로</th><th class="num">타워</th><th class="num">누적 투자</th><th class="num">경로 위 타워</th><th class="num">칸 중복</th><th class="num">지형</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td class="num">v0</td><td class="num">30</td><td class="num">15,000</td><td class="num">0</td><td class="num">없음</td><td class="num">0</td></tr>
+<tr><td class="num">10</td><td class="num">v0</td><td class="num">30</td><td class="num">15,000</td><td class="num">0</td><td class="num">없음</td><td class="num">2</td></tr>
+<tr class="total"><td class="num">11</td><td class="num">v1</td><td class="num">30</td><td class="num">15,000</td><td class="num">0</td><td class="num">없음</td><td class="num">2</td></tr>
+<tr><td class="num">20</td><td class="num">v1</td><td class="num">30</td><td class="num">15,000</td><td class="num">0</td><td class="num">없음</td><td class="num">4</td></tr>
+<tr class="total"><td class="num">21</td><td class="num">v3</td><td class="num">30</td><td class="num">15,000</td><td class="num">0</td><td class="num">없음</td><td class="num">4</td></tr>
+</tbody></table></div>
+<p>격자를 <strong>가득 채운 34기</strong>로도 시험했다 — 10기가 이설됐고 <strong>환불 0기</strong>.
+9×7 격자는 어떤 변형에서도 35칸 이상이 비므로 옮길 자리가 모자라는 일은 사실상 없다.</p>
+<div class="note">
+<p><strong>난이도는 그대로다.</strong> 지형과 경로 변경을 넣기 전후로 다시 재보니
+신규 11 → 12층, 만렙 27 → 26층. <strong>세 장치는 난이도가 아니라 다양성만 더한다</strong> —
+의도한 대로다.</p>
+</div>
+
 <h4>훈련 — 손에 익히는 곳</h4>
 <p>손으로 쓴 30웨이브는 그대로 남는다. 다만 역할이 바뀌었다 —
 <strong>본편으로 가는 관문이 아니라 연습장</strong>이다.
@@ -1730,16 +1813,21 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
 <tr><td class="wrap">잔존 침입자 · 상한 해제 · 병기 연구 <span class="chip lo">완료</span></td><td class="wrap">"시계에 죽던" 적과 고정 9HP 손실을 고쳤다</td></tr>
 <tr><td rowspan="2"><strong>F</strong><br>무한이 본편 <span class="chip lo">완료</span></td><td class="wrap">훈련/무한 두 모드로 분리 <span class="chip lo">완료</span></td><td class="wrap">본편 진입에 붙던 고정 30분을 없앴다 (2절)</td></tr>
 <tr><td class="wrap">알고리즘 층 생성 · 변형 7종 · 관문 <span class="chip lo">완료</span></td><td class="wrap">신규 11층 / 중간 20층 / 만렙 27층 (13절)</td></tr>
-<tr><td rowspan="2"><strong>G</strong><br>다음</td><td class="wrap">깊은 층의 단조로움 — 지형 변화 · 층 이벤트</td><td class="wrap">40층 이후 그림이 반복된다</td></tr>
+<tr><td rowspan="2"><strong>G</strong><br>다양성 <span class="chip lo">완료</span></td><td class="wrap">런 시드 · 아레나 지형 3종 <span class="chip lo">완료</span></td><td class="wrap">판마다 다른 구성·변형·지형 (13절)</td></tr>
+<tr><td class="wrap">경로 변형 4종 + 타워 자동 이설 <span class="chip lo">완료</span></td><td class="wrap">관문마다 최적 배치가 리셋된다</td></tr>
+<tr><td rowspan="2"><strong>H</strong><br>다음</td><td class="wrap">층 이벤트 — 일시적 규칙 변화</td><td class="wrap">40층 이후에도 새로운 판단거리를 만든다</td></tr>
 <tr><td class="wrap">영웅 고유 스킬 · BGM · 업적</td><td class="wrap">리텐션</td></tr>
 </tbody></table></div>
 <div class="note">
 <p><strong>A부터 F까지 끝났다.</strong> 게임의 형태가 정해졌다 —
 <strong>무한이 본편이고 도달 층이 기록이다.</strong> 신규 11층, 중간 20층, 만렙 27층으로
 성장이 곧 깊이로 환산되고, 층은 손으로 쓰지 않고 생성하므로 콘텐츠가 마르지 않는다.</p>
-<p><strong>남은 것은 깊은 층의 단조로움(G)이다.</strong> 변형 7종과 합류 순서로 20~30층까지는
-그림이 계속 바뀌지만, 적 종류를 다 쓰고 나면 결국 같은 구성이 배율만 올라간다.
-층 이벤트(경로 변형 · 아레나 지형 · 일시적 규칙)가 다음 카드다.</p>
+<p><strong>단조로움(G)도 끝났다.</strong> 런 시드로 판마다 층 구성이 달라지고,
+아레나에 지형이 깔리고, 관문마다 경로가 바뀐다 — 셋 다 난이도는 건드리지 않고 다양성만 더한다
+(실측: 신규 11 → 12층, 만렙 27 → 26층).</p>
+<p><strong>남은 것은 층 이벤트(H)다.</strong> 지금 구조로 20~30층까지는 그림이 계속 바뀌지만,
+적 종류·변형·경로를 다 돌고 나면 결국 조합의 재탕이 된다.
+한 층 동안만 규칙이 바뀌는 이벤트(안개로 사거리 제한, 타워 하나 봉인, 골드 2배 등)가 다음 카드다.</p>
 </div>
 </section>
 

@@ -19,19 +19,110 @@ const CELL_H = Math.floor(DEFENSE_H / GRID_ROWS);
 const GRID_OX = Math.floor((CW - GRID_COLS * CELL_W) / 2);
 const GRID_OY = 5;
 
-// ─── ∞ 경로 (단일) ───────────────────────────────────────────────────────────
-const THE_PATH = [
-  [4,0],[4,1],
-  [3,1],[2,1],[1,1],
-  [1,2],[1,3],[1,4],
-  [2,4],[3,4],[4,4],
-  [4,3],[4,2],[4,1],
-  [5,1],[6,1],[7,1],
-  [7,2],[7,3],[7,4],
-  [6,4],[5,4],[4,4],
-  [4,5],[4,6]
+// ─── 경로 변형 ───────────────────────────────────────────────────────────────
+// 경로가 하나뿐이면 최적 배치도 하나뿐이다 — 몇 판만 지나면 같은 자리에 같은 타워를 놓는다.
+// 관문(10층)마다 경로가 바뀌면 그 최적해가 리셋되고, 배치를 다시 생각하게 된다.
+// 모든 변형은 [4,0]에서 출발해 [4,6](기지)에서 끝나고 인접 칸으로만 이어진다.
+const PATH_VARIANTS = [
+  // 0 — 기본 ∞ (8자). 1~10층은 항상 이것 — 배우는 구간
+  [ [4,0],[4,1],
+    [3,1],[2,1],[1,1],
+    [1,2],[1,3],[1,4],
+    [2,4],[3,4],[4,4],
+    [4,3],[4,2],[4,1],
+    [5,1],[6,1],[7,1],
+    [7,2],[7,3],[7,4],
+    [6,4],[5,4],[4,4],
+    [4,5],[4,6] ],
+  // 1 — 넓은 ∞. 판 바깥을 크게 돌아 안쪽이 넓게 비고, 사거리가 짧은 타워가 불리해진다
+  [ [4,0],[4,1],
+    [3,1],[2,1],[1,1],[0,1],
+    [0,2],[0,3],[0,4],
+    [1,4],[2,4],[3,4],[4,4],
+    [4,3],[4,2],[4,1],
+    [5,1],[6,1],[7,1],[8,1],
+    [8,2],[8,3],[8,4],
+    [7,4],[6,4],[5,4],[4,4],
+    [4,5],[4,6] ],
+  // 2 — 뱀 (S자). 가로로 세 번 훑어서 세로줄 하나에 몰아 지으면 세 번 때린다
+  [ [4,0],[4,1],
+    [5,1],[6,1],[7,1],
+    [7,2],[6,2],[5,2],[4,2],[3,2],[2,2],[1,2],
+    [1,3],
+    [1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],
+    [7,5],[6,5],[5,5],[4,5],
+    [4,6] ],
+  // 3 — 나선. 바깥을 한 바퀴 돌고 안으로 감겨 들어온다 — 중앙 타워가 강해진다
+  [ [4,0],[4,1],[3,1],[2,1],[1,1],
+    [1,2],[1,3],[1,4],[1,5],
+    [2,5],[3,5],[4,5],[5,5],[6,5],[7,5],
+    [7,4],[7,3],[7,2],
+    [6,2],[5,2],[4,2],[3,2],
+    [3,3],[4,3],[4,4],
+    [4,5],[4,6] ]
 ];
-const PATH_CELLS = new Set(THE_PATH.map(([c,r]) => `${c},${r}`));
+
+// 현재 활성 경로. 층이 바뀔 때 applyPathVariant로 교체된다.
+let _activePathIdx = 0;
+let THE_PATH   = PATH_VARIANTS[0];
+let PATH_CELLS = new Set(THE_PATH.map(([c,r]) => `${c},${r}`));
+
+function applyPathVariant(idx) {
+  const i = Math.max(0, Math.min(PATH_VARIANTS.length - 1, idx | 0));
+  _activePathIdx = i;
+  THE_PATH   = PATH_VARIANTS[i];
+  PATH_CELLS = new Set(THE_PATH.map(([c,r]) => `${c},${r}`));
+  return i;
+}
+function activePathIdx() { return _activePathIdx; }
+
+// 경로는 관문 단위(10층)로만 바뀐다. 매 층 바뀌면 배치 계획 자체가 성립하지 않는다.
+function pathBandOf(tier) { return Math.floor(Math.max(0, (tier || 1) - 1) / 10); }
+
+function _variantOrder(seed) {
+  const n = PATH_VARIANTS.length;
+  const a = [];
+  for (let i = 0; i < n; i++) a.push(i);
+  for (let i = n - 1; i > 0; i--) {
+    const j = Math.floor(endlessRand(8000 + i, 11, seed) * (i + 1)) % (i + 1);
+    const t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+  return a;
+}
+// 1~10층은 기본 ∞, 그 뒤로는 런 시드가 정한 순열대로. 연속으로 같은 경로는 나오지 않는다.
+function pathVariantFor(tier, seed) {
+  const band = pathBandOf(tier);
+  if (band <= 0) return 0;
+  const order = _variantOrder(seed);
+  const n = order.length;
+  let prev = 0, v = 0;
+  for (let k = 1; k <= band; k++) {
+    v = order[(k - 1) % n];
+    if (v === prev) v = order[k % n];
+    prev = v;
+  }
+  return v;
+}
+
+// 새 경로에 깔린 타워를 옮길 가장 가까운 빈 칸 (링 탐색)
+function nearestFreeCell(col, row, occupied) {
+  for (let ring = 1; ring <= 8; ring++) {
+    let best = null, bestD = Infinity;
+    for (let dc = -ring; dc <= ring; dc++) {
+      for (let dr = -ring; dr <= ring; dr++) {
+        if (Math.max(Math.abs(dc), Math.abs(dr)) !== ring) continue;
+        const c = col + dc, r = row + dr;
+        if (c < 0 || c >= GRID_COLS || r < 0 || r >= GRID_ROWS) continue;
+        if (isBlockedCell(c, r)) continue;
+        if (occupied.has(`${c},${r}`)) continue;
+        const d = dc * dc + dr * dr;
+        if (d < bestD) { bestD = d; best = { c, r }; }
+      }
+    }
+    if (best) return best;
+  }
+  return null;
+}
 
 // ─── 비행 항로 ───────────────────────────────────────────────────────────────
 // 비행은 ∞ 경로를 따르지 않는다. 판 전체를 대각선으로 가로질러 기지로 온다 —
@@ -620,12 +711,134 @@ function endlessDensityMult(waveIndex) {
 // ─── 결정적 난수 ─────────────────────────────────────────────────────────────
 // 층 구성과 변형은 무작위로 "보이되" 층 번호만으로 결정돼야 한다.
 // 같은 27층은 누가 언제 가도 같은 27층이어야 기록에 의미가 생긴다.
-function endlessRand(tier, salt) {
-  let x = ((tier | 0) * 2654435761 + (salt | 0) * 40503 + 0x9E3779B9) >>> 0;
+// 런 시드를 함께 섞는다.
+// 층 번호만으로 결정하면 27층은 언제나 같은 27층이라 기록 비교는 깔끔하지만,
+// 판을 거듭할수록 "아, 이 층은 그거"가 되어 단조로워진다.
+// 난이도 곡선(배율·물량)은 층 번호만으로 정해지고 시드는 구성과 변형만 흔들므로,
+// 판마다 그림이 달라져도 같은 층의 무게는 같다.
+function runSeed() {
+  return (typeof gs !== 'undefined' && gs && gs.runSeed) ? (gs.runSeed | 0) : 0;
+}
+function endlessRand(tier, salt, seed) {
+  const sd = (seed === undefined) ? runSeed() : (seed | 0);
+  let x = ((tier | 0) * 2654435761 + (salt | 0) * 40503 + sd * 2246822519 + 0x9E3779B9) >>> 0;
   x ^= x << 13; x >>>= 0;
   x ^= x >>> 17;
   x ^= x << 5;  x >>>= 0;
   return x / 4294967296;
+}
+
+// ─── 아레나 지형 ─────────────────────────────────────────────────────────────
+// 빈 직사각형 아레나에서는 어디에 서든 똑같다 — 위치 선정이 의미를 갖지 않는다.
+// 지형이 들어가면 "어디서 싸울지"가 판단거리가 된다:
+//   바위 — 못 지나가고 화살도 막는다. 엄폐물이자 장애물
+//   수렁 — 통과는 되지만 느려진다. 쫓기면 치명적
+//   가시 — 서 있으면 최대 HP 비례로 깎인다. 아군도 몹도 똑같이
+// 층과 런 시드로 생성하므로 판마다 다른 지형이 나온다.
+const TERRAIN_DEFS = {
+  rock:  { name:'바위', fill:'#3a4252', edge:'#6b7280', blocksMove:true, blocksShot:true },
+  mud:   { name:'수렁', fill:'#2f2a16', edge:'#7c6f2a', slow:0.52 },
+  spike: { name:'가시', fill:'#33131f', edge:'#9f1239', dpsPct:0.014 }   // 초당 최대HP의 1.4%
+};
+const TERRAIN_ORDER    = ['rock','mud','spike'];
+const TERRAIN_MARGIN   = 22;   // 벽에서 떨어뜨릴 거리 — 밀려나도 아레나를 벗어나지 않게
+const TERRAIN_SAFE_R   = 74;   // 중앙 안전 반경 — 아군이 시작하는 자리는 비워둔다
+const TERRAIN_MIN      = 30;
+const TERRAIN_MAX      = 76;
+
+// 층이 깊어질수록 지형이 늘어난다. 1~2층은 비워두고 배우게 한다.
+function terrainCountFor(tier) {
+  if (tier < 3) return 0;
+  return Math.min(5, 1 + Math.floor((tier - 3) / 5));
+}
+
+function _rectsOverlap(a, b, pad) {
+  return !(a.x + a.w + pad < b.x || b.x + b.w + pad < a.x ||
+           a.y + a.h + pad < b.y || b.y + b.h + pad < a.y);
+}
+
+function generateArenaTerrain(tier) {
+  const n = terrainCountFor(tier);
+  if (n <= 0) return [];
+  const cx = ARENA_X + ARENA_W / 2, cy = ARENA_Y + ARENA_H / 2;
+  const out = [];
+  let salt = 200;
+  for (let i = 0; i < n; i++) {
+    for (let tries = 0; tries < 30; tries++) {
+      salt++;
+      const kind = TERRAIN_ORDER[Math.floor(endlessRand(tier, salt) * TERRAIN_ORDER.length) % TERRAIN_ORDER.length];
+      const w = TERRAIN_MIN + Math.floor(endlessRand(tier, salt + 900) * (TERRAIN_MAX - TERRAIN_MIN));
+      const h = TERRAIN_MIN + Math.floor(endlessRand(tier, salt + 1800) * (TERRAIN_MAX - TERRAIN_MIN));
+      const x = ARENA_X + TERRAIN_MARGIN + endlessRand(tier, salt + 2700) * (ARENA_W - w - TERRAIN_MARGIN * 2);
+      const y = ARENA_Y + TERRAIN_MARGIN + endlessRand(tier, salt + 3600) * (ARENA_H - h - TERRAIN_MARGIN * 2);
+      const rect = { kind, x, y, w, h };
+      // 중앙(아군 시작 자리)과 겹치면 버린다
+      const nx = Math.max(x, Math.min(cx, x + w));
+      const ny = Math.max(y, Math.min(cy, y + h));
+      if (Math.hypot(cx - nx, cy - ny) < TERRAIN_SAFE_R) continue;
+      if (out.some(o => _rectsOverlap(o, rect, 16))) continue;
+      const d = TERRAIN_DEFS[kind];
+      out.push(Object.assign(rect, {
+        blocksMove: !!d.blocksMove, blocksShot: !!d.blocksShot,
+        slow: d.slow || 0, dpsPct: d.dpsPct || 0
+      }));
+      break;
+    }
+  }
+  return out;
+}
+
+// 점이 이 사각형 안인지 (반지름 r만큼 여유)
+function terrainAt(terrain, x, y) {
+  if (!terrain) return null;
+  for (const t of terrain) {
+    if (x >= t.x && x <= t.x + t.w && y >= t.y && y <= t.y + t.h) return t;
+  }
+  return null;
+}
+
+// 이동 속도 배율 — 수렁 위에 있으면 느려진다
+function terrainSpeedMult(terrain, e) {
+  const t = terrainAt(terrain, e.x, e.y);
+  return (t && t.slow) ? (1 - t.slow) : 1;
+}
+
+// 바위 밖으로 밀어낸다 (원 vs 사각형)
+function resolveTerrainCollision(terrain, e) {
+  if (!terrain || !terrain.length) return;
+  const r = e.radius || 6;
+  for (const t of terrain) {
+    if (!t.blocksMove) continue;
+    const nx = Math.max(t.x, Math.min(e.x, t.x + t.w));
+    const ny = Math.max(t.y, Math.min(e.y, t.y + t.h));
+    const dx = e.x - nx, dy = e.y - ny;
+    const d2 = dx * dx + dy * dy;
+    if (d2 >= r * r) continue;
+    if (d2 < 0.0001) {
+      // 중심이 사각형 안 — 가장 가까운 변으로 뺀다
+      const left = e.x - t.x, right = t.x + t.w - e.x;
+      const top  = e.y - t.y, bot   = t.y + t.h - e.y;
+      const m = Math.min(left, right, top, bot);
+      if      (m === left)  e.x = t.x - r;
+      else if (m === right) e.x = t.x + t.w + r;
+      else if (m === top)   e.y = t.y - r;
+      else                  e.y = t.y + t.h + r;
+    } else {
+      const d = Math.sqrt(d2);
+      e.x = nx + dx / d * r;
+      e.y = ny + dy / d * r;
+    }
+  }
+}
+
+// 투사체가 바위에 막히는지
+function terrainBlocksShot(terrain, x, y) {
+  if (!terrain) return false;
+  for (const t of terrain) {
+    if (!t.blocksShot) continue;
+    if (x >= t.x && x <= t.x + t.w && y >= t.y && y <= t.y + t.h) return true;
+  }
+  return false;
 }
 
 // ─── 적 해금 순서 ────────────────────────────────────────────────────────────
@@ -686,8 +899,11 @@ function affixesFor(tier) {
 function isGateTier(tier) { return tier > 0 && tier % 10 === 0; }
 
 // ─── 층 생성 ─────────────────────────────────────────────────────────────────
-const _endlessDefCache = new Map();
+let _endlessDefCache = new Map();
+let _endlessCacheSeed = null;
 function endlessWaveDef(tier) {
+  const sd = runSeed();
+  if (_endlessCacheSeed !== sd) { _endlessDefCache = new Map(); _endlessCacheSeed = sd; }
   if (_endlessDefCache.has(tier)) return _endlessDefCache.get(tier);
 
   const gate = isGateTier(tier);

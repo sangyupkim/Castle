@@ -87,6 +87,8 @@ function newState() {
     rerolls:0,          // 이번 런에서 강화 카드를 몇 번 리롤했는지
     bountyUsed:0,       // 현상수배를 몇 번 불렀는지 (강해지고 보상도 오른다)
     mode:'campaign',    // 'campaign'(훈련 30웨이브) | 'endless'(본편, 죽어야 끝난다)
+    runSeed:0,          // 이 판의 시드 — 층 구성·변형·지형·경로를 흔든다
+    pathChanged:null,   // 직전 층에서 경로가 바뀐 결과 (준비 화면 안내용)
     endlessGems:0,      // 무한 층에서 쌓인 보석
     research:0,         // 병기 연구 횟수 (상한 없는 골드 사용처)
     bountyPending:false,// 이번 웨이브에 소환 예약됨
@@ -156,6 +158,7 @@ gs.battle = createBattle();
   gs.research    = sv.research    || 0;
   gs.bountyUsed  = sv.bountyUsed  || 0;
   gs.mode          = sv.mode === 'endless' ? 'endless' : 'campaign';
+  gs.runSeed       = sv.runSeed || 0;
   gs.endlessGems   = sv.endlessGems || 0;
   gs.rerolls     = sv.rerolls     || 0;
   if (sv.townBuildings) {
@@ -466,7 +469,11 @@ function handleLobbyTap(x, y) {
 function startRun(mode) {
   SFX.click();
   resetGame();
+  // 판마다 다른 시드 — 같은 층도 구성과 변형이 달라진다
+  gs.runSeed = (Math.floor(Math.random() * 0x7FFFFFFF) | 0) || 1;
   gs.mode  = (mode === 'endless' && endlessUnlocked()) ? 'endless' : 'campaign';
+  applyPathVariant(0);
+  gs.pathChanged = null;
   gs.inRun = true;
   gs.page  = 'battle';
   wm.init(0);

@@ -1,6 +1,58 @@
 'use strict';
 
 // ─── Tower ───────────────────────────────────────────────────────────────────
+// ─── 경로 교체와 타워 이설 ───────────────────────────────────────────────────
+// 관문에서 경로가 바뀌면 이미 지은 타워가 새 경로 위에 놓일 수 있다.
+// 부수면 Lv.5까지 올린 투자가 통째로 날아가고, 예고 없이 벌을 받는 꼴이 된다.
+// 그래서 부수지 않고 인접한 빈 칸으로 옮긴다 — 레벨과 투자금은 그대로다.
+// 옮길 자리가 하나도 없을 때만 전액 환불한다.
+function relocateTowersOffPath(gs) {
+  const occupied = new Set(gs.towers.map(t => `${t.col},${t.row}`));
+  const moved = [], refunded = [];
+
+  for (const t of gs.towers) {
+    if (!isBlockedCell(t.col, t.row)) continue;
+    occupied.delete(`${t.col},${t.row}`);
+    const spot = nearestFreeCell(t.col, t.row, occupied);
+    if (spot) {
+      t.col = spot.c; t.row = spot.r;
+      t.relocatedAt = Date.now();
+      occupied.add(`${spot.c},${spot.r}`);
+      moved.push(t);
+    } else {
+      refunded.push(t);
+    }
+  }
+
+  let gold = 0;
+  if (refunded.length) {
+    gold = refunded.reduce((a, t) => a + (t.invested || 0), 0);
+    gs.gold += gold;
+    gs.towers = gs.towers.filter(t => !refunded.includes(t));
+  }
+  return { moved: moved.length, refunded: refunded.length, gold };
+}
+
+// 이 층에 맞는 경로를 적용한다. 바뀌었으면 이설 결과를 돌려준다.
+function applyPathForFloor(gs, waveIndex) {
+  const tier = endlessTier(waveIndex);
+  const want = tier > 0 ? pathVariantFor(tier, gs.runSeed || 0) : 0;
+  if (want === activePathIdx()) return null;
+  applyPathVariant(want);
+  const res = relocateTowersOffPath(gs);
+  res.variant = want;
+  return (res.moved || res.refunded) ? res : null;
+}
+
+// 다음 층에서 경로가 바뀌는가 — 준비 화면에 미리 보여주기 위한 것
+function nextPathPreview(gs, waveIndex) {
+  const tier = endlessTier(waveIndex);
+  if (tier <= 0) return null;
+  const nextIdx = pathVariantFor(tier + 1, gs.runSeed || 0);
+  if (nextIdx === activePathIdx()) return null;
+  return { idx: nextIdx, cells: PATH_VARIANTS[nextIdx] };
+}
+
 function makeTower(col, row, typeId) {
   return {
     col, row, typeId,

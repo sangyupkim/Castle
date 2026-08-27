@@ -100,6 +100,7 @@ function pickSpawnPoint(arena, allies) {
     else if (side === 1) { x = ARENA_X + Math.random() * ARENA_W;       y = ARENA_Y + ARENA_H - Math.random() * b; }
     else if (side === 2) { x = ARENA_X + Math.random() * b;             y = ARENA_Y + Math.random() * ARENA_H; }
     else                 { x = ARENA_X + ARENA_W - Math.random() * b;   y = ARENA_Y + Math.random() * ARENA_H; }
+    if (terrainAt(arena.terrain, x, y)) continue;   // 바위·가시 위에 소환하지 않는다
     if (Math.hypot(x - cx, y - cy) >= SPAWN_SAFE_RADIUS) return { x, y };
   }
   // 아군이 구석에 몰려 안전 반경을 만족할 수 없으면 가장 먼 모서리에 붙인다
@@ -126,6 +127,7 @@ function createArena() {
     elapsed: 0,
     spawnTimer: 0.6,
     waveIndex: 0,
+    terrain: [],
     pool: [['goblin', 10]],
     eliteBonus: 0,
     spawnMult: 1,
@@ -228,8 +230,10 @@ function updateAlly(gs, u, mobs, allies, dt) {
     allySkill(gs, u, mobs, allies);
   }
 
-  // 이동
-  const spd = u.moveSpd;
+  // 이동 — 수렁 위에서는 느려진다
+  applyTerrainTick(gs, u, dt, true);
+  if (u.dead) return;
+  const spd = u.moveSpd * terrainSpeedMult(gs.arena.terrain, u);
   if (gs.arena.mode === 'manual' && gs.arena.rally) {
     moveToward(u, u.slotX, u.slotY, spd, dt, 3);
   } else if (!inRange) {
@@ -244,6 +248,8 @@ function updateAlly(gs, u, mobs, allies, dt) {
       u.x += Math.cos(ang) * spd * 0.7 * dt;
       u.y += Math.sin(ang) * spd * 0.7 * dt;
       clampToArena(u, u.radius);
+      resolveTerrainCollision(gs.arena.terrain, u);
+      clampToArena(u, u.radius);
     }
   }
 }
@@ -253,10 +259,47 @@ function moveToward(e, tx, ty, spd, dt, stopDist) {
   const d  = Math.hypot(dx, dy);
   if (d <= (stopDist || 0)) return false;
   const step = Math.min(d, spd * dt);
+  const px = e.x, py = e.y;
   e.x += dx / d * step;
   e.y += dy / d * step;
   clampToArena(e, e.radius);
+  const ter = (typeof gs !== 'undefined' && gs.arena) ? gs.arena.terrain : null;
+  if (ter && ter.length) {
+    resolveTerrainCollision(ter, e);
+    clampToArena(e, e.radius);
+    // 바위에 정면으로 막히면 옆으로 미끄러진다 — 붙어서 떠는 것을 막는다
+    if (Math.hypot(e.x - px, e.y - py) < step * 0.25) {
+      const sx = -(dy / d), sy = (dx / d);
+      const side = ((e.slideDir = e.slideDir || (Math.random() < 0.5 ? -1 : 1)));
+      e.x = px + sx * side * step; e.y = py + sy * side * step;
+      clampToArena(e, e.radius);
+      resolveTerrainCollision(ter, e);
+      clampToArena(e, e.radius);
+    } else {
+      e.slideDir = 0;
+    }
+  }
   return true;
+}
+
+// 지형이 개체에 매 프레임 주는 효과 — 수렁은 이동에서, 가시는 여기서
+function applyTerrainTick(gs, e, dt, isAlly) {
+  const ter = gs.arena.terrain;
+  if (!ter || !ter.length) return;
+  const t = terrainAt(ter, e.x, e.y);
+  if (!t || !t.dpsPct) return;
+  const dmg = (e.maxHp || 1) * t.dpsPct * dt;
+  e.hp -= dmg;
+  e._spikeAccum = (e._spikeAccum || 0) + dmg;
+  if (e._spikeAccum >= 1) {
+    e._spikeAccum = 0;
+    if (typeof FX !== 'undefined') FX.burst(e.x, e.y, '#f43f5e', 3, 7);
+  }
+  if (e.hp <= 0 && !e.dead) {
+    e.hp = 0;
+    if (isAlly) hurtAlly(gs, e, 0, '#f43f5e');
+    else        hurtMob(gs, e, 0, '#f43f5e');
+  }
 }
 
 function allyAttack(gs, u, target) {
@@ -346,6 +389,8 @@ function allySkill(gs, u, mobs, allies) {
 // ─── 몬스터 ──────────────────────────────────────────────────────────────────
 function updateMob(gs, m, allies, dt) {
   if (m.flashTimer > 0) m.flashTimer = Math.max(0, m.flashTimer - dt);
+  applyTerrainTick(gs, m, dt, false);
+  if (m.dead) return;
   if (!allies.length) return;
 
   if (m.tauntTimer > 0) {
@@ -359,7 +404,7 @@ function updateMob(gs, m, allies, dt) {
   m.target = target;
 
   const d = dist(m, target) - target.radius;
-  const slowMult = m.slowUntil > 0 ? 0.55 : 1;
+  const slowMult = (m.slowUntil > 0 ? 0.55 : 1) * terrainSpeedMult(gs.arena.terrain, m);
   if (m.slowUntil > 0) m.slowUntil -= dt;
 
   // 돌진 패턴 (보스)
@@ -409,7 +454,9 @@ function updateMob(gs, m, allies, dt) {
 }
 
 // ─── 개체 분리 — 완전히 겹치지 않게 밀어낸다 ─────────────────────────────────
+let _terrainRef = null;
 function separate(all, dt) {
+  _terrainRef = (typeof gs !== 'undefined' && gs.arena) ? gs.arena.terrain : null;
   for (let i = 0; i < all.length; i++) {
     const a = all[i];
     for (let j = i + 1; j < all.length; j++) {
@@ -424,6 +471,10 @@ function separate(all, dt) {
       a.x -= nx * push; a.y -= ny * push;
       b.x += nx * push; b.y += ny * push;
       clampToArena(a, a.radius); clampToArena(b, b.radius);
+      if (_terrainRef && _terrainRef.length) {
+        resolveTerrainCollision(_terrainRef, a); clampToArena(a, a.radius);
+        resolveTerrainCollision(_terrainRef, b); clampToArena(b, b.radius);
+      }
     }
   }
 }
@@ -467,6 +518,14 @@ function updateShots(gs, dt) {
       continue;
     }
     const step = Math.min(d, s.spd * dt);
+    // 바위는 화살을 막는다 — 엄폐물 뒤의 적은 돌아가서 쏴야 한다
+    const ter = a.terrain;
+    if (ter && ter.length && terrainBlocksShot(ter, s.x + dx / d * step, s.y + dy / d * step)) {
+      if (s.fromAlly && t) t.pendingDmg = Math.max(0, (t.pendingDmg||0) - s.dmg);
+      if (typeof FX !== 'undefined') FX.burst(s.x, s.y, '#94a3b8', 3, 6);
+      a.shots.splice(i, 1);
+      continue;
+    }
     s.x += dx / d * step;
     s.y += dy / d * step;
   }
@@ -578,6 +637,8 @@ function startArena(gs, waveIndex) {
   a.spawnMult  = def.spawnMult  || 1;
   a.rally = null;
   a.goldCollected = 0;
+  // 지형은 층마다 새로 생성된다 (훈련에는 없다 — 배우는 곳이므로 판을 비워둔다)
+  a.terrain = (endlessTier(waveIndex) > 0) ? generateArenaTerrain(endlessTier(waveIndex)) : [];
 
   const allies = gs.battle.ourTeam.filter(u => !u.dead);
   allies.forEach((u, i) => spawnAllyIntoArena(a, u, i, allies.length));

@@ -32,6 +32,7 @@ const SaveManager = {
       research:    gs.research || 0,
       bountyUsed:  gs.bountyUsed || 0,
       mode:       gs.mode || 'campaign',
+      runSeed:    gs.runSeed || 0,
       endlessGems:   gs.endlessGems || 0,
       rerolls:     gs.rerolls || 0,
       totalGoldEarned: gs.battle ? gs.battle.totalGoldEarned : 0,
