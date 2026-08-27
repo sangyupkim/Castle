@@ -71,10 +71,14 @@ function towerStats(t) {
   const tpl = TOWER_TYPES[t.typeId];
   const m   = TOWER_LEVEL_MULT[Math.min(t.level || 1, towerLevelCap())] || TOWER_LEVEL_MULT[1];
   const overloaded = (t.overloadUntil || 0) > 0;
+  // 층 이벤트 — 안개는 사거리를, 부식은 공격력을, 봉인은 한 종류를 통째로 막는다
+  const sealed = fev('sealedTower', null) === t.typeId;
   return {
-    dmg:   Math.round((tpl.dmg + BONUSES.towerDmg) * m.dmg * (BONUSES.pactTowerDmgMult || 1)),
+    sealed,
+    dmg:   sealed ? 0 : Math.round((tpl.dmg + BONUSES.towerDmg) * m.dmg
+             * (BONUSES.pactTowerDmgMult || 1) * fev('towerDmgMult', 1)),
     spd:   tpl.spd   * m.spd   * BONUSES.towerSpdMult * (overloaded ? OVERLOAD_SPD_MULT : 1),
-    range: tpl.range * m.range * BONUSES.towerRangeMult,
+    range: sealed ? 0 : tpl.range * m.range * BONUSES.towerRangeMult * fev('towerRangeMult', 1),
     slow:        tpl.slow ? Math.min(0.8, tpl.slow) : 0,
     slowDur:     tpl.slowDur || 0,
     splash:      tpl.splash || 0,
@@ -97,7 +101,7 @@ function makeDefenseEnemy(typeId, waveIndex, opts) {
   const mods  = endlessMods(w);
   const scale = (mods ? endlessStatMult(w) * (mods.hpBonus || 1)
                       : (1 + w * DEF_WAVE_HP_SCALE))
-              * (BONUSES.pactDefHpMult || 1);
+              * (BONUSES.pactDefHpMult || 1) * fev('hpMult', 1);
   const hp    = Math.max(1, Math.round((opts && opts.hp) || tpl.hp * scale));
 
   // 비행은 ∞ 경로가 아니라 항로를 탄다 — 좌우를 번갈아 써서 한쪽만 막지 못하게

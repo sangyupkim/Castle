@@ -428,13 +428,13 @@ const HERO_ARENA = {
 // behavior: 'charge' 최근접 아군 직진 · 'kite' 거리 유지 원거리 · 'dash' 주기적 돌진
 // 이속은 아군 최고(95)보다 느려야 카이팅이 성립한다 — 광견(135)만 예외.
 const BATTLE_MOB_TYPES = {
-  goblin:   { id:'goblin',   name:'고블린',   hp:30,  atk:8,  def:1,  atkPeriod:1.0, range:20,  moveSpd:70,  radius:6,  goldReward:8,   color:'#4ade80', icon:'👺', behavior:'charge' },
-  hound:    { id:'hound',    name:'광견',     hp:22,  atk:6,  def:0,  atkPeriod:0.7, range:18,  moveSpd:135, radius:6,  goldReward:12,  color:'#f472b6', icon:'🐺', behavior:'charge' },
-  orc:      { id:'orc',      name:'오크',     hp:80,  atk:15, def:4,  atkPeriod:1.2, range:22,  moveSpd:55,  radius:8,  goldReward:20,  color:'#818cf8', icon:'👹', behavior:'charge' },
-  darkarch: { id:'darkarch', name:'다크아처', hp:45,  atk:12, def:2,  atkPeriod:1.4, range:140, moveSpd:60,  radius:7,  goldReward:24,  color:'#c084fc', icon:'🏹', behavior:'kite', ranged:true },
-  ogre:     { id:'ogre',     name:'오우거',   hp:150, atk:22, def:6,  atkPeriod:1.6, range:26,  moveSpd:45,  radius:10, goldReward:38,  color:'#a16207', icon:'🧌', behavior:'charge' },
-  boss:     { id:'boss',     name:'보스',     hp:200, atk:25, def:8,  atkPeriod:1.5, range:30,  moveSpd:40,  radius:11, goldReward:60,  color:'#ef4444', icon:'💀', behavior:'dash',  isBoss:true },
-  warlord:  { id:'warlord',  name:'마왕',     hp:520, atk:40, def:14, atkPeriod:1.8, range:34,  moveSpd:35,  radius:11, goldReward:180, color:'#db2777', icon:'🐲', behavior:'slam',  isBoss:true }
+  goblin:   { id:'goblin',   name:'고블린',   hp:30,  atk:8,  def:1,  atkPeriod:1.0, range:20,  moveSpd:70,  radius:6,  goldReward:3,   color:'#4ade80', icon:'👺', behavior:'charge' },
+  hound:    { id:'hound',    name:'광견',     hp:22,  atk:6,  def:0,  atkPeriod:0.7, range:18,  moveSpd:135, radius:6,  goldReward:5,  color:'#f472b6', icon:'🐺', behavior:'charge' },
+  orc:      { id:'orc',      name:'오크',     hp:80,  atk:15, def:4,  atkPeriod:1.2, range:22,  moveSpd:55,  radius:8,  goldReward:8,  color:'#818cf8', icon:'👹', behavior:'charge' },
+  darkarch: { id:'darkarch', name:'다크아처', hp:45,  atk:12, def:2,  atkPeriod:1.4, range:140, moveSpd:60,  radius:7,  goldReward:9,  color:'#c084fc', icon:'🏹', behavior:'kite', ranged:true },
+  ogre:     { id:'ogre',     name:'오우거',   hp:150, atk:22, def:6,  atkPeriod:1.6, range:26,  moveSpd:45,  radius:10, goldReward:15,  color:'#a16207', icon:'🧌', behavior:'charge' },
+  boss:     { id:'boss',     name:'보스',     hp:200, atk:25, def:8,  atkPeriod:1.5, range:30,  moveSpd:40,  radius:11, goldReward:24,  color:'#ef4444', icon:'💀', behavior:'dash',  isBoss:true },
+  warlord:  { id:'warlord',  name:'마왕',     hp:520, atk:40, def:14, atkPeriod:1.8, range:34,  moveSpd:35,  radius:11, goldReward:70, color:'#db2777', icon:'🐲', behavior:'slam',  isBoss:true }
 };
 
 // ─── 웨이브 결과 3단계 ───────────────────────────────────────────────────────
@@ -454,6 +454,20 @@ const BATTLE_MOB_TYPES = {
 const RETREAT_DPS = 0.20;   // 후퇴 시 남은 1초당 기지 피해
 const RETREAT_MAX = 14;     // 상한 — 돌파(27)의 절반 수준
 
+// ─── 골드 경제 (v3.2 재조정) ─────────────────────────────────────────────────
+// 실측: 1-4까지 가볍게 진행한 판에서 8,000골드가 남고 살 것이 없었다.
+// 원인은 후반 사용처가 아니라 초반부터의 과잉 수급이었다 —
+// 웨이브 1에 41골드가 들어오고 웨이브 2에 323골드가 들어왔다.
+//
+// 목표: 웨이브 1을 마치면 타워 두 기(10) + 용병 한 명(6)을 살 정도.
+// 처음 몇 웨이브는 완벽하게 막지 못하고 기지가 조금씩 깎여야 하고,
+// 그 부족분을 보석 강화로 메워 다음 판이 쉬워지는 것이 이 게임의 성장 축이다.
+//
+//   몹 보상   ×0.4 정도로 (고블린 8→3 … 마왕 180→70) — 수입의 대부분이 여기서 나온다
+//   처치 보너스 kills×(웨이브+1) → kills×(1+웨이브×0.12). 곱셈이 이중으로 붙어 폭발했다
+//   승리/완주 보너스도 절반 이하로
+//   사용처 비용도 함께 내린다 — 수입만 깎으면 후반 사용처에 영영 못 닿는다
+//
 // ─── 후반 골드 사용처 ────────────────────────────────────────────────────────
 // 실측에서 발전한 편성은 웨이브 5부터 2,000~3,600골드를 놀린다.
 // 타워 격자가 30기에서 차고 마을 강화가 바닥나는데 수입은 계속 늘기 때문이다.
@@ -462,15 +476,15 @@ const RETREAT_MAX = 14;     // 상한 — 돌파(27)의 절반 수준
 // 성벽 보수 — 후반에 남아도는 것은 골드고 모자란 것은 기지 HP다.
 // 그 둘을 교환하는 통로를 열되, 런 안에서 살수록 비싸진다.
 const WALL_REPAIR_AMOUNT = 12;
-const WALL_REPAIR_BASE   = 70;
-const WALL_REPAIR_ESCALATION = 1.6;
+const WALL_REPAIR_BASE   = 40;
+const WALL_REPAIR_ESCALATION = 1.45;
 function wallRepairCost(n) {
   return Math.round(WALL_REPAIR_BASE * Math.pow(WALL_REPAIR_ESCALATION, Math.max(0, n || 0)));
 }
 
 // 강화 카드 리롤 — 원하는 빌드로 밀어붙이고 싶을 때 쓰는 곳
-const REROLL_BASE = 40;
-const REROLL_ESCALATION = 1.8;
+const REROLL_BASE = 22;
+const REROLL_ESCALATION = 1.6;
 function rerollCost(n) {
   return Math.round(REROLL_BASE * Math.pow(REROLL_ESCALATION, Math.max(0, n || 0)));
 }
@@ -479,8 +493,8 @@ function rerollCost(n) {
 // 성벽 보수는 체증으로 스스로 확장되지만 타워 레벨은 5에서 막히고,
 // 무한 구간에서는 수입이 계속 늘어 결국 다시 골드가 논다.
 // 살 때마다 비싸지고 효과는 그대로 쌓이는 항목을 하나 열어둔다.
-const RESEARCH_BASE = 120;
-const RESEARCH_ESCALATION = 1.45;
+const RESEARCH_BASE = 60;
+const RESEARCH_ESCALATION = 1.38;
 // 타워 쪽을 4로 잡았더니 연구 12단계가 타워 총 DPS를 32,821 → 56,589(+72%)로 올렸다.
 // 남는 골드를 흡수하라고 연 창구가 상단을 다시 무적으로 만든 셈이다.
 // 실제로 무너지는 쪽은 아레나이므로, 무게를 아래로 옮긴다.
@@ -490,8 +504,8 @@ function researchCost(n) {
   return Math.round(RESEARCH_BASE * Math.pow(RESEARCH_ESCALATION, Math.max(0, n || 0)));
 }
 
-const CLEAR_BONUS_BASE     = 30;   // 완주 보너스 기본
-const CLEAR_BONUS_PER_WAVE = 12;   // 웨이브당 가산
+const CLEAR_BONUS_BASE     = 12;   // 완주 보너스 기본
+const CLEAR_BONUS_PER_WAVE = 4;    // 웨이브당 가산
 // 완주 보상의 알맹이는 골드가 아니라 성벽 수리다.
 // 후반에는 골드가 남아돌지만 기지 HP는 언제나 모자라기 때문이고,
 // 버티기 어려운 후반 웨이브일수록 많이 수리해줘야 완주할 이유가 생긴다.
@@ -895,6 +909,69 @@ function affixesFor(tier) {
   return out;
 }
 
+// ─── 층 이벤트 ───────────────────────────────────────────────────────────────
+// 변형(affix)이 적의 숫자를 바꾼다면, 이벤트는 그 층 동안의 규칙을 바꾼다.
+// 배율만 계속 올리면 40층과 41층이 구분되지 않는다 — 다른 축의 변화가 필요하다.
+// 불리한 것만 넣으면 그냥 난이도 곡선이 한 겹 더 생길 뿐이라,
+// 유리한 것과 교환(득실이 함께 있는 것)을 섞었다. 좋은 층은 밀어붙이고
+// 나쁜 층은 버티는 — 층마다 다른 판단을 하게 만드는 것이 목적이다.
+const FLOOR_EVENTS = [
+  // 불리
+  { id:'fog',   icon:'🌫', name:'짙은 안개', tone:'bad',  w:12, desc:'타워 사거리 −30%',
+    towerRangeMult:0.70 },
+  { id:'seal',  icon:'🔒', name:'봉인',      tone:'bad',  w:10, desc:'타워 한 종류가 침묵합니다',
+    sealsTower:true },
+  { id:'rust',  icon:'🧪', name:'부식',      tone:'bad',  w:10, desc:'타워 공격력 −25%',
+    towerDmgMult:0.75 },
+  { id:'bleed', icon:'🩸', name:'출혈',      tone:'bad',  w:9,  desc:'완주 수리·성벽 보수 없음',
+    noRepair:true },
+  // 유리
+  { id:'lode',  icon:'💰', name:'노다지',    tone:'good', w:9,  desc:'골드 획득 ×2',
+    goldMult:2 },
+  { id:'trove', icon:'💎', name:'보물',      tone:'good', w:7,  desc:'이 층 보석 ×3',
+    gemMult:3 },
+  { id:'surge', icon:'⚡', name:'각성',      tone:'good', w:9,  desc:'타워 과부하 쿨다운 −70%',
+    overloadCdMult:0.30 },
+  { id:'levy',  icon:'👥', name:'증원',      tone:'good', w:9,  desc:'편성 슬롯 +2',
+    slotBonus:2 },
+  { id:'boon',  icon:'🎲', name:'풍요',      tone:'good', w:8,  desc:'강화 카드 5장 중 선택',
+    cards:5 },
+  // 교환 — 득과 실이 함께 있다
+  { id:'blitz', icon:'🕐', name:'속공',      tone:'mix',  w:8,  desc:'40초 · 골드 ×1.6',
+    duration:40, goldMult:1.6 },
+  { id:'greed', icon:'🪙', name:'탐욕',      tone:'mix',  w:8,  desc:'골드 ×2.5 · 적 HP +40%',
+    goldMult:2.5, hpMult:1.4 },
+];
+const FLOOR_EVENT_FROM   = 4;     // 1~3층은 비워둔다 — 기본을 먼저 익히게
+const FLOOR_EVENT_CHANCE = 0.55;
+
+function floorEventOf(tier) {
+  if (!tier || tier < FLOOR_EVENT_FROM) return null;
+  if (endlessRand(tier, 500) >= FLOOR_EVENT_CHANCE) return null;
+  const total = FLOOR_EVENTS.reduce((a, e) => a + e.w, 0);
+  let roll = endlessRand(tier, 501) * total;
+  for (const e of FLOOR_EVENTS) {
+    roll -= e.w;
+    if (roll <= 0) {
+      if (!e.sealsTower) return e;
+      // 봉인은 어떤 타워가 막히는지까지 정해야 한다
+      const pool = (typeof unlockedTowers === 'function') ? unlockedTowers() : ['arrow'];
+      const idx = Math.floor(endlessRand(tier, 502) * pool.length) % pool.length;
+      const id  = pool[idx] || 'arrow';
+      const nm  = (TOWER_TYPES[id] || {}).name || id;
+      return Object.assign({}, e, { sealedTower: id, desc: `${nm}이(가) 이 층에서 침묵합니다` });
+    }
+  }
+  return null;
+}
+
+// 현재 층의 이벤트에서 값 하나를 꺼낸다 (없으면 기본값)
+function fev(key, dflt) {
+  const e = (typeof gs !== 'undefined' && gs) ? gs.floorEvent : null;
+  return (e && e[key] !== undefined) ? e[key] : dflt;
+}
+function waveDuration() { return fev('duration', WAVE_DURATION); }
+
 // 10층마다 관문 — 물량이 줄고 대형·보스가 몰려온다. 조합이 안 맞으면 여기서 막힌다.
 function isGateTier(tier) { return tier > 0 && tier % 10 === 0; }
 
@@ -1025,7 +1102,7 @@ const CAVE_MAX_LEVEL = CAVE_LEVELS.length - 1;
 // 난이도 상승은 웨이브 인덱스(등급·물량)가 맡고, 처치 항은 보조로만 남긴다.
 const WAVE_STAT_SCALE = 0.07;   // 웨이브 1당 몹 스탯 +7%
 const KILL_SCALE      = 0.006;  // 처치 1회당 +0.6% (웨이브 내 완만한 가속)
-const WAVE_GOLD_SCALE = 0.06;   // 웨이브 1당 보상 +6%
+const WAVE_GOLD_SCALE = 0.045;  // 웨이브 1당 보상 +4.5%
 
 
 // 웨이브 종료 후 생존 병력이 회복하는 최대 HP 비율

@@ -12,6 +12,8 @@ function createWaveManager() {
 
     init(idx) {
       this.waveIndex = idx;
+      // 이 층의 이벤트를 먼저 정한다 — 아래 경로·스탯 계산이 이걸 참조한다
+      if (typeof gs !== 'undefined' && gs) gs.floorEvent = floorEventOf(endlessTier(idx));
       // 이 층의 경로를 적용한다. 관문에서 바뀌면 새 경로에 깔린 타워를 옮긴다.
       if (typeof gs !== 'undefined' && gs && gs.towers) {
         // 안내는 바뀐 그 층에서만 — 다음 층으로 넘어가면 지운다
@@ -25,7 +27,7 @@ function createWaveManager() {
         }
       }
       this.phase     = 'idle';
-      this.timer     = WAVE_DURATION;
+      this.timer     = waveDuration();
       this.elapsed   = 0;
       this.defenseQueues = [];
       this.wipedAt   = null;
@@ -37,7 +39,7 @@ function createWaveManager() {
 
       this.phase   = 'active';
       this.elapsed = 0;
-      this.timer   = WAVE_DURATION;
+      this.timer   = waveDuration();
       this.wipedAt = null;
 
       const def = waveDefFor(this.waveIndex);
@@ -99,7 +101,7 @@ function createWaveManager() {
       if (this.phase !== 'active') return;
 
       this.elapsed += dt;
-      this.timer = Math.max(0, WAVE_DURATION - this.elapsed);
+      this.timer = Math.max(0, waveDuration() - this.elapsed);
 
       // 상단 적 스폰
       for (const q of this.defenseQueues) {
@@ -178,23 +180,28 @@ function createWaveManager() {
       }
 
       const earned     = gs.battle.goldEarned;
-      const killBonus  = gs.battle.killCount * (this.waveIndex + 1);
-      const fullWin    = 20 + this.waveIndex * 15;
+      // 처치 보너스가 웨이브에 비례해 곱해지면 물량 증가와 이중으로 붙어 폭발한다.
+      // 마릿수는 이미 웨이브에 따라 늘어나므로, 단가는 완만하게만 올린다.
+      const killBonus  = Math.round(gs.battle.killCount * (1 + this.waveIndex * 0.12));
+      const fullWin    = 8 + this.waveIndex * 4;
       // 후퇴는 승리 보너스를 절반만 받는다 — 하단을 끝까지 지킨 것이 아니므로
       const winBonus   = cleared ? fullWin : retreated ? Math.floor(fullWin * 0.5) : 0;
       const clearBonus = cleared ? clearBonusGold(this.waveIndex) : 0;
-      gs.gold += earned + killBonus + winBonus + clearBonus;
+      // 드랍(earned)은 주울 때 이미 이벤트 배율이 붙었다 — 여기서 또 곱하면 두 번 적용된다
+      const evGold = fev('goldMult', 1);
+      gs.gold += earned + Math.round((killBonus + winBonus + clearBonus) * evGold);
 
       const parts = [];
       if (earned > 0)     parts.push(`드랍 +${earned}💰`);
       if (killBonus > 0)  parts.push(`처치 +${killBonus}💰`);
       if (winBonus > 0)   parts.push(`${retreated ? '후퇴' : '승리'} +${winBonus}💰`);
       if (clearBonus > 0) parts.push(`★완주 +${clearBonus}💰`);
+      if (evGold !== 1)   parts.push(`${gs.floorEvent.icon}${gs.floorEvent.name} ×${evGold}`);
       addLog(gs.battle, `웨이브${this.waveIndex+1}: ${parts.join(' ')}`, COLORS.gold);
 
       // 완주하면 성벽을 조금 수리한다. 기지 HP가 내려가기만 하면
       // 공격적으로 굴리는 플레이가 구조적으로 지속 불가능해진다.
-      if (cleared && !BONUSES.pactNoRepair) {
+      if (cleared && !BONUSES.pactNoRepair && !fev('noRepair', false)) {
         const before = gs.baseHP;
         gs.baseHP = Math.min(baseHpMax(), gs.baseHP + clearRepair(this.waveIndex));
         const healed = Math.round(gs.baseHP - before);
@@ -243,7 +250,7 @@ function createWaveManager() {
       gs.battle.result     = null;
       gs.battle.goldEarned = 0;
       gs.battle.floaties   = [];
-      gs.battle.maxSlots   = Math.max(1, Math.floor((4 + BONUSES.maxSlotBonus) * (BONUSES.pactSlotMult || 1)));
+      gs.battle.maxSlots   = Math.max(1, Math.floor((4 + BONUSES.maxSlotBonus) * (BONUSES.pactSlotMult || 1)) + fev('slotBonus', 0));
 
       gs.hero.placement = 'none';
       restHealTeam(gs.battle);       // 생존 병력 휴식 회복
@@ -252,7 +259,7 @@ function createWaveManager() {
       const atCampaignEnd = (gs.mode !== 'endless') && (this.waveIndex + 1 >= WAVE_DEFS.length);
       if (!atCampaignEnd) {
         this.phase = 'upgradePick';
-        gs.upgradePick = { active: true, cards: rollUpgradeCards(gs.activeUpgrades) };
+        gs.upgradePick = { active: true, cards: rollUpgradeCards(gs.activeUpgrades, fev('cards', 3)) };
       } else {
         this.phase = 'intermission';
         this.intermissionTimer = 0;
@@ -264,7 +271,7 @@ function createWaveManager() {
       // 무한은 층마다 보석이 쌓이고, 깊이 들어갈수록 층당 몫이 커진다
       const et = endlessTier(this.waveIndex);
       if (et > 0) {
-        gs.endlessGems = (gs.endlessGems || 0) + endlessGemStep(et);
+        gs.endlessGems = (gs.endlessGems || 0) + endlessGemStep(et) * fev('gemMult', 1);
         gs.stats.bestEndless = Math.max(gs.stats.bestEndless || 0, et);
         // 관문(10층 단위) 최초 돌파는 일회성 보상
         if (isGateTier(et)) {

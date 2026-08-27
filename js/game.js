@@ -89,6 +89,7 @@ function newState() {
     mode:'campaign',    // 'campaign'(훈련 30웨이브) | 'endless'(본편, 죽어야 끝난다)
     runSeed:0,          // 이 판의 시드 — 층 구성·변형·지형·경로를 흔든다
     pathChanged:null,   // 직전 층에서 경로가 바뀐 결과 (준비 화면 안내용)
+    floorEvent:null,    // 이 층에만 걸리는 규칙 변화
     endlessGems:0,      // 무한 층에서 쌓인 보석
     research:0,         // 병기 연구 횟수 (상한 없는 골드 사용처)
     bountyPending:false,// 이번 웨이브에 소환 예약됨
@@ -179,7 +180,7 @@ function _applyStartBonuses() {
   gs.gold     = Math.max(0, gs.gold + BONUSES.startGoldBonus);
   gs.baseHP   = Math.max(1, Math.min(baseHpMax(), gs.baseHP + BONUSES.baseHpMax));
   gs.hero.exp = Math.min(HERO_LEVELS[gs.hero.level].expNeeded - 1, gs.hero.exp + BONUSES.heroStartExp);
-  gs.battle.maxSlots = Math.max(1, Math.floor((4 + BONUSES.maxSlotBonus) * (BONUSES.pactSlotMult || 1)));
+  gs.battle.maxSlots = Math.max(1, Math.floor((4 + BONUSES.maxSlotBonus) * (BONUSES.pactSlotMult || 1)) + fev('slotBonus', 0));
 }
 
 function baseHpMax()     { return Math.max(20, Math.round((BASE_HP_MAX + BONUSES.baseHpMax) * (BONUSES.pactBaseHpMult || 1))); }
@@ -333,7 +334,7 @@ function tap({x,y}) {
           SFX.denied();
         } else {
           tw.overloadUntil  = OVERLOAD_DURATION;
-          gs.overloadReady  = OVERLOAD_COOLDOWN;
+          gs.overloadReady  = OVERLOAD_COOLDOWN * fev('overloadCdMult', 1);
           const ctr = cellCenter(tw.col, tw.row);
           spawnFloaty('⚡ 과부하!', ctr.x, ctr.y - 18, '#fbbf24');
           FX.ring(ctr.x, ctr.y, '#fbbf24', 12);
@@ -605,6 +606,7 @@ function handleTownTap(x,y) {
     }
     if (hitTest(x,y,gs.ui.wallRepairBtn||{})) {
       const cost = wallRepairCost(gs.wallRepairs);
+      if (fev('noRepair', false)) { spawnFloaty('🩸 출혈 — 이 층에서는 보수할 수 없습니다',CW/2,300,'#ef4444'); SFX.denied(); return; }
       if (gs.baseHP >= baseHpMax()) { spawnFloaty('성벽이 이미 온전합니다',x,y,'#64748b'); SFX.denied(); return; }
       if (gs.gold < cost) { spawnFloaty('골드 부족!',x,y,'#ef4444'); SFX.denied(); return; }
       gs.gold -= cost;

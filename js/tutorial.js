@@ -88,6 +88,12 @@ const TUTORIAL_STEPS = [
           '지형은 적에게도 똑같이 적용됩니다. 끼고 싸우세요.'
   },
   {
+    title: '🎯 층 이벤트',
+    text: '4층부터 절반 정도의 층에\n그 층에만 걸리는 규칙이 붙습니다.\n\n' +
+          '🌫 안개 — 타워 사거리 −30%\n🔒 봉인 — 타워 한 종류가 침묵\n💰 노다지 — 골드 ×2\n🪙 탐욕 — 골드 ×2.5, 대신 적이 단단해집니다\n\n' +
+          '나쁜 층은 버티고, 좋은 층은 밀어붙이세요.\n준비 화면 맨 위에 뜹니다.'
+  },
+  {
     title: '🛤 경로는 관문에서 바뀝니다',
     text: '10층마다 상단 ∞ 경로가 통째로 바뀝니다.\n한 층 전에 격자에 점선으로 미리 보입니다.\n\n' +
           '새 경로에 깔린 타워는 사라지지 않습니다 —\n인접한 빈 칸으로 옮겨지고 레벨도 그대로입니다.\n(옮길 자리가 없을 때만 전액 환불)\n\n' +
@@ -111,14 +117,14 @@ function createTutorial() {
   return {
     active: false, step: 0, done: false,
     start() {
-      if (localStorage.getItem('df_tut6') === '1') { this.done = true; return; }
+      if (localStorage.getItem('df_tut7') === '1') { this.done = true; return; }
       this.active = true; this.step = 0;
     },
     next() {
       this.step++;
       if (this.step >= TUTORIAL_STEPS.length) {
         this.active = false; this.done = true;
-        localStorage.setItem('df_tut6', '1');
+        localStorage.setItem('df_tut7', '1');
       }
     },
     current() { return TUTORIAL_STEPS[this.step] || null; }

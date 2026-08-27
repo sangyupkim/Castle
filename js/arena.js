@@ -573,7 +573,7 @@ function hurtMob(gs, m, dmg, color) {
   if (typeof SFX !== 'undefined') SFX.kill();
 
   // 드랍
-  let amount = Math.round((m.goldReward || 1) * BONUSES.battleGoldMult);
+  let amount = Math.round((m.goldReward || 1) * BONUSES.battleGoldMult * fev('goldMult', 1));
   if (BONUSES.dropChance > 0 && Math.random() < BONUSES.dropChance) {
     amount += 6 + Math.floor(Math.random() * 10);
   }

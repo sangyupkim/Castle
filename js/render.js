@@ -351,6 +351,12 @@ function renderUIBar(ctx, gs, wm) {
     const bst = gs.stats.bestEndless || 0;
     ctx.fillStyle = si.tier > bst ? '#4ade80' : '#94a3b8';
     ctx.fillText(si.tier > bst ? '신기록' : `최고 ${bst}`, 42, cy-12);
+    if (gs.floorEvent) {
+      ctx.font='bold 10px sans-serif';
+      ctx.fillStyle = gs.floorEvent.tone === 'good' ? '#4ade80'
+                    : gs.floorEvent.tone === 'bad'  ? '#f87171' : '#fbbf24';
+      ctx.fillText(`${gs.floorEvent.icon}${gs.floorEvent.name}`, 88, cy-12);
+    }
   } else {
     ctx.fillText(`웨이브 ${si.waveInStage+1}/3`, 30, cy-12);
   }
@@ -358,7 +364,7 @@ function renderUIBar(ctx, gs, wm) {
   // 타이머
   const tv = wm.phase==='active'       ? Math.ceil(wm.timer)
            : wm.phase==='intermission' ? Math.ceil(wm.intermissionTimer)
-           : WAVE_DURATION;
+           : waveDuration();
   const tlabel = wm.phase==='intermission'
     ? `준비 ${tv}s`
     : `${String(Math.floor(tv/60)).padStart(2,'0')}:${String(tv%60).padStart(2,'0')}`;
@@ -516,6 +522,28 @@ function renderBriefing(ctx, gs) {
     ctx.fillText('격자에 점선으로 표시 · 겹치는 칸에 지으면 안 옮겨집니다', CW-12, y+nh/2+1);
     ctx.textAlign='left'; ctx.textBaseline='top';
     y += nh + 5;
+  }
+
+  // ── 이 층의 이벤트 ───────────────────────────────────────────────────────
+  // 변형(적 숫자)과 달리 이벤트는 이 층 동안의 규칙을 바꾼다. 제일 먼저 보여야 한다.
+  const ev = gs.floorEvent;
+  if (st.endless && ev) {
+    const eh = 32;
+    const tone = ev.tone === 'good' ? { bg:'rgba(20,83,45,0.42)',  bd:'#22c55e', fg:'#4ade80', sub:'#15803d' }
+               : ev.tone === 'bad'  ? { bg:'rgba(127,29,29,0.42)', bd:'#ef4444', fg:'#f87171', sub:'#991b1b' }
+                                    : { bg:'rgba(120,53,15,0.42)', bd:'#f59e0b', fg:'#fbbf24', sub:'#b45309' };
+    roundRect(ctx, 6, y, CW-12, eh, 6);
+    ctx.fillStyle = tone.bg; ctx.fill();
+    ctx.strokeStyle = tone.bd; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = tone.fg; ctx.font='bold 12px sans-serif';
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.fillText(`${ev.icon} ${ev.name}`, 12, y+eh/2-6);
+    ctx.fillStyle = tone.sub; ctx.font='bold 9px sans-serif';
+    ctx.fillText(ev.desc, 12, y+eh/2+8);
+    ctx.textAlign='right'; ctx.fillStyle = tone.sub; ctx.font='bold 8px sans-serif';
+    ctx.fillText('이 층에만 적용', CW-12, y+eh/2);
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    y += eh + 5;
   }
 
   // ── 이 층의 변형 ─────────────────────────────────────────────────────────

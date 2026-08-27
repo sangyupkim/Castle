@@ -165,7 +165,7 @@ const SKILL_TREES = {
 };
 
 // ─── 랜덤 카드 3장 뽑기 ──────────────────────────────────────────────────────
-function rollUpgradeCards(taken) {
+function rollUpgradeCards(taken, count) {
   const owned = new Set(taken || []);
   // 불린/일회성 효과 카드는 이미 뽑았으면 후보에서 제외
   const uniqueOnly = new Set(['t_thunder', 'u_undying', 'h_immortal', 'b_wall', 'c_eldorado']);
@@ -176,7 +176,8 @@ function rollUpgradeCards(taken) {
   );
   const picked = [], used = new Set();
 
-  while (picked.length < 3 && used.size < pool.length) {
+  const want = Math.max(1, count || 3);
+  while (picked.length < want && used.size < pool.length) {
     let total = 0;
     for (let i = 0; i < pool.length; i++) if (!used.has(i)) total += weights[i];
     if (total <= 0) break;
