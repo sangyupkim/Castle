@@ -254,6 +254,10 @@ function createWaveManager() {
       gs.battle.maxSlots   = Math.max(1, Math.floor((4 + BONUSES.maxSlotBonus) * (BONUSES.pactSlotMult || 1)) + fev('slotBonus', 0));
 
       gs.hero.placement = 'none';
+      // 아래 절반이 아레나 → 준비 화면으로 바뀐다. 연타 중이던 손가락이
+      // 새로 생긴 버튼을 그대로 누르지 않도록 잠깐 탭을 막는다.
+      if (typeof lockTapsBriefly === 'function') lockTapsBriefly();
+      tickHeroDown(gs);              // 전사한 영웅의 결장 층을 하나 센다
       restHealTeam(gs.battle);       // 생존 병력 휴식 회복
       refreshInnOffers(gs);          // 여관에 새 손님이 온다
 
@@ -312,6 +316,7 @@ function createWaveManager() {
       gs.upgradePick = { active: false, cards: [] };
       this.phase = 'intermission';
       this.intermissionTimer = 0;
+      if (typeof lockTapsBriefly === 'function') lockTapsBriefly();
     },
 
     updateIntermission(gs, dt) {

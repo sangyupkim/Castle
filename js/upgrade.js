@@ -101,7 +101,7 @@ const UPGRADE_CARDS = [
     apply: b => { b.heroAura += 3; } },
   { id:'h_exp',     name:'급성장',        desc:'영웅 EXP +100%',       grade:'rare',   icon:'👑', cat:'hero',
     apply: b => { b.heroExpMult *= 2.0; } },
-  { id:'h_immortal',name:'불사의 영웅',   desc:'영웅 즉시 부활',       grade:'epic',   icon:'👑', cat:'hero',
+  { id:'h_immortal',name:'불사의 영웅',   desc:'전사해도 결장 없음',   grade:'epic',   icon:'👑', cat:'hero',
     apply: b => { b.heroInstantRevive = true; } },
   { id:'h_power',   name:'신의 강림',     desc:'영웅 모든 스탯 +20%',  grade:'epic',   icon:'👑', cat:'hero',
     apply: b => { b.heroStatMult *= 1.2; b.heroAtk += 5; } },
@@ -149,7 +149,7 @@ const SKILL_TREES = {
       { id:'hr_s5', name:'신의 강림',   icon:'👑', cost:2, req:'hr_s2', row:2, col:0, desc:'영웅 모든 스탯 +20%',     apply:b=>{ b.heroStatMult*=1.20; b.heroAtk+=10; } },
       { id:'hr_s6', name:'영웅의 오라', icon:'✨', cost:2, req:'hr_s3', row:2, col:1, desc:'아군 방어력 오라 +5',      apply:b=>{ b.heroAura+=5; } },
       { id:'hr_s7', name:'빠른 성장',   icon:'⬆️', cost:2, req:'hr_s4', row:2, col:2, desc:'영웅 EXP +80%, 시작EXP+30',apply:b=>{ b.heroExpMult*=1.80; b.heroStartExp+=30; } },
-      { id:'hr_s8', name:'불사의 영웅', icon:'🔮', cost:3, req:'hr_s5', row:3, col:0, desc:'영웅 즉시 부활',           apply:b=>{ b.heroInstantRevive=true; } },
+      { id:'hr_s8', name:'불사의 영웅', icon:'🔮', cost:3, req:'hr_s5', row:3, col:0, desc:'전사해도 결장 없음',        apply:b=>{ b.heroInstantRevive=true; } },
       { id:'hr_s9', name:'영웅 전설',   icon:'🌟', cost:3, req:'hr_s6', row:3, col:1, desc:'스탯 +25%, 오라 +8',       apply:b=>{ b.heroStatMult*=1.25; b.heroAura+=8; } },
     ]
   },

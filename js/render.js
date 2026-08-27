@@ -298,6 +298,12 @@ function renderDefEnemy(ctx, e) {
   drawHPBar(ctx, e.x-e.radius, ey-e.radius-7, e.radius*2, 4, e.hp/e.maxHp);
 }
 
+// 전사한 영웅이 언제 돌아오는지 — 화면마다 같은 말을 쓰기 위해 한곳에 둔다
+function heroDownLabel(hero) {
+  const n = hero.downFor || 0;
+  return n > 0 ? `${n}개 층 결장` : '이 층 끝나면 복귀';
+}
+
 function renderHeroInDefense(ctx, hero) {
   if (hero.dead) {
     ctx.globalAlpha=0.4;
@@ -305,7 +311,7 @@ function renderHeroInDefense(ctx, hero) {
     ctx.fillText('💀', hero.defX, hero.defY);
     ctx.globalAlpha=1;
     ctx.fillStyle='#f87171'; ctx.font='bold 8px sans-serif'; ctx.textBaseline='top';
-    ctx.fillText(`부활 ${Math.ceil(hero.reviveTimer)}s`, hero.defX, hero.defY+12);
+    ctx.fillText(heroDownLabel(hero), hero.defX, hero.defY+12);
     return;
   }
   const lv = HERO_LEVELS[hero.level];
@@ -729,7 +735,7 @@ function renderBriefing(ctx, gs) {
     ctx.fillText('⚠️ 병력 없음 — 마을 › 출전준비에서 고용하세요', 12, y+27);
   }
 
-  const heroTxt = gs.hero.dead ? `💀 부활 ${Math.ceil(gs.hero.reviveTimer)}s`
+  const heroTxt = gs.hero.dead ? `💀 전사 — ${heroDownLabel(gs.hero)}`
                 : gs.hero.placement==='defense' ? '👑 상단 배치'
                 : gs.hero.placement==='battle'  ? '👑 하단 배치' : '👑 미배치';
   ctx.fillStyle = gs.hero.dead ? '#f87171' : gs.hero.placement==='none' ? '#64748b' : COLORS.hero;
@@ -2628,7 +2634,7 @@ function renderTownPageArmy(ctx, gs, startY) {
   ctx.font='24px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillText(hero.dead?'💀':'👑',12,y+6);
   ctx.fillStyle=hero.dead?'#f87171':COLORS.hero; ctx.font='bold 12px sans-serif';
-  ctx.fillText(hero.dead?`전사 — 부활까지 ${Math.ceil(hero.reviveTimer)}s`:`영웅  Lv.${hero.level}`,44,y+6);
+  ctx.fillText(hero.dead?`전사 — ${heroDownLabel(hero)}`:`영웅  Lv.${hero.level}`,44,y+6);
   ctx.fillStyle='#cbd5e1'; ctx.font='bold 10px sans-serif';
   ctx.fillText(`ATK ${Math.round((lv.atk+BONUSES.heroAtk)*BONUSES.heroStatMult*BONUSES.sigilHeroAtkMult)}   HP ${Math.ceil(hero.hp)}/${hMax}   DEF ${Math.round((lv.def+BONUSES.heroAura)*BONUSES.heroStatMult)}`,44,y+22);
   // 지금 걸린 각인 — 캠프에서 바꾼 게 여기 반영됐는지 바로 보이게
@@ -3153,27 +3159,33 @@ function renderTutorial(ctx, tut) {
   ctx.textBaseline='bottom';
   ctx.fillText(isTip ? '탭하여 닫기' : '탭하여 계속 ▶', CW/2, cy+ch-3);
 
-  // 건너뛰기 / 이전 — 카드 바깥에 둬서 본문 탭(=다음)과 겹치지 않게 한다
-  if (!isTip) {
-    const bw=78, bh=26, by=cy+ch+12;
-    if (tut.step > 0) {
-      const bx=cx;
-      roundRect(ctx,bx,by,bw,bh,6);
-      ctx.fillStyle='#111827'; ctx.fill(); ctx.strokeStyle='#334155'; ctx.lineWidth=1; ctx.stroke();
-      ctx.fillStyle='#94a3b8'; ctx.font='bold 11px sans-serif';
-      ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText('◀ 이전', bx+bw/2, by+bh/2);
-      gs.ui.tutBackBtn={x:bx,y:by,w:bw,h:bh};
-    }
-    const sx=cx+cw-bw;
-    roundRect(ctx,sx,by,bw,bh,6);
+  // 이전 / 건너뛰기 — 카드 바깥에 둬서 본문 탭(=다음)과 겹치지 않게 한다.
+  // 건너뛰기는 남은 쪽지까지 전부 끈다. 쪽지가 층마다 계속 뜨면
+  // 플레이어에겐 튜토리얼이 안 꺼진 것과 같다.
+  const bw=104, bh=28, by=cy+ch+12;
+  const left = tipsRemaining();
+  if (!isTip && tut.step > 0) {
+    const bx=cx;
+    roundRect(ctx,bx,by,78,bh,6);
     ctx.fillStyle='#111827'; ctx.fill(); ctx.strokeStyle='#334155'; ctx.lineWidth=1; ctx.stroke();
     ctx.fillStyle='#94a3b8'; ctx.font='bold 11px sans-serif';
     ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText('건너뛰기 ✕', sx+bw/2, by+bh/2);
-    gs.ui.tutSkipBtn={x:sx,y:by,w:bw,h:bh};
+    ctx.fillText('◀ 이전', bx+39, by+bh/2);
+    gs.ui.tutBackBtn={x:bx,y:by,w:78,h:bh};
+  }
+  const sx=cx+cw-bw;
+  roundRect(ctx,sx,by,bw,bh,6);
+  ctx.fillStyle='#1c1420'; ctx.fill(); ctx.strokeStyle='#4b5563'; ctx.lineWidth=1; ctx.stroke();
+  ctx.fillStyle='#cbd5e1'; ctx.font='bold 11px sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('✕ 안내 전부 끄기', sx+bw/2, by+bh/2-5);
+  ctx.fillStyle='#64748b'; ctx.font='8px sans-serif';
+  ctx.fillText(left ? `남은 안내 ${left}장까지` : '다시 안 뜹니다', sx+bw/2, by+bh/2+8);
+  gs.ui.tutSkipBtn={x:sx,y:by,w:bw,h:bh};
 
+  if (!isTip) {
     ctx.fillStyle='#334155'; ctx.font='9px sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(`${tut.step+1} / ${TUTORIAL_STEPS.length}`, CW/2, by+bh/2);
   }
   ctx.textAlign='left'; ctx.textBaseline='top';

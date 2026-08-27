@@ -38,6 +38,21 @@ const SaveManager = {
       totalGoldEarned: gs.battle ? gs.battle.totalGoldEarned : 0,
       townBuildings: JSON.parse(JSON.stringify(gs.town?.buildings || {})),
       townEquipped:  gs.town?.equippedItems || [],
+      // ── 판에 세워둔 것 ──
+      // v8까지 골드·웨이브·건물만 담고 타워와 편성을 빼먹었다. 강제 종료 후 돌아오면
+      // 골드는 그대로인데 판이 텅 비어 있었다 — 한 판에서 제일 오래 쌓은 것이 사라졌다.
+      towers: (gs.towers || []).map(t => ({
+        col:t.col, row:t.row, typeId:t.typeId, level:t.level || 1, invested:t.invested || 0,
+        kills:t.kills || 0, damageDealt:t.damageDealt || 0
+      })),
+      team: (gs.battle?.ourTeam || []).filter(u => !u.isHero).map(u => ({
+        typeId:u.typeId, hp:Math.max(1, Math.round(u.hp))
+      })),
+      heroPlacement: gs.hero?.placement || 'none',
+      heroHp:        Math.max(0, Math.round(gs.hero?.hp || 0)),
+      heroDead:      !!gs.hero?.dead,
+      heroDownFor:   gs.hero?.downFor || 0,
+      innOffers:     gs.innOffers || [],
       // ── 영구 (런과 무관) ──
       soulStones:     gs.soulStones  || 0,
       metaUpgrades:   gs.metaUpgrades || {},

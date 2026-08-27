@@ -175,11 +175,14 @@ function createTutorial() {
       this.step = Math.max(0, this.step - 1);
     },
 
+    // 건너뛰기는 "전부"를 뜻한다. 본 튜토리얼만 끄고 쪽지 14장이 층마다 계속 뜨면
+    // 플레이어가 보기엔 튜토리얼이 안 꺼진 것이다 — 실제로 그렇게 보고가 왔다.
     skip() {
       this.tip = null;
       this.active = false; this.done = true;
       this.step = TUTORIAL_STEPS.length;
       try { localStorage.setItem('df_tut9', '1'); } catch (e) {}
+      markAllTipsSeen();
     },
 
     current() {
@@ -187,6 +190,20 @@ function createTutorial() {
       return TUTORIAL_STEPS[this.step] || null;
     }
   };
+}
+
+// 남은 쪽지를 전부 본 것으로 처리한다 (건너뛰기 · 안내 끄기)
+function markAllTipsSeen() {
+  try {
+    for (const key of Object.keys(TUTORIAL_TIPS)) localStorage.setItem(TIP_KEY_PREFIX + key, '1');
+  } catch (e) {}
+}
+
+// 아직 안 뜬 쪽지가 몇 장 남았는지 — 버튼에 적어 준다
+function tipsRemaining() {
+  try {
+    return Object.keys(TUTORIAL_TIPS).filter(k => localStorage.getItem(TIP_KEY_PREFIX + k) !== '1').length;
+  } catch (e) { return 0; }
 }
 
 // 쪽지 기록도 초기화 대상이다 — 데이터 초기화가 "처음부터"를 뜻하려면.

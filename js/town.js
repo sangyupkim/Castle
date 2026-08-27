@@ -96,8 +96,8 @@ const TOWN_BUILDINGS = [
         desc:v=>`영웅 전체 능력치 +${pct(v)}`,               apply:(b,v)=>{ b.heroStatMult += v; } },
       { id:'h_aura', name:'지휘 오라',  icon:'🎖️', unlockLv:3, cost:28, costMult:1.50, step:2,    growth:0.15,
         desc:v=>`영웅 방어력 +${Math.round(v)}`,             apply:(b,v)=>{ b.heroAura += v; } },
-      { id:'h_rev',  name:'구원의 손',  icon:'🕊️', unlockLv:4, cost:38, costMult:1.55, step:1.2,  growth:0.10, maxLv:8,
-        desc:v=>`영웅 부활 시간 -${v.toFixed(1)}초`,         apply:(b,v)=>{ b.heroReviveReduction += v; } },
+      { id:'h_rev',  name:'구원의 손',  icon:'🕊️', unlockLv:4, cost:38, costMult:1.55, step:1,  growth:0, maxLv:8,
+        desc:v=>`전사 후 복귀 HP +${Math.round(v*HERO_RETURN_HP_PER*100)}%p`, apply:(b,v)=>{ b.heroReviveReduction += v; } },
       { id:'h_inf',  name:'전설의 무구', icon:'♾️', unlockLv:BUILDING_MAX_LEVEL-1, cost:190, costMult:1.27, step:0.04, growth:0.05, maxLv:Infinity,
         desc:v=>`영웅 전체 능력치 +${pct(v)}`,               apply:(b,v)=>{ b.heroStatMult += v; } },
     ]
@@ -160,7 +160,7 @@ const HERO_EQUIPMENT_POOL = [
   { id:'cape_shadow',  name:'그림자 망토',    icon:'🦸', cost:65, grade:'epic',   slot:'방어구', desc:'불굴의 의지 + 콤보 +15%',         apply:b=>{ b.undying=true; b.comboChance+=0.15; } },
   { id:'ring_gold',    name:'황금 반지',      icon:'💍', cost:35, grade:'common', slot:'장신구', desc:'처치 골드 +20%',                  apply:b=>{ b.battleGoldMult *= 1.20; } },
   { id:'cross_holy',   name:'성스러운 십자가',icon:'✝️', cost:55, grade:'rare',   slot:'장신구', desc:'처치 시 아군 HP +5 회복',          apply:b=>{ b.killHeal += 5; } },
-  { id:'scroll_epic',  name:'마법의 두루마리',icon:'📜', cost:70, grade:'epic',   slot:'장신구', desc:'영웅 즉시 부활',                   apply:b=>{ b.heroInstantRevive=true; } },
+  { id:'scroll_epic',  name:'마법의 두루마리',icon:'📜', cost:70, grade:'epic',   slot:'장신구', desc:'전사해도 결장 없음',                apply:b=>{ b.heroInstantRevive=true; } },
 ];
 
 function createTown() {

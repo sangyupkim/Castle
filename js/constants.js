@@ -1,7 +1,7 @@
 'use strict';
 
 // 타이틀 화면에 표기되는 버전
-const GAME_VERSION = 'v0.3.8';
+const GAME_VERSION = 'v0.3.9';
 
 // 포기하고 정산하면 보석을 깎는다. 한 판이 10~30분이라 접을 길은 있어야 하지만,
 // 접는 쪽이 늘 이득이면 아무도 마지막 층을 버티지 않는다.
@@ -1298,7 +1298,13 @@ const REST_HEAL_PCT    = 0.30;
 const WAVE_DURATION    = 60;
 const INTERMISSION     = 15;
 const BASE_HP_MAX      = 100;
-const HERO_REVIVE_TIME = 20;
+// ─── 영웅 전사 ───────────────────────────────────────────────────────────────
+// 20초 뒤 만피로 부활하던 시절에는 영웅이 죽는 것에 아무 대가가 없었다 —
+// 오히려 위험한 자리에 밀어넣고 죽으면 기다리는 쪽이 편했다.
+// 이제 쓰러진 층은 물론 다음 층까지 영웅 없이 치러야 하고, 돌아올 때도 만피가 아니다.
+const HERO_DOWN_FLOORS  = 1;     // 쓰러진 층 다음으로 결장하는 층 수
+const HERO_RETURN_HP    = 0.40;  // 복귀 시 최대 HP 비율 (구원의 손으로 올린다)
+const HERO_RETURN_HP_PER = 0.05; // 구원의 손 1단계당 +5%p
 
 // v1.0의 틱 전투 상수(TICK_INTERVAL · SKILL_TICK_CD · MP_REGEN_TICK)는 폐기됐다.
 // 실시간 전투에서는 유닛마다 atkPeriod / skillCd(초)를 직접 쓴다.

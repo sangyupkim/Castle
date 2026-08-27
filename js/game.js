@@ -76,7 +76,7 @@ function newState() {
       level:1, exp:0,
       hp: HERO_LEVELS[1].hp,
       placement:'none',
-      dead:false, reviveTimer:0,
+      dead:false, downFor:0,   // downFor: 전사 후 결장이 남은 층 수
       defX: GRID_OX + 4*CELL_W + CELL_W/2,
       defY: GRID_OY + 3*CELL_H + CELL_H/2,
       moveX: null, moveY: null,   // 웨이브 중 지정한 이동 목표
@@ -139,6 +139,8 @@ const tut = createTutorial();
 
 gs.battle = createBattle();
 
+let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적용 뒤에 되돌린다)
+
 // 세이브 로드 — 영구 데이터는 항상, 런 진행은 출격 중이었을 때만 이어받는다
 (function(){
   const sv = SaveManager.load();
@@ -179,6 +181,32 @@ gs.battle = createBattle();
     }
   }
   gs.town.equippedItems = sv.townEquipped || [];
+  gs.innOffers = sv.innOffers || [];
+
+  // ── 판에 세워둔 것 복원 ──
+  // 경로는 층에 따라 정해지므로 wm.init()이 THE_PATH를 맞춘 뒤에 타워를 올려야 하는데,
+  // 반대로 타워가 먼저 있어야 경로 변경 시 이설 대상이 된다. init 전에 세운다.
+  for (const t of (sv.towers || [])) {
+    if (!TOWER_TYPES[t.typeId]) continue;
+    if (t.col < 0 || t.col >= GRID_COLS || t.row < 0 || t.row >= GRID_ROWS) continue;
+    if (gs.towers.some(x => x.col === t.col && x.row === t.row)) continue;
+    const tw = makeTower(t.col, t.row, t.typeId);
+    tw.level    = Math.max(1, Math.min(TOWER_MAX_LEVEL, t.level || 1));
+    tw.invested = t.invested || tw.invested;
+    tw.kills    = t.kills || 0;
+    tw.damageDealt = t.damageDealt || 0;
+    gs.towers.push(tw);
+  }
+  for (const u of (sv.team || [])) {
+    if (!UNIT_TYPES[u.typeId]) continue;
+    const unit = makeUnit(u.typeId);
+    unit.hp = Math.max(1, Math.min(unit.maxHp, u.hp || unit.maxHp));
+    gs.battle.ourTeam.push(unit);
+  }
+  // 영웅은 _applyStartBonuses()가 만피로 채우므로, 그 뒤에 되돌린다
+  _restoredHero = { hp:sv.heroHp || 0, placement:sv.heroPlacement || 'none',
+                    dead:!!sv.heroDead, downFor:sv.heroDownFor || 0 };
+
   refreshHeroShop(gs);
   wm.init(gs.wave);
 })();
@@ -186,6 +214,21 @@ gs.battle = createBattle();
 // 메타 업그레이드 및 시작 보너스 적용
 reapplyAllBonuses(gs);
 _applyStartBonuses();
+
+// 이어하는 판이면 영웅 상태를 세이브 값으로 되돌린다 (만피 초기화 뒤에)
+if (_restoredHero) {
+  const rh = _restoredHero;
+  gs.hero.dead    = rh.dead;
+  gs.hero.downFor = rh.downFor;
+  gs.hero.hp      = rh.dead ? 0 : Math.max(1, Math.min(heroMaxHp(), rh.hp || heroMaxHp()));
+  if (!rh.dead && (rh.placement === 'battle' || rh.placement === 'defense')) {
+    gs.hero.placement = rh.placement;
+    if (rh.placement === 'battle' && !gs.battle.ourTeam.some(u => u.isHero)) {
+      gs.battle.ourTeam.unshift(makeHeroUnit(gs.hero));
+    }
+  }
+  _restoredHero = null;
+}
 
 function _applyStartBonuses() {
   gs.gold     = Math.max(0, gs.gold + BONUSES.startGoldBonus);
@@ -199,7 +242,6 @@ function _applyStartBonuses() {
 
 function baseHpMax()     { return Math.max(20, Math.round((BASE_HP_MAX + BONUSES.baseHpMax) * (BONUSES.pactBaseHpMult || 1))); }
 function heroMaxHp()     { return Math.round(HERO_LEVELS[gs.hero.level].hp * BONUSES.heroStatMult * BONUSES.sigilHeroHpMult); }
-function heroReviveDur() { return Math.max(5, HERO_REVIVE_TIME - BONUSES.heroReviveReduction); }
 
 tut.start();
 
@@ -348,6 +390,15 @@ function tryStartWave() {
   return true;
 }
 
+// 웨이브가 끝나면 아래 절반이 아레나에서 준비 화면으로 통째로 바뀐다.
+// 수동 전투 중에는 바닥을 연타하고 있으므로, 바뀐 직후의 탭이 그 자리에 새로 생긴
+// [마을] 버튼에 그대로 꽂힌다 — 전투 중에 갑자기 마을로 넘어가던 것이 이것이다.
+// 배치가 바뀐 뒤 잠깐은 탭을 먹지 않는다.
+const LAYOUT_TAP_LOCK = 0.45;   // 초
+let _tapLockUntil = 0;
+function lockTapsBriefly() { _tapLockUntil = (typeof performance !== 'undefined' ? performance.now() : Date.now()) + LAYOUT_TAP_LOCK * 1000; }
+function tapsLocked() { return (typeof performance !== 'undefined' ? performance.now() : Date.now()) < _tapLockUntil; }
+
 function tap({x,y}) {
   if (_titleScreen) {
     SFX.unlock();
@@ -367,13 +418,21 @@ function tap({x,y}) {
     return;
   }
   if (tut.active) {
-    if (hitTest(x,y,gs.ui.tutSkipBtn||{})) { tut.skip(); SFX.click(); return; }
+    if (hitTest(x,y,gs.ui.tutSkipBtn||{})) {
+      tut.skip();
+      SFX.click();
+      spawnFloaty('안내를 모두 껐습니다 — 초기화하면 다시 볼 수 있습니다', CW/2, CH/2, '#94a3b8');
+      return;
+    }
     if (hitTest(x,y,gs.ui.tutBackBtn||{})) { tut.back(); SFX.click(); return; }
     tut.next(); SFX.click(); return;
   }
 
   if (gs.page === 'lobby')  { handleLobbyTap(x,y);  return; }
   if (gs.page === 'result') { handleResultTap(x,y); return; }
+
+  // 방금 화면 배치가 바뀌었으면 이 탭은 흘려보낸다
+  if (tapsLocked()) return;
 
   // 훈련 완주 — 무한이 열린다
   if (gs.stageCleared && !gs.gameOver) { showResult(); return; }
@@ -496,8 +555,31 @@ function tap({x,y}) {
       tryStartWave();
       return;
     }
-    handleTownTap(x,y);
+    // 여기서 handleTownTap을 부르던 코드가 있었다. 준비 화면에 마을 조작이 얹혀 있던 시절의
+    // 잔재인데, 지금은 마을이 별도 페이지라 전투 화면 탭이 "지난번 마을 화면에 남아 있던"
+    // 버튼 좌표에 맞아 마을로 튕기는 버그가 됐다 — 수동 전투 중 웨이브가 끝난 직후
+    // 바닥을 계속 탭하면 갑자기 마을로 넘어가던 것이 이것이다.
     return;
+  }
+}
+
+// 페이지가 바뀌면 지난 화면의 버튼 좌표를 지운다.
+// gs.ui는 그리면서 채워지므로, 다른 페이지의 낡은 사각형이 남아 엉뚱한 탭을 먹는다.
+const _PAGE_UI_KEYS = [
+  'buildingCards','researchBtn','wallRepairBtn','caveBtn','tabTownBtn','townBackBtn',
+  'buildingLvUpBtn','upgradeBtns','buildingScroll','hireCards','hiredSlots',
+  'specialCards','specialSlots','heroDefBtn','heroBatBtn','bountyBtn','towerMiniGrid',
+  'lobbyTabBtns','sortieBtn','trainBtn','metaCards','unlockBtns','pactBtns','sigilCards',
+  'towerTabBtn','heroTabBtn','supportTabBtn','backupExportBtn','backupImportBtn',
+  'resultBtn','waveBtn','battleWaveStartBtn','briefTownBtn','retreatBtn','modeBtn'
+];
+let _lastUiPage = null;
+function clearStalePageUI() {
+  if (gs.page === _lastUiPage) return;
+  _lastUiPage = gs.page;
+  for (const k of _PAGE_UI_KEYS) {
+    if (Array.isArray(gs.ui[k])) gs.ui[k] = [];
+    else if (gs.ui[k]) gs.ui[k] = null;
   }
 }
 
@@ -1057,12 +1139,38 @@ function killHero(state) {
   hero.hp = 0;
   hero.placement = 'none';
   hero.moveX = hero.moveY = null;
-  hero.reviveTimer = BONUSES.heroInstantRevive ? 0 : heroReviveDur();
+  // 이 층은 이미 끝났고, 결장할 층이 몇 개 더 남았는지를 센다.
+  // 불사(스킬·두루마리)는 결장 없이 이 층이 끝나면 바로 돌아온다.
+  hero.downFor = BONUSES.heroInstantRevive ? 0 : HERO_DOWN_FLOORS;
   state.battle.ourTeam = state.battle.ourTeam.filter(u => !u.isHero);
-  spawnFloaty('👑 영웅 전사!', CW/2, DEFENSE_H/2, '#ef4444');
-  addLog(state.battle, '👑 영웅이 쓰러졌습니다', '#ef4444');
+  const msg = hero.downFor > 0
+    ? `👑 영웅 전사! — 다음 ${hero.downFor}개 층 결장`
+    : '👑 영웅 전사! — 이 층이 끝나면 복귀';
+  spawnFloaty(msg, CW/2, DEFENSE_H/2, '#ef4444');
+  addLog(state.battle, msg, '#ef4444');
   FX.shake(7, 0.4);
   SFX.lose();
+}
+
+// 영웅이 돌아올 때 채워지는 HP 비율 — 🕊️ 구원의 손으로 올린다
+function heroReturnHpPct() {
+  return Math.min(1, HERO_RETURN_HP + (BONUSES.heroReviveReduction || 0) * HERO_RETURN_HP_PER);
+}
+
+// 층이 끝날 때마다 한 칸씩 센다. 다 세면 만피가 아니라 일부만 채우고 돌아온다.
+function tickHeroDown(state) {
+  const hero = state.hero;
+  if (!hero.dead) return;
+  if ((hero.downFor || 0) > 0) {
+    hero.downFor--;
+    return;
+  }
+  hero.dead = false;
+  hero.hp = Math.max(1, Math.round(heroMaxHp() * heroReturnHpPct()));
+  hero.placement = 'none';   // 어디에 세울지는 다시 고르게 한다
+  spawnFloaty(`👑 영웅 복귀 — HP ${Math.round(heroReturnHpPct()*100)}%`, CW/2, DEFENSE_H/2, '#22c55e');
+  addLog(state.battle, '👑 영웅이 돌아왔습니다', '#22c55e');
+  SFX.levelUp();
 }
 
 function heroGainExp(amount) {
@@ -1107,16 +1215,6 @@ function update(dt) {
 
   updateBattleFx(gs.battle, dt);
 
-  // 영웅 부활 카운트다운
-  if (gs.hero.dead) {
-    gs.hero.reviveTimer = Math.max(0, gs.hero.reviveTimer - dt);
-    if (gs.hero.reviveTimer <= 0) {
-      gs.hero.dead = false;
-      gs.hero.hp = heroMaxHp();
-      spawnFloaty('👑 영웅 부활!', CW/2, DEFENSE_H/2, '#22c55e');
-      SFX.levelUp();
-    }
-  }
 
   if (!gs.waveActive) { wm.updateIntermission(gs,dt); return; }
 
@@ -1239,6 +1337,7 @@ function loop(ts) {
 function frame(ts) {
   const dt=Math.min((ts-_last)/1000,0.05); _last=ts;
   ctx.clearRect(0,0,CW,CH);
+  clearStalePageUI();
 
   const [shx, shy] = FX.shakeOffset();
   ctx.save();
@@ -1294,6 +1393,19 @@ function resetGame() {
   _applyStartBonuses();
   wm.init(0);
 }
+
+// ─── 자동 저장 ───────────────────────────────────────────────────────────────
+// 웨이브가 끝날 때만 저장하고 있었다. 한 층이 60초인데 그 사이에 산 타워·용병·건물이
+// 앱을 강제 종료하면 통째로 사라졌다 — 모바일에서는 홈 버튼 한 번이면 그렇게 된다.
+// 주기적으로, 그리고 화면이 가려지는 순간에 반드시 한 번 더 쓴다.
+function autoSave() {
+  if (!gs || !gs.inRun || _titleScreen) return;
+  try { SaveManager.save(gs); } catch (e) {}
+}
+setInterval(autoSave, 10000);
+document.addEventListener('visibilitychange', () => { if (document.hidden) autoSave(); });
+window.addEventListener('pagehide', autoSave);
+window.addEventListener('blur', autoSave);
 
 // ─── 시작 ────────────────────────────────────────────────────────────────────
 requestAnimationFrame(ts=>{ _last=ts; requestAnimationFrame(loop); });

@@ -219,7 +219,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <div class="wrap">
 <header class="cover">
-  <div class="eyebrow">Game Design Document · v3.6 · 각인과 심층</div>
+  <div class="eyebrow">Game Design Document · v3.7 · 플레이 보고 반영</div>
   <h1>듀얼 프론티어</h1>
   <p class="tagline">한 화면에서 두 개의 전선을 동시에 굴리는 모바일 웹 로그라이트.
      끝은 없다 — 얼마나 깊이 내려갔는지가 기록이다.</p>
@@ -228,7 +228,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
     <div><dt>플랫폼</dt><dd>모바일 웹 (480×800 캔버스)</dd></div>
     <div><dt>1회 하강</dt><dd>10~30분 (도달 층에 비례)</dd></div>
     <div><dt>현재 볼륨</dt><dd>훈련 30웨이브 + ∞ 무한 (알고리즘 생성)</dd></div>
-    <div><dt>이번 개정</dt><dd>👑 영웅 각인 · 🌑 심층 · 튜토리얼 압축 (v3.6)</dd></div>
+    <div><dt>이번 개정</dt><dd>세이브 유실 · 마을 튕김 · 안내 끄기 · 영웅 결장 (v3.7)</dd></div>
   </dl>
 </header>
 
@@ -1538,6 +1538,102 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
 </tbody></table></div>
 
 
+
+<h3>세이브가 판을 절반만 담고 있었다 <span class="rev">v3.7</span></h3>
+
+<p class="lede">플레이 보고: <strong>"강제로 종료한 뒤 다시 들어가면 골드는 있는데
+타워랑 용병, 건물은 없는 경우가 있어."</strong> 재현됐다.</p>
+
+<div class="tw"><table>
+<caption>같은 판을 저장하고 다시 켰을 때 (수정 전)</caption>
+<thead><tr><th></th><th class="num">저장 전</th><th class="num">재기동 후</th></tr></thead>
+<tbody>
+<tr><td>골드</td><td class="num">777</td><td class="num">777</td></tr>
+<tr><td>타워</td><td class="num">5기</td><td class="num"><strong>0기</strong></td></tr>
+<tr><td>편성</td><td class="num">3명</td><td class="num"><strong>0명</strong></td></tr>
+<tr><td>영웅</td><td>하단 배치</td><td><strong>미배치</strong></td></tr>
+<tr><td>건물</td><td class="num">4채</td><td class="num">4채</td></tr>
+</tbody></table></div>
+
+<p>두 가지가 겹쳐 있었다.</p>
+<ol>
+<li><strong>담기지 않은 것.</strong> 세이브에 타워와 편성이 <strong>아예 없었다.</strong>
+<span class="mono">towers</span>(칸·종류·레벨·투자액)와 <span class="mono">team</span>(종류·HP),
+영웅의 배치·HP·전사 상태, 여관 손님을 추가했다. 복원할 때 타워는 격자 범위와 중복을 검사하고
+없는 종류는 버린다. 영웅은 <span class="mono">_applyStartBonuses()</span>가 만피로 채운
+<strong>뒤에</strong> 되돌려야 해서 한 박자 미룬다.</li>
+<li><strong>저장 시점.</strong> 웨이브가 끝날 때만 썼다. 한 층이 60초인데 그 사이에 산 것은
+앱을 내리면 통째로 날아갔다 — 사용자가 본 것이 정확히 이 창이다.
+<strong>10초 주기 자동 저장</strong>에 더해
+<span class="mono">visibilitychange</span> · <span class="mono">pagehide</span> ·
+<span class="mono">blur</span>에서 즉시 한 번 더 쓴다. 모바일에서 홈 버튼을 누르는 순간이다.</li>
+</ol>
+<div class="note"><p>세이브 키(<span class="mono">dualfrontier_v8</span>)는 그대로 뒀다.
+새 필드는 없으면 빈 값으로 읽히므로 기존 세이브가 깨지지 않는다 —
+버전을 올려 폐기하면 이 버그의 피해자가 기록까지 잃는다.</p></div>
+
+<h3>전투 중 갑자기 마을로 넘어가던 것 <span class="rev">v3.7</span></h3>
+
+<p class="lede">플레이 보고: <strong>"수동전투중에 바닥을 계속 누르다보면 전투가 안 끝났는데
+갑자기 마을화면으로 돌아가지는 버그."</strong> 원인이 둘이었다.</p>
+
+<h4>① <span class="mono">tap()</span>에 남은 잔재</h4>
+<p>웨이브가 끝나 <span class="mono">wm.phase</span>가 <span class="mono">idle</span>이 되면,
+전투 화면의 탭이 <span class="mono">handleTownTap(x,y)</span>로 넘어가고 있었다.
+준비 화면에 마을 조작이 얹혀 있던 시절(v3.2 이전)의 코드다.
+지금은 마을이 별도 페이지라, <strong>지난번 마을 화면에서 남은 버튼 좌표</strong>에
+탭이 맞으면 그대로 마을로 튕겼다. 호출을 지웠다.</p>
+
+<h4>② 손가락 밑에서 화면이 바뀐다</h4>
+<p>웨이브가 끝나면 아래 절반이 아레나에서 준비 화면으로 <strong>통째로 교체</strong>되는데,
+수동 전투 중에는 바로 그 자리를 연타하고 있다. 새로 생긴 [🏰마을] 버튼이 손가락 밑으로 들어온다.
+배치가 바뀐 뒤 <strong>0.45초 동안 탭을 먹지 않는다</strong>
+(<span class="mono">lockTapsBriefly</span>). 실측 — 평소 탭은 마을로 가고,
+배치 변경 직후 같은 탭은 무시되고, 0.6초 뒤에는 다시 간다.</p>
+
+<p>덤으로 페이지가 바뀔 때 이전 화면의 버튼 좌표를 지우는
+<span class="mono">clearStalePageUI()</span>를 넣었다.
+<span class="mono">gs.ui</span>는 그리면서 채워지므로 다른 페이지의 낡은 사각형이 남는데,
+같은 종류의 사고를 구조적으로 막는다.</p>
+
+<h3>안내가 안 꺼진다 <span class="rev">v3.7</span></h3>
+<p class="lede">플레이 보고: <strong>"처음 게임을 들어갔을 때 튜토리얼이 계속 뜬다."</strong></p>
+<p>v3.6에서 20장을 6장 + 쪽지 14장으로 나눴는데, <strong>건너뛰기가 앞의 6장만 껐다.</strong>
+플레이어 입장에서는 층마다 쪽지가 계속 뜨니 튜토리얼이 안 꺼진 것과 같다 —
+쪼갠 것이 오히려 "끌 수 없는 안내"를 만든 셈이다.</p>
+<p><span class="mono">tut.skip()</span>이 <span class="mono">markAllTipsSeen()</span>까지 부르게 했고,
+버튼 문구도 <strong>✕ 안내 전부 끄기 / 남은 안내 N장까지</strong>로 바꿔
+무엇을 끄는지 적었다. 쪽지 카드에도 같은 버튼을 붙여, 플레이 도중에도 한 번에 끌 수 있다.
+데이터 초기화로는 다시 볼 수 있다.</p>
+
+<h3>👑 영웅 전사의 대가 <span class="rev">v3.7</span></h3>
+
+<p class="lede">플레이 보고: <strong>"영웅이 죽을 경우 몇 초 뒤에 부활하는데 이건 리스크가 전혀 없다."</strong>
+맞다. 20초 뒤 <strong>만피로</strong> 돌아왔으니, 위험한 자리에 밀어넣고 죽으면
+기다리는 쪽이 오히려 편했다.</p>
+
+<p>시간 기반 부활을 <strong>층 기반 결장</strong>으로 바꿨다.</p>
+<div class="tw"><table>
+<thead><tr><th></th><th class="wrap">이전</th><th class="wrap">지금</th></tr></thead>
+<tbody>
+<tr><td>전사 직후</td><td class="wrap">20초 카운트다운</td><td class="wrap">그 층은 영웅 없이 끝낸다</td></tr>
+<tr><td>다음 층</td><td class="wrap">—</td><td class="wrap"><strong>결장</strong> (<span class="mono">HERO_DOWN_FLOORS = 1</span>)</td></tr>
+<tr><td>복귀</td><td class="wrap">만피</td><td class="wrap"><strong>최대 HP의 40%</strong> · 배치는 다시 고른다</td></tr>
+</tbody></table></div>
+
+<p>영웅은 상단 방어와 하단 아레나 어느 쪽에도 설 수 있는 유일한 말이고,
+배치를 안 하면 웨이브를 시작할 수도 없다. 그 말이 한 층 통째로 빠지면
+그 층의 편성 계획을 다시 짜야 한다 — 그게 대가다.</p>
+
+<p>두 기존 강화의 뜻도 여기에 맞췄다. 둘 다 <strong>결장이 생기면서 오히려 값이 올라갔다.</strong></p>
+<ul>
+<li>🔮 <strong>불사의 영웅</strong> (스킬 / 강화 카드 / 마법의 두루마리) →
+<em>전사해도 결장 없음.</em> 쓰러진 층이 끝나면 바로 돌아온다.</li>
+<li>🕊️ <strong>구원의 손</strong> (영웅 전당 트랙, 8단계) →
+<em>복귀 HP +5%p/단계.</em> 만렙이면 40% → 80%.</li>
+</ul>
+<p><span class="mono">reviveTimer</span> · <span class="mono">HERO_REVIVE_TIME</span> ·
+<span class="mono">heroReviveDur()</span>는 지웠다.</p>
 
 <h3>🏳 포기 정산 감액 <span class="rev">v3.6</span></h3>
 <p class="lede">접을 길은 있어야 하지만, <strong>접는 쪽이 늘 이득이면 아무도 마지막 층을 버티지 않는다.</strong></p>
