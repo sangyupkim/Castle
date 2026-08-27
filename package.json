@@ -1,7 +1,7 @@
 {
   "name": "dual-frontier",
   "productName": "듀얼 프론티어",
-  "version": "0.4.3",
+  "version": "0.5.0",
   "description": "한 화면에서 두 개의 전선을 동시에 굴리는 로그라이트",
   "main": "desktop/main.js",
   "private": true,

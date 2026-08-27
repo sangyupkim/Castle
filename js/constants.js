@@ -1,7 +1,7 @@
 'use strict';
 
 // 타이틀 화면에 표기되는 버전
-const GAME_VERSION = 'v0.4.3';
+const GAME_VERSION = 'v0.5.0';
 
 // 포기하고 정산하면 보석을 깎는다. 한 판이 10~30분이라 접을 길은 있어야 하지만,
 // 접는 쪽이 늘 이득이면 아무도 마지막 층을 버티지 않는다.
@@ -197,7 +197,10 @@ const DEFENSE_GOLD_SCALE = 0.25;
 // ─── 스폰 편성 ───────────────────────────────────────────────────────────────
 const SPAWN_FIRST_AT   = 0.6;   // 첫 마리가 나오는 시각
 const SPAWN_MIN_GAP    = 0.28;  // 아무리 많아도 이보다 촘촘히는 안 나온다
-const SPAWN_TARGET_GAP = 2.2;   // 이보다 뜸하면 상단이 비어 보인다 — 마릿수를 채운다
+// 2.2초로도 "띄엄띄엄해서 긴장감이 없다"는 보고가 왔다.
+// 상단은 60초 내내 손이 바쁠 이유가 있어야 하는 곳이라, 도착 간격을 1.3초까지 좁힌다.
+// 마릿수가 늘어난 만큼 마리당 보상은 buildSpawnPlan의 rewardMult가 자동으로 낮춘다.
+const SPAWN_TARGET_GAP = 1.3;   // 이보다 뜸하면 상단이 비어 보인다 — 마릿수를 채운다
 // 마지막 스폰 시각 (웨이브 길이 대비).
 // 기본은 "마지막 한 마리가 웨이브가 끝날 때 기지에 닿도록" 역산한 시각이지만,
 // 그대로 두면 고블린 웨이브는 39초에 스폰이 끊기고 타워가 남은 것을 다 잡아버려
@@ -473,10 +476,39 @@ const ARENA_SPAWN_BAND    = 26;    // 가장자리 스폰 밴드 두께
 const SPAWN_BASE_INTERVAL = 1.6;   // 초. 경과에 따라 짧아진다
 const SPAWN_RAMP          = 0.03;  // 간격 = base / (1 + 경과초 × RAMP)
 const SPAWN_SAFE_RADIUS   = 120;   // 아군 부대 중심에서 이 반경 안에는 스폰 금지
-const DROP_PICKUP_RADIUS  = 40;    // 아군이 이 반경에 들어와야 드랍 획득
-const DROP_LIFETIME       = 8;     // 초
+const DROP_PICKUP_RADIUS  = 44;    // 아군이 이 반경에 들어와야 드랍 획득
+const DROP_LIFETIME       = 9;     // 초
 const DROP_SCATTER_MIN    = 24;    // 처치 지점에서 튀어나가는 최소 거리
-const DROP_SCATTER_MAX    = 66;    // 최대 거리 — 수거 반경(40)보다 넓어야 이동에 값이 생긴다
+const DROP_SCATTER_MAX    = 66;    // 최대 거리 — 수거 반경보다 넓어야 이동에 값이 생긴다
+
+// ─── 아레나 드랍 ─────────────────────────────────────────────────────────────
+// 예전에는 처치할 때마다 골드 토큰이 떨어지고 그걸 하나하나 주우러 다녀야 했다.
+// 60초 내내 동전을 줍는 일은 조작이 아니라 잡일이다.
+//
+// 이제 기본 골드는 처치하는 순간 바로 들어온다. 대신 가끔 값나가는 것이 떨어지고,
+// 그것만 주우러 간다 — 움직일 이유는 남기되, 움직임이 의무가 되지 않게.
+// 자동 수거로 바뀌면서 흘리는 골드가 없어졌다 — 예전에는 못 주운 드랍이 그냥 사라졌다.
+// 같은 몹을 잡고 같은 돈을 벌게 하려면 마리당 값을 그만큼 낮춰야 한다.
+// (실측: 자동 수거만 넣었을 때 1-2 웨이브 5 시작 골드가 400 → 1,001)
+const ARENA_GOLD_SCALE    = 0.58;
+const DROP_SPECIAL_CHANCE = 0.075; // 처치당 특수 드랍 확률
+const ARENA_BUFF_DURATION = 9;     // 일시 버프 지속(초)
+const DROP_HEAL_PCT       = 0.15;  // ❤️ 응급 치료가 되살리는 최대 HP 비율
+
+const DROP_TYPES = [
+  { id:'gold',  icon:'💰', w:30, color:'#fbbf24', label:'금화 더미' },
+  { id:'exp',   icon:'✨', w:22, color:'#f59e0b', label:'전투 기록' },
+  { id:'heal',  icon:'❤️', w:16, color:'#22c55e', label:'응급 치료' },
+  { id:'rage',  icon:'🔥', w:10, color:'#f87171', label:'분노',   buff:{kind:'rage',  mult:1.6} },
+  { id:'haste', icon:'💨', w:10, color:'#38bdf8', label:'질풍',   buff:{kind:'haste', mult:1.6} },
+  { id:'guard', icon:'🛡️', w:  6, color:'#a78bfa', label:'수호',  buff:{kind:'guard', mult:0.55} },
+];
+function rollDropType() {
+  const total = DROP_TYPES.reduce((a, d) => a + d.w, 0);
+  let r = Math.random() * total;
+  for (const d of DROP_TYPES) { r -= d.w; if (r <= 0) return d; }
+  return DROP_TYPES[0];
+}
 const FORMATION_RADIUS    = 30;    // 집결 지점 기준 대형 반경
 const AUTO_ADVANCE_PCT    = 0.40;  // 자동 모드에서 사거리 밖 적에게 접근하는 속도 비율
 const SEPARATION_FORCE    = 26;    // 개체가 서로 완전히 겹치지 않게 미는 힘
@@ -889,10 +921,13 @@ const ENDLESS_ELITE_STEP   = 0.012;  // 층당 정예 확률
 // ─── 보석 ────────────────────────────────────────────────────────────────────
 // 층당 몫이 깊이에 따라 커진다. 정액이면 20층에서 40층으로 가는 열 배 어려운 구간이
 // 정확히 두 배 값어치밖에 안 돼서, 더 내려갈 이유가 사라진다.
-const ENDLESS_GEM_BASE      = 0.35;   // 층당 기본
-const ENDLESS_GEM_ACCEL     = 0.055;  // 층당 가산 — 깊이의 값
-const ENDLESS_GATE_BONUS      = 6;    // 관문(10층 단위) 최초 돌파
-const ENDLESS_GATE_BONUS_STEP = 4;    // 관문마다 증가
+// 보석 경로가 셋이 됐다 — 층당 적립 · 상단 현상수배 · 하단 정예.
+// 소환 두 갈래가 모두 층마다 기회를 주므로, 층당 적립을 그만큼 낮춘다.
+// 그러지 않으면 "깊이 간 대가"보다 "소환을 몇 번 눌렀나"가 보석을 지배한다.
+const ENDLESS_GEM_BASE      = 0.24;   // 층당 기본
+const ENDLESS_GEM_ACCEL     = 0.040;  // 층당 가산 — 깊이의 값
+const ENDLESS_GATE_BONUS      = 5;    // 관문(10층 단위) 최초 돌파
+const ENDLESS_GATE_BONUS_STEP = 3;    // 관문마다 증가
 function endlessGemStep(tier) {
   return ENDLESS_GEM_BASE + Math.max(0, (tier || 1) - 1) * ENDLESS_GEM_ACCEL;
 }
@@ -1371,10 +1406,24 @@ function bountyHp(n, waveIndex) {
   return Math.round(ENEMY_TYPES.bounty.hp * (1 + (n || 0) * BOUNTY_HP_ESCALATION)
                     * (1 + (waveIndex || 0) * DEF_WAVE_HP_SCALE));
 }
-function bountyGems(n)  { return 1 + Math.floor((n || 0) / 2); }   // 1,1,2,2,3,3…
+// 보석 획득 경로가 상단 현상수배 + 하단 정예 둘이 됐다.
+// 둘 다 예전 값을 그대로 주면 보석이 두 배로 들어오므로, 한 마리당 값을 낮춘다.
+function bountyGems(n)  { return 1 + Math.floor((n || 0) / 3); }   // 1,1,1,2,2,2,3…
 function bountyGold(n, waveIndex) {
   return Math.round(ENEMY_TYPES.bounty.reward * (1 + (n || 0) * 0.5) * (1 + (waveIndex || 0) * 0.05));
 }
+
+// ─── 하단 정예 소환 ──────────────────────────────────────────────────────────
+// 상단의 현상수배와 짝을 이루는 하단판.
+// 상단은 "경로를 막을 화력이 있는가"를 묻고, 하단은 "부대가 정면으로 이겨낼 수 있는가"를 묻는다.
+// 놓쳤을 때의 대가도 다르다 — 상단은 성벽이 깎이고, 하단은 부대가 죽는다.
+const ELITE_HP_ESCALATION   = 0.80;   // 소환 1회당 HP +80%
+const ELITE_SPAWN_DELAY     = 6;      // 웨이브 시작 후 등장까지(초)
+const ELITE_STAT_BONUS      = 6.0;    // 같은 층 일반 몹 대비 배율
+const ELITE_MIN_HP          = 200;    // 1층 고블린이 뻥튀기돼도 벽처럼 느껴질 최소치
+function eliteCharges(waveIndex) { return Math.floor((waveIndex || 0) / 4) + 1; }
+function eliteGems(n)   { return 1 + Math.floor((n || 0) / 3); }
+function eliteGoldMult(n) { return 6 + (n || 0) * 1.5; }
 
 // ─── 상단 개입 수단 ──────────────────────────────────────────────────────────
 // 웨이브가 시작되면 상단은 손댈 곳이 없었다. 배치형은 유지하되

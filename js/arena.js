@@ -121,6 +121,7 @@ function createArena() {
     drops: [],
     shots: [],       // 원거리 투사체
     bursts: [],      // 스킬 시각 효과 (원형 파동)
+    buffs: [],       // 드랍으로 얻은 일시 버프 {kind, mult, until}
     mode: 'auto',    // 'auto' | 'manual'
     rally: null,     // 수동 집결 지점 {x,y}
     facing: { x: 0, y: -1 },
@@ -166,6 +167,12 @@ function updateArena(gs, dt) {
 
   if (b.phase !== 'fighting') return;
   a.elapsed += dt;
+
+  // 예약해둔 소환 정예
+  if (a.eliteTimer !== null && a.eliteTimer !== undefined) {
+    a.eliteTimer -= dt;
+    if (a.eliteTimer <= 0) { a.eliteTimer = null; spawnSummonedElite(gs, a.eliteN || 0); }
+  }
 
   const allies = b.ourTeam.filter(u => !u.dead);
   const mobs   = a.mobs.filter(m => !m.dead);
@@ -217,7 +224,7 @@ function updateAlly(gs, u, mobs, allies, dt) {
   // 공격
   u.atkCd -= dt;
   if (inRange && u.atkCd <= 0) {
-    u.atkCd = u.atkPeriod / (BONUSES.unitAtkSpdMult || 1);
+    u.atkCd = u.atkPeriod / ((BONUSES.unitAtkSpdMult || 1) * arenaBuff(gs, 'haste'));   // 💨 질풍
     allyAttack(gs, u, inRange);
   } else if (u.atkCd <= 0) {
     u.atkCd = 0;
@@ -304,7 +311,8 @@ function applyTerrainTick(gs, e, dt, isAlly) {
 
 function allyAttack(gs, u, target) {
   const crit = BONUSES.critChance > 0 && Math.random() < BONUSES.critChance;
-  const dmg  = Math.max(1, Math.round((crit ? u.atk * 1.8 : u.atk) - target.def));
+  const rage = arenaBuff(gs, 'rage');   // 🔥 분노
+  const dmg  = Math.max(1, Math.round((crit ? u.atk * 1.8 : u.atk) * rage - target.def));
   if (u.ranged) {
     target.pendingDmg = (target.pendingDmg || 0) + dmg;
     gs.arena.shots.push({
@@ -537,8 +545,8 @@ function updateShots(gs, dt) {
 }
 
 // ─── 드랍 ────────────────────────────────────────────────────────────────────
-// 몹이 죽은 자리에 골드가 떨어지고, 아군이 반경 안에 들어가야 획득된다.
-// 이 규칙이 수동 모드에 존재 이유를 준다 — 움직이면 더 번다.
+// 바닥에 떨어지는 것은 이제 "값나가는 것"뿐이다. 기본 골드는 처치 즉시 들어온다.
+// 그래서 움직일 이유는 남되, 60초 내내 동전을 줍는 잡일은 없어진다.
 function updateDrops(gs, allies, dt) {
   const a = gs.arena;
   for (let i = a.drops.length - 1; i >= 0; i--) {
@@ -552,13 +560,110 @@ function updateDrops(gs, allies, dt) {
     }
     if (!picker) continue;
 
+    collectDrop(gs, dp, picker);
+    a.drops.splice(i, 1);
+  }
+  // 지난 버프 정리
+  if (a.buffs && a.buffs.length) a.buffs = a.buffs.filter(b => b.until > a.elapsed);
+}
+
+function collectDrop(gs, dp, picker) {
+  const a = gs.arena;
+  if (dp.kind === 'gold') {
     gs.battle.goldEarned      += dp.amount;
     gs.battle.totalGoldEarned += dp.amount;
     a.goldCollected           += dp.amount;
     addFloaty(gs.battle, `+${dp.amount}💰`, dp.x, dp.y, COLORS.gold);
     if (typeof SFX !== 'undefined') SFX.coin ? SFX.coin() : SFX.click();
-    a.drops.splice(i, 1);
+
+  } else if (dp.kind === 'exp') {
+    if (typeof grantHeroExp === 'function') grantHeroExp(dp.amount, 'battle', true, dp.x, dp.y);
+    addFloaty(gs.battle, `EXP +${Math.round(dp.amount)}`, dp.x, dp.y, '#f59e0b');
+    if (typeof SFX !== 'undefined') SFX.upgrade();
+
+  } else if (dp.kind === 'heal') {
+    let healed = 0;
+    for (const u of gs.battle.ourTeam) {
+      if (u.dead) continue;
+      const before = u.hp;
+      u.hp = Math.min(u.maxHp, u.hp + u.maxHp * dp.amount);
+      healed += Math.max(0, u.hp - before);
+    }
+    addFloaty(gs.battle, `+${Math.round(healed)} HP`, dp.x, dp.y, '#22c55e');
+    if (typeof FX  !== 'undefined') FX.ring(dp.x, dp.y, '#22c55e', 26);
+    if (typeof SFX !== 'undefined') SFX.heal();
+
+  } else {
+    // 일시 버프 — 이번 웨이브 동안만
+    a.buffs = (a.buffs || []).filter(b => b.kind !== dp.buff.kind);
+    a.buffs.push({ kind: dp.buff.kind, mult: dp.buff.mult, until: a.elapsed + ARENA_BUFF_DURATION });
+    addFloaty(gs.battle, `${dp.icon} ${dp.label}!`, dp.x, dp.y, dp.color);
+    addLog(gs.battle, `${dp.icon} ${dp.label} — ${ARENA_BUFF_DURATION}초`, dp.color);
+    if (typeof FX  !== 'undefined') FX.ring(dp.x, dp.y, dp.color, 30);
+    if (typeof SFX !== 'undefined') SFX.levelUp();
   }
+}
+
+// ─── 소환 정예 ───────────────────────────────────────────────────────────────
+// 플레이어가 마을에서 직접 부르는 한 마리. 부대가 정면으로 이길 수 있는지를 묻는다.
+function spawnSummonedElite(gs, n) {
+  const a = gs.arena;
+  const pool = (a.pool || [['goblin', 1]]);
+  // 이 층에서 가장 무거운 종류를 고른다 — 정예는 잡몹의 확대판이 아니라 벽이어야 한다
+  const typeId = pool.map(([t]) => t)
+    .sort((x, y) => (BATTLE_MOB_TYPES[y]?.hp || 0) - (BATTLE_MOB_TYPES[x]?.hp || 0))[0] || 'orc';
+
+  const m = makeArenaMob(typeId, a.waveIndex, gs.battle.killCount, gs.caveLevel, 0);
+  const scale = ELITE_STAT_BONUS * (1 + n * ELITE_HP_ESCALATION);
+  m.isElite = true;
+  m.isSummonedElite = true;
+  m.name  = `소환 정예 ${m.name}`;
+  m.color = '#fbbf24';
+  m.maxHp = Math.max(ELITE_MIN_HP, Math.round(m.maxHp * scale));
+  m.hp    = m.maxHp;
+  m.atk   = Math.round(m.atk * (1 + n * 0.25) * 2.0);
+  m.def   = Math.round(m.def * 1.3);
+  m.radius = Math.round(m.radius * 1.5);
+  m.goldReward = Math.round(m.goldReward * eliteGoldMult(n));
+  m.gems  = eliteGems(n);
+
+  const allies = gs.battle.ourTeam.filter(u => !u.dead);
+  const p = pickSpawnPoint(a, allies);
+  m.x = p.x; m.y = p.y;
+  a.mobs.push(m);
+
+  addLog(gs.battle, `⚔️ 소환 정예 등장 — 처치 시 보석 +${m.gems}`, '#fbbf24');
+  addFloaty(gs.battle, '⚔️ 소환 정예!', m.x, m.y - 24, '#fbbf24');
+  if (typeof FX  !== 'undefined') { FX.ring(m.x, m.y, '#fbbf24', 30); FX.shake(5, 0.35); }
+  if (typeof SFX !== 'undefined') SFX.waveStart();
+}
+
+// 값나가는 드랍 하나를 처치 지점 바깥에 떨군다.
+// 발밑에 두면 제자리를 지키는 자동 모드가 그냥 주워버려 "가지러 간다"가 성립하지 않는다.
+function spawnSpecialDrop(gs, m, baseGold) {
+  const d = rollDropType();
+  const ang  = Math.random() * Math.PI * 2;
+  const away = DROP_SCATTER_MIN + Math.random() * (DROP_SCATTER_MAX - DROP_SCATTER_MIN);
+  const p = clampToArena({ x: m.x + Math.cos(ang) * away, y: m.y + Math.sin(ang) * away }, 8);
+
+  let amount = 0;
+  if (d.id === 'gold')      amount = Math.max(6, Math.round(baseGold * (5 + Math.random() * 5)));
+  else if (d.id === 'exp')  amount = Math.max(6, Math.round((m.goldReward || 3) * ARENA_EXP_BASE * 12));
+  else if (d.id === 'heal') amount = DROP_HEAL_PCT;
+
+  gs.arena.drops.push({
+    x: p.x, y: p.y, kind: d.id, icon: d.icon, color: d.color, label: d.label,
+    buff: d.buff || null, amount, life: DROP_LIFETIME,
+    big: d.id === 'gold' || !!d.buff
+  });
+}
+
+// 지금 걸린 아레나 버프 배율
+function arenaBuff(gs, kind) {
+  const a = gs.arena;
+  if (!a.buffs || !a.buffs.length) return 1;
+  const b = a.buffs.find(x => x.kind === kind && x.until > a.elapsed);
+  return b ? b.mult : 1;
 }
 
 // ─── 피해 ────────────────────────────────────────────────────────────────────
@@ -571,26 +676,36 @@ function hurtMob(gs, m, dmg, color) {
   if (m.hp > 0) return;
 
   m.dead = true; m.hp = 0; m.deadTimer = 0; m.pendingDmg = 0;
+  // 소환 정예 — 잡아야만 보석이 들어온다
+  if (m.gems > 0) {
+    gs.soulStones += m.gems;
+    gs.stats.totalGems = (gs.stats.totalGems || 0) + m.gems;
+    gs.stats.eliteKills = (gs.stats.eliteKills || 0) + 1;
+    addFloaty(gs.battle, `💎 +${m.gems}`, m.x, m.y - 30, '#a78bfa');
+    addLog(gs.battle, `⚔️ 소환 정예 처치! 보석 +${m.gems}`, '#a78bfa');
+    if (typeof FX !== 'undefined') { FX.ring(m.x, m.y, '#fbbf24', 30); FX.shake(6, 0.4); }
+    if (typeof SaveManager !== 'undefined') SaveManager.save(gs);
+    m.gems = 0;
+  }
   gs.battle.killCount++;
   gs.battle.runKills = (gs.battle.runKills || 0) + 1;
   gs.stats.totalKills++;
   if (typeof FX  !== 'undefined') FX.burst(m.x, m.y, m.color, 10, 14);
   if (typeof SFX !== 'undefined') SFX.kill();
 
-  // 드랍
-  let amount = Math.round((m.goldReward || 1) * BONUSES.battleGoldMult * fev('goldMult', 1));
-  if (BONUSES.dropChance > 0 && Math.random() < BONUSES.dropChance) {
-    amount += 6 + Math.floor(Math.random() * 10);
-  }
-  // 드랍은 처치 지점에서 바깥으로 튄다.
-  // 그냥 발밑에 떨어지면 제자리를 지키는 자동 모드가 전부 주워버려
-  // "움직이면 더 번다"는 규칙이 성립하지 않는다.
-  const ang  = Math.random() * Math.PI * 2;
-  const away = DROP_SCATTER_MIN + Math.random() * (DROP_SCATTER_MAX - DROP_SCATTER_MIN);
-  const dp = clampToArena({ x: m.x + Math.cos(ang) * away, y: m.y + Math.sin(ang) * away }, 6);
-  gs.arena.drops.push({
-    x: dp.x, y: dp.y, amount, life: DROP_LIFETIME, big: !!m.isBoss || !!m.isElite
-  });
+  // ── 기본 골드는 즉시 들어온다 ──
+  const amount = Math.max(1, Math.round((m.goldReward || 1) * ARENA_GOLD_SCALE
+                                       * BONUSES.battleGoldMult * fev('goldMult', 1)));
+  gs.battle.goldEarned      += amount;
+  gs.battle.totalGoldEarned += amount;
+  gs.arena.goldCollected    += amount;
+  addFloaty(gs.battle, `+${amount}💰`, m.x, m.y - m.radius - 4, COLORS.gold);
+
+  // ── 가끔 값나가는 것이 떨어진다 — 그것만 주우러 간다 ──
+  const chance = DROP_SPECIAL_CHANCE + (BONUSES.dropChance || 0)
+               + (m.isBoss ? 0.5 : m.isElite ? 0.22 : 0);
+  if (Math.random() < chance) spawnSpecialDrop(gs, m, amount);
+
   if (typeof tut !== 'undefined' && tut && tut.showTip) tut.showTip('drop');
 
   if (m.isBoss) {
@@ -652,7 +767,8 @@ function applyDeathAffixes(gs, m) {
 
 function hurtAlly(gs, u, dmg, color) {
   if (u.dead) return;
-  let remain = dmg;
+  let remain = Math.max(1, Math.round(dmg * arenaBuff(gs, 'guard')));   // 🛡️ 수호
+  if (dmg <= 0) remain = 0;
   if (u.shield > 0) {
     const absorbed = Math.min(u.shield, remain);
     u.shield -= absorbed; remain -= absorbed;
@@ -692,7 +808,17 @@ function startArena(gs, waveIndex) {
   a.thorns   = def.thorns   || 0;
   a.split    = def.split    || 0;
   a.volatile = def.volatile || 0;
+  // 웨이브가 새로 시작하면 자동으로 돌아간다.
+  // 예전에는 rally만 지우고 mode는 'manual'로 남겨둬서, 표시는 수동인데 행동은 자동이고
+  // 배속만 2배로 묶여 있는 상태가 됐다.
+  a.mode = 'auto';
   a.rally = null;
+  a.buffs = [];
+  // 마을에서 예약해둔 소환 정예는 웨이브 시작 조금 뒤에 나온다
+  a.eliteTimer = gs.elitePending ? ELITE_SPAWN_DELAY : null;
+  a.eliteN     = Math.max(0, (gs.eliteUsed || 1) - 1);
+  gs.elitePending = false;
+  if (typeof releaseManualSpeed === 'function') releaseManualSpeed();
   a.goldCollected = 0;
   // 지형은 층마다 새로 생성된다 (훈련에는 없다 — 배우는 곳이므로 판을 비워둔다)
   a.terrain = (endlessTier(waveIndex) > 0) ? generateArenaTerrain(endlessTier(waveIndex)) : [];

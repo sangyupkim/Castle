@@ -876,15 +876,40 @@ function renderArenaPhase(ctx, gs) {
     ctx.beginPath(); ctx.arc(a.rally.x, a.rally.y, 3.5, 0, Math.PI*2); ctx.fill();
   }
 
-  // 드랍 (수거 반경 안내 포함)
+  // 드랍 — 이제 바닥에 있는 것은 값나가는 것뿐이라 눈에 띄게 그린다
   for (const d of a.drops) {
     const fade = d.life < 2 ? (d.life/2) : 1;
-    const bob  = Math.sin(Date.now()/220 + d.x) * 1.6;
+    const bob  = Math.sin(Date.now()/220 + d.x) * 2.2;
+    const col  = d.color || COLORS.gold;
     ctx.globalAlpha = fade;
-    ctx.fillStyle = d.big ? '#fde047' : COLORS.gold;
-    ctx.beginPath(); ctx.arc(d.x, d.y + bob, d.big ? 5 : 3.6, 0, Math.PI*2); ctx.fill();
-    ctx.strokeStyle = 'rgba(120,80,10,0.8)'; ctx.lineWidth = 1; ctx.stroke();
+    // 수거 반경을 옅게 — 어디까지 가야 하는지 보여준다
+    ctx.strokeStyle = col; ctx.globalAlpha = fade * 0.16; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(d.x, d.y, DROP_PICKUP_RADIUS, 0, Math.PI*2); ctx.stroke();
+    ctx.globalAlpha = fade * 0.30;
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.arc(d.x, d.y + bob, 11, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = fade;
+    ctx.font = '13px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(d.icon || '💰', d.x, d.y + bob);
     ctx.globalAlpha = 1;
+  }
+
+  // 걸려 있는 일시 버프 — 남은 시간을 아레나 좌상단에 띄운다
+  if (a.buffs && a.buffs.length) {
+    let bx = ARENA_X + 6;
+    for (const bf of a.buffs) {
+      const left = bf.until - a.elapsed;
+      if (left <= 0) continue;
+      const d = DROP_TYPES.find(t => t.buff && t.buff.kind === bf.kind) || {};
+      roundRect(ctx, bx, ARENA_Y + 4, 46, 16, 4);
+      ctx.fillStyle = 'rgba(10,14,26,0.82)'; ctx.fill();
+      ctx.strokeStyle = d.color || '#94a3b8'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.font='9px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
+      ctx.fillStyle = d.color || '#94a3b8';
+      ctx.fillText(`${d.icon || '⚡'} ${left.toFixed(0)}s`, bx + 5, ARENA_Y + 12);
+      bx += 50;
+    }
+    ctx.textAlign='left'; ctx.textBaseline='top';
   }
 
   // 스킬 파동
@@ -2864,6 +2889,32 @@ function renderTownPageArmy(ctx, gs, startY) {
     ctx.fillText('기회를 다 썼습니다 — 더 진행하면 다시 생깁니다', 14, y+bh3/2+9);
   }
   gs.ui.bountyBtn = (left > 0 || on) ? {x:6,y,w:CW-12,h:bh3} : null;
+  y += bh3 + 6;
+
+  // ── ⚔️ 하단 정예 소환 ────────────────────────────────────────────────────
+  // 상단 현상수배의 짝. 상단은 화력을, 하단은 부대의 정면 승부를 묻는다.
+  const eCharges = eliteCharges(gs.wave);
+  const eLeft    = Math.max(0, eCharges - (gs.eliteUsed || 0));
+  const eOn      = gs.elitePending;
+  roundRect(ctx, 6, y, CW-12, bh3, 7);
+  ctx.fillStyle   = eOn ? '#2a1f08' : eLeft > 0 ? '#141c2e' : '#0e1017'; ctx.fill();
+  ctx.strokeStyle = eOn ? '#fbbf24' : eLeft > 0 ? '#a16207' : '#252b38';
+  ctx.lineWidth   = eOn ? 2 : 1; ctx.stroke();
+  ctx.textAlign='left'; ctx.textBaseline='middle';
+  ctx.fillStyle = (eLeft > 0 || eOn) ? '#fbbf24' : '#475569'; ctx.font='bold 11px sans-serif';
+  ctx.fillText(eOn ? '⚔️ 정예 예약됨 — 탭하여 취소' : '⚔️ 아레나 정예 소환', 14, y+bh3/2-5);
+  ctx.font='bold 9px sans-serif';
+  if (eOn) {
+    ctx.fillStyle='#fde68a';
+    ctx.fillText(`처치 시 💎+${eliteGems((gs.eliteUsed||1)-1)} · 부대가 정면으로 이겨야 합니다`, 14, y+bh3/2+9);
+  } else if (eLeft > 0) {
+    ctx.fillStyle='#94a3b8';
+    ctx.fillText(`남은 기회 ${eLeft} · 처치 시 💎+${eliteGems(gs.eliteUsed||0)} · 골드도 크게 떨어집니다`, 14, y+bh3/2+9);
+  } else {
+    ctx.fillStyle='#475569';
+    ctx.fillText('기회를 다 썼습니다 — 더 진행하면 다시 생깁니다', 14, y+bh3/2+9);
+  }
+  gs.ui.eliteBtn = (eLeft > 0 || eOn) ? {x:6,y,w:CW-12,h:bh3} : null;
   y += bh3 + 8;
 
   // ── 출전 버튼 ────────────────────────────────────────────────────────────

@@ -43,9 +43,12 @@ let _titleAlpha  = 1;     // 페이드아웃용
 // ─── 세션 설정 (런 리셋과 무관) ──────────────────────────────────────────────
 let _paused   = false;
 let _speedIdx = 0;
+// 수동 조작 중에는 2배속으로 강등되는데, 그때 플레이어가 원래 고른 배속을 기억해 둔다.
+// 이게 없으면 한 번 수동을 만졌다가 자동으로 돌아와도 2배속에 갇힌다 — 실제로 그랬다.
+let _speedPref = 0;
 function gameSpeed() { return SPEED_STEPS[_speedIdx]; }
 function togglePause() { _paused = !_paused; _giveUpArmed = false; SFX.click(); }
-function cycleSpeed()  { _speedIdx = (_speedIdx + 1) % SPEED_STEPS.length; SFX.click(); }
+function cycleSpeed()  { _speedIdx = (_speedIdx + 1) % SPEED_STEPS.length; _speedPref = _speedIdx; SFX.click(); }
 
 // ─── 영구 데이터 (런 초기화 후에도 유지) ─────────────────────────────────────
 let _soulStones    = 0;
@@ -97,6 +100,8 @@ function newState() {
     innOffers:[],       // 이번 웨이브에 여관에 와 있는 특수 용병
     endlessGems:0,      // 무한 층에서 쌓인 보석
     bountyPending:false,// 이번 웨이브에 소환 예약됨
+    eliteUsed:0,        // 하단 정예를 몇 번 불렀는지
+    elitePending:false, // 이번 웨이브에 하단 정예 예약됨
     overloadReady:0,    // 타워 과부하 재사용까지 남은 시간
     hoveredCell:null,
     selectedTowerType:'arrow',
@@ -170,6 +175,7 @@ let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적�
   gs.caveLevel  = Math.max(1, Math.min(5, sv.caveLevel||1));
   gs.wallRepairs = sv.wallRepairs || 0;
   gs.bountyUsed  = sv.bountyUsed  || 0;
+  gs.eliteUsed   = sv.eliteUsed   || 0;
   gs.mode          = sv.mode === 'endless' ? 'endless' : 'campaign';
   gs.runSeed       = sv.runSeed || 0;
   gs.endlessGems   = sv.endlessGems || 0;
@@ -570,7 +576,7 @@ function tap({x,y}) {
 const _PAGE_UI_KEYS = [
   'buildingCards','wallRepairBtn','caveBtn','tabTownBtn','townBackBtn',
   'buildingLvUpBtn','upgradeBtns','buildingScroll','pageScroll','hireCards','hiredSlots',
-  'specialCards','specialSlots','heroDefBtn','heroBatBtn','bountyBtn','towerMiniGrid',
+  'specialCards','specialSlots','heroDefBtn','heroBatBtn','bountyBtn','eliteBtn','towerMiniGrid',
   'lobbyTabBtns','sortieBtn','trainBtn','metaCards','unlockBtns','pactBtns','sigilCards',
   'towerTabBtn','heroTabBtn','supportTabBtn','backupExportBtn','backupImportBtn',
   'resultBtn','waveBtn','battleWaveStartBtn','briefTownBtn','retreatBtn','modeBtn'
@@ -932,6 +938,19 @@ function handleTownTap(x,y) {
       return;
     }
     // 💰 현상수배 — 마을에서만 예약한다
+    if (hitTest(x,y,gs.ui.eliteBtn||{})) {
+      if (gs.elitePending) {
+        gs.elitePending = false;
+        spawnFloaty('소환 취소', x, y, '#64748b'); SFX.click();
+      } else if (gs.eliteUsed >= eliteCharges(gs.wave)) {
+        spawnFloaty('남은 소환 기회가 없습니다', x, y, '#ef4444'); SFX.denied();
+      } else {
+        gs.elitePending = true;
+        gs.eliteUsed++;
+        spawnFloaty(`⚔️ ${gs.eliteUsed}번째 정예 예약`, x, y, '#fbbf24'); SFX.upgrade();
+      }
+      return;
+    }
     if (hitTest(x,y,gs.ui.bountyBtn||{})) {
       if (gs.bountyPending) {
         gs.bountyPending = false;

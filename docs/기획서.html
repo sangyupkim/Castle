@@ -219,7 +219,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <div class="wrap">
 <header class="cover">
-  <div class="eyebrow">Game Design Document · v4.1 · 건물마다 하는 일</div>
+  <div class="eyebrow">Game Design Document · v4.2 · 빽빽한 상단 · 값나가는 드랍</div>
   <h1>듀얼 프론티어</h1>
   <p class="tagline">한 화면에서 두 개의 전선을 동시에 굴리는 모바일 웹 로그라이트.
      끝은 없다 — 얼마나 깊이 내려갔는지가 기록이다.</p>
@@ -228,7 +228,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
     <div><dt>플랫폼</dt><dd>모바일 웹 (480×800 캔버스)</dd></div>
     <div><dt>1회 하강</dt><dd>10~30분 (도달 층에 비례)</dd></div>
     <div><dt>현재 볼륨</dt><dd>훈련 30웨이브 + ∞ 무한 (알고리즘 생성)</dd></div>
-    <div><dt>이번 개정</dt><dd>여관 재정리 · 병기 연구 삭제 · 특수 용병 강화 (v4.1)</dd></div>
+    <div><dt>이번 개정</dt><dd>상단 밀도 · 자동 수거 드랍 · 아레나 정예 소환 (v4.2)</dd></div>
   </dl>
 </header>
 
@@ -1538,6 +1538,94 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
 </tbody></table></div>
 
 
+
+<h3>상단을 빽빽하게 <span class="rev">v4.2</span></h3>
+<p class="lede">플레이 보고: <strong>"상단 웨이브의 몬스터가 너무 띄엄띄엄 나와서 긴장감이 너무 없어."</strong></p>
+<p>v4.0에서 도착 간격을 2.2초로 잡았는데 아직 성겼다. <strong>1.3초</strong>로 좁혔다.
+마릿수가 그만큼 늘고, 마리당 보상은 <span class="mono">buildSpawnPlan</span>의
+<span class="mono">rewardMult</span>가 자동으로 낮춘다 — 보이는 것만 바뀌고 버는 돈은 그대로다.</p>
+<div class="tw"><table>
+<caption>1웨이브 · 화살탑 2기 + 궁수 + 영웅</caption>
+<thead><tr><th></th><th class="num">상단이 빈 시간</th><th class="wrap">경로 위 개체 수</th></tr></thead>
+<tbody>
+<tr><td>v4.0 (2.2초)</td><td class="num">6~11%</td><td class="wrap">1~2기</td></tr>
+<tr class="total"><td><strong>지금 (1.3초)</strong></td><td class="num"><strong>0%</strong></td><td class="wrap">1기에서 13기까지 차오름</td></tr>
+</tbody></table></div>
+
+<h3>하단 드랍 — 자동 수거 + 값나가는 것만 줍기 <span class="rev">v4.2</span></h3>
+<p class="lede">요청: <strong>"하단의 몬스터를 잡을 때 자동으로 자원이 들어오게 해주고,
+확률적으로 큰 자원 혹은 큰 경험치, 체력, 일시버프 등을 먹을 수 있게 드랍해줘."</strong></p>
+<p>60초 내내 동전을 주우러 다니는 것은 조작이 아니라 잡일이다.
+<strong>기본 골드는 처치 즉시 들어온다.</strong> 대신 처치의 7.5%에서 값나가는 것이 떨어지고,
+그것만 주우러 간다 — 움직일 이유는 남기되 움직임이 의무가 되지 않게.</p>
+<div class="tw"><table>
+<thead><tr><th>드랍</th><th class="num">비중</th><th class="wrap">효과</th></tr></thead>
+<tbody>
+<tr><td>💰 금화 더미</td><td class="num">30</td><td class="wrap">기본 골드의 5~10배</td></tr>
+<tr><td>✨ 전투 기록</td><td class="num">22</td><td class="wrap">영웅 EXP 뭉치</td></tr>
+<tr><td>❤️ 응급 치료</td><td class="num">16</td><td class="wrap">부대 전원 최대 HP 15% 회복</td></tr>
+<tr><td>🔥 분노</td><td class="num">10</td><td class="wrap">공격력 ×1.6 (9초)</td></tr>
+<tr><td>💨 질풍</td><td class="num">10</td><td class="wrap">공격속도 ×1.6 (9초)</td></tr>
+<tr><td>🛡️ 수호</td><td class="num">6</td><td class="wrap">받는 피해 ×0.55 (9초)</td></tr>
+</tbody></table></div>
+<p>보스는 +50%p, 정예는 +22%p 확률이 붙는다. 버프는 아레나 좌상단에 남은 시간이 뜬다.</p>
+<div class="note"><p><strong>골드 보정이 필요했다.</strong> 자동 수거로 흘리는 골드가 없어져서
+— 예전에는 못 주운 드랍이 그냥 사라졌다 — 같은 몹으로 훨씬 많이 벌게 됐다.
+1-2 웨이브 5 시작 골드가 400에서 <strong>1,001</strong>로 뛰었다.
+<span class="mono">ARENA_GOLD_SCALE = 0.58</span>로 마리당 값을 낮춰 되돌렸다.</p></div>
+
+<h3>표시는 수동, 행동은 자동, 배속은 잠김 <span class="rev">v4.2</span></h3>
+<p class="lede">플레이 보고: <strong>"하단 전투가 수동으로 끝났다가 다음 스테이지가 되면 자동 모드로
+바뀌는데 인식은 수동으로 하는 건지 배속이 2배속 고정이야."</strong></p>
+<p><span class="mono">startArena()</span>가 <span class="mono">rally</span>만 지우고
+<span class="mono">mode</span>는 그대로 뒀다. 그래서 <strong>표시는 수동,
+행동은 자동</strong>(rally가 없으니 제자리 사수), <strong>배속만 2배로 묶인</strong> 상태가 됐다.</p>
+<p>웨이브가 시작되면 자동으로 돌아가게 하고, 배속 강등도 함께 푼다.
+플레이어가 고른 배속은 <span class="mono">_speedPref</span>에 따로 기억한다 —
+이게 없으면 한 번 수동을 만졌다가 자동으로 돌아와도 계속 2배속에 갇힌다.</p>
+<p>실측: 수동 중 <span class="mono">{mode:manual, speed:2}</span> →
+다음 웨이브 <span class="mono">{mode:auto, speed:3, rally:없음}</span>.</p>
+
+<h3>⚔️ 아레나 정예 소환 <span class="rev">v4.2</span></h3>
+<p class="lede">요청: <strong>"상단 타워에 보너스 보석을 얻는 현상수배를 하단 아레나에서도
+엘리트 몬스터 소환 이런 느낌으로 추가해줘."</strong></p>
+<p>마을에서 예약하면 웨이브 시작 6초 뒤 아레나에 강한 한 마리가 나온다.
+잡으면 보석과 큰 골드, 못 잡으면 부대가 죽는다.</p>
+<ul>
+<li>상단 현상수배는 <strong>경로를 막을 화력이 있는가</strong>를 묻고,</li>
+<li>하단 정예는 <strong>부대가 정면으로 이겨낼 수 있는가</strong>를 묻는다.</li>
+</ul>
+<p>그 층 풀에서 가장 무거운 종류를 골라 HP ×6(최소 200) · ATK ×2로 부풀린다.
+기회는 4층마다 하나씩 늘어난다(현상수배는 3층마다).</p>
+
+<h3>보석 재조정 — 경로가 셋이 됐다 <span class="rev">v4.2</span></h3>
+<p class="lede">요청: <strong>"보석 획득 기회가 늘어나니까 보상을 낮춰서
+보석을 너무 많이 얻지 않게 밸런스를 조절해."</strong></p>
+<div class="tw"><table>
+<thead><tr><th></th><th class="wrap">이전</th><th class="wrap">지금</th></tr></thead>
+<tbody>
+<tr><td>층당 적립</td><td class="wrap">0.35 + 0.055/층</td><td class="wrap"><strong>0.24 + 0.040/층</strong></td></tr>
+<tr><td>관문 최초 돌파</td><td class="wrap">6 + 4/관문</td><td class="wrap"><strong>5 + 3/관문</strong></td></tr>
+<tr><td>소환 보석</td><td class="wrap">1 + n/2</td><td class="wrap"><strong>1 + n/3</strong> (양쪽 공통)</td></tr>
+</tbody></table></div>
+<p>45층까지 모으는 총 보석 <strong>185 → 175</strong>.
+획득 경로를 하나 더 열면서 총량은 그대로다.
+구성은 깊이 100 · 소환 75로 여전히 깊이가 앞선다 — 기록이 곧 깊이인 게임이므로.</p>
+
+<h4>드랍만 따로 본 A/B</h4>
+<p>새 드랍 체계가 난이도를 흔드는지 보려고 같은 편성으로 12층까지 두 번 돌렸다.</p>
+<div class="tw"><table>
+<thead><tr><th></th><th class="wrap">층별 기지 HP (1→5층)</th><th class="num">전멸</th><th class="num">누적 수입</th></tr></thead>
+<tbody>
+<tr><td>드랍 ON</td><td class="mono wrap">100 86 59 31 2</td><td class="num">5회</td><td class="num">226</td></tr>
+<tr><td>드랍 OFF</td><td class="mono wrap">100 73 46 31 13</td><td class="num">5회</td><td class="num">217</td></tr>
+</tbody></table></div>
+<p>거의 같다 — 값나가는 드랍은 맛을 바꾸지 난이도를 바꾸지 않는다.</p>
+<div class="note"><p><strong>하강 깊이는 이번에 다시 재지 못했다.</strong>
+상단 마릿수가 4배 가까이 늘면서 한 층을 시뮬레이션하는 실시간이 길어져,
+스크립트 하강이 죽기 전에 시간 예산(3배속 17분)에 먼저 걸린다 —
+초심자·만렙 둘 다 18층에서 기지 HP를 온전히 남긴 채 잘렸다(<span class="mono">사망 false</span>).
+곡선 판단은 위 A/B에 근거한다.</p></div>
 
 <h3>건물마다 하는 일을 하나씩 <span class="rev">v4.1</span></h3>
 

@@ -30,6 +30,7 @@ const SaveManager = {
       caveLevel:  gs.caveLevel,
       wallRepairs: gs.wallRepairs || 0,
       bountyUsed:  gs.bountyUsed || 0,
+      eliteUsed:   gs.eliteUsed  || 0,
       mode:       gs.mode || 'campaign',
       runSeed:    gs.runSeed || 0,
       endlessGems:   gs.endlessGems || 0,

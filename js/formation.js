@@ -98,15 +98,22 @@ function nudgeRally(gs, dx, dy) {
 function toggleArenaMode(gs) {
   const a = gs.arena;
   a.mode = a.mode === 'auto' ? 'manual' : 'auto';
-  if (a.mode === 'auto') a.rally = null;
+  if (a.mode === 'auto') { a.rally = null; releaseManualSpeed(); }
   else clampManualSpeed();
   if (typeof SFX !== 'undefined') SFX.click();
   return a.mode;
 }
 
-// 3배속에서 실시간 조작은 사실상 불가능하다 — 수동으로 바꾸면 2배속으로 강등한다
+// 3배속에서 실시간 조작은 사실상 불가능하다 — 수동으로 바꾸면 2배속으로 강등한다.
+// 원래 고른 배속(_speedPref)은 건드리지 않는다.
 function clampManualSpeed() {
   if (typeof _speedIdx === 'undefined') return;
   const max = SPEED_STEPS.indexOf(2);
   if (max >= 0 && _speedIdx > max) _speedIdx = max;
+}
+
+// 자동으로 돌아오면 강등을 푼다
+function releaseManualSpeed() {
+  if (typeof _speedIdx === 'undefined') return;
+  if (typeof _speedPref === 'number') _speedIdx = _speedPref;
 }
