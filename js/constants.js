@@ -1,7 +1,7 @@
 'use strict';
 
 // 타이틀 화면에 표기되는 버전
-const GAME_VERSION = 'v0.3.4';
+const GAME_VERSION = 'v0.3.5';
 
 // ─── Canvas / Layout ────────────────────────────────────────────────────────
 const CW = 480;

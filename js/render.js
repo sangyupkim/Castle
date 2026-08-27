@@ -2334,8 +2334,8 @@ function renderTownPageBuildingGrid(ctx, gs, startY) {
 
     if (built&&def.id!=='cave') {
       const curLv=bs.level||0;
-      const lvLabel=def.levels[curLv]?def.levels[curLv].levelName:`Lv.${curLv+1}`;
-      ctx.fillStyle='#60a5fa'; ctx.font='bold 9px sans-serif'; ctx.fillText(lvLabel,bx+50,by+26);
+      ctx.fillStyle='#60a5fa'; ctx.font='bold 9px sans-serif';
+      ctx.fillText(`Lv.${curLv+1}/${BUILDING_MAX_LEVEL}`,bx+50,by+26);
     } else if (def.id==='cave') {
       ctx.fillStyle=def.color; ctx.font='bold 9px sans-serif'; ctx.textBaseline='top';
       ctx.fillText(`Lv.${gs.caveLevel}/5`,bx+50,by+26);
@@ -2345,10 +2345,14 @@ function renderTownPageBuildingGrid(ctx, gs, startY) {
 
     if (built&&def.id!=='cave') {
       const curLv=bs.level||0;
-      const totalUpgs=def.levels.slice(0,curLv+1).reduce((s,l)=>s+l.upgrades.length,0);
-      const boughtUpgs=Object.keys(bs.upgrades||{}).length;
-      ctx.fillStyle=boughtUpgs===totalUpgs?'#22c55e':'#94a3b8'; ctx.font='bold 9px sans-serif';
-      ctx.fillText(`업그레이드 ${boughtUpgs}/${totalUpgs}`,bx+10,by+68);
+      const open=buildingTracks(def,curLv);
+      // 유한 트랙만 진행도로 센다 — 무한 트랙은 끝이 없으므로 분모가 될 수 없다
+      const fin=open.filter(t=>!trackIsInfinite(t));
+      const cap=fin.reduce((a,t)=>a+trackMax(t),0);
+      const got=fin.reduce((a,t)=>a+(bs.upgrades[t.id]||0),0);
+      const inf=open.filter(t=>trackIsInfinite(t)).reduce((a,t)=>a+(bs.upgrades[t.id]||0),0);
+      ctx.fillStyle=(cap>0&&got>=cap)?'#22c55e':'#94a3b8'; ctx.font='bold 9px sans-serif';
+      ctx.fillText(`강화 ${got}/${cap}${inf?`  ♾️×${inf}`:''}`,bx+10,by+68);
     }
 
     const btnY=by+bh-28,btnH=22,btnW=bw-20;

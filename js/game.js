@@ -1116,7 +1116,24 @@ function bankRunResult() {
 
 // ─── 렌더 루프 ────────────────────────────────────────────────────────────────
 let _last=0;
+// 한 프레임에서 예외가 나면 requestAnimationFrame 재등록까지 못 가고 게임이 통째로 멈춘다.
+// 실제로 마을 건물 카드가 없어진 필드를 참조하다 그렇게 얼어붙은 적이 있다.
+// 그리기/시뮬레이션 오류 하나가 판을 끝내지 않도록 프레임을 감싸고, 원인은 한 번만 알린다.
+let _loopErrShown = false;
 function loop(ts) {
+  try {
+    frame(ts);
+  } catch (err) {
+    if (!_loopErrShown) {
+      _loopErrShown = true;
+      console.error('[frame]', err);
+      try { spawnFloaty('⚠ 화면 오류 — 계속 진행합니다', CW/2, CH/2, '#f87171'); } catch (e) {}
+    }
+  }
+  requestAnimationFrame(loop);
+}
+
+function frame(ts) {
   const dt=Math.min((ts-_last)/1000,0.05); _last=ts;
   ctx.clearRect(0,0,CW,CH);
 
@@ -1153,7 +1170,6 @@ function loop(ts) {
     const steps = (_titleScreen || _fadingOut || gs.page==='lobby' || gs.page==='result') ? 1 : gameSpeed();
     for (let i = 0; i < steps; i++) update(dt);
   }
-  requestAnimationFrame(loop);
 }
 
 // ─── 런 리셋 ─────────────────────────────────────────────────────────────────
