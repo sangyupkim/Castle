@@ -23,16 +23,22 @@ const TUTORIAL_STEPS = [
           '훈련을 한 판 치르면 무한이 열립니다 —\n완주할 필요는 없습니다. 손에 익히는 곳입니다.'
   },
   {
+    title: '🏗 마을은 10레벨까지',
+    text: '건물마다 강화 항목이 있고,\n살 때마다 효과도 비용도 함께 올라갑니다.\n\n' +
+          '승급하면 새 항목이 열립니다 —\n무엇을 먼저 올릴지가 판단거리입니다.\n\n' +
+          '최고 레벨(10)에 닿으면 ♾️ 무한 강화가 열립니다.\n끝없이 살 수 있고, 살수록 비싸집니다.'
+  },
+  {
     title: '🏰 준비는 전부 마을에서',
     text: '타워 배치 · 병력 고용 · 현상수배 —\n전부 🏰마을에서 합니다.\n\n' +
           '웨이브 시작 화면은 확인용입니다.\n적 구성과 층 정보를 보고,\n타워를 탭하면 성능만 볼 수 있습니다.\n\n' +
           '👑 영웅을 배치하지 않으면 시작할 수 없습니다.'
   },
   {
-    title: '🏨 여관',
-    text: '마을에 여관을 지으면\n웨이브가 끝날 때마다 병력이 더 회복됩니다.\n\n' +
-          '레벨을 올릴수록 특수 용병이 하나씩 열립니다 —\n🗡️도적 · ✝️성기사 · 🎯명사수\n\n' +
-          '일반 용병보다 비싸지만 확실히 강합니다.'
+    title: '🏨 여관 — 오늘은 누가 왔나',
+    text: '여관을 지으면 웨이브마다 병력이 더 회복되고,\n특수 용병이 찾아옵니다.\n\n' +
+          '🗡️도적 · ✝️성기사 · 🎯명사수 —\n매 웨이브 확률로 등장하고, 그 웨이브에만 고용됩니다.\n\n' +
+          '전용 슬롯을 쓰므로 일반 편성은 그대로입니다.\n여관 레벨이 오르면 더 자주, 더 많이 옵니다.'
   },
   {
     title: '🏰 상단 — 배치하고 지켜본다',
@@ -129,14 +135,14 @@ function createTutorial() {
   return {
     active: false, step: 0, done: false,
     start() {
-      if (localStorage.getItem('df_tut8') === '1') { this.done = true; return; }
+      if (localStorage.getItem('df_tut9') === '1') { this.done = true; return; }
       this.active = true; this.step = 0;
     },
     next() {
       this.step++;
       if (this.step >= TUTORIAL_STEPS.length) {
         this.active = false; this.done = true;
-        localStorage.setItem('df_tut8', '1');
+        localStorage.setItem('df_tut9', '1');
       }
     },
     current() { return TUTORIAL_STEPS[this.step] || null; }

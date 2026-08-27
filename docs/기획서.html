@@ -219,7 +219,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <div class="wrap">
 <header class="cover">
-  <div class="eyebrow">Game Design Document · v3.3 · 흐름 정리 · 여관</div>
+  <div class="eyebrow">Game Design Document · v3.4 · 마을 재설계</div>
   <h1>듀얼 프론티어</h1>
   <p class="tagline">한 화면에서 두 개의 전선을 동시에 굴리는 모바일 웹 로그라이트.
      끝은 없다 — 얼마나 깊이 내려갔는지가 기록이다.</p>
@@ -228,7 +228,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
     <div><dt>플랫폼</dt><dd>모바일 웹 (480×800 캔버스)</dd></div>
     <div><dt>1회 하강</dt><dd>10~30분 (도달 층에 비례)</dd></div>
     <div><dt>현재 볼륨</dt><dd>훈련 30웨이브 + ∞ 무한 (알고리즘 생성)</dd></div>
-    <div><dt>이번 개정</dt><dd>준비/전투 분리 · 여관 · 특수 용병 (v3.3)</dd></div>
+    <div><dt>이번 개정</dt><dd>건물 10레벨 · ♾️무한 강화 · 여관 손님 (v3.4)</dd></div>
   </dl>
 </header>
 
@@ -1537,6 +1537,78 @@ v2.0에서 드랍 수거가 추가되면 <strong>수입 변동폭이 커져 이 
 <tr><td class="num">33</td><td class="wrap"><span class="mono">4🧪부식 8💎보물 11💰노다지 14⚡각성 17🪙탐욕 19🧪부식 20🪙탐욕</span></td></tr>
 </tbody></table></div>
 
+
+
+<h3>마을 재설계 — 10레벨과 무한 강화 <span class="rev">v3.4</span></h3>
+
+<p class="lede">플레이 보고 둘: <strong>병영을 2레벨로 올리니 강화 목록이 화면 밖으로 잘린다</strong>,
+그리고 <strong>건물이 2레벨까지뿐이라 무한 모드에서 살 것이 금세 바닥난다.</strong></p>
+
+<h4>강화를 "트랙"으로</h4>
+<p>이전에는 건물마다 <span class="mono">levels[]</span> 안에 강화 목록을 손으로 적어뒀다.
+10레벨로 늘리려면 항목을 120개 넘게 써야 했고, 그렇게 써도 여전히 유한했다.</p>
+<p>이제 건물은 <strong>강화 트랙</strong> 목록을 갖는다. 트랙 하나가 곧 하나의 강화 항목이고 몇 번이든 반복 구매한다.</p>
+<div class="fx">
+  <span class="mono">n번째 비용 = cost × costMult<sup>n−1</sup></span><br>
+  <span class="mono">n번째 효과 = step × (1 + (n−1) × growth)</span>
+</div>
+<p>비용은 지수로 오르고 <strong>상승치도 살수록 조금씩 커진다.</strong>
+건물 레벨은 어떤 트랙이 열리는지를 정한다 — 승급이 곧 새 선택지다.</p>
+
+<div class="tw"><table>
+<caption>건물 4종 · 각 10레벨 · 승급 비용은 레벨당 1.7배</caption>
+<thead><tr><th>건물</th><th class="num">Lv.2</th><th class="num">Lv.5</th><th class="num">Lv.8</th><th class="num">Lv.10</th><th>트랙</th></tr></thead>
+<tbody>
+<tr><td>⚒️ 무기 공방</td><td class="num">35</td><td class="num">172</td><td class="num">845</td><td class="num">2,442</td><td class="wrap">연마 · 조준경 · 속사 · 대량생산 · 강화탄두 · ♾️정밀세공</td></tr>
+<tr><td>⚔️ 병영</td><td class="num">30</td><td class="num">147</td><td class="num">724</td><td class="num">2,093</td><td class="wrap">전투·체력·철갑·속공·할인·급소·증원 · ♾️불굴의 대열</td></tr>
+<tr><td>🏪 영웅 상점</td><td class="num">32</td><td class="num">157</td><td class="num">772</td><td class="num">2,232</td><td class="wrap">단련 · 교본 · 각성 · 오라 · 구원 · ♾️전설의 무구</td></tr>
+<tr><td>🏨 여관</td><td class="num">40</td><td class="num">203</td><td class="num">1,036</td><td class="num">3,064</td><td class="wrap">잠자리 · 식사 · 물약 · 주점 · 별관 · 대접 · ♾️끝없는 환대</td></tr>
+</tbody></table></div>
+
+<h4>♾️ 무한 강화 — 골드 사용처가 마르지 않게</h4>
+<p>최고 레벨(10)에 닿으면 상한이 없는 트랙이 열린다. 비용이 계속 지수로 오르므로
+<strong>수입이 아무리 늘어도 흡수한다</strong> — 무한 모드의 골드가 놀지 않게 하는 마지막 장치다.</p>
+<div class="tw"><table>
+<caption>♾️ 정밀 세공(무기 공방) 비용 곡선</caption>
+<thead><tr><th class="num">회차</th><th class="num">1</th><th class="num">10</th><th class="num">20</th><th class="num">30</th><th class="num">40</th></tr></thead>
+<tbody>
+<tr><td>비용</td><td class="num">180</td><td class="num">1,441</td><td class="num">14,532</td><td class="num">146,561</td><td class="num">1,478,168</td></tr>
+</tbody></table></div>
+
+<h4>화면이 잘리던 이유</h4>
+<p>건물 상세 화면이 <strong>하단 전투 영역(y 410~800)에만</strong> 그려지고 있었다.
+위쪽 300px이 통째로 비어 있는 채로 강화 목록만 좁은 칸에 밀려 잘렸던 것이다.
+마을 탭 아래 <strong>전체(y 92~800)</strong>를 쓰도록 고쳤고, 그래도 넘칠 때를 대비해
+드래그·휠 스크롤을 넣었다(6px 임계값으로 탭과 구분).</p>
+
+<h3>🏨 여관 손님 — 특수 용병 재설계 <span class="rev">v3.4</span></h3>
+
+<p class="lede">상시 고용할 수 있으면 <strong>그냥 비싼 일반 용병</strong>일 뿐이다.
+웨이브마다 여관 문을 열어봐야 누가 와 있는지 알게 하면, 원하는 조합이 떴을 때
+골드를 쓸지 아낄지가 판단거리가 된다.</p>
+
+<div class="tw"><table>
+<caption>여관 레벨별 등장 — 3,000회 표본</caption>
+<thead><tr><th class="num">여관</th><th class="num">자리</th><th class="num">자리당 확률</th><th class="num">평균 등장</th><th class="num">아무도 안 옴</th></tr></thead>
+<tbody>
+<tr><td class="num">Lv.1</td><td class="num">1</td><td class="num">28%</td><td class="num">0.28명</td><td class="num">72%</td></tr>
+<tr><td class="num">Lv.3</td><td class="num">1</td><td class="num">38%</td><td class="num">0.38명</td><td class="num">62%</td></tr>
+<tr><td class="num">Lv.6</td><td class="num">2</td><td class="num">53%</td><td class="num">1.05명</td><td class="num">22%</td></tr>
+<tr class="total"><td class="num">Lv.10</td><td class="num">4</td><td class="num">73%</td><td class="num">2.62명</td><td class="num">1%</td></tr>
+</tbody></table></div>
+<p>🍺 소문난 주점 강화가 확률을 최대 +61% 더 올린다. 고용하면 그 자리는 사라져
+같은 웨이브에 둘을 뽑을 수 없고, 다음 웨이브에는 다시 뽑는다.</p>
+
+<h4>전용 슬롯</h4>
+<p>특수 용병은 <strong>일반 편성 슬롯과 별개로</strong> 센다. 기본 1칸이고
+🚪 별관 증축으로 최대 4칸까지 늘린다 — 실측: 일반 4 + 특수 3 = <strong>총 7명</strong> 편성.
+편성 화면에서도 ★ 줄로 따로 보여준다.</p>
+
+<div class="note">
+<p><strong>난이도는 그대로다.</strong> 사용처를 크게 늘렸지만 실측 도달 층은 11층으로 변함이 없고,
+보유 골드는 층마다 130~140에서 평평하다 — 버는 족족 새 사용처로 나간다는 뜻이다.
+신규 판에서 10층까지 가면 병영 Lv.6 · 공방 Lv.3 · 여관 Lv.1 정도가 된다.</p>
+</div>
 
 <h3>준비와 전투를 갈라놓기 <span class="rev">v3.3</span></h3>
 

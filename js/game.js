@@ -92,6 +92,7 @@ function newState() {
     runSeed:0,          // 이 판의 시드 — 층 구성·변형·지형·경로를 흔든다
     pathChanged:null,   // 직전 층에서 경로가 바뀐 결과 (준비 화면 안내용)
     floorEvent:null,    // 이 층에만 걸리는 규칙 변화
+    innOffers:[],       // 이번 웨이브에 여관에 와 있는 특수 용병
     endlessGems:0,      // 무한 층에서 쌓인 보석
     research:0,         // 병기 연구 횟수 (상한 없는 골드 사용처)
     bountyPending:false,// 이번 웨이브에 소환 예약됨
@@ -100,9 +101,9 @@ function newState() {
     selectedTowerType:'arrow',
     resultBanked:false,
     floaties:[],
-    ui:{ waveBtn:{}, hireCards:[], hiredSlots:[], heroDefBtn:{}, heroBatBtn:{},
+    ui:{ waveBtn:{}, hireCards:[], hiredSlots:[], specialCards:[], specialSlots:[], heroDefBtn:{}, heroBatBtn:{},
          metaCards:[], towerTabBtn:{}, heroTabBtn:{}, supportTabBtn:{},
-         lobbyTabBtns:[], unlockBtns:[], pactBtns:[], sortieBtn:{}, trainBtn:null, resultBtn:{} },
+         lobbyTabBtns:[], unlockBtns:[], pactBtns:[], sortieBtn:{}, trainBtn:null, resultBtn:{}, buildingScroll:null },
     // 영구 데이터 참조
     get soulStones()    { return _soulStones; },
     set soulStones(v)   { _soulStones = v; },
@@ -198,13 +199,62 @@ function pt(e) {
   return {x:(t.clientX-r.left)/_scale, y:(t.clientY-r.top)/_scale};
 }
 
+// ─── 드래그 스크롤 ───────────────────────────────────────────────────────────
+// 건물 강화 목록이 한 화면을 넘으므로 끌어서 훑을 수 있어야 한다.
+// 탭과 구분하려고 임계값(6px)을 넘겨야 드래그로 친다.
+const DRAG_THRESHOLD = 6;
+let _drag = null;      // { y0, scroll0, region }
+let _didDrag = false;
+
+function scrollRegionAt(p) {
+  const r = gs.ui.buildingScroll;
+  if (!r) return null;
+  if (p.x < r.x || p.x > r.x + r.w || p.y < r.y || p.y > r.y + r.h) return null;
+  return r;
+}
+function beginDrag(p) {
+  _didDrag = false;
+  const r = scrollRegionAt(p);
+  _drag = r ? { y0: p.y, scroll0: gs.town.scroll || 0, max: r.max } : null;
+}
+function moveDrag(p) {
+  if (!_drag) return;
+  const dy = p.y - _drag.y0;
+  if (!_didDrag && Math.abs(dy) < DRAG_THRESHOLD) return;
+  _didDrag = true;
+  gs.town.scroll = Math.max(0, Math.min(_drag.max, _drag.scroll0 - dy));
+}
+function endDrag() { _drag = null; }
+
 canvas.addEventListener('mousemove', e => {
   const p=pt(e);
   gs.hoveredCell = p.y<UIBAR_Y ? screenToCell(p.x,p.y) : null;
+  if (_drag) moveDrag(p);
 });
-canvas.addEventListener('mouseleave', ()=>{ gs.hoveredCell=null; });
-canvas.addEventListener('click', e=>tap(pt(e)));
-canvas.addEventListener('touchstart', e=>{ e.preventDefault(); tap(pt(e)); },{passive:false});
+canvas.addEventListener('mouseleave', ()=>{ gs.hoveredCell=null; endDrag(); });
+canvas.addEventListener('mousedown', e=>beginDrag(pt(e)));
+canvas.addEventListener('mouseup',   ()=>endDrag());
+canvas.addEventListener('click', e=>{ if (_didDrag) { _didDrag=false; return; } tap(pt(e)); });
+
+canvas.addEventListener('touchstart', e=>{ e.preventDefault(); beginDrag(pt(e)); },{passive:false});
+canvas.addEventListener('touchmove',  e=>{ e.preventDefault(); moveDrag(pt(e)); },{passive:false});
+canvas.addEventListener('touchend',   e=>{
+  e.preventDefault();
+  const wasDrag = _didDrag; endDrag(); _didDrag=false;
+  if (wasDrag) return;
+  const t = e.changedTouches && e.changedTouches[0];
+  if (t) {
+    const r = canvas.getBoundingClientRect();
+    tap({ x:(t.clientX-r.left)/_scale, y:(t.clientY-r.top)/_scale });
+  }
+},{passive:false});
+
+canvas.addEventListener('wheel', e=>{
+  const r = scrollRegionAt(pt(e));
+  if (!r) return;
+  e.preventDefault();
+  gs.town.scroll = Math.max(0, Math.min(r.max, (gs.town.scroll||0) + e.deltaY));
+},{passive:false});
 
 window.addEventListener('keydown', e => {
   if (_titleScreen) { _startFadeOut(); return; }
@@ -518,6 +568,7 @@ function startRun(mode) {
   gs.mode  = (mode === 'endless' && endlessUnlocked()) ? 'endless' : 'campaign';
   applyPathVariant(0);
   gs.pathChanged = null;
+  refreshInnOffers(gs);
   gs.inRun = true;
   gs.page  = 'battle';
   wm.init(0);
@@ -567,7 +618,7 @@ function handleTownTap(x,y) {
     if (hitTest(x,y,gs.ui.tabTownBtn||{}))   { t.screen='main'; t.tab='town'; return; }
     if (hitTest(x,y,gs.ui.tabArmyBtn||{}))   { t.screen='main'; t.tab='army'; return; }
     if (hitTest(x,y,gs.ui.tabTowersBtn||{})) { t.screen='main'; t.tab='towers'; gs.ui.towerAction=null; return; }
-    if (hitTest(x,y,gs.ui.townBackBtn||{})) { t.screen='main'; return; }
+    if (hitTest(x,y,gs.ui.townBackBtn||{})) { t.screen='main'; t.scroll=0; return; }
     if (t.screen==='heroShop') {
       for (const btn of gs.ui.shopItemBtns||[]) {
         if (hitTest(x,y,btn)) {
@@ -631,7 +682,7 @@ function handleTownTap(x,y) {
           if (!buildBuilding(card.id,gs)) spawnFloaty('골드 부족!',x,y,'#ef4444');
           else spawnFloaty('건설 완료!',x,y,'#22c55e');
         } else if (card.id!=='cave') {
-          t.screen=card.id;
+          t.screen=card.id; t.scroll=0;
         }
         return;
       }
@@ -682,14 +733,31 @@ function handleTownTap(x,y) {
       if (hitTest(x,y,card)) {
         const prev=gs.gold; gs.gold=hireUnit(gs.battle,card.typeId,gs.gold);
         if (gs.gold<prev) { spawnFloaty(`+${UNIT_TYPES[card.typeId].name}`,card.x+card.w/2,card.y,'#60a5fa'); SFX.hire(); }
-        else { const full=gs.battle.ourTeam.filter(u=>!u.isHero).length>=gs.battle.maxSlots;
+        else { const full=gs.battle.ourTeam.filter(u=>!u.isHero&&!(UNIT_TYPES[u.typeId]||{}).special).length>=gs.battle.maxSlots;
                spawnFloaty(full?'슬롯이 가득 참!':'골드 부족!',x,y,'#ef4444'); SFX.denied(); }
+        return;
+      }
+    }
+    // 🏨 여관 손님 — 전용 슬롯을 쓴다
+    for (const card of gs.ui.specialCards||[]) {
+      if (hitTest(x,y,card)) {
+        const prev=gs.gold; gs.gold=hireUnit(gs.battle,card.typeId,gs.gold);
+        if (gs.gold<prev) { spawnFloaty(`★ ${UNIT_TYPES[card.typeId].name} 합류!`,card.x+card.w/2,card.y,'#f472b6'); SFX.hire(); }
+        else { const full=specialHiredCount(gs.battle)>=specialSlotMax();
+               spawnFloaty(full?'특수 슬롯이 가득 참! — 🏨여관에서 증축':'골드 부족!',x,y,'#ef4444'); SFX.denied(); }
+        return;
+      }
+    }
+    for (const slot of gs.ui.specialSlots||[]) {
+      if (hitTest(x,y,slot)) {
+        const sp=gs.battle.ourTeam.filter(u=>!u.isHero&&(UNIT_TYPES[u.typeId]||{}).special);
+        if (sp[slot.idx]) { const ref=fireUnit(gs.battle,gs.battle.ourTeam.indexOf(sp[slot.idx])); gs.gold+=ref; if (ref>0) { spawnFloaty(`+${ref}💰`,x,y,COLORS.gold); SFX.sell(); } }
         return;
       }
     }
     for (const slot of gs.ui.hiredSlots||[]) {
       if (hitTest(x,y,slot)) {
-        const units=gs.battle.ourTeam.filter(u=>!u.isHero);
+        const units=gs.battle.ourTeam.filter(u=>!u.isHero&&!(UNIT_TYPES[u.typeId]||{}).special);
         if (units[slot.idx]) { const ref=fireUnit(gs.battle,gs.battle.ourTeam.indexOf(units[slot.idx])); gs.gold+=ref; if (ref>0) { spawnFloaty(`+${ref}💰`,x,y,COLORS.gold); SFX.sell(); } }
         return;
       }

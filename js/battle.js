@@ -116,13 +116,23 @@ function hireCost(typeId) {
 function hireUnit(battle, typeId, gold) {
   const t = UNIT_TYPES[typeId];
   if (!t) return gold;
-  // 특수 용병은 캠프 해금이 아니라 여관 레벨로 열린다
-  if (t.special) {
-    if (typeof gs === 'undefined' || !availableSpecialUnits(gs).includes(typeId)) return gold;
-  } else if (!isUnlocked(typeId)) return gold;
   const cost = hireCost(typeId);
-  const nonHero = battle.ourTeam.filter(u => !u.isHero).length;
-  if (nonHero >= battle.maxSlots || gold < cost) return gold;
+  if (gold < cost) return gold;
+
+  if (t.special) {
+    // 이번 웨이브에 여관에 와 있어야 하고, 전용 슬롯을 쓴다
+    if (typeof gs === 'undefined' || !availableSpecialUnits(gs).includes(typeId)) return gold;
+    if (specialHiredCount(battle) >= specialSlotMax()) return gold;
+    battle.ourTeam.push(makeUnit(typeId));
+    // 고용하면 그 자리는 사라진다 — 같은 웨이브에 둘을 뽑을 수 없다
+    const i = gs.innOffers.indexOf(typeId);
+    if (i >= 0) gs.innOffers.splice(i, 1);
+    return gold - cost;
+  }
+
+  if (!isUnlocked(typeId)) return gold;
+  const normal = battle.ourTeam.filter(u => !u.isHero && !(UNIT_TYPES[u.typeId]||{}).special).length;
+  if (normal >= battle.maxSlots) return gold;
   battle.ourTeam.push(makeUnit(typeId));
   return gold - cost;
 }

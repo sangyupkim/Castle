@@ -1,7 +1,7 @@
 'use strict';
 
 // 타이틀 화면에 표기되는 버전
-const GAME_VERSION = 'v0.3.3';
+const GAME_VERSION = 'v0.3.4';
 
 // ─── Canvas / Layout ────────────────────────────────────────────────────────
 const CW = 480;
@@ -445,6 +445,42 @@ const SPECIAL_UNIT_TYPES = {
   }
 };
 const SPECIAL_UNIT_ORDER = ['rogue', 'paladin', 'marksman'];
+
+// ─── 특수 용병은 매 웨이브 여관에 "들르는" 것이다 ────────────────────────────
+// 항상 고용할 수 있으면 그냥 비싼 일반 용병일 뿐이다.
+// 웨이브마다 여관 문을 열어봐야 누가 와 있는지 알 수 있게 하면,
+// 원하는 조합이 떴을 때 골드를 쓸지 아낄지가 판단거리가 된다.
+// 등장 확률과 자릿수는 여관 레벨과 '소문난 주점' 강화가 올린다.
+const SPECIAL_BASE_CHANCE  = 0.28;   // 여관 Lv.1 기준 한 자리당 등장 확률
+const SPECIAL_CHANCE_PER_LV= 0.05;   // 여관 레벨당 가산
+const SPECIAL_SEATS_BASE   = 1;      // 굴리는 자릿수
+const SPECIAL_SEATS_PER_LV = 1/3;    // 여관 3레벨마다 +1
+
+function specialSeats(innLv) {
+  return SPECIAL_SEATS_BASE + Math.floor(Math.max(0, innLv) * SPECIAL_SEATS_PER_LV);
+}
+function specialChance(innLv) {
+  return Math.min(0.92, SPECIAL_BASE_CHANCE + Math.max(0, innLv) * SPECIAL_CHANCE_PER_LV
+                        + (BONUSES.specialChance || 0));
+}
+// 이번 웨이브에 여관에 와 있는 특수 용병을 뽑는다 (중복 없음)
+function rollInnOffers(innLv) {
+  if (innLv < 0) return [];
+  const seats = specialSeats(innLv);
+  const chance = specialChance(innLv);
+  const pool = SPECIAL_UNIT_ORDER.slice();
+  const out = [];
+  for (let i = 0; i < seats && pool.length; i++) {
+    if (Math.random() >= chance) continue;
+    const k = Math.floor(Math.random() * pool.length);
+    out.push(pool.splice(k, 1)[0]);
+  }
+  return out;
+}
+// 특수 용병 전용 슬롯 — 일반 편성 슬롯과 따로 센다
+function specialSlotMax() {
+  return 1 + (BONUSES.specialSlotBonus || 0);
+}
 // 일반 용병과 특수 용병을 한 표에서 찾을 수 있게 합쳐 둔다
 Object.assign(UNIT_TYPES, SPECIAL_UNIT_TYPES);
 

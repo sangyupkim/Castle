@@ -2037,10 +2037,14 @@ function renderBuildingScreen(ctx, gs, buildingId) {
   const bs=gs.town.buildings[buildingId];
   if (!def||!bs) return;
 
-  ctx.fillStyle='#0c0f1a'; ctx.fillRect(0,BATTLE_Y,CW,BATTLE_H);
+  // 건물 화면은 마을 탭 아래 전체를 쓴다.
+  // 전에는 하단 전투 영역(BATTLE_Y부터)에만 그려서 위쪽 300px이 비어 있었고,
+  // 강화 목록은 그 좁은 칸에 밀려 화면 밖으로 잘렸다.
+  const SCR_TOP = 92;
+  ctx.fillStyle='#0c0f1a'; ctx.fillRect(0,SCR_TOP,CW,CH-SCR_TOP);
 
   // Header
-  const hY=BATTLE_Y+6;
+  const hY=SCR_TOP+6;
   ctx.fillStyle=def.color; ctx.font='bold 13px sans-serif';
   ctx.textAlign='center'; ctx.textBaseline='top';
   ctx.fillText(`${def.icon} ${def.name}`,CW/2,hY);
@@ -2053,80 +2057,136 @@ function renderBuildingScreen(ctx, gs, buildingId) {
   ctx.fillText('← 뒤로',31,hY+11);
   gs.ui.townBackBtn={x:6,y:hY,w:50,h:22};
 
-  // Level up button
-  const curLv=bs.level||0, maxLv=def.levels.length-1;
-  const nextLvDef=curLv<maxLv?def.levels[curLv+1]:null;
-  if (nextLvDef) {
-    const canAff=gs.gold>=nextLvDef.upgradeCost;
+  // ── 건물 레벨 ────────────────────────────────────────────────────────────
+  const curLv = bs.level||0, maxLv = BUILDING_MAX_LEVEL-1;
+  if (curLv < maxLv) {
+    const cost = buildingLevelCost(def, curLv+1);
+    const canAff = gs.gold>=cost;
     const bw=140,bh=22,bx=CW-6-bw,by2=hY;
     roundRect(ctx,bx,by2,bw,bh,4);
     ctx.fillStyle=canAff?'#1e3a5f':'#1a1a2e'; ctx.fill();
     ctx.strokeStyle=canAff?'#f59e0b':'#374151'; ctx.lineWidth=1; ctx.stroke();
     ctx.fillStyle=canAff?'#fbbf24':'#6b7280'; ctx.font='bold 8px sans-serif';
     ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(`건물 Lv.UP ${nextLvDef.upgradeCost}💰`,bx+bw/2,by2+bh/2);
+    ctx.fillText(`Lv.${curLv+2} 승급 ${cost}💰`,bx+bw/2,by2+bh/2);
     gs.ui.buildingLvUpBtn={x:bx,y:by2,w:bw,h:bh};
-  } else { gs.ui.buildingLvUpBtn=null; }
+  } else {
+    const bw=140,bh=22,bx=CW-6-bw;
+    roundRect(ctx,bx,hY,bw,bh,4);
+    ctx.fillStyle='#2a1f05'; ctx.fill(); ctx.strokeStyle='#f59e0b'; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle='#fbbf24'; ctx.font='bold 8px sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('★ 최고 레벨 — ♾️ 개방',bx+bw/2,hY+bh/2);
+    gs.ui.buildingLvUpBtn=null;
+  }
 
   ctx.fillStyle='#475569'; ctx.font='9px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText(`현재 ${def.levels[curLv].levelName} | 최대 ${def.levels[maxLv].levelName}`,6,hY+26);
+  const nextTracks = curLv<maxLv ? tracksUnlockedAt(def, curLv+1) : [];
+  ctx.fillText(`Lv.${curLv+1} / ${BUILDING_MAX_LEVEL}` +
+    (nextTracks.length ? `   다음 승급: ${nextTracks.map(t=>t.icon+t.name).join(' ')} 개방` : ''), 6, hY+26);
 
-  // Upgrades
+  // ── 강화 목록 (스크롤) ───────────────────────────────────────────────────
+  // 10레벨이면 항목이 화면을 넘는다. 드래그로 훑을 수 있게 잘라 그린다.
+  const listTop = SCR_TOP+50, listBot = CH-8, listH = listBot-listTop;
+  const open   = buildingTracks(def, curLv);
+  const locked = (def.tracks||[]).filter(t => (t.unlockLv||0) > curLv);
+  const rowH = 40, gapH = 4, lockH = 26;
+  const contentH = open.length*(rowH+gapH) + (locked.length ? 16 + locked.length*(lockH+3) : 0);
+  const maxScroll = Math.max(0, contentH - listH);
+  gs.town.scroll = Math.max(0, Math.min(maxScroll, gs.town.scroll||0));
+  const sc = gs.town.scroll;
+
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, listTop, CW, listH); ctx.clip();
+
   gs.ui.upgradeBtns=[];
-  let uy=BATTLE_Y+52;
-  for (let lv=0;lv<=curLv&&lv<def.levels.length;lv++) {
-    const lvDef=def.levels[lv];
-    if (lv>0) { ctx.fillStyle='#1e293b'; ctx.fillRect(6,uy,CW-12,1); uy+=6; }
-    ctx.fillStyle='#a5b4fc'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
-    ctx.fillText(lvDef.levelName+' 업그레이드',8,uy); uy+=14;
+  let uy = listTop - sc;
 
-    for (const upg of lvDef.upgrades) {
-      const curUpgLv=bs.upgrades[upg.id]||0;
-      const maxed=curUpgLv>=upg.maxLv;
-      const upgCost=townUpgradeCost(upg,curUpgLv);
-      const canAff=!maxed&&gs.gold>=upgCost;
-      const uh=36;
-      roundRect(ctx,6,uy,CW-12,uh,5);
-      ctx.fillStyle=maxed?'#0f1a0f':canAff?'#0d1929':'#0f0f1a'; ctx.fill();
-      ctx.strokeStyle=maxed?'#22c55e':canAff?def.color:'#334155'; ctx.lineWidth=1; ctx.stroke();
-      ctx.fillStyle='#e2e8f0';
-      ctx.font='13px sans-serif'; ctx.textBaseline='middle';
-      ctx.fillText(upg.icon,12,uy+uh/2);
-      ctx.fillStyle='#f1f5f9'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left';
-      ctx.fillText(upg.name,30,uy+uh/2-7);
-      ctx.fillStyle='#cbd5e1'; ctx.font='bold 9px sans-serif';
-      ctx.fillText(upg.desc(curUpgLv>0?curUpgLv:1),30,uy+uh/2+6);
-      // level dots
-      for (let d=0;d<upg.maxLv;d++) {
-        ctx.beginPath(); ctx.arc(CW-100+d*10,uy+uh/2,3.5,0,Math.PI*2);
-        ctx.fillStyle=d<curUpgLv?'#22c55e':'#334155'; ctx.fill();
+  for (const tr of open) {
+    if (uy > listBot || uy + rowH < listTop) { uy += rowH+gapH; continue; }
+    const n = bs.upgrades[tr.id]||0;
+    const mx = trackMax(tr), inf = trackIsInfinite(tr);
+    const maxed = !inf && n>=mx;
+    const cost = trackCost(tr, n);
+    const canAff = !maxed && gs.gold>=cost;
+
+    roundRect(ctx,6,uy,CW-12,rowH,5);
+    ctx.fillStyle = maxed?'#0f1a0f' : inf?'#1a1030' : canAff?'#0d1929':'#0f0f1a'; ctx.fill();
+    ctx.strokeStyle = maxed?'#22c55e' : inf?'#a78bfa' : canAff?def.color:'#334155';
+    ctx.lineWidth = inf?1.5:1; ctx.stroke();
+
+    ctx.fillStyle='#e2e8f0'; ctx.font='13px sans-serif';
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.fillText(tr.icon,12,uy+rowH/2);
+    ctx.fillStyle = inf?'#c4b5fd':'#f1f5f9'; ctx.font='bold 10px sans-serif';
+    ctx.fillText(tr.name + (inf?'  (무한)':''),30,uy+rowH/2-9);
+    // 현재 효과 → 다음 효과
+    const now = trackTotal(tr, n), next = trackTotal(tr, n+1);
+    ctx.fillStyle='#94a3b8'; ctx.font='bold 9px sans-serif';
+    ctx.fillText(n>0 ? tr.desc(now) : tr.desc(next), 30, uy+rowH/2+2);
+    if (!maxed && n>0) {
+      ctx.fillStyle='#4ade80'; ctx.font='bold 8px sans-serif';
+      ctx.fillText(`▲ ${tr.desc(next)}`, 30, uy+rowH/2+13);
+    }
+    // 진행 표시 — 유한이면 점, 무한이면 횟수
+    ctx.textAlign='right';
+    if (inf) {
+      ctx.fillStyle='#a78bfa'; ctx.font='bold 10px sans-serif';
+      ctx.fillText(`×${n}`, CW-84, uy+rowH/2);
+    } else {
+      const dots = Math.min(mx, 10), dw = 7;
+      for (let d=0; d<dots; d++) {
+        ctx.beginPath(); ctx.arc(CW-84-(dots-1-d)*dw, uy+rowH/2, 2.6, 0, Math.PI*2);
+        ctx.fillStyle = d<n?'#22c55e':'#334155'; ctx.fill();
       }
-      if (!maxed) {
-        const bw2=68,bh2=20,bx2=CW-8-bw2,by2=uy+(uh-bh2)/2;
-        roundRect(ctx,bx2,by2,bw2,bh2,4);
-        ctx.fillStyle=canAff?def.color:'#1e293b'; ctx.fill();
-        ctx.fillStyle=canAff?'#fff':'#475569'; ctx.font='bold 8px sans-serif';
-        ctx.textAlign='center'; ctx.textBaseline='middle';
-        ctx.fillText(`${upgCost}💰`,bx2+bw2/2,by2+bh2/2);
-        gs.ui.upgradeBtns.push({x:bx2,y:by2,w:bw2,h:bh2,id:upg.id});
-      } else {
-        ctx.fillStyle='#22c55e'; ctx.font='bold 8px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-        ctx.fillText('MAX',CW-30,uy+uh/2);
+      ctx.fillStyle='#475569'; ctx.font='bold 7px sans-serif'; ctx.textAlign='right';
+      ctx.fillText(`${n}/${mx}`, CW-84, uy+rowH/2+12);
+    }
+
+    if (!maxed) {
+      const bw2=68,bh2=22,bx2=CW-8-bw2,by2=uy+(rowH-bh2)/2;
+      roundRect(ctx,bx2,by2,bw2,bh2,4);
+      ctx.fillStyle=canAff?(inf?'#6d28d9':def.color):'#1e293b'; ctx.fill();
+      ctx.fillStyle=canAff?'#fff':'#475569'; ctx.font='bold 9px sans-serif';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(`${cost}💰`,bx2+bw2/2,by2+bh2/2);
+      gs.ui.upgradeBtns.push({x:bx2,y:by2,w:bw2,h:bh2,id:tr.id});
+    } else {
+      ctx.fillStyle='#22c55e'; ctx.font='bold 8px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('MAX',CW-42,uy+rowH/2);
+    }
+    uy += rowH+gapH;
+  }
+
+  // 아직 안 열린 트랙
+  if (locked.length) {
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif';
+    ctx.fillText('🔒 승급하면 열립니다', 8, uy+2);
+    uy += 16;
+    for (const tr of locked) {
+      if (uy <= listBot && uy+lockH >= listTop) {
+        roundRect(ctx,6,uy,CW-12,lockH,4);
+        ctx.fillStyle='#080d18'; ctx.fill(); ctx.strokeStyle='#232c3d'; ctx.lineWidth=1; ctx.stroke();
+        ctx.fillStyle= trackIsInfinite(tr)?'#7c5cbf':'#64748b';
+        ctx.font='bold 9px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
+        ctx.fillText(`${tr.icon} ${tr.name}`, 12, uy+lockH/2);
+        ctx.fillStyle='#3f4a5c'; ctx.font='bold 8px sans-serif'; ctx.textAlign='right';
+        ctx.fillText(`Lv.${(tr.unlockLv||0)+1} 필요`, CW-12, uy+lockH/2);
       }
-      uy+=uh+4;
+      uy += lockH+3;
     }
   }
+  ctx.restore();
 
-  // Locked levels
-  for (let lv=curLv+1;lv<def.levels.length;lv++) {
-    const lvDef=def.levels[lv];
-    roundRect(ctx,6,uy,CW-12,30,5);
-    ctx.fillStyle='#080d18'; ctx.fill();
-    ctx.strokeStyle='#374151'; ctx.lineWidth=1; ctx.stroke();
-    ctx.fillStyle='#64748b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(`🔒 ${lvDef.levelName} (건물 레벨업 필요 ${lvDef.upgradeCost}💰)`,CW/2,uy+15);
-    uy+=34;
+  // 스크롤 막대
+  if (maxScroll > 0) {
+    const trackH = listH-8, thumbH = Math.max(24, trackH*listH/contentH);
+    const ty = listTop+4 + (trackH-thumbH) * (sc/maxScroll);
+    ctx.fillStyle='rgba(148,163,184,0.12)'; ctx.fillRect(CW-4, listTop+4, 2, trackH);
+    ctx.fillStyle='rgba(148,163,184,0.55)'; ctx.fillRect(CW-4, ty, 2, thumbH);
   }
+  gs.ui.buildingScroll = maxScroll>0 ? {x:0,y:listTop,w:CW,h:listH,max:maxScroll} : null;
 }
 
 // ─── 영웅 상점 ───────────────────────────────────────────────────────────────
@@ -2449,9 +2509,7 @@ function renderTownPageArmy(ctx, gs, startY) {
   ctx.fillText('병력 고용 — 탭하여 편성',6,y); y+=14;
   const cols=3, cardW=(CW-12-(cols-1)*6)/cols, cardH=64;
   gs.ui.hireCards=[];
-  // 일반 5종 + 여관에서 열린 특수 용병
-  const specials = availableSpecialUnits(gs);
-  const roster = UNIT_ORDER.concat(specials);
+  const roster = UNIT_ORDER;
   roster.forEach((id,i)=>{
     const ut=UNIT_TYPES[id];
     const col=i%cols, row=Math.floor(i/cols);
@@ -2480,35 +2538,100 @@ function renderTownPageArmy(ctx, gs, startY) {
       ctx.fillStyle='#f59e0b'; ctx.font='bold 9px sans-serif';
       ctx.fillText(`🔒 캠프 💎${unlockCost(id)}`,cx+cardW/2,cy2+50);
     }
-    // 특수 용병은 테두리를 굵게 — 일반 용병과 한눈에 구분되도록
-    if (ut.special) {
-      roundRect(ctx,cx,cy2,cardW,cardH,6);
-      ctx.strokeStyle=ut.color; ctx.lineWidth=2; ctx.stroke();
-      ctx.fillStyle=ut.color; ctx.font='bold 7px sans-serif'; ctx.textAlign='left';
-      ctx.fillText('★',cx+4,cy2+4);
-      ctx.textAlign='center';
-    }
   });
-  y += Math.ceil(roster.length/cols)*(cardH+6) + 4;
+  y += Math.ceil(roster.length/cols)*(cardH+6) + 6;
 
-  // 여관 안내 — 다음 특수 용병이 몇 레벨에 열리는지
-  const innLv = innLevel(gs);
-  const nextSp = SPECIAL_UNIT_ORDER.find(id => SPECIAL_UNIT_TYPES[id].innLevel > innLv);
-  ctx.fillStyle='#475569'; ctx.font='9px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  // ── 🏨 여관 손님 (특수 용병) ─────────────────────────────────────────────
+  // 매 웨이브 다시 뽑는다. 상시 고용이면 그냥 비싼 일반 용병일 뿐이라,
+  // "이번엔 누가 와 있나"를 열어봐야 알게 했다.
+  const innLv   = innLevel(gs);
+  const offers  = availableSpecialUnits(gs);
+  const spMax   = specialSlotMax();
+  const spUsed  = specialHiredCount(battle);
+  gs.ui.specialCards=[];
+
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle='#f472b6'; ctx.font='bold 10px sans-serif';
+  ctx.fillText('🏨 여관 손님 — 이번 웨이브에만',6,y);
+  ctx.textAlign='right'; ctx.fillStyle= spUsed>=spMax ? '#f87171' : '#94a3b8'; ctx.font='bold 9px sans-serif';
+  ctx.fillText(innLv<0 ? '여관 미건설' : `전용 슬롯 ${spUsed}/${spMax}`, CW-6, y);
+  ctx.textAlign='left';
+  y+=14;
+
+  const spH=58;
   if (innLv < 0) {
-    ctx.fillStyle='#f472b6';
-    ctx.fillText('🏨 마을에 여관을 지으면 특수 용병을 고용할 수 있습니다',6,y);
-  } else if (nextSp) {
-    const sp = SPECIAL_UNIT_TYPES[nextSp];
-    ctx.fillStyle='#f472b6';
-    ctx.fillText(`🏨 여관 Lv.${sp.innLevel+1}에서 ${sp.icon} ${sp.name} 개방 — ${sp.role}`,6,y);
+    roundRect(ctx,6,y,CW-12,spH,6);
+    ctx.fillStyle='#0c1220'; ctx.fill(); ctx.strokeStyle='#1e293b'; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle='#64748b'; ctx.font='10px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('🏨 마을에 여관을 지으면 특수 용병이 찾아옵니다', CW/2, y+spH/2);
+    ctx.textAlign='left'; ctx.textBaseline='top';
+  } else if (!offers.length) {
+    roundRect(ctx,6,y,CW-12,spH,6);
+    ctx.fillStyle='#140d18'; ctx.fill(); ctx.strokeStyle='#3f2447'; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle='#6b5b7a'; ctx.font='10px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('이번 웨이브에는 아무도 오지 않았습니다', CW/2, y+spH/2-7);
+    ctx.fillStyle='#4c3a5a'; ctx.font='bold 9px sans-serif';
+    ctx.fillText(`여관 Lv.${innLv+1} · 자리 ${specialSeats(innLv)} · 등장 확률 ${Math.round(specialChance(innLv)*100)}%`, CW/2, y+spH/2+9);
+    ctx.textAlign='left'; ctx.textBaseline='top';
   } else {
-    ctx.fillText('★ 특수 용병을 모두 고용할 수 있습니다',6,y);
+    const sw=(CW-12-(offers.length-1)*6)/offers.length;
+    offers.forEach((id,i)=>{
+      const ut=SPECIAL_UNIT_TYPES[id];
+      const sx=6+i*(sw+6);
+      const cost=hireCost(id);
+      const roomy=spUsed<spMax, canAff=roomy&&gs.gold>=cost;
+      roundRect(ctx,sx,y,sw,spH,6);
+      ctx.fillStyle=canAff?'#241528':'#141018'; ctx.fill();
+      ctx.strokeStyle=canAff?ut.color:'#3f2447'; ctx.lineWidth=2; ctx.stroke();
+      ctx.globalAlpha=canAff?1:0.5;
+      ctx.textAlign='center'; ctx.textBaseline='top';
+      ctx.fillStyle='#e2e8f0'; ctx.font='19px sans-serif';
+      ctx.fillText(ut.icon,sx+sw/2,y+4);
+      ctx.fillStyle=ut.color; ctx.font='bold 11px sans-serif';
+      ctx.fillText(ut.name,sx+sw/2,y+25);
+      ctx.fillStyle='#94a3b8'; ctx.font='bold 8px sans-serif';
+      ctx.fillText(`ATK ${ut.atk+BONUSES.unitAtk} · HP ${ut.hp+BONUSES.unitHp}`,sx+sw/2,y+38);
+      ctx.fillStyle=canAff?COLORS.gold:'#64748b'; ctx.font='bold 10px sans-serif';
+      ctx.fillText(roomy?`💰${cost}`:'슬롯 없음',sx+sw/2,y+47);
+      ctx.globalAlpha=1;
+      ctx.fillStyle=ut.color; ctx.font='bold 8px sans-serif'; ctx.textAlign='left';
+      ctx.fillText('★',sx+4,y+3);
+      ctx.textAlign='left';
+      gs.ui.specialCards.push({x:sx,y:y,w:sw,h:spH,typeId:id});
+    });
   }
-  y+=16;
+  y += spH + 6;
+
+  // 편성된 특수 용병 — 전용 슬롯 줄
+  gs.ui.specialSlots=[];
+  if (innLv >= 0) {
+    const sp = battle.ourTeam.filter(u=>!u.isHero && (UNIT_TYPES[u.typeId]||{}).special);
+    const ssW=Math.max(44,Math.min(82,Math.floor((CW-12-(spMax-1)*6)/Math.max(1,spMax))));
+    const ssH=44;
+    for (let i=0;i<spMax;i++) {
+      const sx=6+i*(ssW+6), u=sp[i];
+      roundRect(ctx,sx,y,ssW,ssH,6);
+      ctx.fillStyle=u?'#2a1530':'#0f0a14'; ctx.fill();
+      ctx.strokeStyle=u?(u.color||'#f472b6'):'#3f2447'; ctx.lineWidth=1.5; ctx.stroke();
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      if (u) {
+        ctx.fillStyle='#e2e8f0'; ctx.font='17px sans-serif';
+        ctx.fillText(u.icon,sx+ssW/2,y+15);
+        drawHPBar(ctx,sx+5,ssH+y-13,ssW-10,4,u.hp/u.maxHp);
+        ctx.fillStyle='#ef4444'; ctx.font='bold 9px sans-serif';
+        ctx.fillText('✕',sx+ssW-10,y+8);
+      } else {
+        ctx.fillStyle='#3f2447'; ctx.font='18px sans-serif';
+        ctx.fillText('★',sx+ssW/2,y+ssH/2);
+      }
+      gs.ui.specialSlots.push({x:sx,y:y,w:ssW,h:ssH,idx:i});
+    }
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    y += ssH + 8;
+  }
 
   // ── 편성 슬롯 ────────────────────────────────────────────────────────────
-  const hired=battle.ourTeam.filter(u=>!u.isHero);
+  const hired=battle.ourTeam.filter(u=>!u.isHero && !(UNIT_TYPES[u.typeId]||{}).special);
   ctx.fillStyle='#64748b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillText(`편성된 병력 (${hired.length}/${battle.maxSlots})  ·  탭하면 해고`,6,y); y+=14;
   const slotGap=6;

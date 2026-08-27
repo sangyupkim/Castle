@@ -254,6 +254,7 @@ function createWaveManager() {
 
       gs.hero.placement = 'none';
       restHealTeam(gs.battle);       // 생존 병력 휴식 회복
+      refreshInnOffers(gs);          // 여관에 새 손님이 온다
 
       // 훈련 마지막 웨이브만 강화 없이 결과로 넘긴다. 무한은 매 층 강화를 고른다.
       const atCampaignEnd = (gs.mode !== 'endless') && (this.waveIndex + 1 >= WAVE_DEFS.length);

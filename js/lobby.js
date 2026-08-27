@@ -45,10 +45,19 @@ function innLevel(gs) {
   const b = gs.town && gs.town.buildings && gs.town.buildings.inn;
   return (b && b.built) ? (b.level || 0) : -1;   // -1 = 미건설
 }
+// 이번 웨이브에 여관에 와 있는 특수 용병. 웨이브가 넘어갈 때 다시 뽑는다.
 function availableSpecialUnits(gs) {
-  const lv = innLevel(gs);
-  if (lv < 0) return [];
-  return SPECIAL_UNIT_ORDER.filter(id => SPECIAL_UNIT_TYPES[id].innLevel <= lv);
+  if (innLevel(gs) < 0) return [];
+  return (gs.innOffers || []).filter(id => SPECIAL_UNIT_TYPES[id]);
+}
+// 웨이브가 바뀔 때 호출 — 여관 손님을 새로 뽑는다
+function refreshInnOffers(gs) {
+  gs.innOffers = rollInnOffers(innLevel(gs));
+  return gs.innOffers;
+}
+// 편성된 특수 용병 수
+function specialHiredCount(battle) {
+  return battle.ourTeam.filter(u => !u.isHero && (UNIT_TYPES[u.typeId] || {}).special).length;
 }
 // 고용 가능한 전체 목록 (일반 + 여관 특수)
 function hireableUnits(gs) {
