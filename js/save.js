@@ -65,6 +65,7 @@ const SaveManager = {
       forge:          gs.forge ? JSON.parse(JSON.stringify(gs.forge)) : null,
       charms:         gs.charms ? JSON.parse(JSON.stringify(gs.charms)) : [],
       charmSlots:     gs.charmSlots ? gs.charmSlots.slice() : [null, null],
+      ascension:      gs.ascension || 0,
       unlocked:       gs.unlocked || [],
       pacts:          gs.pacts    || [],
       seenMobs:       gs.seenMobs || [],

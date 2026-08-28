@@ -2075,6 +2075,31 @@ function renderLobbyUnlock(ctx, gs) {
     y += rowH;
   }
 
+  // ── ♾️ 승천 — 끝이 없는 사용처 ────────────────────────────────────────────
+  y += 8;
+  const an = ascendLevel(gs), ac = ascendCost(gs), acan = gs.soulStones >= ac;
+  const ah = 74;
+  roundRect(ctx,10,y,CW-20,ah,8);
+  ctx.fillStyle='#150f26'; ctx.fill();
+  ctx.strokeStyle = acan ? '#a78bfa' : '#3b2a5e'; ctx.lineWidth = acan ? 2 : 1; ctx.stroke();
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle='#c4b5fd'; ctx.font='bold 11px sans-serif';
+  ctx.fillText('♾️ 승천 — 끝이 없습니다', 20, y+10);
+  ctx.textAlign='right'; ctx.fillStyle='#a78bfa'; ctx.font='bold 14px sans-serif';
+  ctx.fillText(`${an}단계`, CW-20, y+8);
+  ctx.textAlign='left'; ctx.fillStyle='#94a3b8'; ctx.font='9px sans-serif';
+  ctx.fillText(`현재 — 타워·아군 공격력 +${(an*ASCEND_DMG*100).toFixed(1)}% · 체력 +${(an*ASCEND_HP*100).toFixed(1)}%`, 20, y+28);
+  ctx.fillStyle='#64748b'; ctx.font='9px sans-serif';
+  ctx.fillText('한 단계마다 값이 12%씩 오릅니다 — 남는 보석이 갈 곳', 20, y+41);
+  const abw=CW-40, abh=22, aby=y+ah-abh-8;
+  roundRect(ctx,20,aby,abw,abh,5);
+  ctx.fillStyle = acan ? '#2a1a05' : '#12161f'; ctx.fill();
+  ctx.strokeStyle = acan ? '#f59e0b' : '#293040'; ctx.lineWidth=1; ctx.stroke();
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillStyle = acan ? '#fbbf24' : '#475569'; ctx.font='bold 11px sans-serif';
+  ctx.fillText(`💎 ${ac}  →  ${an+1}단계`, CW/2, aby+abh/2);
+  gs.ui.ascendBtn = {x:20,y:aby,w:abw,h:abh};
+  ctx.textAlign='left'; ctx.textBaseline='top';
 }
 
 // ── 📜 서약 ─────────────────────────────────────────────────────────────────

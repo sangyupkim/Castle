@@ -309,6 +309,7 @@ function reapplyAllBonuses(gs) {
   applyTownUpgrades(gs);
   applyRunUpgrades(gs);   // 이번 판에 집은 강화 카드
   applyForge(gs);         // ⚒️ 대장간 담금질 숙련도
+  applyAscend(gs);        // ♾️ 승천 — 끝나지 않는 보석 사용처
   applyCharms(gs);        // 🎴 이번 판에 들고 온 부적
   // 각인은 마지막에 — 스킬 트리와 마을 강화 위에 얹힌다
   const sg = (typeof activeSigil === 'function') ? activeSigil() : null;

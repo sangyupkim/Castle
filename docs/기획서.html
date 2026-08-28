@@ -219,7 +219,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <div class="wrap">
 <header class="cover">
-  <div class="eyebrow">Game Design Document · v4.8 · 하단을 비우면 위로</div>
+  <div class="eyebrow">Game Design Document · v4.9 · 정액을 배율로</div>
   <h1>듀얼 프론티어</h1>
   <p class="tagline">한 화면에서 두 개의 전선을 동시에 굴리는 모바일 웹 로그라이트.
      끝은 없다 — 얼마나 깊이 내려갔는지가 기록이다.</p>
@@ -228,7 +228,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
     <div><dt>플랫폼</dt><dd>모바일 웹 (480×800 캔버스)</dd></div>
     <div><dt>1회 하강</dt><dd>10~30분 (도달 층에 비례)</dd></div>
     <div><dt>현재 볼륨</dt><dd>훈련 30웨이브 + ∞ 무한 (알고리즘 생성)</dd></div>
-    <div><dt>이번 개정</dt><dd>후퇴·전멸이 상단으로 · 🌊쇄도 · 배경음 (v4.8)</dd></div>
+    <div><dt>이번 개정</dt><dd>정액→배율 밸런스 · 스킬트리 v2 · ⚒️대장간 · 🎴부적 (v4.9)</dd></div>
   </dl>
 </header>
 
@@ -1042,7 +1042,136 @@ v1.0의 "그룹 순환 + 보상 체감" 구조를 이 압력 곡선이 대체한
 "다음 영웅"이라는 목표가 되게 했다. 한 번 열면 <strong>언제든 무료로 갈아 끼운다</strong> —
 층 조합에 맞춰 바꾸는 것이 각인의 목적이므로 교체까지 잠그면 그냥 안 쓰게 된다.</p>
 
-<h3>하단을 비우면 그대로 상단으로 올라온다 <span class="rev">v4.8</span></h3>
+<h3>정액을 배율로 — 26층이 무피해로 막히던 이유 <span class="rev">v4.9</span></h3>
+
+<p class="lede">플레이 보고: <strong>"26층까지 해봤는데 상단의 타워는 10층에서 업그레이드한
+내용으로 26층까지 아무런 피해 없이 (거의 바로 나오자마자 녹여버리는) 막히는 모습이야."</strong></p>
+
+<p>화살탑의 기본 공격력은 <strong>2</strong>다. 여기에 공방의 세 트랙(날붙이 연마 +38,
+강화 탄두 +62, 정밀 세공 ∞)과 스킬 트리(+880)가 <strong>정액으로</strong> 얹혔다.
+그러면 실효 공격력의 99%가 <em>어느 탑이냐</em>와도 <em>몇 레벨이냐</em>와도 무관한 값이 되고,
+적 체력이 12배로 불어나도 그 옆에서는 반올림 오차가 된다.
+10층에서 산 강화가 26층까지 그대로 통한 것이 정확히 이것이다.</p>
+
+<p>정액을 <strong>전부 배율로</strong> 바꿨다. 이제 공격력은
+<code>기본 × 레벨 × 강화배율</code>이라 탑의 종류와 레벨이 다시 의미를 갖고,
+적 체력 곡선과 같은 축에서 겨룬다.</p>
+
+<div class="tw"><table>
+<caption>실측 여유배 — 60초 웨이브 총 화력 ÷ 웨이브 총 체력 (1보다 작으면 뚫린다)</caption>
+<thead><tr><th>플레이어</th><th>1층</th><th>8층</th><th>12층</th><th>16층</th><th>20층</th><th>26층</th><th>32층</th><th>40층</th></tr></thead>
+<tbody>
+<tr><td>신규 (강화 0%)</td><td>15.5</td><td>1.8</td><td>0.41</td><td>0.07</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>초반 (25%)</td><td>58</td><td>8.4</td><td>2.5</td><td>0.50</td><td>0.06</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>중반 (60%)</td><td>428</td><td>62</td><td>19.5</td><td>4.6</td><td>0.74</td><td>0.39</td><td>0.39</td><td>0.05</td></tr>
+<tr><td>만렙 (100%)</td><td>2621</td><td>380</td><td>119</td><td>28</td><td>4.7</td><td><strong>2.6</strong></td><td>2.6</td><td>0.45</td></tr>
+</tbody></table></div>
+
+<p>벽이 신규 10~12층 → 25% 14~16층 → 60% 20~22층 → 만렙 35~40층으로 옮겨간다.
+곡선도 함께 조였다 (<code>ENDLESS_EXP</code> 1.055→1.062, <code>ENDLESS_LINEAR</code> 0.09→0.11).</p>
+
+<h3>하단은 반대로 벽이었다 — 곱셈 방어력 vs 덧셈 공격력 <span class="rev">v4.9</span></h3>
+
+<p class="lede">플레이 보고: <strong>"하단은 용 모습을 한 몹이 나오니까 더 이상 잡히지 않고
+(화살·검사·힐러 조합, 최대 고용에 업그레이드도 모두 마친 상태)
+그냥 몹을 잡을 수 없는 난이도로 진행됐어."</strong></p>
+
+<p>하단 몹의 방어력은 체력과 <strong>같은 곱셈 곡선</strong>을 탔다. 그런데 아군 공격력은
+마을 트랙과 스킬 트리가 정액으로 더해주는 값이다. 두 값이 다른 속도로 자라니
+언젠가 반드시 만난다 — 40층 마왕 방어력 <strong>111</strong>, 궁수 공격력 <strong>117</strong>,
+유효타 6, 처치에 84초.</p>
+
+<ul>
+<li>방어력은 <code>sm<sup>0.45</sup></code>, 공격력은 <code>sm<sup>0.80</sup></code>으로 눌렀다 (체력은 그대로).</li>
+<li>방어력이 아무리 높아도 <strong>원 공격력의 12%는 들어가는 하한</strong>을 뒀다.</li>
+<li>하단 곡선을 상단과 분리했다 (<code>ENDLESS_ARENA_LINEAR</code> 0.06).</li>
+</ul>
+
+<p>같은 40층 마왕이 <strong>12.5초 → 2.9초</strong>. 10층 1.5초에서 50층 24.5초까지
+벽 없이 완만하게 오른다.</p>
+
+<h3>🌳 스킬 트리 v2 — 나무 다섯 × 노드 아홉 × 레벨 열 <span class="rev">v4.9</span></h3>
+
+<div class="tw"><table>
+<caption>v1 → v2</caption>
+<thead><tr><th></th><th>v1</th><th>v2</th></tr></thead>
+<tbody>
+<tr><td>나무</td><td>3 (타워·영웅·보조)</td><td><strong>5</strong> (타워·병력·영웅·기지·심연)</td></tr>
+<tr><td>노드</td><td>27, 한 번씩만</td><td><strong>45, 각 10레벨</strong></td></tr>
+<tr><td>해금</td><td>바로 위 노드 1개</td><td><strong>윗줄에 쌓은 레벨 ≥ 줄번호×5</strong></td></tr>
+<tr><td>비용</td><td>고정 (총 48💎)</td><td><strong>기본값 × 레벨</strong> (총 <strong>4126</strong>💎)</td></tr>
+</tbody></table></div>
+
+<p>구 세이브의 습득 노드는 하나당 2보석으로 환급한다.
+정액 공격력 노드는 <strong>얼음 도금</strong>(모든 타워에 감속)으로 바뀌었다.</p>
+
+<h3>⚒️ 대장간 — 값이 흔들리는 유일한 건물 <span class="rev">v4.9</span></h3>
+
+<p>다른 건물은 전부 "골드를 내면 정해진 만큼 오른다". 대장간은 <strong>보석</strong>을 받고,
+셋 중 둘은 <strong>확률</strong>이다.</p>
+
+<div class="tw"><table>
+<caption>세 갈래</caption>
+<thead><tr><th>갈래</th><th>값</th><th>확정/확률</th><th>내용</th></tr></thead>
+<tbody>
+<tr><td>🔨 장비 연마</td><td>💎 3×(N+1)×1.15</td><td>확정</td><td class="wrap">장비가 아니라 <strong>칸</strong>에 +N. 장비는 한 판짜리라 물건에 붙이면 매번 날아간다. 칸마다 +10, 단계당 +8%.</td></tr>
+<tr><td>🔥 타워 합성</td><td>💎 14 / 심</td><td>확률</td><td class="wrap">★5 둘 → ★6 (62%) … ★9 둘 → ★10 (18%). 실패하면 하나가 탄다. 가진 최고 별이 그 판의 <strong>타워 최고 레벨</strong>. ★10은 1레벨의 27배 화력.</td></tr>
+<tr><td>🎲 담금질</td><td>💎 4+숙련×1.6</td><td>확률</td><td class="wrap">숙련도를 걸고 굴린다. 실패하면 5단위 체크포인트로. 숙련도 1당 타워·아군 공격력 +2%, 최대 40 (+80%).</td></tr>
+</tbody></table></div>
+
+<p>합성이 특히 중요하다 — <strong>"5성 타워가 끝이면 결국 진행 불가 지역이 생긴다"</strong>는
+지적이 맞다. 타워 레벨 상한이 고정이면 아무리 골드를 벌어도 쓸 데가 없어지고
+어느 층에서 딱 멈춘다. ★10까지 열리면 상한 자체가 목표가 된다.</p>
+
+<h3>보석이 갈 곳 — 🎴 부적과 ♾️ 승천 <span class="rev">v4.9</span></h3>
+
+<p class="lede">플레이 보고: <strong>"26스테이지를 깨고 나니 보석이 140개 정도 모였는데
+이건 지금 캠프에 있는 모든 보석 사용처를 다 쓰고도 남는 양이야.
+이미 게임의 목표가 사라져버리는 느낌이 들었어."</strong></p>
+
+<p><strong>🎴 부적</strong> — 캠프 출격 탭에서 💎8에 하나 뽑고, 두 칸에 끼우고,
+출격하면 소모된다. 13종 · 등급별 가중치. 영구 강화와 달리
+"이번 판을 어떻게 풀 것인가"를 고르는 물건이다.</p>
+
+<p><strong>♾️ 승천</strong> — 끝이 있는 사용처는 결국 다 채워진다. 그런데 층당 보석은 계속 들어온다.
+해금 탭 아래에 값이 단계마다 12%씩 오르는 무한 트랙을 뒀다 — 아무리 벌어도 앞서가지 못한다.</p>
+
+<div class="tw"><table>
+<caption>보석 사용처 총계</caption>
+<thead><tr><th>사용처</th><th>v4.8</th><th>v4.9</th></tr></thead>
+<tbody>
+<tr><td>🔓 해금</td><td>63</td><td>63</td></tr>
+<tr><td>🌳 스킬 트리</td><td>48</td><td><strong>4126</strong></td></tr>
+<tr><td>⚒️ 대장간 연마</td><td>—</td><td>~1200</td></tr>
+<tr><td>⚒️ 타워 합성</td><td>—</td><td>~3000</td></tr>
+<tr><td>⚒️ 담금질</td><td>—</td><td>~1500</td></tr>
+<tr><td>🎴 부적</td><td>—</td><td><strong>무한</strong></td></tr>
+<tr><td>♾️ 승천</td><td>—</td><td><strong>무한</strong></td></tr>
+</tbody></table></div>
+
+<h3>상단으로 밀고 들어오던 것을 되돌리고, 대신 보여준다 <span class="rev">v4.9</span></h3>
+
+<p class="lede">플레이 보고: <strong>"8번의 수정사항은 게임의 근간을 흔드는 것 같아.
+위아래로 나뉜 두 개의 게임을 적절한 분배로 클리어해 나가는 게 게임의 묘미인데,
+이렇게 되면 상단 타워만 엄청 강화하면 하단을 버려도 상단으로 다 막히는 게임이 돼버려."</strong></p>
+
+<p>맞는 지적이라 v4.8의 spill을 되돌렸다. 대신 <strong>돌진 연출</strong>을 넣었다 —
+후퇴하거나 전멸하면 남은 몹들이 실제로 화면 위쪽 성으로 달려가 부딪히고,
+부딪힌 만큼 HP가 깎인다. 총 피해량은 예전과 같지만, 숫자로만 <code>-14HP</code>라고
+뜨던 것이 "몇 마리를 못 막았는지"로 눈에 보인다.</p>
+
+<h3>강화 카드 정리 · 용병 슬롯 줄바꿈 <span class="rev">v4.9</span></h3>
+
+<p>'즉시 골드 +15/+35'는 뺐다 — 2층만 가도 한 판에 수백 골드가 도는데
+강화 한 장을 그걸로 채우면 그 선택지는 없는 것과 같다. 정액 수치는 전부 배율로.
+새 카드 10장(관통 탄심 · 서리 코팅 · 과부하 개조 · 급소 찌르기 · 정예 사냥터 등)과
+<strong>대가가 있는 카드</strong> 둘 — 집중 포화(공격력 +80% / 사거리 −20%),
+결사대(아군 공격력 +70% / HP −25%).</p>
+
+<p>용병 슬롯이 최대치에서 화면 가로를 넘던 것은 줄당 개수를 화면 폭에서 계산해
+<strong>두 줄로 접는다</strong>. 특수 용병 칸도 같이.</p>
+
+<h3>하단을 비우면 그대로 상단으로 올라온다 <span class="rev">v4.8 · 되돌림</span></h3>
 
 <p class="lede">플레이 보고: <strong>"하단 아레나를 그냥 후퇴하면 돈을 좀 못 버는 것 말고는
 별다른 손해가 없는 것 같은데… 조기 후퇴를 하면 남은 웨이브가 한 번에 타워로 밀고 들어오는
@@ -1526,7 +1655,10 @@ Infinity가 되지 않게 하한을 두고, <span class="mono">dt</span>의 음�
 <thead><tr><th>키</th><th>내용</th><th class="num">상태</th></tr></thead>
 <tbody>
 <tr><td class="mono">gems</td><td class="wrap">보유 보석 (기존 <span class="mono">soulStones</span> 개명)</td><td><span class="chip lo">기존</span></td></tr>
-<tr><td class="mono">skillTreeOwned</td><td class="wrap">습득한 스킬 노드 id 배열</td><td><span class="chip lo">기존</span></td></tr>
+<tr><td class="mono">skillLevels</td><td class="wrap">스킬 노드 id → 레벨 (0~10)</td><td><span class="chip lo">v4.9</span></td></tr>
+<tr><td class="mono">forge</td><td class="wrap">⚒️ 대장간 — 심 재고 · 최고 별 · 담금질 숙련도 · 칸별 연마</td><td><span class="chip lo">v4.9</span></td></tr>
+<tr><td class="mono">charms / charmSlots</td><td class="wrap">🎴 부적 보관함과 장착 두 칸</td><td><span class="chip lo">v4.9</span></td></tr>
+<tr><td class="mono">ascension</td><td class="wrap">♾️ 승천 단계</td><td><span class="chip lo">v4.9</span></td></tr>
 <tr><td class="mono">clearedStages</td><td class="wrap">스테이지 클리어 여부 10칸</td><td><span class="chip lo">기존</span></td></tr>
 <tr><td class="mono">stats</td><td class="wrap">플레이 횟수 · 최고 웨이브 · 누적 처치 · 누적 골드</td><td><span class="chip lo">기존</span></td></tr>
 <tr><td class="mono">unlocked</td><td class="wrap"><span class="mono">{ towers:[...], units:[...] }</span></td><td><span class="chip md">신규</span></td></tr>

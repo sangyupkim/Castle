@@ -134,3 +134,31 @@ function skillProgress(gs) {
 // 로비에서 병력을 고를 수는 없다 — 골드는 런 안의 화폐다.
 // 출격은 언제나 가능하고, 편성은 첫 웨이브 준비 단계(마을)에서 한다.
 function canSortie() { return true; }
+
+// ─── ♾️ 승천 ─────────────────────────────────────────────────────────────────
+// 끝이 있는 사용처는 결국 다 채워진다. 해금 52, 스킬 4126, 대장간도 언젠가 끝난다.
+// 그런데 층당 보석은 계속 들어온다 — 그래서 절대 끝나지 않는 사용처가 하나 필요하다.
+// 값이 12%씩 붙으므로 아무리 벌어도 앞서가지 못한다. 저축이 계속 의미를 갖는다.
+const ASCEND_BASE = 25;
+const ASCEND_MULT = 1.12;
+const ASCEND_DMG  = 0.012;   // 단계당 타워·아군 공격력 +1.2%
+const ASCEND_HP   = 0.010;   // 단계당 기지·아군 HP +1.0%
+
+function ascendLevel(gs) { return (gs && gs.ascension) || 0; }
+function ascendCost(gs)  { return Math.round(ASCEND_BASE * Math.pow(ASCEND_MULT, ascendLevel(gs))); }
+function buyAscend(gs) {
+  const c = ascendCost(gs);
+  if ((gs.soulStones || 0) < c) return false;
+  gs.soulStones -= c;
+  gs.ascension = ascendLevel(gs) + 1;
+  reapplyAllBonuses(gs);
+  return true;
+}
+function applyAscend(gs) {
+  const n = ascendLevel(gs);
+  if (n <= 0) return;
+  BONUSES.towerDmgMult *= 1 + n * ASCEND_DMG;
+  BONUSES.unitAtkMult  *= 1 + n * ASCEND_DMG;
+  BONUSES.unitHpMult   *= 1 + n * ASCEND_HP;
+  BONUSES.baseHpMax    += Math.round(BASE_HP_MAX * n * ASCEND_HP);
+}

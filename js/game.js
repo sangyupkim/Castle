@@ -74,6 +74,7 @@ let _skillLevels   = {};   // 스킬 노드 id → 레벨(0~10)
 let _forge         = { cores:{}, best:5, mastery:0, plus:{} };  // ⚒️ 대장간 (보석)
 let _charms        = [];   // 🎴 보관 중인 일회용 부적
 let _charmSlots    = [null, null];
+let _ascension     = 0;    // ♾️ 승천 단계
 let _unlocked       = [];   // 보석으로 연 타워/유닛
 let _pacts          = [];   // 걸어둔 서약
 let _seenMobs       = [];   // 도감
@@ -155,6 +156,8 @@ function newState() {
     set charms(v) { _charms = v; },
     get charmSlots()  { return _charmSlots; },
     set charmSlots(v) { _charmSlots = v; },
+    get ascension()  { return _ascension; },
+    set ascension(v) { _ascension = v; },
     get unlocked()  { return _unlocked; },
     set unlocked(v) { _unlocked = v; },
     get pacts()  { return _pacts; },
@@ -191,6 +194,7 @@ let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적�
   _forge          = sv.forge      || { cores:{}, best:5, mastery:0, plus:{} };
   _charms         = sv.charms     || [];
   _charmSlots     = sv.charmSlots || [null, null];
+  _ascension      = sv.ascension  || 0;
   // 트리 v2 이전 세이브 — 노드 구성이 통째로 바뀌었으므로 습득분은 보석으로 환급한다
   if (!sv.skillLevels && Array.isArray(sv.skillTreeOwned) && sv.skillTreeOwned.length)
     _soulStones += sv.skillTreeOwned.length * SKILL_V1_REFUND;
@@ -658,7 +662,7 @@ const _PAGE_UI_KEYS = [
   'charmRollBtn','charmCards','charmSlotBtns',
   'specialCards','specialSlots','heroDefBtn','heroBatBtn','bountyBtn','eliteBtn','towerMiniGrid',
   'lobbyTabBtns','sortieBtn','trainBtn','metaCards','unlockBtns','pactBtns','sigilCards',
-  'skillTreeTabs','backupExportBtn','backupImportBtn',
+  'skillTreeTabs','ascendBtn','backupExportBtn','backupImportBtn',
   'tutReplayBtn','tutResetTipBtn','bgmToggleBtn','sfxToggleBtn',
   'resultBtn','waveBtn','battleWaveStartBtn','briefTownBtn','retreatBtn','modeBtn'
 ];
@@ -795,6 +799,12 @@ function handleLobbyTap(x, y) {
   }
 
   if (L.tab === 'unlock') {
+    if (hitTest(x,y,gs.ui.ascendBtn||{})) {
+      const c = ascendCost(gs);
+      if (buyAscend(gs)) { SaveManager.save(gs); spawnFloaty(`♾️ ${ascendLevel(gs)}단계!`,x,y,'#a78bfa'); SFX.levelUp(); }
+      else { spawnFloaty(`💎 ${c - gs.soulStones} 더 필요`,x,y,'#ef4444'); SFX.denied(); }
+      return;
+    }
     for (const b of gs.ui.unlockBtns||[]) {
       if (hitTest(x,y,b)) {
         if (buyUnlock(b.id, gs)) { spawnFloaty(`${b.icon} 해금!`,x,y,'#f59e0b'); SFX.levelUp(); }
@@ -862,7 +872,7 @@ function resetAllProgress() {
   _clearedStages = new Array(10).fill(false);
   _skillLevels = {};
   _forge = { cores:{}, best:5, mastery:0, plus:{} };
-  _charms = []; _charmSlots = [null, null];
+  _charms = []; _charmSlots = [null, null]; _ascension = 0;
   _unlocked = [];
   _heroSigil = DEFAULT_SIGIL;
   _unlockedSigils = [DEFAULT_SIGIL];
