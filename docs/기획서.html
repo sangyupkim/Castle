@@ -219,7 +219,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <div class="wrap">
 <header class="cover">
-  <div class="eyebrow">Game Design Document · v4.9 · 정액을 배율로</div>
+  <div class="eyebrow">Game Design Document · v4.10 · 기다리는 시간과 다시 하는 수고</div>
   <h1>듀얼 프론티어</h1>
   <p class="tagline">한 화면에서 두 개의 전선을 동시에 굴리는 모바일 웹 로그라이트.
      끝은 없다 — 얼마나 깊이 내려갔는지가 기록이다.</p>
@@ -228,7 +228,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
     <div><dt>플랫폼</dt><dd>모바일 웹 (480×800 캔버스)</dd></div>
     <div><dt>1회 하강</dt><dd>10~30분 (도달 층에 비례)</dd></div>
     <div><dt>현재 볼륨</dt><dd>훈련 30웨이브 + ∞ 무한 (알고리즘 생성)</dd></div>
-    <div><dt>이번 개정</dt><dd>정액→배율 밸런스 · 스킬트리 v2 · ⚒️대장간 · 🎴부적 (v4.9)</dd></div>
+    <div><dt>이번 개정</dt><dd>10배속 · 🔀타워 이설 · 👑배치 기억 (v4.10)</dd></div>
   </dl>
 </header>
 
@@ -1042,6 +1042,52 @@ v1.0의 "그룹 순환 + 보상 체감" 구조를 이 압력 곡선이 대체한
 "다음 영웅"이라는 목표가 되게 했다. 한 번 열면 <strong>언제든 무료로 갈아 끼운다</strong> —
 층 조합에 맞춰 바꾸는 것이 각인의 목적이므로 교체까지 잠그면 그냥 안 쓰게 된다.</p>
 
+<h3>배속 10배 · 🔀 타워 이설 · 👑 배치 기억 <span class="rev">v4.10</span></h3>
+
+<p class="lede">플레이 보고: <strong>"계속 해 나가다 보면 초반 스테이지들이 매우 쉬워지고
+루즈해지는 경우가 생길 것 같은데(캠프에서 능력치를 올려놓고 나면 타워 2개로도 많이 밀 수 있을 것 같음)
+배속을 한 10배속까지 만들면 좋을 것 같아."</strong></p>
+
+<p><code>SPEED_STEPS</code>를 <code>[1,2,3]</code> → <strong><code>[1,2,3,5,10]</code></strong>으로 늘렸다.
+스테이지 스킵은 넣지 않았다 — 지적대로 층을 지나며 받는 골드와 강화 카드가 진행의 뼈대라
+건너뛰면 그 층의 성장이 통째로 사라진다. 대신 같은 판을 열 배 빨리 치르게 한다.</p>
+
+<p>루프가 <code>dt</code>를 키우는 게 아니라 <code>update(dt)</code>를 N번 도는 방식이라
+10배속에서도 충돌 판정과 투사체가 건너뛰지 않는다. 수동 조작 중에는 여전히 2배속으로 강등된다.</p>
+
+<h4>🔀 타워 이설</h4>
+
+<p class="lede">플레이 보고: <strong>"10스테이지가 지나서 타워디펜스 길이 바뀌면 타워 위치들이 바뀌는데,
+타워 위치를 골드를 소모해서 변경할 수 있도록 해줘. 빈칸에 클릭하면 빈칸으로 옮겨지고,
+타워가 있는 곳을 클릭하면 돈을 두 배 소모해서 서로 교환되는 기능."</strong></p>
+
+<p>경로 위에 놓인 타워는 자동으로 밀려나지만 <strong>배치 전체</strong>는 어긋난 채 남았다.
+지금까지 유일한 수습은 팔고(회수 60%) 다시 짓는 것이었는데, 같은 종류를 지을수록
+건설비가 오르는 규칙까지 겹쳐 사실상 "처음부터 다시 하라"는 말이었다.</p>
+
+<div class="tw"><table>
+<caption>이설 비용</caption>
+<thead><tr><th>동작</th><th>값</th></tr></thead>
+<tbody>
+<tr><td>빈 칸으로 이동</td><td>투자액의 <strong>15%</strong> (최소 4💰)</td></tr>
+<tr><td>타워끼리 교환</td><td>두 타워 이설비의 <strong>합</strong> — 같은 값이면 정확히 두 배</td></tr>
+</tbody></table></div>
+
+<p>🏰마을 › 타워배치에서 타워를 고르면 <strong>🔀 이동</strong> 버튼이 붙는다.
+누르면 격자가 갈 수 있는 칸(파랑)과 맞바꿀 타워(보라)로 칠해진다.
+레벨·투자액·처치 수는 그대로 따라간다 — 옮기는 것이지 다시 짓는 게 아니다.
+경로 칸으로는 옮길 수 없고, 골드가 모자라면 차감 없이 거절한다.</p>
+
+<h4>👑 영웅 배치를 기억한다</h4>
+
+<p>층이 넘어갈 때마다 배치가 풀렸다. 원래는 "층 구성에 맞춰 다시 고르라"는 뜻이었는데,
+실제로는 거의 항상 같은 자리를 다시 고르는 반복 조작이 됐다 —
+배치를 잊으면 출격 자체가 막히므로 잊을 수도 없었다.</p>
+
+<p>마지막으로 고른 자리를 <code>heroPlacePref</code>로 영구 저장하고,
+<strong>층이 넘어갈 때 · 전사 후 복귀할 때 · 새 판을 시작할 때</strong> 자동으로 되돌린다.
+바꾸고 싶으면 예전처럼 버튼을 누르면 되고, 그 선택이 다시 기억된다.</p>
+
 <h3>정액을 배율로 — 26층이 무피해로 막히던 이유 <span class="rev">v4.9</span></h3>
 
 <p class="lede">플레이 보고: <strong>"26층까지 해봤는데 상단의 타워는 10층에서 업그레이드한
@@ -1659,6 +1705,7 @@ Infinity가 되지 않게 하한을 두고, <span class="mono">dt</span>의 음�
 <tr><td class="mono">forge</td><td class="wrap">⚒️ 대장간 — 심 재고 · 최고 별 · 담금질 숙련도 · 칸별 연마</td><td><span class="chip lo">v4.9</span></td></tr>
 <tr><td class="mono">charms / charmSlots</td><td class="wrap">🎴 부적 보관함과 장착 두 칸</td><td><span class="chip lo">v4.9</span></td></tr>
 <tr><td class="mono">ascension</td><td class="wrap">♾️ 승천 단계</td><td><span class="chip lo">v4.9</span></td></tr>
+<tr><td class="mono">heroPlacePref</td><td class="wrap">👑 마지막으로 고른 영웅 배치 자리</td><td><span class="chip lo">v4.10</span></td></tr>
 <tr><td class="mono">clearedStages</td><td class="wrap">스테이지 클리어 여부 10칸</td><td><span class="chip lo">기존</span></td></tr>
 <tr><td class="mono">stats</td><td class="wrap">플레이 횟수 · 최고 웨이브 · 누적 처치 · 누적 골드</td><td><span class="chip lo">기존</span></td></tr>
 <tr><td class="mono">unlocked</td><td class="wrap"><span class="mono">{ towers:[...], units:[...] }</span></td><td><span class="chip md">신규</span></td></tr>

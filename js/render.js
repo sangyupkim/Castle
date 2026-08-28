@@ -266,7 +266,7 @@ function renderDefense(ctx, gs) {
       }
       roundRect(ctx,ax,ay2,aw,ah,4); ctx.fillStyle='#0f172a'; ctx.fill(); ctx.strokeStyle='#f59e0b'; ctx.lineWidth=1.5; ctx.stroke();
       ctx.fillStyle='#f59e0b'; ctx.font='bold 8px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText(`Lv.${lv}/${TOWER_MAX_LEVEL}`,ax+18,ay2+ah/2);
+      ctx.fillText(`Lv.${lv}/${towerLevelCap()}`,ax+18,ay2+ah/2);
       if (lv<3) {
         roundRect(ctx,ax+26,ay2+2,42,ah-4,3); ctx.fillStyle='#1e3a5f'; ctx.fill(); ctx.strokeStyle='#60a5fa'; ctx.lineWidth=1; ctx.stroke();
         ctx.fillStyle='#60a5fa'; ctx.font='7px sans-serif'; ctx.fillText(`강화 ${lv*15}💰`,ax+47,ay2+ah/2);
@@ -4145,6 +4145,21 @@ function renderTownPageTowers(ctx, gs, startY) {
         ctx.strokeStyle='rgba(148,163,184,0.12)'; ctx.lineWidth=1;
         ctx.strokeRect(x+1.5,y+1.5,mCW-3,mCH-3);
       }
+      // 🔀 이설 모드 — 갈 수 있는 칸은 파랗게, 맞바꿀 타워는 보랗게
+      const mv = gs.ui.towerMove;
+      if (mv) {
+        const isSrc = mv.col===c && mv.row===r;
+        const occupied = gs.towers.some(tw=>tw.col===c&&tw.row===r);
+        if (isSrc) {
+          ctx.fillStyle='rgba(129,140,248,0.35)'; ctx.fillRect(x+1,y+1,mCW-2,mCH-2);
+        } else if (occupied) {
+          ctx.fillStyle='rgba(168,85,247,0.22)'; ctx.fillRect(x+1,y+1,mCW-2,mCH-2);
+        } else if (!isBlockedCell(c,r)) {
+          ctx.fillStyle='rgba(96,165,250,0.20)'; ctx.fillRect(x+1,y+1,mCW-2,mCH-2);
+          ctx.strokeStyle='rgba(96,165,250,0.55)'; ctx.lineWidth=1;
+          ctx.strokeRect(x+1.5,y+1.5,mCW-3,mCH-3);
+        }
+      }
       const tower=gs.towers.find(tw=>tw.col===c&&tw.row===r);
       if (tower) {
         const selected=gs.ui.towerAction&&gs.ui.towerAction.col===c&&gs.ui.towerAction.row===r;
@@ -4181,9 +4196,14 @@ function renderTownPageTowers(ctx, gs, startY) {
       ctx.font='20px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
       ctx.fillText(tpl.icon,14,panelY+20);
       ctx.fillStyle='#f1f5f9'; ctx.font='bold 12px sans-serif';
-      ctx.fillText(`${tpl.name}  Lv.${lv}/${TOWER_MAX_LEVEL}`,42,panelY+13);
+      ctx.fillText(`${tpl.name}  Lv.${lv}/${towerLevelCap()}`,42,panelY+13);
       ctx.fillStyle='#94a3b8'; ctx.font='bold 10px sans-serif';
-      ctx.fillText(`ATK ${st.dmg}   ${st.spd.toFixed(2)}/s   사거리 ${Math.round(st.range)}px   처치 ${tower.kills}`,42,panelY+29);
+      if (gs.ui.towerMove && gs.ui.towerMove.col===tower.col && gs.ui.towerMove.row===tower.row) {
+        ctx.fillStyle='#a5b4fc';
+        ctx.fillText(`옮길 칸을 고르세요 — 빈 칸 ${towerMoveCost(tower)}💰 · 타워끼리 교환은 두 배`,42,panelY+29);
+      } else {
+        ctx.fillText(`ATK ${st.dmg}   ${st.spd.toFixed(2)}/s   사거리 ${Math.round(st.range)}px   처치 ${tower.kills}`,42,panelY+29);
+      }
 
       // 등급별 실효 피해 — 이 타워가 무엇을 잘 잡는지
       const aff = TOWER_AFFINITY[tower.typeId] || {};
@@ -4211,8 +4231,19 @@ function renderTownPageTowers(ctx, gs, startY) {
         ctx.fillStyle='#f59e0b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
         ctx.fillText('★ 최고 레벨',12,panelY+55);
       }
-      const rbw=110,rbh=26,rbx=CW-10-rbw;
-      drawBtn(ctx,rbx,panelY+42,rbw,rbh,`🗑 판매 +${towerSellValue(tower)}💰`,'#3f1515','#ef4444');
+      // 🔀 이설 — 경로가 바뀌었을 때 배치를 통째로 다시 하지 않아도 되게
+      const mvOn  = !!(gs.ui.towerMove && gs.ui.towerMove.col===tower.col && gs.ui.towerMove.row===tower.row);
+      const mvCost= towerMoveCost(tower);
+      const mvAff = gs.gold >= mvCost;
+      const mbw=88, mbx=166;
+      drawBtn(ctx,mbx,panelY+42,mbw,26,
+              mvOn ? '✕ 취소' : `🔀 이동 ${mvCost}💰`,
+              mvOn ? '#312e81' : (mvAff?'#1e2a4f':'#1e293b'),
+              mvOn ? '#a5b4fc' : (mvAff?'#818cf8':'#64748b'), mvAff || mvOn);
+      gs.ui.towerMoveBtn={x:mbx,y:panelY+42,w:mbw,h:26};
+
+      const rbw=92,rbh=26,rbx=CW-10-rbw;
+      drawBtn(ctx,rbx,panelY+42,rbw,rbh,`🗑 +${towerSellValue(tower)}💰`,'#3f1515','#ef4444');
       gs.ui.towerRemoveBtn={x:rbx,y:panelY+42,w:rbw,h:rbh};
     }
   } else {
@@ -4224,8 +4255,8 @@ function renderTownPageTowers(ctx, gs, startY) {
     ctx.fillStyle='#64748b'; ctx.font='bold 10px sans-serif';
     ctx.fillText(tpl.desc,CW/2,panelY+38);
     ctx.fillStyle='#475569'; ctx.font='10px sans-serif';
-    ctx.fillText('빈 셀 탭 = 건설 / 세운 타워 탭 = 강화·판매',CW/2,panelY+56);
-    gs.ui.towerUpgradeBtn=null; gs.ui.towerRemoveBtn=null;
+    ctx.fillText('빈 셀 탭 = 건설 / 세운 타워 탭 = 강화·이동·판매',CW/2,panelY+56);
+    gs.ui.towerUpgradeBtn=null; gs.ui.towerRemoveBtn=null; gs.ui.towerMoveBtn=null;
   }
 
   // ── 배치 요약 ────────────────────────────────────────────────────────────

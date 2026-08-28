@@ -1,7 +1,7 @@
 'use strict';
 
 // 타이틀 화면에 표기되는 버전
-const GAME_VERSION = 'v0.9.0';
+const GAME_VERSION = 'v0.9.1';
 
 // 포기하고 정산하면 보석을 깎는다. 한 판이 10~30분이라 접을 길은 있어야 하지만,
 // 접는 쪽이 늘 이득이면 아무도 마지막 층을 버티지 않는다.
@@ -1612,7 +1612,28 @@ const HERO_LEVELS = [
 const HERO_MAX_LEVEL = HERO_LEVELS.length - 1;
 
 // ─── 게임 속도 ────────────────────────────────────────────────────────────────
-const SPEED_STEPS = [1, 2, 3];
+// 배속. 캠프 강화가 쌓이면 초반 층은 타워 두 개로도 밀리므로,
+// "안 지는 판"을 앉아서 기다리는 시간이 진짜 비용이 된다.
+// 루프가 dt를 키우지 않고 update()를 N번 도는 방식이라 10배속에서도
+// 충돌·투사체가 건너뛰지 않는다 — 정수만 쓸 수 있는 이유이기도 하다.
+const SPEED_STEPS = [1, 2, 3, 5, 10];
+
+// 타워 이설 — 경로가 바뀌면 잘 세워둔 배치가 통째로 어긋난다.
+// 판매 후 재건설(회수 60%)보다 싸되 공짜는 아니게, 투자액에 비례해 받는다.
+const TOWER_MOVE_PCT  = 0.15;
+const TOWER_MOVE_MIN  = 4;
+const TOWER_SWAP_MULT = 2;      // 타워끼리 맞바꾸면 두 배 — 둘 다 옮기는 것이므로
+function towerMoveCost(t) {
+  if (!t) return 0;
+  const inv = t.invested || TOWER_TYPES[t.typeId].cost;
+  return Math.max(TOWER_MOVE_MIN, Math.round(inv * TOWER_MOVE_PCT));
+}
+// 맞바꾸면 둘 다 옮기는 것이므로 둘의 이설비를 더한다 —
+// 같은 값의 타워끼리라면 정확히 한 번 옮기는 값의 두 배가 된다.
+function towerSwapCost(a, b) {
+  return b ? towerMoveCost(a) + towerMoveCost(b)
+           : towerMoveCost(a) * TOWER_SWAP_MULT;
+}
 
 const COLORS = {
   defenseBg:  '#0f172a',

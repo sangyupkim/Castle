@@ -266,6 +266,8 @@ function createWaveManager() {
       recalcMaxSlots(gs);
 
       gs.hero.placement = 'none';
+      // 마지막으로 고른 자리를 그대로 다시 적용한다 — 매 층 같은 버튼을 누르지 않아도 되게
+      if (typeof applyHeroPlacePref === 'function') applyHeroPlacePref(gs);
       // 아래 절반이 아레나 → 준비 화면으로 바뀐다. 연타 중이던 손가락이
       // 새로 생긴 버튼을 그대로 누르지 않도록 잠깐 탭을 막는다.
       if (typeof lockTapsBriefly === 'function') lockTapsBriefly();

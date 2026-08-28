@@ -75,6 +75,9 @@ let _forge         = { cores:{}, best:5, mastery:0, plus:{} };  // ⚒️ 대장
 let _charms        = [];   // 🎴 보관 중인 일회용 부적
 let _charmSlots    = [null, null];
 let _ascension     = 0;    // ♾️ 승천 단계
+// 👑 영웅을 어디에 세웠는지 기억한다. 층마다 배치가 풀리는데 매번 같은 곳을
+// 다시 고르는 게 일이었다 — 마지막으로 고른 자리를 다음 층·다음 판에 자동으로 적용한다.
+let _heroPlacePref = 'none';
 let _unlocked       = [];   // 보석으로 연 타워/유닛
 let _pacts          = [];   // 걸어둔 서약
 let _seenMobs       = [];   // 도감
@@ -134,7 +137,7 @@ function newState() {
     resultBanked:false,
     floaties:[],
     ui:{ waveBtn:{}, hireCards:[], hiredSlots:[], specialCards:[], specialSlots:[], heroDefBtn:{}, heroBatBtn:{},
-         metaCards:[], skillTreeTabs:[],
+         metaCards:[], skillTreeTabs:[], towerMove:null,
          lobbyTabBtns:[], unlockBtns:[], pactBtns:[], sortieBtn:{}, trainBtn:null, resultBtn:{},
          buildingScroll:null, pageScroll:null, briefScroll:null, lobbyScroll:null,
          pauseResumeBtn:null, pauseGiveUpBtn:null,
@@ -158,6 +161,8 @@ function newState() {
     set charmSlots(v) { _charmSlots = v; },
     get ascension()  { return _ascension; },
     set ascension(v) { _ascension = v; },
+    get heroPlacePref()  { return _heroPlacePref; },
+    set heroPlacePref(v) { _heroPlacePref = v; },
     get unlocked()  { return _unlocked; },
     set unlocked(v) { _unlocked = v; },
     get pacts()  { return _pacts; },
@@ -195,6 +200,7 @@ let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적�
   _charms         = sv.charms     || [];
   _charmSlots     = sv.charmSlots || [null, null];
   _ascension      = sv.ascension  || 0;
+  _heroPlacePref  = sv.heroPlacePref || 'none';
   // 트리 v2 이전 세이브 — 노드 구성이 통째로 바뀌었으므로 습득분은 보석으로 환급한다
   if (!sv.skillLevels && Array.isArray(sv.skillTreeOwned) && sv.skillTreeOwned.length)
     _soulStones += sv.skillTreeOwned.length * SKILL_V1_REFUND;
@@ -435,7 +441,7 @@ window.addEventListener('keydown', e => {
     case 'ArrowDown':  case 'x': nudgeArena(0,  28); break;
     case 'ArrowLeft':                      nudgeArena(-28, 0); break;
     case 'ArrowRight': case 'd': case 'D': nudgeArena( 28, 0); break;
-    case 'Escape': gs.ui.towerAction = null; break;
+    case 'Escape': gs.ui.towerAction = null; gs.ui.towerMove = null; break;
   }
 });
 
@@ -655,7 +661,7 @@ function tap({x,y}) {
 // gs.ui는 그리면서 채워지므로, 다른 페이지의 낡은 사각형이 남아 엉뚱한 탭을 먹는다.
 const _PAGE_UI_KEYS = [
   'buildingCards','wallRepairBtn','caveBtn','tabTownBtn','townBackBtn',
-  'buildingLvUpBtn','upgradeBtns','buildingScroll','pageScroll','briefScroll','lobbyScroll','hireCards','hiredSlots',
+  'buildingLvUpBtn','upgradeBtns','towerMoveBtn','buildingScroll','pageScroll','briefScroll','lobbyScroll','hireCards','hiredSlots',
   'heroInfoBtn','heroBackBtn','equipSlotBtns','invCards','skillSlotBtns','skillCards','heroPickBtn',
   'shopItemBtns','skillBuyBtns','shopTabBuy','shopTabUp',
   'forgeTabs','forgeGearBtns','forgeFuseBtns','forgeTemperBtn','forgeCoreBtn',
@@ -872,7 +878,7 @@ function resetAllProgress() {
   _clearedStages = new Array(10).fill(false);
   _skillLevels = {};
   _forge = { cores:{}, best:5, mastery:0, plus:{} };
-  _charms = []; _charmSlots = [null, null]; _ascension = 0;
+  _charms = []; _charmSlots = [null, null]; _ascension = 0; _heroPlacePref = 'none';
   _unlocked = [];
   _heroSigil = DEFAULT_SIGIL;
   _unlockedSigils = [DEFAULT_SIGIL];
@@ -909,6 +915,7 @@ function startRun(mode) {
   // 🎴 끼워둔 부적은 여기서 소모된다 — 판이 시작되면 사라지고 이 판에만 붙는다
   consumeCharmsForRun(gs);
   reapplyAllBonuses(gs);
+  applyHeroPlacePref(gs);   // 지난 판에 세워둔 자리 그대로 시작한다
   gs.inRun = true;
   gs.page  = 'battle';
   wm.init(0);
@@ -1079,7 +1086,7 @@ function handleTownTap(x,y) {
     // Tab buttons work even inside sub-screen
     if (hitTest(x,y,gs.ui.tabTownBtn||{}))   { t.screen='main'; t.tab='town';   t.scroll=0; return; }
     if (hitTest(x,y,gs.ui.tabArmyBtn||{}))   { t.screen='main'; t.tab='army';   t.scroll=0; return; }
-    if (hitTest(x,y,gs.ui.tabTowersBtn||{})) { t.screen='main'; t.tab='towers'; t.scroll=0; gs.ui.towerAction=null; return; }
+    if (hitTest(x,y,gs.ui.tabTowersBtn||{})) { t.screen='main'; t.tab='towers'; t.scroll=0; gs.ui.towerAction=null; gs.ui.towerMove=null; return; }
     if (hitTest(x,y,gs.ui.townBackBtn||{})) { t.screen='main'; t.scroll=0; return; }
     if (t.screen==='heroShop') {
       if (hitTest(x,y,gs.ui.shopTabBuy||{})) { t.shopTab='buy';     t.scroll=0; SFX.click(); return; }
@@ -1122,11 +1129,12 @@ function handleTownTap(x,y) {
   // Tab switching
   if (hitTest(x,y,gs.ui.tabTownBtn||{})) { t.tab='town';   t.scroll=0; return; }
   if (hitTest(x,y,gs.ui.tabArmyBtn||{})) { t.tab='army';   t.scroll=0; return; }
-  if (hitTest(x,y,gs.ui.tabTowersBtn||{})) { t.tab='towers'; t.scroll=0; gs.ui.towerAction=null; return; }
+  if (hitTest(x,y,gs.ui.tabTowersBtn||{})) { t.tab='towers'; t.scroll=0; gs.ui.towerAction=null; gs.ui.towerMove=null; return; }
 
   // Towers tab
   if (t.tab==='towers') {
     if (hitTest(x,y,gs.ui.towerUpgradeBtn||{})) { upgradeSelectedTower(x,y); return; }
+    if (hitTest(x,y,gs.ui.towerMoveBtn||{}))    { beginTowerMove();          return; }
     if (hitTest(x,y,gs.ui.towerRemoveBtn||{}))  { sellSelectedTower(x,y);    return; }
     for (const b of gs.ui.towerTypeBtns||[]) {
       if (hitTest(x,y,b)) { gs.selectedTowerType=b.typeId; gs.ui.towerAction=null; SFX.click(); return; }
@@ -1137,6 +1145,7 @@ function handleTownTap(x,y) {
         const c=Math.floor((x-mg.x)/mg.cellW);
         const r=Math.floor((y-mg.y)/mg.cellH);
         if (c<0||c>=GRID_COLS||r<0||r>=GRID_ROWS) return;
+        if (tryTowerMoveTo(c, r, x, y)) return;
         const existing=gs.towers.find(tw=>tw.col===c&&tw.row===r);
         if (existing) {
           gs.ui.towerAction=(gs.ui.towerAction?.col===c&&gs.ui.towerAction?.row===r)?null:{col:c,row:r,tower:existing};
@@ -1192,10 +1201,18 @@ function handleTownTap(x,y) {
     // ── 👑 영웅 상세 — 장비·스킬 ────────────────────────────────────────────
     if (t.heroView) { handleHeroDetailTap(x,y); return; }
     if (hitTest(x,y,gs.ui.heroInfoBtn||{})) { t.heroView=true; t.pick=null; t.scroll=0; SFX.click(); return; }
-    if (hitTest(x,y,gs.ui.heroDefBtn||{})) { gs.hero.placement=gs.hero.placement==='defense'?'none':'defense'; if (gs.hero.placement==='defense') gs.battle.ourTeam=gs.battle.ourTeam.filter(u=>!u.isHero); return; }
+    if (hitTest(x,y,gs.ui.heroDefBtn||{})) {
+      gs.hero.placement = gs.hero.placement==='defense' ? 'none' : 'defense';
+      if (gs.hero.placement==='defense') gs.battle.ourTeam=gs.battle.ourTeam.filter(u=>!u.isHero);
+      gs.heroPlacePref = gs.hero.placement;   // 다음 층·다음 판에도 여기에 선다
+      SaveManager.save(gs);
+      return;
+    }
     if (hitTest(x,y,gs.ui.heroBatBtn||{})) {
       if (gs.hero.placement==='battle') { gs.hero.placement='none'; gs.battle.ourTeam=gs.battle.ourTeam.filter(u=>!u.isHero); }
       else { gs.hero.placement='battle'; if (!gs.battle.ourTeam.some(u=>u.isHero)) gs.battle.ourTeam.unshift(makeHeroUnit(gs.hero)); }
+      gs.heroPlacePref = gs.hero.placement;
+      SaveManager.save(gs);
       return;
     }
     for (const card of gs.ui.hireCards||[]) {
@@ -1277,6 +1294,7 @@ function buildTowerAt(c, r, fx, fy) {
   t.invested = cost;
   gs.towers.push(t);
   gs.ui.towerAction = null;
+  gs.ui.towerMove = null;
   spawnFloaty(`-${cost}💰`, fx, fy, COLORS.gold);
   const ctr = cellCenter(c, r);
   FX.ring(ctr.x, ctr.y, TOWER_TYPES[typeId].color, 8);
@@ -1299,6 +1317,57 @@ function upgradeSelectedTower(x, y) {
   const ctr = cellCenter(tower.col, tower.row);
   FX.ring(ctr.x, ctr.y, '#22c55e', 9);
   SFX.upgrade();
+}
+
+// ─── 🔀 타워 이설 ────────────────────────────────────────────────────────────
+// 10층마다 경로가 바뀌면 공들여 잡은 배치가 통째로 어긋난다. 그때마다 팔고 다시 짓는 건
+// 회수 60% 손실에 건설비 상승까지 겹쳐서 사실상 "다시 하라"는 말이 된다.
+// 빈 칸으로 옮기는 값은 투자액의 15%, 타워끼리 맞바꾸면 그 두 배다.
+function beginTowerMove() {
+  const ta = gs.ui.towerAction;
+  if (!ta) return;
+  const tower = gs.towers.find(tw => tw.col === ta.col && tw.row === ta.row);
+  if (!tower) { gs.ui.towerAction = null; return; }
+  gs.ui.towerMove = (gs.ui.towerMove && gs.ui.towerMove.col === ta.col && gs.ui.towerMove.row === ta.row)
+                  ? null : { col: ta.col, row: ta.row };
+  SFX.click();
+}
+
+// 이설 모드에서 격자 한 칸을 눌렀다. 처리했으면 true.
+function tryTowerMoveTo(c, r, fx, fy) {
+  const mv = gs.ui.towerMove;
+  if (!mv) return false;
+  const from = gs.towers.find(tw => tw.col === mv.col && tw.row === mv.row);
+  if (!from) { gs.ui.towerMove = null; return false; }
+  if (c === mv.col && r === mv.row) { gs.ui.towerMove = null; SFX.click(); return true; }
+
+  const other = gs.towers.find(tw => tw.col === c && tw.row === r);
+  const cost  = other ? towerSwapCost(from, other) : towerMoveCost(from);
+
+  if (!other && isBlockedCell(c, r)) {
+    spawnFloaty('여기엔 세울 수 없습니다', fx, fy, '#ef4444'); SFX.denied(); return true;
+  }
+  if (gs.gold < cost) {
+    spawnFloaty(`골드 부족 — ${cost}💰 필요`, fx, fy, '#ef4444'); SFX.denied(); return true;
+  }
+
+  gs.gold -= cost;
+  if (other) {
+    other.col = mv.col; other.row = mv.row;
+    from.col = c; from.row = r;
+    spawnFloaty(`🔀 교환 -${cost}💰`, fx, fy, COLORS.gold);
+  } else {
+    from.col = c; from.row = r;
+    spawnFloaty(`🔀 이동 -${cost}💰`, fx, fy, COLORS.gold);
+  }
+  // 옮긴 자리에서 다시 조준하도록 쿨다운만 초기화한다 (레벨·투자액·처치수는 그대로)
+  from.cooldown = 0; if (other) other.cooldown = 0;
+  gs.ui.towerMove   = null;
+  gs.ui.towerAction = { col:c, row:r, tower:from };
+  const ctr = cellCenter(c, r);
+  FX.ring(ctr.x, ctr.y, '#818cf8', 9);
+  SFX.build();
+  return true;
 }
 
 function sellSelectedTower(x, y) {
@@ -1463,6 +1532,21 @@ function updateHeroDefense(dt) {
   }
 }
 
+// 기억해둔 자리에 영웅을 다시 세운다. 층이 넘어갈 때와 부활할 때 부른다.
+// 전사 중이거나 기억이 없으면 아무 일도 하지 않는다.
+function applyHeroPlacePref(state) {
+  const hero = state.hero;
+  if (!hero || hero.dead) return;
+  const pref = state.heroPlacePref || 'none';
+  if (pref !== 'defense' && pref !== 'battle') return;
+  hero.placement = pref;
+  if (pref === 'battle') {
+    if (!state.battle.ourTeam.some(u => u.isHero)) state.battle.ourTeam.unshift(makeHeroUnit(hero));
+  } else {
+    state.battle.ourTeam = state.battle.ourTeam.filter(u => !u.isHero);
+  }
+}
+
 function killHero(state) {
   const hero = state.hero;
   if (hero.dead) return;
@@ -1498,7 +1582,8 @@ function tickHeroDown(state) {
   }
   hero.dead = false;
   hero.hp = Math.max(1, Math.round(heroMaxHp() * heroReturnHpPct()));
-  hero.placement = 'none';   // 어디에 세울지는 다시 고르게 한다
+  hero.placement = 'none';
+  applyHeroPlacePref(state);   // 마지막으로 고른 자리에 그대로 복귀시킨다
   spawnFloaty(`👑 영웅 복귀 — HP ${Math.round(heroReturnHpPct()*100)}%`, CW/2, DEFENSE_H/2, '#22c55e');
   addLog(state.battle, '👑 영웅이 돌아왔습니다', '#22c55e');
   SFX.levelUp();
