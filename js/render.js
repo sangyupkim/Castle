@@ -453,8 +453,10 @@ function renderPauseOverlay(ctx) {
   ctx.fillStyle = _giveUpArmed ? '#fecaca' : '#94a3b8'; ctx.font='bold 14px sans-serif';
   ctx.fillText(_giveUpArmed ? '⚠ 정말 포기합니다 — 다시 탭' : '🏳 포기하고 정산', CW/2, y+bh/2-7);
   ctx.fillStyle = _giveUpArmed ? '#f87171' : '#475569'; ctx.font='bold 9px sans-serif';
-  const gaveUpGems = Math.max(1, Math.round(calcSoulStones(gs) * GIVE_UP_GEM_MULT));
-  ctx.fillText(`정산 💎${gaveUpGems}  —  끝까지 버티면 ${Math.round((1-GIVE_UP_GEM_MULT)*100)}% 더`, CW/2, y+bh/2+11);
+  const gaveUpGems = Math.max(0, Math.round(calcSoulStones(gs) * GIVE_UP_GEM_MULT));
+  ctx.fillText(gaveUpGems > 0
+    ? `정산 💎${gaveUpGems}  —  끝까지 버티면 ${Math.round((1-GIVE_UP_GEM_MULT)*100)}% 더`
+    : '정산 💎0  —  한 층이라도 넘어야 보석이 남습니다', CW/2, y+bh/2+11);
   gs.ui.pauseGiveUpBtn = {x:bx,y:y,w:bw,h:bh};
   y += bh + 18;
 
@@ -637,15 +639,22 @@ function renderBriefing(ctx, gs, top) {
   ctx.fillText(st.endless ? (gate ? `🏁 ${st.tier}층 — 관문` : `∞ ${st.tier}층`)
                           : `훈련 — 스테이지 ${st.stageLabel}`, 10, TOP+9);
   ctx.fillStyle='#475569'; ctx.font='bold 10px sans-serif';
-  ctx.fillText(st.endless ? `적 HP ×${endlessStatMult(gs.wave).toFixed(1)} · 이동 ×${endlessSpdMult(gs.wave).toFixed(2)} · 이 층 보석 +${endlessGemStep(st.tier).toFixed(1)}`
+  const _gemStep = st.endless ? endlessGemStepFor(st.tier, gs.runBestAtStart) : 0;
+  ctx.fillText(st.endless ? `적 HP ×${endlessStatMult(gs.wave).toFixed(1)} · 이동 ×${endlessSpdMult(gs.wave).toFixed(2)} · 이 층 보석 +${_gemStep.toFixed(2)}`
                           : `웨이브 ${st.waveInStage+1}/3${st.isBossStage?'  ★보스 스테이지':''}`, 10, TOP+26);
 
   // 최고 기록 — 지금 어디쯤인지가 무한의 유일한 좌표다
   if (st.endless) {
-    const best = gs.stats.bestEndless || 0;
-    ctx.textAlign='right'; ctx.fillStyle = st.tier > best ? '#22c55e' : '#334155';
+    const best  = gs.stats.bestEndless || 0;
+    const fresh = st.tier > (gs.runBestAtStart || 0);   // 처음 닿는 깊이인가
+    // 오른쪽 끝 110px은 ⏸·배속·음소거 버튼 자리다 — 그 앞에서 끊는다
+    const rx = CW - 118;
+    ctx.textAlign='right'; ctx.fillStyle = fresh ? '#22c55e' : '#334155';
     ctx.font='bold 10px sans-serif';
-    ctx.fillText(st.tier > best ? `★ 신기록 구간` : `최고 ${best}층`, CW-10, TOP+12);
+    ctx.fillText(fresh ? `★ 신기록 구간` : `최고 ${best}층`, rx, TOP+10);
+    // 되짚는 층은 보석이 1/10이다 — 내려가기 전에 알아야 판단이 된다
+    ctx.fillStyle = fresh ? '#4ade80' : '#8a6a33'; ctx.font='bold 9px sans-serif';
+    ctx.fillText(fresh ? '💎 첫 돌파 — 제값' : `💎 되짚는 층 ×${ENDLESS_REPEAT_MULT}`, rx, TOP+27);
     ctx.textAlign='left';
   }
 
@@ -1307,7 +1316,7 @@ function renderTrainingClear(ctx, gs) {
   ctx.fillText(`${TRAINING_WAVES}웨이브를 모두 막아냈습니다`, CW/2, y); y += 40;
 
   // ── 무한 해금 ──
-  const bw = CW-56, bx = 28, bh = 118;
+  const bw = CW-56, bx = 28, bh = 128;
   roundRect(ctx, bx, y, bw, bh, 10);
   ctx.fillStyle='#1a0d2e'; ctx.fill(); ctx.strokeStyle='#a78bfa'; ctx.lineWidth=2; ctx.stroke();
   ctx.textAlign='center';
@@ -1317,7 +1326,9 @@ function renderTrainingClear(ctx, gs) {
   ctx.fillText('1층부터 내려가며 버티는 본편입니다.', CW/2, y+46);
   ctx.fillText('층마다 적이 강해지고 새 변형이 붙습니다.', CW/2, y+64);
   ctx.fillStyle='#a78bfa'; ctx.font='bold 11px sans-serif';
-  ctx.fillText('깊이 갈수록 층당 보석이 커집니다 — 그게 다음 판의 힘입니다.', CW/2, y+88);
+  ctx.fillText('보석은 처음 닿은 깊이에서만 제값입니다.', CW/2, y+86);
+  ctx.fillStyle='#7c6aa8'; ctx.font='10px sans-serif';
+  ctx.fillText(`이미 돌파한 층을 되짚을 때는 ×${ENDLESS_REPEAT_MULT} — 더 내려가야 벌립니다.`, CW/2, y+102);
   y += bh + 22;
 
   // ── 층 전망 ──
@@ -1338,7 +1349,8 @@ function renderTrainingClear(ctx, gs) {
     ctx.fillStyle='#f87171'; ctx.font='bold 10px sans-serif';
     ctx.fillText(`적 ×${endlessCurve(t, ENDLESS_EXP).toFixed(1)}`, cx2, y+50);
     ctx.fillStyle='#a78bfa'; ctx.font='bold 10px sans-serif';
-    ctx.fillText(`💎${Math.floor(endlessGemTotal(t))}`, cx2, y+68);
+    // 내 기록을 반영한 값 — 이미 돌파한 층은 1/10이라 표에도 그렇게 나와야 한다
+    ctx.fillText(`💎${Math.floor(endlessGemTotalFor(t, gs.stats.bestEndless || 0))}`, cx2, y+68);
   });
   ctx.textAlign='left'; ctx.fillStyle='#334155'; ctx.font='9px sans-serif';
   ctx.fillText('10층마다 관문 — 최초 돌파에 보석이 따로 붙습니다.', bx+14, y+86);

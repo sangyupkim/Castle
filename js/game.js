@@ -109,6 +109,9 @@ function newState() {
     floorEvent:null,    // 이 층에만 걸리는 규칙 변화
     innOffers:[],       // 이번 웨이브에 여관에 와 있는 특수 용병
     endlessGems:0,      // 무한 층에서 쌓인 보석
+    endlessGemsNew:0,   // 그중 처음 닿은 깊이에서 온 몫
+    endlessGemsOld:0,   // 그중 이미 돌파해 본 층에서 온 몫
+    runBestAtStart:0,   // 이 판을 시작할 때의 최고 기록 — 첫 돌파 판정의 기준
     bountyPending:false,// 이번 웨이브에 소환 예약됨
     eliteUsed:0,        // 하단 정예를 몇 번 불렀는지
     elitePending:false, // 이번 웨이브에 하단 정예 예약됨
@@ -193,7 +196,12 @@ let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적�
   gs.eliteUsed   = sv.eliteUsed   || 0;
   gs.mode          = sv.mode === 'endless' ? 'endless' : 'campaign';
   gs.runSeed       = sv.runSeed || 0;
-  gs.endlessGems   = sv.endlessGems || 0;
+  gs.endlessGems    = sv.endlessGems || 0;
+  gs.endlessGemsNew = sv.endlessGemsNew || 0;
+  gs.endlessGemsOld = sv.endlessGemsOld || 0;
+  // 옛 세이브에는 없다 — 없으면 지금 기록을 기준으로 삼는다(이미 지나온 층은 되짚기로 친다)
+  gs.runBestAtStart = sv.runBestAtStart !== undefined
+                    ? sv.runBestAtStart : ((sv.stats && sv.stats.bestEndless) || 0);
   gs.rerolls     = sv.rerolls     || 0;
   if (sv.townBuildings) {
     for (const [k, v] of Object.entries(sv.townBuildings)) {
@@ -778,6 +786,9 @@ function startRun(mode) {
   // 판마다 다른 시드 — 같은 층도 구성과 변형이 달라진다
   gs.runSeed = (Math.floor(Math.random() * 0x7FFFFFFF) | 0) || 1;
   gs.mode  = (mode === 'endless' && endlessUnlocked()) ? 'endless' : 'campaign';
+  // 판이 도는 동안 최고 기록은 계속 갱신된다. 첫 돌파를 판정하려면
+  // 시작 시점의 기록을 따로 붙들고 있어야 한다.
+  gs.runBestAtStart = (gs.stats && gs.stats.bestEndless) || 0;
   applyPathVariant(0);
   gs.pathChanged = null;
   refreshInnOffers(gs);

@@ -8,7 +8,7 @@
 // 스프라이트 목록은 게임과 같은 파일에서 읽는다 — 두 군데에 적으면 반드시 어긋난다
 try { importScripts('assets/images/manifest.js'); } catch (e) {}
 
-const CACHE = 'dual-frontier-v0.7.0';
+const CACHE = 'dual-frontier-v0.7.1';
 
 const SHELL = [
   '.', 'index.html', 'manifest.webmanifest',

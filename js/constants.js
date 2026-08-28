@@ -1,7 +1,7 @@
 'use strict';
 
 // 타이틀 화면에 표기되는 버전
-const GAME_VERSION = 'v0.7.0';
+const GAME_VERSION = 'v0.7.1';
 
 // 포기하고 정산하면 보석을 깎는다. 한 판이 10~30분이라 접을 길은 있어야 하지만,
 // 접는 쪽이 늘 이득이면 아무도 마지막 층을 버티지 않는다.
@@ -960,10 +960,40 @@ const ENDLESS_GATE_BONUS_STEP = 3;    // 관문마다 증가
 function endlessGemStep(tier) {
   return ENDLESS_GEM_BASE + Math.max(0, (tier || 1) - 1) * ENDLESS_GEM_ACCEL;
 }
+
+// 이미 돌파해 본 층은 값이 거의 없다.
+// 예전에는 몇 층이든 내려갈 때마다 같은 값을 줬다. 그러면 최고 기록이 40층인 사람에게도
+// 1~10층을 빠르게 훑고 나오는 쪽이 41층을 노리는 것보다 시간당 이득이 커진다 —
+// 깊이가 점수인 게임에서 얕은 반복이 최적 전략이 되는 것은 앞뒤가 안 맞는다.
+// 그래서 보석은 '처음 닿은 깊이'에만 제값이 붙고, 되짚는 층은 1/10만 남긴다.
+const ENDLESS_REPEAT_MULT = 0.10;
+// 되짚기를 1/10로 깎으면 층 적립만으로는 벌이가 4분의 1로 준다.
+// 그 몫을 '새로 돌파한 층'으로 옮긴다 — 벌이의 중심을 깊이로 밀어붙이는 것이 이 개편의 목적이므로,
+// 총량을 줄이는 게 아니라 어디서 버는지를 바꾸는 것이 맞다.
+// 깊은 층은 한 층 내려가기가 더 어려우니 층당 몫도 기록에 비례해 커진다.
+const ENDLESS_NEW_FLOOR_GEM   = 1.0;    // 새로 돌파한 층 한 층당
+const ENDLESS_NEW_FLOOR_DEPTH = 0.06;   // 기존 기록 한 층당 가산
+function newDepthGems(cleared, bestAtStart) {
+  const gained = Math.max(0, (cleared || 0) - (bestAtStart || 0));
+  if (!gained) return 0;
+  return Math.round(gained * (ENDLESS_NEW_FLOOR_GEM + (bestAtStart || 0) * ENDLESS_NEW_FLOOR_DEPTH));
+}
+// 이번 판에서 이 층을 넘었을 때 쌓이는 몫. bestAtStart는 판을 시작할 때의 최고 기록.
+function endlessGemStepFor(tier, bestAtStart) {
+  const first = tier > (bestAtStart || 0);
+  return endlessGemStep(tier) * (first ? 1 : ENDLESS_REPEAT_MULT);
+}
 // t층까지 내려갔을 때 쌓이는 총량 (표시용 — 실제 적립은 층마다 endlessGemStep)
 function endlessGemTotal(tier) {
   const t = Math.max(0, tier || 0);
   return t * ENDLESS_GEM_BASE + ENDLESS_GEM_ACCEL * t * (t - 1) / 2;
+}
+// 최고 기록이 best인 사람이 t층까지 내려갔을 때 실제로 받는 총량.
+// best층까지는 되짚기라 1/10, 그 위는 제값이다.
+function endlessGemTotalFor(tier, best) {
+  const t = Math.max(0, tier || 0);
+  const b = Math.min(t, Math.max(0, best || 0));
+  return endlessGemTotal(b) * ENDLESS_REPEAT_MULT + (endlessGemTotal(t) - endlessGemTotal(b));
 }
 
 // 1층이 기준(×1)이고 거기서부터 오른다

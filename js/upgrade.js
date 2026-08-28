@@ -270,11 +270,18 @@ function calcSoulStones(gs) {
   const mult     = pactGemMult() * (gs.gaveUp ? GIVE_UP_GEM_MULT : 1);
 
   if (gs.mode === 'endless') {
-    const tier    = Math.max(1, gs.wave + 1);
+    // 한 층도 못 넘겼으면 정산할 것이 없다.
+    // 예전에는 Math.max(1, …) 두 겹이 바닥을 깔아서, 들어가자마자 나가도 보석이 나왔다 —
+    // 케이브 레벨이 최소 1이라 항상 1 이상이었고, 기록 갱신 항목까지 붙어 2개씩 나왔다.
+    // 아무것도 하지 않은 판에 값을 매기면 그게 최적 전략이 된다.
+    const cleared = Math.max(0, gs.wave);              // 실제로 돌파한 층 수
+    if (cleared <= 0) return 0;
+
     const endTerm = Math.floor(gs.endlessGems || 0);
-    const recTerm = tier > (gs.stats.bestEndless || 0) ? Math.max(3, Math.floor(tier / 4)) : 0;
-    const base    = Math.max(1, endTerm + caveTerm + killTerm + recTerm);
-    return Math.max(1, Math.round(base * mult));
+    // 새로 돌파한 층이 벌이의 중심이다. 판 시작 시점의 기록과 견준다 —
+    // 판 도중에 갱신되는 값을 쓰면 한 층도 못 넘긴 판이 자기 자신을 갱신한 것으로 쳐서 보너스를 받는다.
+    const recTerm = newDepthGems(cleared, gs.runBestAtStart);
+    return Math.max(0, Math.round((endTerm + caveTerm + killTerm + recTerm) * mult));
   }
 
   // 훈련 정산 — 아주 적게. 훈련은 심연으로 가기 전에 조작을 익히는 6웨이브짜리 과정이고,
@@ -288,12 +295,31 @@ function soulStoneBreakdown(gs) {
   const mult = pactGemMult();   // 서약 배율만 — 포기 감액은 따로 보여준다
 
   if (gs.mode === 'endless') {
-    const tier = Math.max(1, gs.wave + 1);
-    rows.push({ label:'∞ 도달 층',   value:Math.floor(gs.endlessGems||0), note:`${tier}층 · 깊을수록 층당 몫이 큽니다` });
+    const cleared = Math.max(0, gs.wave);
+    const start   = gs.runBestAtStart || 0;
+    if (cleared <= 0) {
+      rows.push({ label:'돌파한 층 없음', value:0, note:'한 층이라도 넘어야 정산이 있습니다' });
+      return { rows, mult, gaveUp:!!gs.gaveUp, total: 0 };
+    }
+    // 새 깊이와 되짚은 층을 갈라 보여준다 — 어디서 벌었는지가 보여야 다음 판이 달라진다.
+    // 층 적립은 소수로 쌓이고 총합에서 한 번만 내림하므로, 나눠 적을 때도 합이 총합과 맞아야 한다.
+    const rawNew = gs.endlessGemsNew || 0, rawOld = gs.endlessGemsOld || 0;
+    const endTerm = Math.floor(rawNew + rawOld);
+    const nw = Math.min(endTerm, Math.floor(rawNew));
+    const od = endTerm - nw;
+    if (cleared > start) {
+      rows.push({ label:'∞ 새 깊이', value:nw,
+                  note:`${start+1}~${cleared}층 · 처음 닿은 깊이 → ${rawNew.toFixed(1)}` });
+    }
+    if (start > 0) {
+      rows.push({ label:'∞ 되짚은 층', value:od,
+                  note:`1~${Math.min(cleared, start)}층 · ×${ENDLESS_REPEAT_MULT} 적용 → ${rawOld.toFixed(1)}` });
+    }
     rows.push({ label:'케이브 레벨', value:gs.caveLevel, note:`Lv.${gs.caveLevel}` });
     rows.push({ label:'처치',        value:Math.floor((gs.battle.runKills||0)/60), note:`${gs.battle.runKills||0}마리 ÷ 60` });
-    if (tier > (gs.stats.bestEndless || 0)) {
-      rows.push({ label:'최고 기록 갱신', value:Math.max(3, Math.floor(tier/4)), note:`이전 최고 ${gs.stats.bestEndless||0}층` });
+    if (cleared > start) {
+      rows.push({ label:'새로 돌파한 층', value:newDepthGems(cleared, start),
+                  note:`${start}층 → ${cleared}층 · ${cleared-start}개 층` });
     }
     return { rows, mult, gaveUp:!!gs.gaveUp, total: calcSoulStones(gs) };
   }

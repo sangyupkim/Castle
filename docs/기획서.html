@@ -219,7 +219,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <div class="wrap">
 <header class="cover">
-  <div class="eyebrow">Game Design Document · v4.6 · 이모지를 걷어낸다</div>
+  <div class="eyebrow">Game Design Document · v4.7 · 보석은 깊이에만</div>
   <h1>듀얼 프론티어</h1>
   <p class="tagline">한 화면에서 두 개의 전선을 동시에 굴리는 모바일 웹 로그라이트.
      끝은 없다 — 얼마나 깊이 내려갔는지가 기록이다.</p>
@@ -228,7 +228,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
     <div><dt>플랫폼</dt><dd>모바일 웹 (480×800 캔버스)</dd></div>
     <div><dt>1회 하강</dt><dd>10~30분 (도달 층에 비례)</dd></div>
     <div><dt>현재 볼륨</dt><dd>훈련 30웨이브 + ∞ 무한 (알고리즘 생성)</dd></div>
-    <div><dt>이번 개정</dt><dd>픽셀 아트 51장 적용 · 몬스터 애니메이션 (v4.6)</dd></div>
+    <div><dt>이번 개정</dt><dd>보석은 처음 닿은 깊이에만 · 되짚기 ×0.1 (v4.7)</dd></div>
   </dl>
 </header>
 
@@ -1041,6 +1041,66 @@ v1.0의 "그룹 순환 + 보상 체감" 구조를 이 압력 곡선이 대체한
 <p>셋 다 처음부터 열려 있으면 고르는 데 값이 없다. 심연에서 모은 보석이
 "다음 영웅"이라는 목표가 되게 했다. 한 번 열면 <strong>언제든 무료로 갈아 끼운다</strong> —
 층 조합에 맞춰 바꾸는 것이 각인의 목적이므로 교체까지 잠그면 그냥 안 쓰게 된다.</p>
+
+<h3>들어가자마자 나가도 보석이 나왔다 <span class="rev">v4.7 · 버그</span></h3>
+
+<p class="lede">플레이 보고: <strong>"심연 모드에서 스테이지 시작하자마자 나가도 보석을 하나 주는 현상이 있어."</strong></p>
+
+<p><span class="mono">calcSoulStones</span>에 바닥이 두 겹 깔려 있었다.
+케이브 레벨이 최소 1이라 항상 1을 얹었고, 거기에 기록 갱신 항목까지 붙었다 —
+<span class="mono">bestEndless</span>는 층을 넘겨야 갱신되는데
+<span class="mono">tier = wave+1 = 1 &gt; 0</span>은 언제나 참이라
+<strong>한 층도 못 넘긴 판이 자기 자신을 갱신한 것으로 쳐서</strong> 매번 3을 더 받았다.
+들어갔다 나오기만 반복하면 판당 2보석이 무한히 나왔다.</p>
+
+<p>바닥을 걷어내고 <strong>한 층도 못 넘겼으면 0</strong>으로 잘랐다.
+기록 갱신은 <em>판을 시작할 때의 기록</em>과 견준다.</p>
+
+<h3>되짚는 층은 1/10 <span class="rev">v4.7</span></h3>
+
+<p class="lede">플레이 보고: <strong>"처음 클리어하는 스테이지에는 보석을 줘도 될 것 같은데,
+그 이후에 도달하는 스테이지는 보상을 낮춰야 할 것 같아. 이미 클리어한 스테이지는 ×0.1을 하는 식으로."</strong></p>
+
+<p>정확한 지적이다. 정액이면 <strong>최고 기록이 40층인 사람에게도 1~10층을 빠르게 훑고 나오는 쪽이
+41층을 노리는 것보다 시간당 이득이 크다</strong> — 깊이가 점수인 게임에서 얕은 반복이 최적 전략이 된다.</p>
+
+<p>기준은 <strong>판을 시작할 때의 최고 기록</strong>(<span class="mono">gs.runBestAtStart</span>)이다.
+판이 도는 동안 갱신되는 <span class="mono">bestEndless</span>를 쓰면 매 층이 자기 자신을 갱신해서
+전부 첫 돌파가 돼 버린다. 세이브에도 남긴다 — 중간에 껐다 켜도 기준이 흔들리면 안 된다.</p>
+
+<h3>깎은 몫은 ‘새로 돌파한 층’으로 <span class="rev">v4.7</span></h3>
+
+<p>되짚기만 1/10로 깎으면 층 적립이 4분의 1로 준다. 총량을 줄이는 게 목적이 아니라
+<strong>어디서 버는지를 바꾸는 것</strong>이 목적이므로, 그 몫을 새 깊이로 옮겼다.
+깊은 층은 한 층 내려가기가 더 어려우니 층당 몫도 기록에 비례해 커진다
+(<span class="mono">1.0 + 기록×0.06</span>). 예전의 정액 “최고 기록 갱신” 보너스를 이걸로 갈아치웠다.</p>
+
+<div class="tw"><table>
+<caption>실측 — 기록 대비 실제 수령 (케이브 1 포함 · 처치 항목 별도)</caption>
+<thead><tr><th class="num">기록</th><th class="num">도달</th><th class="num">층 적립</th><th class="num">새 깊이</th><th class="num">합계</th><th class="num">예전</th></tr></thead>
+<tbody>
+<tr><td class="num">0</td><td class="num">10</td><td class="num">4</td><td class="num">10</td><td class="num"><strong>15</strong></td><td class="num">8</td></tr>
+<tr><td class="num">0</td><td class="num">20</td><td class="num">12</td><td class="num">20</td><td class="num"><strong>33</strong></td><td class="num">18</td></tr>
+<tr><td class="num">10</td><td class="num">10</td><td class="num">0</td><td class="num">0</td><td class="num"><strong>1</strong></td><td class="num">8</td></tr>
+<tr><td class="num">20</td><td class="num">25</td><td class="num">6</td><td class="num">11</td><td class="num"><strong>18</strong></td><td class="num">25</td></tr>
+<tr><td class="num">30</td><td class="num">30</td><td class="num">2</td><td class="num">0</td><td class="num"><strong>3</strong></td><td class="num">32</td></tr>
+<tr><td class="num">40</td><td class="num">45</td><td class="num">13</td><td class="num">17</td><td class="num"><strong>31</strong></td><td class="num">62</td></tr>
+<tr><td class="num">50</td><td class="num">55</td><td class="num">17</td><td class="num">20</td><td class="num"><strong>38</strong></td><td class="num">86</td></tr>
+</tbody></table></div>
+
+<p>읽는 법은 하나다 — <strong>한 층이라도 더 내려가면 벌고, 제자리면 거의 못 번다.</strong>
+첫 하강은 전부 새 깊이라 오히려 예전보다 후하다. 신규 플레이어가 손해 보지 않는다.</p>
+
+<p><strong>막힘 방지</strong> — 기록을 못 깬 판도 처치 항목(처치÷60)은 그대로 들어온다.
+깊은 판이면 500마리 안팎이라 8보석쯤 된다. 들어갔다 나오면 처치가 0이라 여전히 0이다 —
+값이 붙는 것은 ‘들어간 것’이 아니라 <em>‘싸운 것’</em>이다.</p>
+
+<p><strong>내려가기 전에 알 수 있게</strong> — 브리핑에
+<span class="mono">★ 신기록 구간 / 💎 첫 돌파 — 제값</span> 또는
+<span class="mono">최고 N층 / 💎 되짚는 층 ×0.1</span>을 띄우고, 이 층의 실제 적립도
+배율을 반영해 표시한다(<span class="mono">+0.84</span> vs <span class="mono">+0.04</span>).
+층 전망 표는 <span class="mono">endlessGemTotalFor(t, best)</span>로 <em>내 기록 기준</em> 수령액을 보여주고,
+결과 정산은 <span class="mono">∞ 새 깊이</span> / <span class="mono">∞ 되짚은 층</span>으로 갈라 적는다.</p>
 
 <h3>이모지를 걷어낸다 <span class="rev">v4.6</span></h3>
 

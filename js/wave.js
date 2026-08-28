@@ -296,7 +296,14 @@ function createWaveManager() {
       // 무한은 층마다 보석이 쌓이고, 깊이 들어갈수록 층당 몫이 커진다
       const et = endlessTier(this.waveIndex);
       if (et > 0) {
-        gs.endlessGems = (gs.endlessGems || 0) + endlessGemStep(et) * fev('gemMult', 1);
+        // 처음 닿은 깊이인지 되짚는 층인지에 따라 몫이 다르다.
+        // 기준은 '판을 시작할 때의 최고 기록'이다 — 판이 진행되며 갱신되는 값을 쓰면
+        // 매 층이 자기 자신을 갱신해서 전부 첫 돌파가 돼 버린다.
+        const first = et > (gs.runBestAtStart || 0);
+        const step  = endlessGemStepFor(et, gs.runBestAtStart) * fev('gemMult', 1);
+        gs.endlessGems = (gs.endlessGems || 0) + step;
+        if (first) gs.endlessGemsNew = (gs.endlessGemsNew || 0) + step;
+        else       gs.endlessGemsOld = (gs.endlessGemsOld || 0) + step;
         gs.stats.bestEndless = Math.max(gs.stats.bestEndless || 0, et);
         // 관문(10층 단위) 최초 돌파는 일회성 보상
         if (isGateTier(et)) {
