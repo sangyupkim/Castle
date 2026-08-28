@@ -1,7 +1,7 @@
 'use strict';
 
 // 타이틀 화면에 표기되는 버전
-const GAME_VERSION = 'v0.9.2';
+const GAME_VERSION = 'v0.9.3';
 
 // 포기하고 정산하면 보석을 깎는다. 한 판이 10~30분이라 접을 길은 있어야 하지만,
 // 접는 쪽이 늘 이득이면 아무도 마지막 층을 버티지 않는다.
@@ -517,6 +517,8 @@ const ARENA_STATUS_H = 28;
 // 480 논리폭을 6인치 화면에 늘려 놓아도 손가락에는 여전히 작았다.
 // 아레나가 8px 줄지만, 개체 몸집을 키운 뒤라 체감은 없다.
 const ARENA_CTRL_H   = 40;
+// 준비 화면 위쪽 ⏸·배속·🔊 전용 띠. 브리핑 본문은 이 아래에서 시작한다.
+const BRIEF_CTRL_H   = 38;
 const ARENA_X = 0;
 const ARENA_Y = BATTLE_Y + ARENA_STATUS_H;
 const ARENA_W = CW;
@@ -623,10 +625,11 @@ const ROGUE_STEALTH_SPD   = 1.45;  // 은신 중 이동속도 배율 — 파고�
 const ROGUE_GREED_CHANCE  = 0.55;  // 드랍이 떨어졌을 때 주우러 갈 확률
 
 const ARENA_REGEN_DELAY = 4.0;   // 마지막 피격 후 이 시간이 지나야 회복 시작
-// 기본 자연 회복은 없앴다. 4.5%/s면 22초면 만피가 되어, 전투가 끝났을 때 부대는
-// 늘 "죽었거나 멀쩡하거나" 둘 중 하나였다 — 그 사이가 없으면 🏨여관이 할 일이 없다.
-// 이제 재생은 카드·장비·스킬(regenBonus)로만 붙는다. 회복은 여관에서 사는 것이다.
-const ARENA_REGEN_PCT   = 0.0;   // 초당 최대 HP 비율 (기본값 — 이제 0)
+// 기본 자연 회복을 0.5%/s까지 낮췄다. 4.5%/s면 22초면 만피가 되어, 전투가 끝났을 때
+// 부대는 늘 "죽었거나 멀쩡하거나" 둘 중 하나였다 — 그 사이가 없으면 🏨여관이 할 일이 없다.
+// 0.5%/s는 60초를 온전히 쉬어야 30%다. 있는 듯 없는 듯한 몫만 남기고,
+// 실질적인 재생은 카드·장비·스킬(regenBonus)로 사게 한다.
+const ARENA_REGEN_PCT   = 0.005; // 초당 최대 HP 비율 — 있는 듯 없는 듯한 수준만 남긴다
 
 function spawnInterval(elapsed) {
   const base = SPAWN_BASE_INTERVAL * (BONUSES.pactSpawnMult || 1) / (BONUSES.spawnSpeedMult || 1);
@@ -1080,6 +1083,17 @@ function newDepthGems(cleared, bestAtStart) {
   if (!gained) return 0;
   return Math.round(gained * (ENDLESS_NEW_FLOOR_GEM + (bestAtStart || 0) * ENDLESS_NEW_FLOOR_DEPTH));
 }
+// 깊이와 무관한 정산 항(케이브 레벨 · 처치 수)에 걸리는 배율.
+// 전부 되짚기면 ENDLESS_REPEAT_MULT, 전부 새 깊이면 1.0, 그 사이는 비례.
+// 층 적립에만 감액을 걸고 정액 항을 그대로 두면 얕은 반복이 다시 최적이 된다.
+function repeatSideMult(cleared, bestAtStart) {
+  const c = Math.max(0, cleared || 0);
+  if (c <= 0) return 0;
+  const fresh = Math.max(0, c - Math.max(0, bestAtStart || 0));
+  const share = Math.min(1, fresh / c);
+  return ENDLESS_REPEAT_MULT + (1 - ENDLESS_REPEAT_MULT) * share;
+}
+
 // 이번 판에서 이 층을 넘었을 때 쌓이는 몫. bestAtStart는 판을 시작할 때의 최고 기록.
 function endlessGemStepFor(tier, bestAtStart) {
   const first = tier > (bestAtStart || 0);

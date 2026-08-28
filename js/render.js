@@ -607,18 +607,23 @@ function renderBattle(ctx, gs) {
     // 준비 화면은 층 정보가 늘면 아래가 잘린다 (층 이벤트 · 변형 · 이월 · 경로 변경…).
     // 마을 탭과 같은 방식으로 스크롤한다 — 렌더러에 스크롤이 반영된 기준선을 넘겨
     // 그림과 버튼 좌표가 함께 움직이게 한다.
+    // ⏸·배속·🔊는 준비 화면에서도 떠 있어야 한다. 예전에는 브리핑 위에 그냥 얹혀서
+    // 그 자리에 있던 "최고 N층 / 💎되짚는 층" 글자를 가렸다 — 오른쪽 118px을 비워 두는
+    // 방식으로는 버튼(142px)을 못 피한다. 아예 전용 띠를 잡고 본문을 그만큼 내린다.
+    const bodyTop = BATTLE_Y + BRIEF_CTRL_H;
+    const bodyH   = BATTLE_H - BRIEF_CTRL_H;
     const scroll = gs.briefScroll || 0;
     ctx.save();
-    ctx.beginPath(); ctx.rect(0, BATTLE_Y, CW, BATTLE_H); ctx.clip();
-    _briefBottom = BATTLE_Y;
-    renderBriefing(ctx, gs, BATTLE_Y - scroll);
+    ctx.beginPath(); ctx.rect(0, bodyTop, CW, bodyH); ctx.clip();
+    _briefBottom = bodyTop;
+    renderBriefing(ctx, gs, bodyTop - scroll);
     ctx.restore();
 
-    const contentH  = (_briefBottom + scroll) - BATTLE_Y + 8;
-    const maxScroll = Math.max(0, contentH - BATTLE_H);
+    const contentH  = (_briefBottom + scroll) - bodyTop + 8;
+    const maxScroll = Math.max(0, contentH - bodyH);
     gs.briefScroll = Math.max(0, Math.min(maxScroll, scroll));
-    gs.ui.briefScroll = maxScroll > 0 ? {x:0,y:BATTLE_Y,w:CW,h:BATTLE_H,max:maxScroll} : null;
-    if (maxScroll > 0) drawScrollHint(ctx, BATTLE_Y, BATTLE_H, gs.briefScroll, maxScroll);
+    gs.ui.briefScroll = maxScroll > 0 ? {x:0,y:bodyTop,w:CW,h:bodyH,max:maxScroll} : null;
+    if (maxScroll > 0) drawScrollHint(ctx, bodyTop, bodyH, gs.briefScroll, maxScroll);
   } else if (wm.phase==='upgradePick') {
     gs.ui.briefScroll = null;
     ctx.fillStyle='#080d18'; ctx.fillRect(0,BATTLE_Y,CW,BATTLE_H);
@@ -632,11 +637,29 @@ function renderBattle(ctx, gs) {
 // ─── 컨트롤 바 (아레나 아래 32px) ────────────────────────────────────────────
 function renderBattleControls(ctx, gs) {
   const fighting = wm.phase==='active';
-  const by = fighting ? (ARENA_Y + ARENA_H + 4) : (BATTLE_Y + 6);
   const bw=44, bh=32, gap=5;
+  const by = fighting ? (ARENA_Y + ARENA_H + 4) : (BATTLE_Y + (BRIEF_CTRL_H - bh) / 2);
   const x3=CW-6-bw, x2=x3-bw-gap, x1=x2-bw-gap;
 
+  // 버튼 뒤는 항상 불투명하게 깐다 — 준비 화면에서는 이 띠가 본문 위쪽 경계가 된다
   if (fighting) { ctx.fillStyle='#080e18'; ctx.fillRect(0, ARENA_Y+ARENA_H, CW, ARENA_CTRL_H); }
+  else if (wm.phase==='idle') {
+    ctx.fillStyle='#080e18'; ctx.fillRect(0, BATTLE_Y, CW, BRIEF_CTRL_H);
+    ctx.strokeStyle='#1e293b'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(0, BATTLE_Y+BRIEF_CTRL_H-0.5); ctx.lineTo(CW, BATTLE_Y+BRIEF_CTRL_H-0.5); ctx.stroke();
+    // 띠 왼쪽은 비니까 층 표시를 여기로 옮겨 준다 — 스크롤해도 늘 보이는 자리
+    const st = getStageInfo(gs.wave);
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.fillStyle = st.endless ? '#c4b5fd' : '#a5b4fc'; ctx.font='bold 12px sans-serif';
+    ctx.fillText(st.endless ? `∞ ${st.tier}층` : `훈련 ${st.stageLabel}`, 10, BATTLE_Y + BRIEF_CTRL_H/2);
+    if (st.endless) {
+      const fresh = st.tier > (gs.runBestAtStart || 0);
+      ctx.fillStyle = fresh ? '#4ade80' : '#8a6a33'; ctx.font='bold 9px sans-serif';
+      ctx.fillText(fresh ? '★ 신기록 구간 · 💎 제값' : `되짚는 층 · 💎 ×${ENDLESS_REPEAT_MULT}`,
+                   72, BATTLE_Y + BRIEF_CTRL_H/2);
+    }
+    ctx.textAlign='left'; ctx.textBaseline='top';
+  }
 
   drawBtn(ctx,x1,by,bw,bh,_paused?'▶':'⏸','#111c2e','#a5b4fc',true);
   drawBtn(ctx,x2,by,bw,bh,`x${gameSpeed()}`,gameSpeed()>1?'#3b1d6e':'#111c2e',gameSpeed()>1?'#c4b5fd':'#94a3b8',true);
@@ -673,34 +696,32 @@ function renderBriefing(ctx, gs, top) {
   const st  = getStageInfo(gs.wave);
   const def = waveDefFor(gs.wave) || { arenaPool:[], defenseEnemies:[] };
 
-  ctx.fillStyle='#a5b4fc'; ctx.font='bold 13px sans-serif';
+  // 층 이름은 위쪽 고정 띠가 이미 들고 있다. 여기서는 관문 표시와 수치만 적는다.
   ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillStyle = st.endless ? '#c4b5fd' : '#a5b4fc';
   const gate = st.endless && st.isBossStage;
-  if (gate) ctx.fillStyle = '#fbbf24';
-  ctx.fillText(st.endless ? (gate ? `🏁 ${st.tier}층 — 관문` : `∞ ${st.tier}층`)
-                          : `훈련 — 스테이지 ${st.stageLabel}`, 10, TOP+9);
+  if (gate) {
+    ctx.fillStyle = '#fbbf24'; ctx.font='bold 13px sans-serif';
+    ctx.fillText(`🏁 ${st.tier}층 — 관문`, 10, TOP+7);
+  }
   ctx.fillStyle='#475569'; ctx.font='bold 10px sans-serif';
   const _gemStep = st.endless ? endlessGemStepFor(st.tier, gs.runBestAtStart) : 0;
   ctx.fillText(st.endless ? `적 HP ×${endlessStatMult(gs.wave).toFixed(1)} · 이동 ×${endlessSpdMult(gs.wave).toFixed(2)} · 이 층 보석 +${_gemStep.toFixed(2)}`
-                          : `웨이브 ${st.waveInStage+1}/3${st.isBossStage?'  ★보스 스테이지':''}`, 10, TOP+26);
+                          : `훈련 스테이지 ${st.stageLabel} · 웨이브 ${st.waveInStage+1}/3${st.isBossStage?'  ★보스':''}`,
+               10, gate ? TOP+26 : TOP+8);
 
-  // 최고 기록 — 지금 어디쯤인지가 무한의 유일한 좌표다
+  // 최고 기록 — 지금 어디쯤인지가 무한의 유일한 좌표다.
+  // 신기록/되짚기 표시는 위쪽 고정 띠로 옮겼다. 여기는 기록 숫자만 남긴다.
   if (st.endless) {
     const best  = gs.stats.bestEndless || 0;
     const fresh = st.tier > (gs.runBestAtStart || 0);   // 처음 닿는 깊이인가
-    // 오른쪽 끝 110px은 ⏸·배속·음소거 버튼 자리다 — 그 앞에서 끊는다
-    const rx = CW - 118;
+    const rx = CW - 12;
     ctx.textAlign='right'; ctx.fillStyle = fresh ? '#22c55e' : '#334155';
     ctx.font='bold 10px sans-serif';
-    ctx.fillText(fresh ? `★ 신기록 구간` : `최고 ${best}층`, rx, TOP+10);
-    // 되짚는 층은 보석이 1/10이다 — 내려가기 전에 알아야 판단이 된다
-    ctx.fillStyle = fresh ? '#4ade80' : '#8a6a33'; ctx.font='bold 9px sans-serif';
-    ctx.fillText(fresh ? '💎 첫 돌파 — 제값' : `💎 되짚는 층 ×${ENDLESS_REPEAT_MULT}`, rx, TOP+27);
+    ctx.fillText(`최고 ${best}층`, rx, gate ? TOP+26 : TOP+8);
     ctx.textAlign='left';
   }
 
-  let y = TOP+44;
+  let y = TOP + (gate ? 44 : 24);
 
   // ── 경로 변경 안내 ───────────────────────────────────────────────────────
   const pc = gs.pathChanged;

@@ -464,7 +464,14 @@ function calcSoulStones(gs) {
     // 새로 돌파한 층이 벌이의 중심이다. 판 시작 시점의 기록과 견준다 —
     // 판 도중에 갱신되는 값을 쓰면 한 층도 못 넘긴 판이 자기 자신을 갱신한 것으로 쳐서 보너스를 받는다.
     const recTerm = newDepthGems(cleared, gs.runBestAtStart);
-    return Math.max(0, Math.round((endTerm + caveTerm + killTerm + recTerm) * mult));
+    // 케이브 레벨과 처치 수는 **깊이와 무관한 값**이다.
+    // 케이브는 새 판에서도 최소 1이라 층 적립이 0이어도 정산이 1이 됐다 —
+    // "1층 깨고 바로 나가면 보석 하나"가 정확히 이 항이었다. 되짚는 층에 ×0.1을
+    // 걸어 놓고 옆에 정액 1을 두면 그 감액이 통째로 무의미해진다.
+    // 그래서 이 둘도 '이번 판에서 새로 판 깊이의 비중'만큼만 받는다.
+    const sideMult = repeatSideMult(cleared, gs.runBestAtStart);
+    const side = (caveTerm + killTerm) * sideMult;
+    return Math.max(0, Math.round((endTerm + recTerm + side) * mult));
   }
 
   // 훈련 정산 — 아주 적게. 훈련은 심연으로 가기 전에 조작을 익히는 6웨이브짜리 과정이고,
@@ -498,8 +505,14 @@ function soulStoneBreakdown(gs) {
       rows.push({ label:'∞ 되짚은 층', value:od,
                   note:`1~${Math.min(cleared, start)}층 · ×${ENDLESS_REPEAT_MULT} 적용 → ${rawOld.toFixed(1)}` });
     }
-    rows.push({ label:'케이브 레벨', value:gs.caveLevel, note:`Lv.${gs.caveLevel}` });
-    rows.push({ label:'처치',        value:Math.floor((gs.battle.runKills||0)/60), note:`${gs.battle.runKills||0}마리 ÷ 60` });
+    // 케이브·처치는 깊이와 무관한 항이라 '새로 판 깊이의 비중'만큼만 받는다.
+    // 그러지 않으면 되짚기 감액 옆에 정액 보석이 남아 얕은 반복이 다시 이득이 된다.
+    const sideMult = repeatSideMult(cleared, start);
+    const caveRaw  = gs.caveLevel;
+    const killRaw  = Math.floor((gs.battle.runKills||0)/60);
+    const sideNote = sideMult < 1 ? ` · 되짚기 ×${sideMult.toFixed(2)}` : '';
+    rows.push({ label:'케이브 레벨', value:+(caveRaw*sideMult).toFixed(1), note:`Lv.${caveRaw}${sideNote}` });
+    rows.push({ label:'처치',        value:+(killRaw*sideMult).toFixed(1), note:`${gs.battle.runKills||0}마리 ÷ 60${sideNote}` });
     if (cleared > start) {
       rows.push({ label:'새로 돌파한 층', value:newDepthGems(cleared, start),
                   note:`${start}층 → ${cleared}층 · ${cleared-start}개 층` });

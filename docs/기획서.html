@@ -219,7 +219,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <div class="wrap">
 <header class="cover">
-  <div class="eyebrow">Game Design Document · v4.11 · 회복을 사게 만든다</div>
+  <div class="eyebrow">Game Design Document · v4.12 · 감액 옆의 정액</div>
   <h1>듀얼 프론티어</h1>
   <p class="tagline">한 화면에서 두 개의 전선을 동시에 굴리는 모바일 웹 로그라이트.
      끝은 없다 — 얼마나 깊이 내려갔는지가 기록이다.</p>
@@ -228,7 +228,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
     <div><dt>플랫폼</dt><dd>모바일 웹 (480×800 캔버스)</dd></div>
     <div><dt>1회 하강</dt><dd>10~30분 (도달 층에 비례)</dd></div>
     <div><dt>현재 볼륨</dt><dd>훈련 30웨이브 + ∞ 무한 (알고리즘 생성)</dd></div>
-    <div><dt>이번 개정</dt><dd>자연 회복 폐지 · 🗡️도적 · ☠️독탑 · 상단 영웅 (v4.11)</dd></div>
+    <div><dt>이번 개정</dt><dd>정산 정액 항 제거 · 컨트롤 전용 띠 · 회복 0.5%/s (v4.12)</dd></div>
   </dl>
 </header>
 
@@ -1041,6 +1041,53 @@ v1.0의 "그룹 순환 + 보상 체감" 구조를 이 압력 곡선이 대체한
 <p>셋 다 처음부터 열려 있으면 고르는 데 값이 없다. 심연에서 모은 보석이
 "다음 영웅"이라는 목표가 되게 했다. 한 번 열면 <strong>언제든 무료로 갈아 끼운다</strong> —
 층 조합에 맞춰 바꾸는 것이 각인의 목적이므로 교체까지 잠그면 그냥 안 쓰게 된다.</p>
+
+<h3>되짚기 감액 옆에 정액 보석이 남아 있었다 <span class="rev">v4.12 · 회귀</span></h3>
+
+<p class="lede">플레이 보고: <strong>"여전히 심연에서 한 스테이지만 클리어하고 중지하면
+보석을 하나 주는 문제가 있어 (기존에 클리어했던 스테이지를 다시 하는 것)."</strong></p>
+
+<p>정산식은 네 항의 합이었다:</p>
+
+<pre><code>endTerm(층 적립) + caveTerm(케이브 레벨) + killTerm(처치÷60) + recTerm(새 깊이)</code></pre>
+
+<p>되짚는 층은 <code>ENDLESS_REPEAT_MULT = 0.1</code>이 걸려 <code>endTerm</code>이
+0.024 → 내림 0이고, 새 깊이가 없으니 <code>recTerm</code>도 0이다.
+그런데 <strong><code>caveTerm</code>은 새 판에서도 최소 1</strong>이다.
+0 + <strong>1</strong> + 0 + 0 = 1 — 이것이 그 보석 하나였다.</p>
+
+<p><strong>층 적립에만 감액을 걸고 옆에 깊이와 무관한 정액 항을 두면 그 감액은 통째로 무의미해진다.</strong>
+케이브 레벨과 처치 수도 이번 판에서 새로 판 깊이의 비중만큼만 받게 했다.</p>
+
+<pre><code>repeatSideMult(cleared, best) = 0.1 + 0.9 × (새로 판 층 / 돌파한 층)</code></pre>
+
+<div class="tw"><table>
+<caption>정산 실측</caption>
+<thead><tr><th>상황</th><th>이전</th><th>이후</th></tr></thead>
+<tbody>
+<tr><td>기록 13 · 1층 깨고 나감</td><td><strong>1</strong></td><td><strong>0</strong></td></tr>
+<tr><td>기록 13 · 5층 깨고 나감</td><td>4</td><td>1</td></tr>
+<tr><td>기록 13 · 10층 되짚기</td><td>6</td><td>1</td></tr>
+<tr><td>기록 0 · 1층 (첫 판)</td><td>2</td><td>2</td></tr>
+<tr><td>기록 13 · 14층 (신기록)</td><td>7</td><td>7</td></tr>
+</tbody></table></div>
+
+<h3>준비 화면에서 ⏸·배속·🔊가 정보를 가렸다 <span class="rev">v4.12</span></h3>
+
+<p>버튼 세 개는 폭 44 + 간격 5로 <strong>142px</strong>인데, 브리핑은 오른쪽
+<strong>118px</strong>만 비워 두고 있었다. 30px이 겹쳐서 "최고 13층"이 "최"로,
+"💎 되짚는 층"이 "💎 되짚는"으로 잘렸다.</p>
+
+<p>여백을 늘리는 방식으로는 글자 길이가 바뀔 때마다 다시 어긋난다.
+아예 <strong>전용 띠(38px)</strong>를 잡고 본문을 그만큼 내렸다 —
+겹칠 자리가 구조적으로 없어진다. 띠 왼쪽이 비니까 "∞ N층 / 되짚는 층 ×0.1"을
+그리로 옮겼다. 스크롤해도 늘 보이는 자리다.</p>
+
+<h3>자연 회복 0 → 0.5%/s <span class="rev">v4.12</span></h3>
+
+<p>v4.11에서 아예 0으로 뒀는데, 회복이 웨이브 <em>사이</em>뿐 아니라 웨이브 <em>안</em>에서도
+사라져 초반 아레나가 지나치게 팍팍해졌다. 0.5%/s로 되돌린다 —
+60초를 온전히 쉬어야 30%다. 실질적인 재생은 여전히 카드·장비·스킬로 사게 한다.</p>
 
 <h3>자연 회복을 없앴다 — 🏨여관이 할 일이 생기도록 <span class="rev">v4.11</span></h3>
 
