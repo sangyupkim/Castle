@@ -132,11 +132,59 @@ function createArena() {
     pool: [['goblin', 10]],
     eliteBonus: 0,
     spawnMult: 1,
+    surgeAt: null, surgeWarn: 0, surgeFlash: 0,
     goldCollected: 0
   };
 }
 
 // ─── 스폰 ────────────────────────────────────────────────────────────────────
+// ─── 🌊 쇄도 — 한 번에 몰려오는 순간 ─────────────────────────────────────────
+// 예고 2초 → 가장자리 곳곳에서 한꺼번에 등장. 스폰 상한은 잠시 무시한다.
+// 상한에 걸려 반만 나오면 쇄도가 쇄도로 안 읽힌다.
+function updateSurge(gs, dt) {
+  const a = gs.arena, b = gs.battle;
+  if (b.phase !== 'fighting') return;
+  if (a.surgeAt === undefined || a.surgeAt === null) return;
+  // 스폰 시간이 끝났으면 새 쇄도를 예약하지 않는다
+  if (typeof wm !== 'undefined' && wm && wm.timer <= 0) { a.surgeWarn = 0; return; }
+
+  if (a.surgeWarn > 0) {
+    a.surgeWarn -= dt;
+    if (a.surgeWarn <= 0) { fireSurge(gs); scheduleSurge(a, false); }
+    return;
+  }
+  a.surgeAt -= dt;
+  if (a.surgeAt <= 0) {
+    a.surgeWarn = SURGE_WARN;
+    addLog(b, '🌊 몬스터 무리가 몰려옵니다!', '#f97316');
+    if (typeof SFX !== 'undefined') SFX.denied();
+    if (typeof FX !== 'undefined') FX.shake(3, 0.3);
+  }
+}
+function scheduleSurge(a, first) {
+  a.surgeAt   = (first ? SURGE_FIRST_AT : SURGE_EVERY) + (Math.random() - 0.5) * SURGE_EVERY_JIT;
+  a.surgeWarn = 0;
+}
+function fireSurge(gs) {
+  const a = gs.arena, b = gs.battle;
+  const n = surgeCount(a.waveIndex + 1);
+  const allies = b.ourTeam.filter(u => !u.dead);
+  let made = 0;
+  for (let i = 0; i < n; i++) {
+    const p = pickSpawnPoint(a, allies);
+    const mob = makeArenaMob(rollArenaMob(a.pool), a.waveIndex, b.killCount, gs.caveLevel, a.eliteBonus);
+    mob.x = p.x; mob.y = p.y;
+    clampToArena(mob, mob.radius);
+    a.mobs.push(mob);
+    markMobSeen(gs, mob.typeId);
+    made++;
+  }
+  a.surgeFlash = 0.9;
+  addLog(b, `🌊 쇄도! ${made}마리가 한꺼번에 들이닥칩니다`, '#f97316');
+  if (typeof SFX !== 'undefined') SFX.baseHit();
+  if (typeof FX !== 'undefined') FX.shake(6, 0.45);
+}
+
 function updateArenaSpawn(gs, dt) {
   const a = gs.arena, b = gs.battle;
   if (b.phase !== 'fighting') return;
@@ -169,6 +217,9 @@ function updateArena(gs, dt) {
 
   if (b.phase !== 'fighting') return;
   a.elapsed += dt;
+
+  if (a.surgeFlash > 0) a.surgeFlash = Math.max(0, a.surgeFlash - dt);
+  updateSurge(gs, dt);
 
   // 예약해둔 소환 정예
   if (a.eliteTimer !== null && a.eliteTimer !== undefined) {
@@ -806,6 +857,8 @@ function startArena(gs, waveIndex) {
   a.pool       = def.arenaPool || [['goblin', 10]];
   a.eliteBonus = def.eliteBonus || 0;
   a.spawnMult  = def.spawnMult  || 1;
+  scheduleSurge(a, true);   // 🌊 첫 쇄도 예약
+  a.surgeFlash = 0;
   // 심층 변형 — 몹마다 들고 다닐 필요가 없으므로 아레나에 한 벌만 둔다
   a.thorns   = def.thorns   || 0;
   a.split    = def.split    || 0;
@@ -827,6 +880,60 @@ function startArena(gs, waveIndex) {
 
   const allies = gs.battle.ourTeam.filter(u => !u.dead);
   allies.forEach((u, i) => spawnAllyIntoArena(a, u, i, allies.length));
+}
+
+// ─── 🏳 남은 무리를 상단으로 올려보낸다 ──────────────────────────────────────
+// 후퇴하거나 전멸하면 아레나에 남아 있던 것들과, 아직 나오지 않았던 몫의 일부가
+// 그대로 상단 경로로 들어온다. 하단을 비우는 것은 도망이 아니라 전선을 옮기는 일이다.
+// 지금 하단을 비우면 몇 마리가 위로 올라오는지. 버튼에 띄우는 값과 실제가 같아야 한다.
+function spillPreview(gs) {
+  const a = gs.arena;
+  if (!a) return 0;
+  const live = a.mobs.filter(m => !m.dead).length;
+  let pending = 0;
+  if (typeof wm !== 'undefined' && wm && wm.timer > 0) {
+    const iv = Math.max(0.3, spawnInterval(a.elapsed) * (a.spawnMult || 1));
+    pending = Math.min(SPILL_PENDING_MAX, Math.floor(wm.timer / iv));
+  }
+  return Math.min(SPILL_TOTAL_MAX, live + pending);
+}
+
+function spillToDefense(gs, why) {
+  const a = gs.arena, b = gs.battle;
+  const live = a.mobs.filter(m => !m.dead);
+
+  // 아직 안 나온 몫 — 남은 스폰 시간을 지금 간격으로 나눈 만큼
+  let pending = 0;
+  if (typeof wm !== 'undefined' && wm && wm.timer > 0) {
+    const iv = Math.max(0.3, spawnInterval(a.elapsed) * (a.spawnMult || 1));
+    pending = Math.min(SPILL_PENDING_MAX, Math.floor(wm.timer / iv));
+  }
+
+  const picks = [];
+  for (const m of live) picks.push(m.typeId);
+  for (let i = 0; i < pending; i++) picks.push(rollArenaMob(a.pool));
+  const total = Math.min(SPILL_TOTAL_MAX, picks.length);
+
+  for (let i = 0; i < total; i++) {
+    const defType = ARENA_TO_DEFENSE[picks[i]] || 'orc';
+    if (!ENEMY_TYPES[defType]) continue;
+    const e = makeDefenseEnemy(defType, a.waveIndex);
+    e.hp = e.maxHp = Math.max(1, Math.round(e.maxHp * SPILL_HP_MULT));
+    // 한 줄로 겹쳐 들어오지 않게 시간차를 준다
+    e.spawnDelay = i * SPILL_STAGGER;
+    e.spilled = true;
+    gs.defenseEnemies.push(e);
+  }
+
+  clearArena(gs);
+
+  if (total > 0) {
+    addLog(b, `⬆️ 하단을 비운 대가 — ${total}마리가 상단으로 넘어옵니다`, '#f97316');
+    spawnFloaty(`⬆️ ${total}마리 상단 진입!`, CW / 2, DEFENSE_H - 40, '#f97316');
+    if (typeof FX !== 'undefined') FX.shake(5, 0.4);
+    if (typeof SFX !== 'undefined') SFX.baseHit();
+  }
+  return total;
 }
 
 function clearArena(gs) {

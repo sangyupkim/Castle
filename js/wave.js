@@ -84,21 +84,12 @@ function createWaveManager() {
         gs.battle.totalGoldEarned += left;
         addLog(gs.battle, `후퇴하며 드랍 회수 +${left}💰`, COLORS.gold);
       }
-      clearArena(gs);
+      // 하단을 비운 대가 — 성벽 HP를 조용히 깎는 대신,
+      // 거기 있던 것들이 그대로 상단 경로로 올라온다. 타워가 감당할 수 있다면
+      // 후퇴는 여전히 옳은 선택이고, 아니라면 값을 치른다.
+      const spilled = spillToDefense(gs, 'retreat');
       gs.battle.phase = 'retreated';
-
-      // 하단을 비운 대가 — 남은 시간만큼 몬스터가 성벽을 두드린다.
-      // 일찍 뺄수록 비싸고, 거의 다 버티고 뺐다면 거의 공짜다.
-      const cost = retreatCost(this.timer);
-      if (cost > 0) {
-        gs.baseHP = Math.max(0, gs.baseHP - cost);
-        spawnFloaty(`후퇴 -${cost}HP`, CW / 2, DEFENSE_H - 40, '#f87171');
-        addLog(gs.battle, `🛡 후퇴 — 남은 ${Math.ceil(this.timer)}초만큼 성벽 -${cost}HP`, '#f87171');
-        if (typeof FX !== 'undefined') FX.shake(3, 0.25);
-        if (gs.baseHP <= 0) { gs.gameOver = true; bankRunResult(); return true; }
-      } else {
-        addLog(gs.battle, '🛡 후퇴 — 병력을 보존했습니다', '#38bdf8');
-      }
+      if (spilled <= 0) addLog(gs.battle, '🛡 후퇴 — 넘어올 무리가 없었습니다', '#38bdf8');
       if (typeof SFX !== 'undefined') SFX.click();
       return true;
     },
@@ -146,18 +137,14 @@ function createWaveManager() {
       // 하단 아레나
       updateArena(gs, dt);
 
-      // 아군 전멸 — 시각을 기록해 돌파 지속시간을 잰다
+      // 아군 전멸 — 후퇴와 같다. 하단이 비었으니 남은 것들이 상단으로 올라온다.
+      // 예전에는 아레나에 남은 몹이 보이지 않는 DPS로 성벽을 갉았는데,
+      // 화면 밖에서 숫자만 줄어드는 것이라 막을 방법도 없고 읽히지도 않았다.
       if (gs.battle.phase === 'lost') {
         gs.battle.phase = 'idle_defeated';
         this.wipedAt = this.elapsed;
-        addLog(gs.battle, '⚠️ 병력 전멸 — 몬스터가 기지로 향합니다', '#ef4444');
-      }
-      // 돌파가 일정 시간 지나면 몬스터는 물러난다 (남은 시간은 상단만 진행)
-      if (this.wipedAt !== null && this.elapsed - this.wipedAt >= BREAKTHROUGH_DURATION) {
-        if (gs.arena.mobs.length) {
-          clearArena(gs);
-          addLog(gs.battle, '몬스터가 물러났습니다', '#64748b');
-        }
+        addLog(gs.battle, '☠️ 병력 전멸 — 하단이 뚫렸습니다', '#ef4444');
+        spillToDefense(gs, 'wipe');
       }
 
       // ── 종료 조건 ──

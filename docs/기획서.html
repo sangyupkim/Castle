@@ -219,7 +219,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <div class="wrap">
 <header class="cover">
-  <div class="eyebrow">Game Design Document · v4.7 · 보석은 깊이에만</div>
+  <div class="eyebrow">Game Design Document · v4.8 · 하단을 비우면 위로</div>
   <h1>듀얼 프론티어</h1>
   <p class="tagline">한 화면에서 두 개의 전선을 동시에 굴리는 모바일 웹 로그라이트.
      끝은 없다 — 얼마나 깊이 내려갔는지가 기록이다.</p>
@@ -228,7 +228,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
     <div><dt>플랫폼</dt><dd>모바일 웹 (480×800 캔버스)</dd></div>
     <div><dt>1회 하강</dt><dd>10~30분 (도달 층에 비례)</dd></div>
     <div><dt>현재 볼륨</dt><dd>훈련 30웨이브 + ∞ 무한 (알고리즘 생성)</dd></div>
-    <div><dt>이번 개정</dt><dd>보석은 처음 닿은 깊이에만 · 되짚기 ×0.1 (v4.7)</dd></div>
+    <div><dt>이번 개정</dt><dd>후퇴·전멸이 상단으로 · 🌊쇄도 · 배경음 (v4.8)</dd></div>
   </dl>
 </header>
 
@@ -1041,6 +1041,118 @@ v1.0의 "그룹 순환 + 보상 체감" 구조를 이 압력 곡선이 대체한
 <p>셋 다 처음부터 열려 있으면 고르는 데 값이 없다. 심연에서 모은 보석이
 "다음 영웅"이라는 목표가 되게 했다. 한 번 열면 <strong>언제든 무료로 갈아 끼운다</strong> —
 층 조합에 맞춰 바꾸는 것이 각인의 목적이므로 교체까지 잠그면 그냥 안 쓰게 된다.</p>
+
+<h3>하단을 비우면 그대로 상단으로 올라온다 <span class="rev">v4.8</span></h3>
+
+<p class="lede">플레이 보고: <strong>"하단 아레나를 그냥 후퇴하면 돈을 좀 못 버는 것 말고는
+별다른 손해가 없는 것 같은데… 조기 후퇴를 하면 남은 웨이브가 한 번에 타워로 밀고 들어오는
+형식을 추가해서 상하단을 모두 신경 쓸 수 있는 게임이 되면 좋겠어. (전멸 시에도)"</strong></p>
+
+<p>정확한 지적이다. 예전 후퇴 비용은 <strong>성벽 HP 정액 차감</strong>이었다 —
+숫자가 조용히 깎일 뿐이라 “돈을 조금 덜 벌었네” 정도로 읽혔고,
+상단이 하단보다 쉬운 것과 겹쳐 아레나를 일찍 접는 쪽이 언제나 편했다.</p>
+
+<p>이제 하단을 비우면 <strong>거기 있던 것들과 아직 나오지 않았던 몫의 일부가
+그대로 상단 경로로 들어온다.</strong> 후퇴는 벌이 아니라 전선을 옮기는 결정이 된다 —
+타워로 감당할 수 있다면 여전히 옳은 선택이고, 아니라면 값을 치른다.</p>
+
+<div class="tw"><table>
+<caption>넘어가는 규칙</caption>
+<thead><tr><th>항목</th><th>값</th></tr></thead>
+<tbody>
+<tr><td>넘어가는 수</td><td>생존 몹 + 남은 스폰 시간 ÷ 스폰 간격 (아직 안 나온 몫은 최대 10)</td></tr>
+<tr><td>총 상한</td><td class="num">18마리</td></tr>
+<tr><td>체력</td><td class="num">×0.72 — 아래에서 이미 싸웠으므로</td></tr>
+<tr><td>입장 간격</td><td class="num">0.55초 — 한 줄로 겹치지 않게</td></tr>
+<tr><td>성벽 정액 피해</td><td><strong>없앴다</strong></td></tr>
+</tbody></table></div>
+
+<p>전멸도 같다. 예전에는 아레나에 남은 몹이 <strong>보이지 않는 DPS로 성벽을 갉았는데</strong>,
+화면 밖에서 숫자만 줄어드는 것이라 막을 방법도 없고 읽히지도 않았다.
+이제는 그것들이 눈에 보이게 위로 올라오고, 타워로 막을 수 있다.</p>
+
+<p>후퇴 버튼에 <strong>지금 빼면 몇 마리가 올라오는지</strong>를 띄운다
+(<span class="mono">🛡 후퇴 ⬆18</span>, 10 이상이면 붉게). 누르기 전에 값을 알아야 판단이 된다.
+실측: 6층에서 하단 생존 8 + 대기 10 = 18마리가 넘어왔고, 성벽 피해 0,
+0 / 0.55 / 1.1 / 1.65초 간격으로 입장, 웨이브는 그것들을 다 정리해야 끝났다.</p>
+
+<h3>🌊 쇄도 — 한 번에 몰려오는 순간 <span class="rev">v4.8</span></h3>
+
+<p>한두 마리씩 꾸준히 나오는 리듬만 있으면 60초가 평탄하다.
+위험이 오르내려야 “지금 물러날까”가 판단거리가 된다.</p>
+
+<div class="tw"><table>
+<caption>쇄도</caption>
+<thead><tr><th>항목</th><th class="num">값</th></tr></thead>
+<tbody>
+<tr><td>첫 쇄도</td><td class="num">18초 ±</td></tr>
+<tr><td>그 뒤 간격</td><td class="num">22초 ± 6</td></tr>
+<tr><td>경고</td><td class="num">2초 — 테두리 점멸</td></tr>
+<tr><td>마릿수</td><td class="num">6 + 층×0.22, 최대 14</td></tr>
+</tbody></table></div>
+
+<p>간격을 흔드는 것은 초시계를 세지 못하게 하려는 것이고,
+쇄도만은 동시 생존 상한(20)을 잠시 무시한다 — 상한에 걸려 반만 나오면 쇄도로 안 읽힌다.
+경고 없이 쏟아지면 그건 사고지 설계가 아니므로 2초를 준다.</p>
+
+<h3>고친 것들 <span class="rev">v4.8 · 버그</span></h3>
+
+<p><strong>강화 목록을 누르면 뒤의 포션이 팔렸다.</strong> 영웅 상점의 ⚒️강화 탭은 일반 건물 화면이
+그리는데, 🛒매대를 그릴 때 기록해둔 버튼 좌표가 지워지지 않은 채 남아 있었다.
+매대를 안 그리는 프레임에는 좌표를 지우고, 탭 처리도 매대 탭일 때만 그 버튼을 보게 했다.</p>
+
+<p><strong>화면을 쓸어넘기면 그게 탭이 됐다.</strong>
+<span class="mono">beginDrag</span>가 스크롤이 걸린 영역에서만 손가락 이동을 쟀다.
+전장 위에는 스크롤이 없으니 손을 떼는 순간 그 자리가 탭으로 처리됐고 —
+화면을 훑을 때마다 영웅이 그리로 걸어가거나 타워가 과부하에 들어갔다.
+누른 자리를 항상 기억해서, 어디서 시작했든 6px 이상 움직이면 탭이 아닌 것으로 친다.</p>
+
+<p><strong>타워가 멈추는 현상은 재현하지 못했다.</strong> 탭 전환(12초 숨김) · 새로고침 ·
+모바일 뷰포트 리사이즈 세 경로를 모두 시험했지만 발사는 계속됐다. 대신 그 증상이 나올 수 있는
+길을 막았다 — 쿨다운이 NaN이거나 60초를 넘으면 되돌리고, <span class="mono">1/spd</span>가
+Infinity가 되지 않게 하한을 두고, <span class="mono">dt</span>의 음수·NaN을 걸러내고,
+그림 로딩이 8초를 넘으면 있는 것만으로 시작하게 했다.</p>
+
+<h3>튜토리얼이 옛 게임을 설명하고 있었다 <span class="rev">v4.8</span></h3>
+
+<div class="tw"><table>
+<caption>바뀐 규칙이 쪽지에 반영돼 있지 않았다</caption>
+<thead><tr><th>쪽지</th><th>옛 설명</th><th>지금</th></tr></thead>
+<tbody>
+<tr><td>💰 드랍</td><td>처치하면 그 자리에 골드가 떨어진다</td><td>기본 골드는 즉시 · 값나가는 것만 떨어진다</td></tr>
+<tr><td>🏁 웨이브 종료</td><td>60초를 버텼다 · 후퇴하면 성벽이 깎인다</td><td>시계는 스폰 시간 · 후퇴하면 상단으로</td></tr>
+<tr><td>출발 안내</td><td>한 층은 60초입니다</td><td>시계는 몬스터가 나오는 시간</td></tr>
+</tbody></table></div>
+
+<p><span class="mono">TUTORIAL_VERSION</span>으로 표시 기록을 판별로 갈랐다.
+쪽지를 고쳐 쓰고 이 숫자를 올리면 이미 본 사람도 새 내용을 한 번 더 본다.
+<strong>캠프 › 기록 탭에 다시 보기</strong>도 넣었다 — 📖 처음부터 다시 · 🔁 쪽지 초기화.
+예전에는 전체 초기화 말고는 다시 볼 길이 없었다.</p>
+
+<h3>🎵 배경음 · 버튼 크기 <span class="rev">v4.8</span></h3>
+
+<p>배경음도 효과음과 같이 <strong>WebAudio로 합성</strong>한다. 음원 파일을 받으면 용량이 몇 MB
+늘고 라이선스도 따로 챙겨야 하는데, 이 게임은 이미 소리를 전부 만들어 쓰고 있다.
+곡은 셋 — 캠프(84 BPM) · 전투(132 BPM) · 심층(100 BPM). 화면과 웨이브 상태를 보고 알아서 고른다.
+25ms마다 앞 0.2초를 예약하는 룩어헤드 방식이라 탭이 뒤로 갔다 와도 박자가 무너지지 않는다.</p>
+
+<div class="tw"><table>
+<caption>버튼 크기 — 480 논리폭을 6인치에 늘려도 24px는 손가락에 작았다</caption>
+<thead><tr><th>대상</th><th class="num">이전</th><th class="num">지금</th></tr></thead>
+<tbody>
+<tr><td>전투 컨트롤</td><td class="num">34 × 24</td><td class="num">44 × 32</td></tr>
+<tr><td>자동 / 후퇴</td><td class="num">76 × 24</td><td class="num">92 · 104 × 32</td></tr>
+<tr><td>컨트롤 바 높이</td><td class="num">32</td><td class="num">40</td></tr>
+<tr><td>← 뒤로</td><td class="num">50 × 22</td><td class="num">64 × 30</td></tr>
+<tr><td>상점 탭</td><td class="num">66 × 20</td><td class="num">80 × 28</td></tr>
+<tr><td>건물 승급</td><td class="num">140 × 22</td><td class="num">152 × 28</td></tr>
+<tr><td>강화 구매 · 매대</td><td class="num">68 × 22</td><td class="num">82 · 74 × 30</td></tr>
+<tr><td>영웅 배치</td><td class="num">높이 34</td><td class="num">44</td></tr>
+<tr><td>보관함 칸</td><td class="num">5열 × 48</td><td class="num">4열 × 58</td></tr>
+</tbody></table></div>
+
+<p>넘치는 곳은 스크롤로 받는다. 캠프 기록 탭에도 스크롤을 붙였다 —
+안내와 소리 항목이 늘면서 한 화면에 안 들어간다.</p>
 
 <h3>들어가자마자 나가도 보석이 나왔다 <span class="rev">v4.7 · 버그</span></h3>
 

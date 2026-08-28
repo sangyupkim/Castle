@@ -175,6 +175,9 @@ function hurtDefenseEnemy(e, dmg, pierceArmor, onKill, affinity) {
 function updateDefenseEnemies(enemies, dt) {
   for (const e of enemies) {
     if (e.dead || e.reached) continue;
+    // 하단에서 넘어온 무리는 한 줄로 겹치지 않게 시간차를 두고 들어온다.
+    // 대기 중에는 움직이지도, 보이지도, 맞지도 않는다.
+    if (e.spawnDelay > 0) { e.spawnDelay = Math.max(0, e.spawnDelay - dt); continue; }
     if (e.hitFlash > 0) e.hitFlash = Math.max(0, e.hitFlash - dt);
     // 🌱 재생 — 꾸준히 깎지 못하면 원점으로 돌아간다. 단발 화력보다 지속 화력을 요구한다.
     if (e.regen > 0 && e.hp < e.maxHp) e.hp = Math.min(e.maxHp, e.hp + e.maxHp * e.regen * dt);
@@ -219,6 +222,9 @@ function pickTarget(enemies, center, range, mode) {
 }
 
 // 상성이 좋은 적을 우선 노린다. 대포탑이 박쥐를 붙잡고 헛되이 쏘는 것을 막는다.
+// 아직 들어오지 않은(시간차 대기 중인) 적은 없는 것으로 친다
+function enemyActive(e) { return !e.dead && !e.reached && !(e.spawnDelay > 0); }
+
 function pickTargetSmart(enemies, center, range, mode, towerTypeId) {
   let best = null, bestScore = -Infinity;
   for (const e of enemies) {
@@ -240,6 +246,10 @@ function updateTowers(towers, enemies, projectiles, dt) {
   for (const tower of towers) {
     if (tower.muzzle > 0) tower.muzzle = Math.max(0, tower.muzzle - dt);
     if (tower.overloadUntil > 0) tower.overloadUntil = Math.max(0, tower.overloadUntil - dt);
+    // 쿨다운이 NaN이거나 터무니없이 크면 되돌린다.
+    // 한 번 NaN이 들어가면 `NaN > 0`이 false라 통과는 하지만, 이후 어떤 계산도 NaN이 되어
+    // 그 타워는 영영 쏘지 않는다. 값이 오염될 경로를 다 막기보다 매 프레임 제자리로 돌린다.
+    if (!(tower.cooldown >= 0) || tower.cooldown > 60) tower.cooldown = 0;
     tower.cooldown = Math.max(0, tower.cooldown - dt);
     if (tower.cooldown > 0) continue;
 
@@ -248,7 +258,8 @@ function updateTowers(towers, enemies, projectiles, dt) {
     const best   = pickTargetSmart(enemies, center, st.range, st.targetMode, tower.typeId);
     if (!best) continue;
 
-    tower.cooldown = 1 / st.spd;
+    // spd가 0이나 NaN이면 1/spd가 Infinity·NaN이 되어 그 타워가 멈춘다
+    tower.cooldown = 1 / Math.max(0.05, (st.spd > 0 ? st.spd : 1));
     tower.muzzle   = 0.12;
 
     const tpl  = TOWER_TYPES[tower.typeId];

@@ -1,7 +1,7 @@
 'use strict';
 
 // 타이틀 화면에 표기되는 버전
-const GAME_VERSION = 'v0.7.1';
+const GAME_VERSION = 'v0.8.0';
 
 // 포기하고 정산하면 보석을 깎는다. 한 판이 10~30분이라 접을 길은 있어야 하지만,
 // 접는 쪽이 늘 이득이면 아무도 마지막 층을 버티지 않는다.
@@ -476,7 +476,10 @@ const DEF_WAVE_COUNT_SCALE = 0.07;
 // ─── 하단 아레나 레이아웃 ─────────────────────────────────────────────────────
 // 410 ┌ 상태 바 28 ┐ 438 ┌ 아레나 330 ┐ 768 ┌ 컨트롤 바 32 ┐ 800
 const ARENA_STATUS_H = 28;
-const ARENA_CTRL_H   = 32;
+// 컨트롤 바를 40으로 키웠다. 32였을 때 버튼이 24px밖에 안 돼서
+// 480 논리폭을 6인치 화면에 늘려 놓아도 손가락에는 여전히 작았다.
+// 아레나가 8px 줄지만, 개체 몸집을 키운 뒤라 체감은 없다.
+const ARENA_CTRL_H   = 40;
 const ARENA_X = 0;
 const ARENA_Y = BATTLE_Y + ARENA_STATUS_H;
 const ARENA_W = CW;
@@ -521,6 +524,38 @@ const ARENA_GOLD_SCALE    = 0.58;
 const DROP_SPECIAL_CHANCE = 0.075; // 처치당 특수 드랍 확률
 const ARENA_BUFF_DURATION = 9;     // 일시 버프 지속(초)
 const DROP_HEAL_PCT       = 0.15;  // ❤️ 응급 치료가 되살리는 최대 HP 비율
+
+// ─── 🌊 아레나 쇄도 ──────────────────────────────────────────────────────────
+// 한두 마리씩 꾸준히 나오는 리듬만 있으면 60초가 평탄해진다. 위험이 오르내려야
+// "지금 물러날까"가 판단거리가 된다. 그래서 웨이브 중간중간 한 번에 몰려오는 순간을 만든다.
+// 2초 전에 경고가 뜨므로 대비할 시간은 준다 — 예고 없이 쏟아지면 그건 사고지 설계가 아니다.
+const SURGE_FIRST_AT   = 18;    // 첫 쇄도까지(초)
+const SURGE_EVERY      = 22;    // 그 뒤 간격
+const SURGE_EVERY_JIT  = 6;     // 간격 흔들기 — 초시계를 세지 않게
+const SURGE_WARN       = 2.0;   // 경고 시간
+const SURGE_BASE       = 6;     // 기본 마릿수
+const SURGE_PER_TIER   = 0.22;  // 층당 가산
+const SURGE_MAX        = 14;
+function surgeCount(tier) {
+  return Math.min(SURGE_MAX, Math.round(SURGE_BASE + Math.max(0, (tier || 1) - 1) * SURGE_PER_TIER));
+}
+
+// ─── 🏳 하단을 비우면 상단으로 넘어온다 ──────────────────────────────────────
+// 예전에는 후퇴가 성벽 HP 정액 차감이었다. 숫자가 조용히 깎일 뿐이라
+// "돈을 조금 덜 벌었네" 정도로 읽혔고, 상단이 하단보다 쉬운 것과 겹쳐
+// 아레나를 일찍 접는 쪽이 언제나 편했다.
+//
+// 이제 하단을 비우면 거기 있던 것들이 그대로 위로 올라온다. 후퇴는 벌이 아니라
+// 전선을 옮기는 결정이 된다 — 타워로 감당할 수 있다면 여전히 옳은 선택이다.
+const SPILL_PENDING_MAX  = 10;   // 아직 안 나온 몫을 넘길 상한
+const SPILL_TOTAL_MAX    = 18;   // 한 번에 올려보낼 최대 마릿수
+const SPILL_HP_MULT      = 0.72; // 위로 올라오면 조금 약해진다 — 아래에서 이미 싸웠으므로
+const SPILL_STAGGER      = 0.55; // 한 마리씩 들어오는 간격(초)
+// 아레나 몹 → 상단 적. 없는 것은 오크로 떨어진다.
+const ARENA_TO_DEFENSE = {
+  goblin:'goblin', hound:'runner', orc:'orc',
+  darkarch:'orc', ogre:'brute', boss:'boss'
+};
 
 const DROP_TYPES = [
   { id:'gold',  icon:'💰', w:30, color:'#fbbf24', label:'금화 더미' },
@@ -794,6 +829,9 @@ function baseDamageMult() {
   return 1 - Math.min(BASE_DEF_PCT_CAP, BONUSES.baseDefPct || 0);
 }
 
+// (v0.8.0부터 쓰지 않는다) 후퇴는 성벽 HP 정액 차감이 아니라
+// 남은 무리가 상단으로 넘어오는 것으로 바뀌었다 — spillToDefense를 보라.
+// 서약·기록 화면이 아직 이 곡선을 참고하므로 정의는 남겨 둔다.
 function retreatCost(remainSec) {
   // 무한 구간에서는 후퇴 단가도 같이 오른다. 상수로 두면 깊은 층에서
   // "매 웨이브 후퇴"가 전멸(층에 비례)보다 압도적으로 싸져 다시 정답이 된다.
@@ -813,6 +851,9 @@ function clearBonusGold(waveIndex) {
 
 // 아군이 전멸하면 아레나에 남은 몬스터가 기지로 돌파해 초당 피해를 준다.
 // 두 전선을 연결해, 하단에서 지는 것도 실제 패배로 이어지게 만든다.
+// 전멸해도 남은 무리는 상단으로 올라가므로(spillToDefense) 아레나가 비어
+// 아래 돌파 피해는 사실상 걸리지 않는다. 넘김이 상한(SPILL_TOTAL_MAX)에 걸려
+// 아레나에 몹이 남는 경우에만 예전처럼 동작한다.
 const BREAKTHROUGH_DPS      = 0.03;  // 몹 공격력 1당 초당 기지 피해
 const BREAKTHROUGH_MAX      = 1.8;   // 초당 상한 — 한 웨이브 전멸이 즉사가 되지 않도록
 // v1.0에서는 2.5(전멸 1회당 37HP)였다. 그룹 전투에서 전멸은 예외였지만

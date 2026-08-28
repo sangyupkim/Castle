@@ -42,6 +42,14 @@ Sprites.load().then(() => {
   _assetsLoading = false;
   if (Sprites.total) console.info('[스프라이트]', Sprites.report());
 });
+// 그림 한 장이 응답 없이 매달리면 로딩 화면에서 영영 못 빠져나온다.
+// 8초가 지나면 있는 것만으로 시작한다 — 없는 그림은 어차피 이모지로 떨어진다.
+setTimeout(() => {
+  if (_assetsLoading) {
+    _assetsLoading = false;
+    console.warn('[스프라이트] 로딩이 8초를 넘겨 있는 것만으로 시작합니다', Sprites.report());
+  }
+}, 8000);
 let _titleScreen = true;  // 앱 시작 시 타이틀 화면 표시
 let _resetArmed  = false; // 리셋 버튼 1차 확인 상태
 let _resetArmedAt = 0;
@@ -99,7 +107,8 @@ function newState() {
     gameOver:false, stageCleared:false, gaveUp:false,
     upgradePick: { active:false, cards:[] },
     activeUpgrades: [],
-    briefScroll: 0,     // 전투 준비 화면 스크롤
+    briefScroll: 0,
+    lobbyScroll: 0,     // 캠프 기록 탭 스크롤
     wallRepairs:0,      // 이번 런에서 성벽을 몇 번 보수했는지 (비용 체증)
     rerolls:0,          // 이번 런에서 강화 카드를 몇 번 리롤했는지
     bountyUsed:0,       // 현상수배를 몇 번 불렀는지 (강해지고 보상도 오른다)
@@ -123,9 +132,10 @@ function newState() {
     ui:{ waveBtn:{}, hireCards:[], hiredSlots:[], specialCards:[], specialSlots:[], heroDefBtn:{}, heroBatBtn:{},
          metaCards:[], towerTabBtn:{}, heroTabBtn:{}, supportTabBtn:{},
          lobbyTabBtns:[], unlockBtns:[], pactBtns:[], sortieBtn:{}, trainBtn:null, resultBtn:{},
-         buildingScroll:null, pageScroll:null, briefScroll:null,
+         buildingScroll:null, pageScroll:null, briefScroll:null, lobbyScroll:null,
          pauseResumeBtn:null, pauseGiveUpBtn:null,
          backupExportBtn:null, backupImportBtn:null, backupMsg:null,
+         tutReplayBtn:null, tutResetTipBtn:null, bgmToggleBtn:null, sfxToggleBtn:null,
          tutSkipBtn:null, tutBackBtn:null, sigilCards:[] },
     // 영구 데이터 참조
     get soulStones()    { return _soulStones; },
@@ -290,33 +300,48 @@ let _didDrag = false;
 
 function scrollRegionAt(p) {
   // 건물 상세 · 마을 탭 본문 · 전투 준비 화면이 각각 스크롤된다
-  for (const r of [gs.ui.buildingScroll, gs.ui.pageScroll, gs.ui.briefScroll]) {
+  for (const r of [gs.ui.buildingScroll, gs.ui.pageScroll, gs.ui.briefScroll, gs.ui.lobbyScroll]) {
     if (!r) continue;
     if (p.x < r.x || p.x > r.x + r.w || p.y < r.y || p.y > r.y + r.h) continue;
     return r;
   }
   return null;
 }
+// 손가락이 처음 닿은 자리 — 스크롤 영역 밖이어도 기억한다.
+// 예전에는 스크롤이 걸린 곳에서만 이동을 쟀다. 그래서 전장 위를 쓸어넘기면
+// _didDrag가 서지 않은 채 손을 떼는 순간 탭으로 처리돼, 화면을 위아래로 훑을 때마다
+// 영웅이 그리로 걸어가거나 타워가 과부하에 들어갔다.
+let _pressAt = null;
 function beginDrag(p) {
   _didDrag = false;
+  _pressAt = { x: p.x, y: p.y };
   const r = scrollRegionAt(p);
-  _drag = r ? { y0: p.y, scroll0: (r === gs.ui.briefScroll ? (gs.briefScroll||0) : (gs.town.scroll||0)),
-                max: r.max, brief: r === gs.ui.briefScroll } : null;
+  _drag = r ? { y0: p.y, max: r.max,
+                kind: r === gs.ui.briefScroll ? 'brief' : r === gs.ui.lobbyScroll ? 'lobby' : 'town',
+                scroll0: r === gs.ui.briefScroll ? (gs.briefScroll||0)
+                       : r === gs.ui.lobbyScroll ? (gs.lobbyScroll||0)
+                       : (gs.town.scroll||0) } : null;
 }
 function moveDrag(p) {
+  // 어디서 시작했든 일정 거리 이상 움직였으면 그건 탭이 아니다
+  if (_pressAt && !_didDrag) {
+    const d = Math.abs(p.x - _pressAt.x) + Math.abs(p.y - _pressAt.y);
+    if (d >= DRAG_THRESHOLD) _didDrag = true;
+  }
   if (!_drag) return;
   const dy = p.y - _drag.y0;
-  if (!_didDrag && Math.abs(dy) < DRAG_THRESHOLD) return;
-  _didDrag = true;
+  if (!_didDrag) return;
   const v = Math.max(0, Math.min(_drag.max, _drag.scroll0 - dy));
-  if (_drag.brief) gs.briefScroll = v; else gs.town.scroll = v;
+  if      (_drag.kind === 'brief') gs.briefScroll = v;
+  else if (_drag.kind === 'lobby') gs.lobbyScroll = v;
+  else                             gs.town.scroll = v;
 }
-function endDrag() { _drag = null; }
+function endDrag() { _drag = null; _pressAt = null; }
 
 canvas.addEventListener('mousemove', e => {
   const p=pt(e);
   gs.hoveredCell = p.y<UIBAR_Y ? screenToCell(p.x,p.y) : null;
-  if (_drag) moveDrag(p);
+  if (_pressAt) moveDrag(p);   // 누른 상태면 스크롤 영역 밖이어도 이동을 잰다
 });
 canvas.addEventListener('mouseleave', ()=>{ gs.hoveredCell=null; endDrag(); });
 canvas.addEventListener('mousedown', e=>beginDrag(pt(e)));
@@ -340,8 +365,9 @@ canvas.addEventListener('wheel', e=>{
   const r = scrollRegionAt(pt(e));
   if (!r) return;
   e.preventDefault();
-  if (r === gs.ui.briefScroll) gs.briefScroll = Math.max(0, Math.min(r.max, (gs.briefScroll||0) + e.deltaY));
-  else                          gs.town.scroll   = Math.max(0, Math.min(r.max, (gs.town.scroll||0) + e.deltaY));
+  if      (r === gs.ui.briefScroll) gs.briefScroll = Math.max(0, Math.min(r.max, (gs.briefScroll||0) + e.deltaY));
+  else if (r === gs.ui.lobbyScroll) gs.lobbyScroll = Math.max(0, Math.min(r.max, (gs.lobbyScroll||0) + e.deltaY));
+  else                              gs.town.scroll = Math.max(0, Math.min(r.max, (gs.town.scroll||0) + e.deltaY));
 },{passive:false});
 
 window.addEventListener('keydown', e => {
@@ -438,6 +464,7 @@ function tap({x,y}) {
   if (_assetsLoading) return;   // 로딩 화면에서는 아무것도 안 받는다
   if (_titleScreen) {
     SFX.unlock();
+    try { BGM.play('camp'); } catch (e) {}
     // 리셋은 두 번 눌러야 실행된다 — 실수로 세이브를 날리지 않도록
     if (hitTest(x, y, gs.ui.titleResetBtn || {})) {
       if (_resetArmed && (Date.now() - _resetArmedAt < 5000)) {
@@ -509,7 +536,11 @@ function tap({x,y}) {
   if (gs.page!=='town') {
     if (hitTest(x,y,gs.ui.ctrlPause||{})) { togglePause(); return; }
     if (hitTest(x,y,gs.ui.ctrlSpeed||{})) { cycleSpeed(); if (gs.arena.mode==='manual') clampManualSpeed(); return; }
-    if (hitTest(x,y,gs.ui.ctrlMute ||{})) { SFX.toggleMute(); return; }
+    if (hitTest(x,y,gs.ui.ctrlMute ||{})) {
+      const m = SFX.toggleMute();
+      if (m) BGM.stop(0.3); else BGM.sync(gs, wm);   // 음소거는 배경음도 함께 다룬다
+      return;
+    }
     if (hitTest(x,y,gs.ui.modeBtn||{}))   {
       const m = toggleArenaMode(gs);
       spawnFloaty(m === 'manual' ? '수동 — 아레나를 탭해 이동' : '자동 — 제자리 사수', CW/2, ARENA_Y+18, '#a5b4fc');
@@ -603,12 +634,13 @@ function tap({x,y}) {
 // gs.ui는 그리면서 채워지므로, 다른 페이지의 낡은 사각형이 남아 엉뚱한 탭을 먹는다.
 const _PAGE_UI_KEYS = [
   'buildingCards','wallRepairBtn','caveBtn','tabTownBtn','townBackBtn',
-  'buildingLvUpBtn','upgradeBtns','buildingScroll','pageScroll','briefScroll','hireCards','hiredSlots',
+  'buildingLvUpBtn','upgradeBtns','buildingScroll','pageScroll','briefScroll','lobbyScroll','hireCards','hiredSlots',
   'heroInfoBtn','heroBackBtn','equipSlotBtns','invCards','skillSlotBtns','skillCards','heroPickBtn',
   'shopItemBtns','skillBuyBtns','shopTabBuy','shopTabUp',
   'specialCards','specialSlots','heroDefBtn','heroBatBtn','bountyBtn','eliteBtn','towerMiniGrid',
   'lobbyTabBtns','sortieBtn','trainBtn','metaCards','unlockBtns','pactBtns','sigilCards',
   'towerTabBtn','heroTabBtn','supportTabBtn','backupExportBtn','backupImportBtn',
+  'tutReplayBtn','tutResetTipBtn','bgmToggleBtn','sfxToggleBtn',
   'resultBtn','waveBtn','battleWaveStartBtn','briefTownBtn','retreatBtn','modeBtn'
 ];
 let _lastUiPage = null;
@@ -687,8 +719,15 @@ function handleLobbyTap(x, y) {
   }
 
   if (L.tab === 'record') {
-    if (hitTest(x,y,gs.ui.backupExportBtn||{})) { exportSaveCode(); return; }
-    if (hitTest(x,y,gs.ui.backupImportBtn||{})) { importSaveCode(); return; }
+    // 본문은 스크롤된 채 그려지지만 버튼 좌표는 스크롤 이전 값으로 기록된다.
+    // 탭 좌표를 같은 기준으로 옮겨서 견준다.
+    const ry = y + (gs.lobbyScroll || 0);
+    if (hitTest(x,ry,gs.ui.backupExportBtn||{})) { exportSaveCode(); return; }
+    if (hitTest(x,ry,gs.ui.backupImportBtn||{})) { importSaveCode(); return; }
+    if (hitTest(x,ry,gs.ui.tutReplayBtn||{}))    { replayTutorial(); return; }
+    if (hitTest(x,ry,gs.ui.tutResetTipBtn||{}))  { resetTutorialTips(); return; }
+    if (hitTest(x,ry,gs.ui.bgmToggleBtn||{})) { BGM.toggle(); BGM.sync(gs, wm); SFX.click(); return; }
+    if (hitTest(x,ry,gs.ui.sfxToggleBtn||{})) { const m=SFX.toggleMute(); if (m) BGM.stop(0.3); else BGM.sync(gs,wm); return; }
     return;
   }
 
@@ -924,14 +963,16 @@ function handleTownTap(x,y) {
     if (t.screen==='heroShop') {
       if (hitTest(x,y,gs.ui.shopTabBuy||{})) { t.shopTab='buy';     t.scroll=0; SFX.click(); return; }
       if (hitTest(x,y,gs.ui.shopTabUp ||{})) { t.shopTab='upgrade'; t.scroll=0; SFX.click(); return; }
-      for (const btn of gs.ui.shopItemBtns||[]) {
+      // 매대 탭일 때만 매대 버튼을 본다 — 렌더가 좌표를 지우지 못한 프레임이 있어도 안전하게
+      const onBuyTab = (t.shopTab||'buy')==='buy';
+      for (const btn of (onBuyTab ? gs.ui.shopItemBtns : null)||[]) {
         if (hitTest(x,y,btn)) {
           if (!buyShopItem(btn.item,gs)) { spawnFloaty('골드 부족!',x,y,'#ef4444'); SFX.denied(); }
           else { spawnFloaty(`${btn.item.icon} 구매 — 🎒보관함`,x,y,'#a78bfa'); SFX.upgrade(); SaveManager.save(gs); }
           return;
         }
       }
-      for (const btn of gs.ui.skillBuyBtns||[]) {
+      for (const btn of (onBuyTab ? gs.ui.skillBuyBtns : null)||[]) {
         if (hitTest(x,y,btn)) {
           if (!buySkillOffer(gs, btn.uid)) { spawnFloaty('골드 부족!',x,y,'#ef4444'); SFX.denied(); }
           else { spawnFloaty('🔮 스킬 습득!',x,y,'#f0abfc'); SFX.upgrade(); SaveManager.save(gs); }
@@ -939,7 +980,7 @@ function handleTownTap(x,y) {
         }
       }
       // 매대 탭에서는 강화 버튼이 없다 — 나머지 탭 전환만 위에서 처리된다
-      if ((t.shopTab||'buy')==='buy') return;
+      if (onBuyTab) return;
     }
     if (hitTest(x,y,gs.ui.buildingLvUpBtn||{})) {
       if (levelUpBuilding(t.screen,gs)) spawnFloaty('건물 레벨업!',x,y,'#f59e0b');
@@ -1503,7 +1544,12 @@ function loop(ts) {
 }
 
 function frame(ts) {
-  const dt=Math.min((ts-_last)/1000,0.05); _last=ts;
+  // 탭이 뒤로 갔다 오면 ts가 크게 튄다. 음수·NaN도 막는다 —
+  // 한 번이라도 NaN dt가 흘러들면 그 뒤 모든 타이머가 NaN이 된다.
+  let dt = (ts - _last) / 1000;
+  if (!(dt > 0)) dt = 0;
+  if (dt > 0.05) dt = 0.05;
+  _last = ts;
   ctx.clearRect(0,0,CW,CH);
   if (_assetsLoading && !Sprites.ready) { renderLoadingScreen(ctx, Sprites.progress); return; }
   _assetsLoading = false;
@@ -1534,6 +1580,8 @@ function frame(ts) {
   if (_paused && !_titleScreen && !tut.active && gs.page!=='lobby' && gs.page!=='result') renderPauseOverlay(ctx);
   renderTutorial(ctx,tut);
   if (_titleScreen || _fadingOut) renderTitleScreen(ctx, _titleAlpha);
+  // 배경음 — 화면과 상황에 맞는 곡으로. 같은 곡이면 아무 일도 하지 않는다.
+  if (!_titleScreen) { try { BGM.sync(gs, wm); } catch (e) {} }
 
   if ((_paused || tut.active) && !_titleScreen && !_fadingOut) {
     FX.update(dt); updateFloaties(dt);
@@ -1569,6 +1617,18 @@ function resetGame() {
 // 웨이브가 끝날 때만 저장하고 있었다. 한 층이 60초인데 그 사이에 산 타워·용병·건물이
 // 앱을 강제 종료하면 통째로 사라졌다 — 모바일에서는 홈 버튼 한 번이면 그렇게 된다.
 // 주기적으로, 그리고 화면이 가려지는 순간에 반드시 한 번 더 쓴다.
+// ─── 📖 안내 다시 보기 ────────────────────────────────────────────────────────
+function replayTutorial() {
+  try { localStorage.removeItem('df_tut9'); } catch (e) {}
+  tut.done = false; tut.tip = null; tut.step = 0; tut.active = true;
+  SFX.click();
+}
+function resetTutorialTips() {
+  clearTipMarks();
+  SFX.upgrade();
+  gs.ui.backupMsg = { text:'\uD83D\uDD01 상황별 쪽지를 다시 보게 됩니다', color:'#22c55e', until: Date.now()+2600 };
+}
+
 function autoSave() {
   if (!gs || !gs.inRun || _titleScreen) return;
   try { SaveManager.save(gs); } catch (e) {}
