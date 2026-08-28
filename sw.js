@@ -8,7 +8,7 @@
 // 스프라이트 목록은 게임과 같은 파일에서 읽는다 — 두 군데에 적으면 반드시 어긋난다
 try { importScripts('assets/images/manifest.js'); } catch (e) {}
 
-const CACHE = 'dual-frontier-v0.6.1';
+const CACHE = 'dual-frontier-v0.7.0';
 
 const SHELL = [
   '.', 'index.html', 'manifest.webmanifest',
@@ -20,7 +20,12 @@ const SHELL = [
   // 스프라이트 — 매니페스트에 켜둔 것만 담는다.
   // 하나라도 실패하면 설치가 통째로 실패하던 문제가 있어 개별로 담으므로(아래),
   // 여기 없는 파일이 있어도 나머지는 정상 설치된다.
-  ...Object.values((self.SPRITE_FILES) || {}).map(p => 'assets/images/' + p)
+  ...Object.values(self.SPRITE_FILES || {}).map(p => 'assets/images/' + p),
+  ...Object.values(self.SPRITE_SHEETS || {}).map(v => 'assets/images/' + v.file),
+  // 배우는 <경로><방향>_<동작>.png 로 펼쳐진다 — 게임과 같은 규칙으로 만든다
+  ...Object.entries(self.SPRITE_ACTORS || {}).flatMap(([, a]) =>
+      (a.anims || ['Walk']).flatMap(an =>
+        (a.dirs || ['S','D','U']).map(d => `assets/images/${a.path}${d}_${an}.png`)))
 ];
 
 self.addEventListener('install', e => {

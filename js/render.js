@@ -32,23 +32,23 @@ function drawBtn(ctx, x, y, w, h, label, bg, fg, on) {
 }
 
 // ─── Defense Zone ─────────────────────────────────────────────────────────────
-// 이 칸에 깔 타일 — 없는 것은 한 단계씩 일반 타일로 내려간다.
-// 길 코너/교차를 안 넣어도 길 타일 하나로 전부 깔린다.
+// 이 칸에 깔 타일. 길은 잔디, 빈 칸은 밭이다 —
+// 밭 사이로 난 잔디 길을 군대가 걸어 내려온다.
+//
+// 밭은 20종을 칸마다 바꿔 깐다. 한 종류로 63칸을 채우면 격자가 그대로 드러난다.
+// 칸 좌표로 정하므로 매 프레임 같은 타일이 나온다 (깜빡이지 않는다).
+let _fieldCount = -1;
+function fieldTileKey(c, r) {
+  if (_fieldCount < 0) { let n = 0; while (Sprites.has(`tile.field.${n}`)) n++; _fieldCount = n; }
+  if (!_fieldCount) return Sprites.pick('tile.ground');
+  const h = (c * 73856093) ^ (r * 19349663);
+  return `tile.field.${(h >>> 0) % _fieldCount}`;
+}
 function tileSpriteKey(c, r, isPath, isStart, isEnd, isCross) {
-  if (isStart) return Sprites.pick('tile.start', 'tile.path', 'tile.ground');
-  if (isEnd)   return Sprites.pick('tile.base',  'tile.path', 'tile.ground');
-  if (isCross) return Sprites.pick('tile.path_cross', 'tile.path', 'tile.ground');
-  if (isPath) {
-    // 꺾이는 칸이면 코너 타일을 우선 — 이웃 길칸이 대각으로 붙어 있으면 코너다
-    const up=PATH_CELLS.has(`${c},${r-1}`), dn=PATH_CELLS.has(`${c},${r+1}`);
-    const lf=PATH_CELLS.has(`${c-1},${r}`), rt=PATH_CELLS.has(`${c+1},${r}`);
-    const corner = (up||dn) && (lf||rt);
-    return corner ? Sprites.pick('tile.path_corner', 'tile.path', 'tile.ground')
-                  : Sprites.pick('tile.path', 'tile.ground');
-  }
-  // 빈 칸은 두 종류를 섞어 깐다 — 같은 타일이 63칸이면 격자가 그대로 보인다
-  if (Sprites.has('tile.ground2') && ((c*7 + r*3) % 5 === 0)) return 'tile.ground2';
-  return Sprites.pick('tile.ground');
+  if (isStart) return Sprites.pick('tile.start', 'tile.path');
+  if (isEnd)   return Sprites.pick('tile.path');            // 성은 타일 위에 따로 세운다
+  if (isPath)  return Sprites.pick('tile.path');
+  return fieldTileKey(c, r);
 }
 
 function renderDefense(ctx, gs) {
@@ -78,9 +78,16 @@ function renderDefense(ctx, gs) {
           ctx.fillRect(x+1, y+1, CELL_W-2, CELL_H-2);
         }
       }
+      // 🏰 기지 — 길 타일 위에 성을 올린다. 깃발이 4프레임으로 나부낀다.
+      let baseDrawn = false;
+      if (isEnd && Sprites.has('tile.base')) {
+        const sz = 50, hh = 38 * (sz / 52);
+        baseDrawn = Sprites.frame(ctx, 'tile.base', Sprites.frameAt('tile.base', Date.now()/1000, 0),
+                                  x + (CELL_W - sz)/2, y + CELL_H - hh - 9, sz, hh);
+      }
       // 시작·기지 글자는 그림이 있어도 남긴다 — 어디로 들어와 어디를 지키는지가 규칙이라서
       if (isStart) labelCell(ctx,'시작',x,y,'#93c5fd');
-      if (isEnd)   labelCell(ctx,'🏰마을',x,y,'#fca5a5');
+      if (isEnd && !baseDrawn) labelCell(ctx,'🏰마을',x,y,'#fca5a5');
 
       // Hover
       if (!isPath && gs.hoveredCell && gs.hoveredCell.c===c && gs.hoveredCell.r===r) {
@@ -111,7 +118,7 @@ function renderDefense(ctx, gs) {
     }
   }
 
-  drawPathFlow(ctx, THE_PATH, 'rgba(239,68,68,0.4)');
+  drawPathFlow(ctx, THE_PATH, 'rgba(120,40,30,0.22)');
 
   // ── 다음 경로 예고 ───────────────────────────────────────────────────────
   // 관문에서 경로가 바뀐다. 미리 보여줘야 두 경로가 함께 쓰는 칸에 지어둘 수 있고,
@@ -149,14 +156,26 @@ function renderDefense(ctx, gs) {
     }
   }
 
-  // 기지 셀 - idle 상태에서 마을 입장 힌트
+  // 기지 셀 - idle 상태에서 마을 입장 힌트.
+  // 성 그림이 생긴 뒤로는 칸을 덮지 않고 테두리로만 알린다 — 덮으면 성이 안 보인다.
   if (wm && wm.phase==='idle') {
     const bx2=GRID_OX+4*CELL_W+1, by2=GRID_OY+6*CELL_H+1;
-    ctx.fillStyle='rgba(99,102,241,0.35)'; ctx.fillRect(bx2,by2,CELL_W-2,CELL_H-2);
-    ctx.fillStyle='#a5b4fc'; ctx.font='bold 9px sans-serif';
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText('🏰',GRID_OX+4*CELL_W+CELL_W/2,GRID_OY+6*CELL_H+CELL_H/2-5);
-    ctx.fillText('마을',GRID_OX+4*CELL_W+CELL_W/2,GRID_OY+6*CELL_H+CELL_H/2+7);
+    const pulse = 0.35 + 0.25*Math.sin(Date.now()/420);
+    if (Sprites.has('tile.base')) {
+      ctx.strokeStyle=`rgba(165,180,252,${pulse})`; ctx.lineWidth=2;
+      ctx.strokeRect(bx2,by2,CELL_W-2,CELL_H-2);
+      ctx.fillStyle=`rgba(199,210,254,${0.55+pulse*0.45})`; ctx.font='bold 8px sans-serif';
+      ctx.textAlign='center'; ctx.textBaseline='top';
+      ctx.shadowColor='#0b1020'; ctx.shadowBlur=3;
+      ctx.fillText('🏰 마을', GRID_OX+4*CELL_W+CELL_W/2, by2+2);
+      ctx.shadowBlur=0;
+    } else {
+      ctx.fillStyle='rgba(99,102,241,0.35)'; ctx.fillRect(bx2,by2,CELL_W-2,CELL_H-2);
+      ctx.fillStyle='#a5b4fc'; ctx.font='bold 9px sans-serif';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('🏰',GRID_OX+4*CELL_W+CELL_W/2,GRID_OY+6*CELL_H+CELL_H/2-5);
+      ctx.fillText('마을',GRID_OX+4*CELL_W+CELL_W/2,GRID_OY+6*CELL_H+CELL_H/2+7);
+    }
   }
 
   // 사거리 미리보기
@@ -171,8 +190,21 @@ function renderDefense(ctx, gs) {
 
   for (const t of gs.towers) renderTower(ctx, t);
   for (const p of gs.projectiles) {
-    ctx.beginPath(); ctx.arc(p.x,p.y,3,0,Math.PI*2);
-    ctx.fillStyle=p.color; ctx.fill();
+    // 그림이 있으면 날아가는 방향으로 돌려 그린다. 없으면 예전처럼 색 점.
+    const pk = p.towerTypeId && Sprites.pick(`proj.${p.towerTypeId}`);
+    const ps = pk && Sprites.size(pk);
+    if (ps && p.target) {
+      const ang = Math.atan2(p.target.y - p.y, p.target.x - p.x);
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(ang);
+      // 원본은 오른쪽을 보고 있지 않은 것도 있어 세로로 긴 것은 90도 돌려 맞춘다
+      if (ps.h > ps.w) ctx.rotate(Math.PI/2);
+      const k = 1.7;
+      Sprites.draw(ctx, pk, -ps.w*k/2, -ps.h*k/2, ps.w*k, ps.h*k);
+      ctx.restore();
+    } else {
+      ctx.beginPath(); ctx.arc(p.x,p.y,3,0,Math.PI*2);
+      ctx.fillStyle=p.color; ctx.fill();
+    }
   }
   for (const e of gs.defenseEnemies) {
     if (!e.dead && !e.reached) renderDefEnemy(ctx, e);
@@ -262,19 +294,24 @@ function drawArrow(ctx,x1,y1,x2,y2,color) {
   ctx.restore();
 }
 
-// 타워 그림 규격 — 칸(53×50)보다 세로로 길어서 칸 위로 솟는다
-const TOWER_ART_W = 48, TOWER_ART_H = 56;
+// 타워 그림 — 원본 비율 그대로 세운다. 픽셀 아트라 정수배에 가깝게 키워야 선이 깨지지 않는다.
+// 원본이 16~18 × 23~35px이므로 2배면 32~36 × 46~70 — 칸(53×50) 위로 적당히 솟는다.
+const TOWER_ART_SCALE = 2.2;
 
 function renderTower(ctx, t) {
   const {x,y}=cellCenter(t.col,t.row);
   const tpl=TOWER_TYPES[t.typeId];
   const kick=t.muzzle>0?1.5:0;
   const key = towerSpriteKey(t.typeId, t.level);
-  if (key) {
+  const ksz = key && Sprites.size(key);
+  if (ksz) {
     // 발밑을 칸 아래쪽에 맞춘다 — 바닥선이 맞아야 앞뒤가 읽힌다
     const footY = y + CELL_H/2 - 2;
-    const k = 1 + kick*0.03;   // 발사 반동
-    Sprites.drawFoot(ctx, key, x, footY, TOWER_ART_W*k, TOWER_ART_H*k);
+    const k = TOWER_ART_SCALE * (1 + kick*0.03);   // 발사 반동
+    // 그림자를 깔아 칸에 붙어 있게 만든다
+    ctx.beginPath(); ctx.ellipse(x, footY-2, ksz.w*k*0.42, 3.4, 0, 0, Math.PI*2);
+    ctx.fillStyle='rgba(0,0,0,0.28)'; ctx.fill();
+    Sprites.drawFoot(ctx, key, x, footY, ksz.w*k, ksz.h*k);
   } else {
   ctx.fillStyle='#0f2540';
   roundRect(ctx,x-CELL_W/2+3,y-CELL_H/2+3,CELL_W-6,CELL_H-6,4); ctx.fill();
@@ -317,22 +354,31 @@ function renderDefEnemy(ctx, e) {
     ctx.strokeStyle = `rgba(251,191,36,${0.85-t*0.7})`; ctx.lineWidth = 2.5; ctx.stroke();
   }
 
+  const drew = drawMobActor(ctx, e, ey, false);
+  if (!drew) {
   ctx.beginPath(); ctx.arc(e.x,ey,e.radius,0,Math.PI*2);
   ctx.fillStyle = e.hitFlash>0 ? '#ffffff' : (slowed ? '#7dd3fc' : ENEMY_TYPES[e.typeId].color);
   ctx.fill();
   ctx.strokeStyle = e.isBounty ? '#fbbf24' : e.flying ? '#e9d5ff' : (e.armor||0)>0 ? '#cbd5e1' : '#fff';
   ctx.lineWidth = (e.isBounty || (e.armor||0)>0) ? 2 : 1;
   ctx.stroke();
+  }
+
+  // 그림을 쓰면 몸이 원보다 위로 솟으므로 표시들도 그만큼 올린다
+  const top = drew ? mobArtTop(e, ey, false) : ey - e.radius;
+
+  drawHPBar(ctx, e.x-e.radius, top-6, e.radius*2, 4, e.hp/e.maxHp);
 
   // 등급 태그 — 어떤 타워로 잡아야 하는지 한 글자로
   const cls = MOB_CLASSES[e.cls || 'medium'];
   if (cls && e.radius >= 8) {
-    ctx.fillStyle = '#0f172a'; ctx.font = `bold ${Math.round(e.radius*0.95)}px sans-serif`;
+    ctx.fillStyle = drew ? '#f1f5f9' : '#0f172a';
+    ctx.font = `bold ${Math.round(Math.max(8, e.radius*(drew?0.62:0.95)))}px sans-serif`;
     ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(cls.tag, e.x, ey + 0.5);
+    if (drew) { ctx.shadowColor='#000'; ctx.shadowBlur=3; }
+    ctx.fillText(cls.tag, e.x, drew ? top-13 : ey+0.5);
+    ctx.shadowBlur=0;
   }
-
-  drawHPBar(ctx, e.x-e.radius, ey-e.radius-7, e.radius*2, 4, e.hp/e.maxHp);
 }
 
 // 전사한 영웅이 언제 돌아오는지 — 화면마다 같은 말을 쓰기 위해 한곳에 둔다
@@ -868,6 +914,37 @@ function renderBriefing(ctx, gs, top) {
 //   바위 — 채워진 덩어리에 사선 하이라이트
 //   수렁 — 가로 물결
 //   가시 — 삼각 톱니
+// 아레나 바닥 타일 — 상단 밭 타일을 32px 격자로 깔고 어둡게 덮는다
+const ARENA_TILE = 40;
+let _arenaFloor = null;
+// 바닥은 변하지 않는다. 매 프레임 108장을 다시 깔 이유가 없어서 한 번 구워 둔다.
+function arenaFloorCanvas() {
+  if (_arenaFloor !== null) return _arenaFloor;
+  if (!Sprites.has('tile.field.0')) return (_arenaFloor = false);
+  const c = document.createElement('canvas');
+  c.width = ARENA_W * 2; c.height = ARENA_H * 2;      // 화면이 DPR 2로 그려지므로 두 배로 굽는다
+  const x = c.getContext('2d');
+  x.scale(2, 2);
+  for (let ty = 0; ty * ARENA_TILE < ARENA_H; ty++) {
+    for (let tx = 0; tx * ARENA_TILE < ARENA_W; tx++) {
+      Sprites.draw(x, fieldTileKey(tx + 11, ty + 7),
+                   tx*ARENA_TILE, ty*ARENA_TILE, ARENA_TILE, ARENA_TILE);
+    }
+  }
+  // 밤 장막 — 이 정도로 눌러야 체력바와 아이콘이 읽힌다
+  x.fillStyle = 'rgba(8,16,28,0.70)';
+  x.fillRect(0, 0, ARENA_W, ARENA_H);
+  return (_arenaFloor = c);
+}
+function drawArenaFloor(ctx) {
+  const c = arenaFloorCanvas();
+  if (!c) return false;
+  const sm = ctx.imageSmoothingEnabled; ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(c, 0, 0, c.width, c.height, ARENA_X, ARENA_Y, ARENA_W, ARENA_H);
+  ctx.imageSmoothingEnabled = sm;
+  return true;
+}
+
 function renderArenaTerrain(ctx, a) {
   const ter = a.terrain;
   if (!ter || !ter.length) return;
@@ -912,16 +989,21 @@ function renderArenaPhase(ctx, gs) {
 
   renderArenaStatusBar(ctx, gs);
 
-  // 아레나 바닥
+  // 아레나 바닥 — 상단과 같은 밭 타일을 깔되 어둡게 덮는다.
+  // 같은 세계인데 아래쪽만 검은 판이면 두 전선이 딴 게임처럼 보인다.
+  // 그렇다고 밝게 두면 개체와 UI가 안 읽히므로, 밤처럼 눌러 둔다.
   ctx.fillStyle = '#0b1622';
   ctx.fillRect(ARENA_X, ARENA_Y, ARENA_W, ARENA_H);
+  const floorTiled = drawArenaFloor(ctx);
 
-  // 격자 (위치감)
-  ctx.strokeStyle = 'rgba(148,163,184,0.055)'; ctx.lineWidth = 1;
-  ctx.beginPath();
-  for (let gx = ARENA_X + 40; gx < ARENA_X + ARENA_W; gx += 40) { ctx.moveTo(gx, ARENA_Y); ctx.lineTo(gx, ARENA_Y+ARENA_H); }
-  for (let gy = ARENA_Y + 40; gy < ARENA_Y + ARENA_H; gy += 40) { ctx.moveTo(ARENA_X, gy); ctx.lineTo(ARENA_X+ARENA_W, gy); }
-  ctx.stroke();
+  if (!floorTiled) {
+    // 격자 (위치감) — 타일을 깔면 무늬가 그 몫을 한다
+    ctx.strokeStyle = 'rgba(148,163,184,0.055)'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let gx = ARENA_X + 40; gx < ARENA_X + ARENA_W; gx += 40) { ctx.moveTo(gx, ARENA_Y); ctx.lineTo(gx, ARENA_Y+ARENA_H); }
+    for (let gy = ARENA_Y + 40; gy < ARENA_Y + ARENA_H; gy += 40) { ctx.moveTo(ARENA_X, gy); ctx.lineTo(ARENA_X+ARENA_W, gy); }
+    ctx.stroke();
+  }
 
   // 스폰 밴드
   ctx.strokeStyle = 'rgba(239,68,68,0.16)'; ctx.lineWidth = 1; ctx.setLineDash([5,5]);
@@ -1054,6 +1136,38 @@ function renderArenaStatusBar(ctx, gs) {
   }
 }
 
+// ─── 몬스터 그림 ─────────────────────────────────────────────────────────────
+// 상단과 아레나가 같은 배우를 쓴다. 몸 반지름에 맞춰 크기를 잡고,
+// 진행 방향을 보고 옆/앞/뒤 그림을 고른다.
+// 48px 프레임 안에서 캐릭터는 22px 남짓만 차지한다. 몸이 충돌원만 하게 보이려면
+// 프레임을 그 두 배 넘게 키워야 한다 — 2r × 48/22 ≈ 4.4r.
+const MOB_ART_MULT = 4.3;
+
+function mobArtHeight(e, arena) {
+  const def = mobActorDef(e.typeId, arena);
+  return def ? e.radius * MOB_ART_MULT * (def.h || 1) : 0;
+}
+// 그림의 머리 꼭대기 y — 체력바와 등급 표시를 여기 위에 얹는다.
+// 프레임은 48px이지만 캐릭터는 그 안에서 절반도 안 차지해서, 프레임 위쪽을 쓰면 허공에 뜬다.
+function mobArtTop(e, drawY, arena) {
+  const def = mobActorDef(e.typeId, arena); if (!def) return drawY - e.radius;
+  return drawY + e.radius - Sprites.actorHeadUp(def.actor, mobArtHeight(e, arena));
+}
+function drawMobActor(ctx, e, drawY, arena) {
+  const def = mobActorDef(e.typeId, arena);
+  if (!def) return false;
+  const f = spriteFacing(e);
+  const h = e.radius * MOB_ART_MULT * (def.h || 1);
+  const opts = { flip: f.flip, phase: (e.id || 0) * 0.7 };
+  // 맞은 순간은 하얗게 튄다 — 원으로 그릴 때의 hitFlash를 그림에서도 살린다
+  if (e.hitFlash > 0)      { opts.tint = '#ffffff'; opts.tintAmt = 1; }
+  else if (e.slowTimer > 0){ opts.tint = '#8fd6ff'; opts.tintAmt = 0.75; }
+  else if (def.tint)       { opts.tint = def.tint; }
+  const anim = 'Walk';
+  const ok = Sprites.actor(ctx, def.actor, anim, f.dir, Date.now()/1000, e.x, drawY + e.radius, h, opts);
+  return ok;
+}
+
 // 아레나 개체 그림 키 — 영웅은 각인별로, 나머지는 타입 아이디로 찾는다.
 //   unit.swordsman · unit.rogue · hero.blade · mob.goblin …
 function arenaSpriteKey(e) {
@@ -1084,9 +1198,9 @@ function renderArenaEntity(ctx, e, alpha) {
   }
   // 그림이 있으면 몸 대신 그린다. 충돌원은 발밑, 그림은 그 위로 선다.
   const skey = arenaSpriteKey(e);
-  if (skey) {
-    Sprites.drawFoot(ctx, skey, e.x, e.y + r, r*ARENA_ART_W_MULT, r*ARENA_ART_H_MULT);
-  } else {
+  const drewArt = skey ? Sprites.drawFoot(ctx, skey, e.x, e.y + r, r*ARENA_ART_W_MULT, r*ARENA_ART_H_MULT)
+                       : (!e.isPlayer && drawMobActor(ctx, e, e.y, true));
+  if (!drewArt) {
   ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, Math.PI*2);
   ctx.fillStyle = e.isHero ? COLORS.hero : e.color; ctx.fill();
   // 아군은 흰 테두리, 몹은 어두운 테두리 — 겹쳐도 편이 구분된다

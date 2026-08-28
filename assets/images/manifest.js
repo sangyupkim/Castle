@@ -1,57 +1,74 @@
 'use strict';
 
 // ─── 🖼 스프라이트 매니페스트 ─────────────────────────────────────────────────
-// 여기 적힌 파일만 읽습니다. 비어 있으면 요청이 한 건도 나가지 않고,
+// 여기 적힌 것만 읽습니다. 비어 있으면 요청이 한 건도 나가지 않고,
 // 게임은 지금까지처럼 이모지와 도형으로 그려집니다.
+// 규격과 이름 규칙은 같은 폴더의 README.md에 있습니다.
 //
-// ⚠️ 지금 켜져 있는 22장은 자리를 잡아두려고 코드로 만든 **임시 그림**입니다.
-//    같은 이름으로 덮어쓰면 그대로 바뀝니다 — 이 파일을 고칠 필요도 없습니다.
-//    자세한 규격과 이름 규칙은 같은 폴더의 README.md를 보세요.
-//
-// 그림을 넣는 법
-//   1. 파일을 assets/images/ 아래 알맞은 폴더에 넣습니다
-//   2. 아래에서 해당 줄의 // 를 지웁니다
-//   3. 새로고침 — 그게 전부입니다
-//
-// 크기는 @2x 기준입니다 (캔버스가 DPR 2로 렌더되므로).
-// 넣지 않은 것은 자동으로 예전 그리기로 떨어지므로, 한 장씩 늘려가도 됩니다.
+// self는 브라우저에서 window와 같고, 서비스워커도 같은 파일을 읽을 수 있게 해줍니다.
 
+// ── 낱장 그림 ───────────────────────────────────────────────────────────────
 self.SPRITE_FILES = {
 
-  // ── 상단 격자 타일 ────────────────────────────────────────────────────────
-  // 한 칸 53 × 50 (@1x) → 파일은 106 × 100 (@2x)
-  'tile.ground':      'tiles/ground.png',        // 타워를 놓는 빈 칸
-  'tile.ground2':     'tiles/ground2.png',       // 선택 — 있으면 섞어서 깝니다
-  'tile.path':        'tiles/path.png',          // 적이 지나는 길
-  'tile.path_corner': 'tiles/path_corner.png',   // 선택 — 없으면 path를 씁니다
-  'tile.path_cross':  'tiles/path_cross.png',    // 선택 — ∞자 교차 구간
-  'tile.start':       'tiles/start.png',         // 적이 나오는 곳 (위쪽 가운데)
-  'tile.base':        'tiles/base.png',          // 지켜야 하는 기지 (아래쪽 가운데)
+  // 밭 타일 — 타워를 놓는 빈 칸. 20종을 칸마다 섞어 깔아 격자가 안 보이게 한다.
+  'tile.field.0':  'tiles/field_00.png',
+  'tile.field.1':  'tiles/field_01.png',
+  'tile.field.2':  'tiles/field_02.png',
+  'tile.field.3':  'tiles/field_03.png',
+  'tile.field.4':  'tiles/field_04.png',
+  'tile.field.5':  'tiles/field_05.png',
+  'tile.field.6':  'tiles/field_06.png',
+  'tile.field.7':  'tiles/field_07.png',
+  'tile.field.8':  'tiles/field_08.png',
+  'tile.field.9':  'tiles/field_09.png',
+  'tile.field.10': 'tiles/field_10.png',
+  'tile.field.11': 'tiles/field_11.png',
+  'tile.field.12': 'tiles/field_12.png',
+  'tile.field.13': 'tiles/field_13.png',
+  'tile.field.14': 'tiles/field_14.png',
+  'tile.field.15': 'tiles/field_15.png',
+  'tile.field.16': 'tiles/field_16.png',
+  'tile.field.17': 'tiles/field_17.png',
+  'tile.field.18': 'tiles/field_18.png',
+  'tile.field.19': 'tiles/field_19.png',
 
-  // ── 타워 ─────────────────────────────────────────────────────────────────
-  // 48 × 56 (@1x) → 파일은 96 × 112 (@2x). 세로가 칸(50)보다 크므로 칸 위로 솟습니다.
-  // 바닥이 칸 아래쪽에 닿도록 그려주세요 (발밑 기준으로 배치합니다).
-  // 티어는 레벨 묶음입니다 — _1은 Lv1~2, _2는 Lv3~4, _3은 Lv5.
-  // _1 한 장만 넣어도 모든 레벨에서 그 그림을 씁니다.
-  'tower.arrow.1':  'towers/arrow_1.png',
-  'tower.arrow.2':  'towers/arrow_2.png',
-  'tower.arrow.3':  'towers/arrow_3.png',
-  'tower.frost.1':  'towers/frost_1.png',
-  'tower.frost.2':  'towers/frost_2.png',
-  'tower.frost.3':  'towers/frost_3.png',
-  'tower.cannon.1': 'towers/cannon_1.png',
-  'tower.cannon.2': 'towers/cannon_2.png',
-  'tower.cannon.3': 'towers/cannon_3.png',
-  'tower.sniper.1': 'towers/sniper_1.png',
-  'tower.sniper.2': 'towers/sniper_2.png',
-  'tower.sniper.3': 'towers/sniper_3.png',
-  'tower.tesla.1':  'towers/tesla_1.png',
-  'tower.tesla.2':  'towers/tesla_2.png',
-  'tower.tesla.3':  'towers/tesla_3.png',
+  // 길 — 밭 사이로 난 잔디 길. 에셋을 만든 사람의 테스트 이미지가 딱 이 구성이다.
+  'tile.path':  'tiles/grass.png',
+  'tile.start': 'tiles/grass.png',
 
+  // 타워 — 원본 비율 그대로 세운다 (16~18 × 23~35px 픽셀 아트)
+  'tower.arrow.1':  'towers/arrow.png',
+  'tower.frost.1':  'towers/frost.png',
+  'tower.cannon.1': 'towers/cannon.png',
+  'tower.sniper.1': 'towers/sniper.png',
+  'tower.tesla.1':  'towers/tesla.png',
+
+  // 투사체
+  'proj.arrow':  'proj/arrow.png',
+  'proj.frost':  'proj/frost.png',
+  'proj.cannon': 'proj/cannon.png',
+  'proj.sniper': 'proj/sniper.png',
+  'proj.tesla':  'proj/tesla.png',
 };
 
-// self는 브라우저에서 window와 같고, 서비스워커에서도 같은 파일을 읽을 수 있게 해준다.
-// 위 목록을 일일이 켜는 대신, 규칙대로 파일을 떨궈놓고 전부 시도하게 하려면 true.
+// ── 이어 붙인 프레임 ────────────────────────────────────────────────────────
+self.SPRITE_SHEETS = {
+  // 지켜야 하는 기지. 4프레임짜리 깃발 애니메이션이다.
+  'tile.base': { file:'tiles/castle.png', fw:52, fh:38, frames:4, fps:4 },
+};
+
+// ── 배우 (방향 × 동작 × 프레임) ─────────────────────────────────────────────
+// <path><방향>_<동작>.png 로 펼쳐집니다. 방향은 S(옆) · D(아래) · U(위).
+// foot — 48px 프레임 안에서 발이 닿는 y. 이 값을 몸 아래쪽에 맞춥니다.
+// head — 그림이 실제로 시작하는 y. 체력바와 등급 표시를 여기 위에 놓습니다.
+//        (프레임은 48px이지만 캐릭터는 그 안에서 13~22px밖에 안 차지합니다)
+self.SPRITE_ACTORS = {
+  slime: { path:'mobs/slime/', fw:48, fh:48, frames:6, fps:7,  foot:38, head:24, anims:['Walk'] },
+  orc:   { path:'mobs/orc/',   fw:48, fh:48, frames:6, fps:9,  foot:37, head:15, anims:['Walk','Attack'] },
+  wolf:  { path:'mobs/wolf/',  fw:48, fh:48, frames:6, fps:11, foot:39, head:17, anims:['Walk','Attack'] },
+  bee:   { path:'mobs/bee/',   fw:48, fh:48, frames:6, fps:13, foot:36, head:14, anims:['Walk'] },
+};
+
+// 매니페스트를 안 켜고 규칙대로 파일만 떨궈놓고 쓰려면 true.
 // 없는 파일마다 콘솔에 404가 한 줄씩 찍히는 것만 감수하면 됩니다.
 self.SPRITE_AUTOLOAD = false;
