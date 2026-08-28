@@ -417,14 +417,21 @@ const PACT_TIERS = { 1:'적을 강하게', 2:'나를 약하게', 3:'경제를 �
 // Lv.4~5는 후반 골드 사용처다. 격자 40칸이 다 차고 마을 강화가 바닥나면
 // 갈 곳 없는 골드가 수천 단위로 쌓이는데, 비용이 급격히 오르는 상위 레벨이
 // 그것을 계속 빨아들인다.
-const TOWER_MAX_LEVEL = 5;
+// ★6~★10은 ⚒️ 대장간 합성으로만 열린다 — 기본 상한은 여전히 5다.
+const TOWER_MAX_LEVEL = 10;
+const TOWER_BASE_LEVEL_CAP = 5;
 const TOWER_LEVEL_MULT = [
   null,
   { dmg:1.00, spd:1.00, range:1.00 },
   { dmg:1.70, spd:1.15, range:1.12 },
   { dmg:2.60, spd:1.30, range:1.25 },
   { dmg:3.80, spd:1.45, range:1.35 },
-  { dmg:5.40, spd:1.62, range:1.45 }
+  { dmg:5.40, spd:1.62, range:1.45 },
+  { dmg:7.60, spd:1.78, range:1.54 },
+  { dmg:10.6, spd:1.94, range:1.62 },
+  { dmg:14.6, spd:2.10, range:1.69 },
+  { dmg:20.0, spd:2.26, range:1.75 },
+  { dmg:27.0, spd:2.42, range:1.80 }
 ];
 // 같은 종류를 많이 지을수록 건설비가 오른다 — 도배 대신 배치를 고민하게 만든다
 const TOWER_COST_ESCALATION = 0.28;
@@ -435,8 +442,12 @@ function towerBuildCost(typeId, towers) {
 }
 // Lv.3까지는 완만하고, Lv.4부터 급격히 비싸진다
 const TOWER_HIGH_LEVEL_ESCALATION = 2.6;
+// 합성으로 연 별과 서약 상한 중 낮은 쪽
 function towerLevelCap() {
-  return Math.min(TOWER_MAX_LEVEL, BONUSES.pactTowerLevelCap || TOWER_MAX_LEVEL);
+  const forged = (typeof gs !== 'undefined' && gs && gs.town && typeof forgeBestStar === 'function')
+               ? forgeBestStar(gs) : TOWER_BASE_LEVEL_CAP;
+  return Math.max(1, Math.min(TOWER_MAX_LEVEL, forged,
+                              BONUSES.pactTowerLevelCap || TOWER_MAX_LEVEL));
 }
 function towerUpgradeCost(t) {
   const lv = t.level || 1;
@@ -447,7 +458,8 @@ function towerUpgradeCost(t) {
   return Math.max(1, Math.round(base * mult));
 }
 function towerSellValue(t) {
-  return Math.max(1, Math.floor((t.invested || TOWER_TYPES[t.typeId].cost) * 0.6));
+  return Math.max(1, Math.floor((t.invested || TOWER_TYPES[t.typeId].cost)
+                                * (0.6 + (BONUSES.towerSellBonus || 0))));
 }
 
 // ─── Defense Enemy Types ─────────────────────────────────────────────────────
@@ -971,9 +983,14 @@ function rollArenaMob(pool) {
 
 // 성장 곡선: 초반은 완만한 선형, 후반은 지수가 지배한다.
 // 선형만 쓰면 반드시 따라잡히고, 지수만 쓰면 1~10층이 지루하게 똑같다.
-const ENDLESS_LINEAR   = 0.09;    // 층당 가산
-const ENDLESS_EXP      = 1.055;   // 층당 배율
-const ENDLESS_ARENA_EXP= 1.040;   // 아레나는 완만하게 — 두 전선이 비슷한 층에서 위험해지도록
+const ENDLESS_LINEAR   = 0.11;    // 층당 가산 (상단)
+const ENDLESS_EXP      = 1.062;   // 층당 배율 — 상단 체력. 1.055는 26층이 무피해로 막혔다
+const ENDLESS_ARENA_EXP= 1.034;   // 하단 체력 곡선 — 1.040은 26층부터 처리량을 못 따라갔다
+const ENDLESS_ARENA_LINEAR = 0.06;// 하단은 가산도 따로 쓴다. 상단을 올리자고 하단까지 끌려가면 안 된다
+// 하단 몹의 방어력·공격력은 체력 배율(sm)을 그대로 쓰지 않는다. 지수를 눌러 쓴다.
+const ARENA_DEF_EXP    = 0.45;    // 방어력
+const ARENA_ATK_EXP    = 0.80;    // 공격력
+const ARENA_DMG_FLOOR  = 0.12;    // 방어력을 다 뚫려도 원 공격력의 12%는 들어간다   // 아레나는 완만하게 — 두 전선이 비슷한 층에서 위험해지도록
 const ENDLESS_DMG_EXP  = 1.035;   // 기지에 넣는 피해
 const ENDLESS_SPD_EXP  = 1.022;   // 이동속도
 const ENDLESS_SPD_CAP  = 2.4;     // 상한 — 이 이상은 프레임 간 이동이 격자를 건너뛴다
@@ -1032,9 +1049,9 @@ function endlessGemTotalFor(tier, best) {
 }
 
 // 1층이 기준(×1)이고 거기서부터 오른다
-function endlessCurve(tier, exp) {
+function endlessCurve(tier, exp, linear) {
   const n = Math.max(0, (tier || 1) - 1);
-  return (1 + n * ENDLESS_LINEAR) * Math.pow(exp, n);
+  return (1 + n * (linear === undefined ? ENDLESS_LINEAR : linear)) * Math.pow(exp, n);
 }
 
 function isEndlessRun() {
@@ -1050,7 +1067,7 @@ function endlessStatMult(waveIndex) {
 }
 function endlessArenaMult(waveIndex) {
   const t = endlessTier(waveIndex);
-  return t <= 0 ? 1 : endlessCurve(t, ENDLESS_ARENA_EXP);
+  return t <= 0 ? 1 : endlessCurve(t, ENDLESS_ARENA_EXP, ENDLESS_ARENA_LINEAR);
 }
 function endlessDmgMult(waveIndex) {
   const t = endlessTier(waveIndex);

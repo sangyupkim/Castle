@@ -71,6 +71,9 @@ let _soulStones    = 0;
 let _metaUpgrades  = {};
 let _clearedStages = new Array(10).fill(false);
 let _skillLevels   = {};   // 스킬 노드 id → 레벨(0~10)
+let _forge         = { cores:{}, best:5, mastery:0, plus:{} };  // ⚒️ 대장간 (보석)
+let _charms        = [];   // 🎴 보관 중인 일회용 부적
+let _charmSlots    = [null, null];
 let _unlocked       = [];   // 보석으로 연 타워/유닛
 let _pacts          = [];   // 걸어둔 서약
 let _seenMobs       = [];   // 도감
@@ -146,6 +149,12 @@ function newState() {
     set clearedStages(v) { _clearedStages = v; },
     get skillLevels()  { return _skillLevels; },
     set skillLevels(v) { _skillLevels = v; },
+    get forge()  { return _forge; },
+    set forge(v) { _forge = v; },
+    get charms()  { return _charms; },
+    set charms(v) { _charms = v; },
+    get charmSlots()  { return _charmSlots; },
+    set charmSlots(v) { _charmSlots = v; },
     get unlocked()  { return _unlocked; },
     set unlocked(v) { _unlocked = v; },
     get pacts()  { return _pacts; },
@@ -179,6 +188,9 @@ let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적�
   _metaUpgrades   = sv.metaUpgrades  || {};
   _clearedStages  = sv.clearedStages || new Array(10).fill(false);
   _skillLevels    = sv.skillLevels || {};
+  _forge          = sv.forge      || { cores:{}, best:5, mastery:0, plus:{} };
+  _charms         = sv.charms     || [];
+  _charmSlots     = sv.charmSlots || [null, null];
   // 트리 v2 이전 세이브 — 노드 구성이 통째로 바뀌었으므로 습득분은 보석으로 환급한다
   if (!sv.skillLevels && Array.isArray(sv.skillTreeOwned) && sv.skillTreeOwned.length)
     _soulStones += sv.skillTreeOwned.length * SKILL_V1_REFUND;
@@ -223,6 +235,7 @@ let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적�
   }
   // 보관함 — 옛 세이브(townEquipped: 장착 아이디 배열)도 받아들인다
   gs.town.gear = normalizeHeroGear(sv.townGear, sv.townEquipped);
+
   gs.innOffers = sv.innOffers || [];
 
   // ── 판에 세워둔 것 복원 ──
@@ -641,6 +654,8 @@ const _PAGE_UI_KEYS = [
   'buildingLvUpBtn','upgradeBtns','buildingScroll','pageScroll','briefScroll','lobbyScroll','hireCards','hiredSlots',
   'heroInfoBtn','heroBackBtn','equipSlotBtns','invCards','skillSlotBtns','skillCards','heroPickBtn',
   'shopItemBtns','skillBuyBtns','shopTabBuy','shopTabUp',
+  'forgeTabs','forgeGearBtns','forgeFuseBtns','forgeTemperBtn','forgeCoreBtn',
+  'charmRollBtn','charmCards','charmSlotBtns',
   'specialCards','specialSlots','heroDefBtn','heroBatBtn','bountyBtn','eliteBtn','towerMiniGrid',
   'lobbyTabBtns','sortieBtn','trainBtn','metaCards','unlockBtns','pactBtns','sigilCards',
   'skillTreeTabs','backupExportBtn','backupImportBtn',
@@ -667,6 +682,43 @@ function handleLobbyTap(x, y) {
   // 출격은 두 갈래 — 해금 전에는 sortieBtn 하나가 훈련이다
   if (hitTest(x,y,gs.ui.trainBtn||{}))  { startRun('campaign'); return; }
   if (hitTest(x,y,gs.ui.sortieBtn||{})) { startRun(endlessUnlocked() ? 'endless' : 'campaign'); return; }
+
+  if (L.tab === 'sortie') {
+    // 출격 탭도 스크롤된 채 그려진다
+    const ry = y + (gs.lobbyScroll || 0);
+    if (hitTest(x,ry,gs.ui.charmRollBtn||{})) {
+      const e = rollCharm(gs);
+      if (e) {
+        const d = charmDef(e.charmId);
+        SFX.levelUp(); SaveManager.save(gs);
+        spawnFloaty(`${d.icon} ${d.name}!`, x, y, GRADE_COLOR[d.grade] || '#a78bfa');
+      } else {
+        SFX.denied();
+        spawnFloaty(charmBag(gs).length >= CHARM_BAG_MAX ? '보관함이 가득 찼습니다'
+                                                         : `💎 ${CHARM_ROLL_COST} 부족`, x, y, '#ef4444');
+      }
+      return;
+    }
+    for (const b of gs.ui.charmSlotBtns||[]) {
+      if (hitTest(x,ry,b)) {   // 낀 것을 다시 누르면 뺀다
+        setCharmSlot(gs, b.idx, null); SFX.click(); SaveManager.save(gs); return;
+      }
+    }
+    for (const c of gs.ui.charmCards||[]) {
+      if (hitTest(x,ry,c)) {
+        const sl = charmSlots(gs);
+        if (isCharmSlotted(gs, c.uid)) {          // 이미 낀 것 → 뺀다
+          for (let i=0;i<sl.length;i++) if (sl[i]===c.uid) sl[i]=null;
+        } else {
+          let idx = sl.findIndex(v => v == null);
+          if (idx < 0) idx = 0;                    // 자리가 없으면 첫 칸을 갈아 끼운다
+          setCharmSlot(gs, idx, c.uid);
+        }
+        SFX.click(); SaveManager.save(gs); return;
+      }
+    }
+    // 나머지(출격 버튼 등)는 아래 공통 처리로
+  }
 
   if (L.tab === 'skill') {
     // 스킬 탭도 스크롤된 채 그려진다 — 좌표를 같은 기준으로 맞춘다
@@ -809,6 +861,8 @@ function resetAllProgress() {
   _metaUpgrades = {};
   _clearedStages = new Array(10).fill(false);
   _skillLevels = {};
+  _forge = { cores:{}, best:5, mastery:0, plus:{} };
+  _charms = []; _charmSlots = [null, null];
   _unlocked = [];
   _heroSigil = DEFAULT_SIGIL;
   _unlockedSigils = [DEFAULT_SIGIL];
@@ -842,6 +896,9 @@ function startRun(mode) {
   applyPathVariant(0);
   gs.pathChanged = null;
   refreshInnOffers(gs);
+  // 🎴 끼워둔 부적은 여기서 소모된다 — 판이 시작되면 사라지고 이 판에만 붙는다
+  consumeCharmsForRun(gs);
+  reapplyAllBonuses(gs);
   gs.inRun = true;
   gs.page  = 'battle';
   wm.init(0);
@@ -958,13 +1015,56 @@ function refreshDeployedHero() {
   gs.battle.ourTeam[i] = u;
 }
 
+// ⚒️ 대장간 — 보석을 쓰는 세 갈래. 처리됐으면 true.
+function handleForgeTap(x, y) {
+  const t = gs.town;
+  const say = (text, color) => { gs.ui.forgeMsg = { text, color, until: Date.now()+2600 }; };
+  for (const b of gs.ui.forgeTabs||[]) {
+    if (hitTest(x,y,b)) { t.forgeTab=b.id; t.scroll=0; SFX.click(); return true; }
+  }
+  for (const b of gs.ui.forgeGearBtns||[]) {
+    if (hitTest(x,y,b)) {
+      const cost = slotPlusCost(gs, b.slot);
+      if (upgradeSlotPlus(gs, b.slot)) {
+        SFX.upgrade(); SaveManager.save(gs);
+        say(`🔨 ${slotDef(b.slot).name} +${slotPlus(gs,b.slot)}`, '#fbbf24');
+      } else { SFX.denied(); say(`💎 ${cost} 부족`, '#ef4444'); }
+      return true;
+    }
+  }
+  if (hitTest(x,y,gs.ui.forgeCoreBtn||{})) {
+    if (buyForgeCore(gs)) { SFX.upgrade(); SaveManager.save(gs); say('★5 심을 사들였습니다', '#60a5fa'); }
+    else { SFX.denied(); say(`💎 ${FORGE_CORE_COST} 부족`, '#ef4444'); }
+    return true;
+  }
+  for (const b of gs.ui.forgeFuseBtns||[]) {
+    if (hitTest(x,y,b)) {
+      const r = fuseCores(gs, b.star);
+      if (!r) { SFX.denied(); say('심이 2개 필요합니다', '#ef4444'); return true; }
+      SaveManager.save(gs);
+      if (r.ok) { SFX.levelUp(); FX.shake(6,0.4); say(`🔥 성공! ★${r.got} 심을 얻었습니다`, '#fbbf24'); }
+      else      { SFX.denied(); say(`💥 실패 — ★${r.star} 심 1개가 탔습니다`, '#ef4444'); }
+      return true;
+    }
+  }
+  if (hitTest(x,y,gs.ui.forgeTemperBtn||{})) {
+    const r = temperForge(gs);
+    if (!r) { SFX.denied(); say(`💎 ${temperCost(gs)} 부족`, '#ef4444'); return true; }
+    SaveManager.save(gs);
+    if (r.ok) { SFX.levelUp(); say(`🎲 성공! 숙련도 ${r.before} → ${r.after}`, '#22c55e'); }
+    else      { SFX.denied(); FX.shake(5,0.35); say(`🎲 실패 — 숙련도 ${r.before} → ${r.after}`, '#ef4444'); }
+    return true;
+  }
+  return false;
+}
+
 function handleTownTap(x,y) {
   const t=gs.town;
 
   // Back to battle page
   if (hitTest(x,y,gs.ui.townPageBackBtn||{})) { gs.page='battle'; return; }
 
-  // Building sub-screen
+// Building sub-screen
   if (t.screen!=='main') {
     // Tab buttons work even inside sub-screen
     if (hitTest(x,y,gs.ui.tabTownBtn||{}))   { t.screen='main'; t.tab='town';   t.scroll=0; return; }
@@ -993,6 +1093,7 @@ function handleTownTap(x,y) {
       // 매대 탭에서는 강화 버튼이 없다 — 나머지 탭 전환만 위에서 처리된다
       if (onBuyTab) return;
     }
+    if (t.screen==='forge' && handleForgeTap(x,y)) return;
     if (hitTest(x,y,gs.ui.buildingLvUpBtn||{})) {
       if (levelUpBuilding(t.screen,gs)) spawnFloaty('건물 레벨업!',x,y,'#f59e0b');
       else spawnFloaty('골드 부족!',x,y,'#ef4444');

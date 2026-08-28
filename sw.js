@@ -12,7 +12,7 @@ const CACHE = 'dual-frontier-v0.8.0';
 
 const SHELL = [
   '.', 'index.html', 'manifest.webmanifest',
-  'assets/images/manifest.js', 'js/constants.js', 'js/sprites.js', 'js/audio.js', 'js/fx.js', 'js/upgrade.js', 'js/hero.js', 'js/town.js',
+  'assets/images/manifest.js', 'js/constants.js', 'js/sprites.js', 'js/audio.js', 'js/fx.js', 'js/upgrade.js', 'js/hero.js', 'js/forge.js', 'js/town.js',
   'js/save.js', 'js/lobby.js', 'js/defense.js', 'js/battle.js', 'js/arena.js',
   'js/formation.js', 'js/wave.js', 'js/tutorial.js', 'js/render.js', 'js/game.js',
   'assets/images/mainpage.png',

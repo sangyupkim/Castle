@@ -34,8 +34,9 @@ function applyUnitStats(u, hpRatio) {
   const ratio = hpRatio !== undefined ? hpRatio : (u.maxHp > 0 ? u.hp / u.maxHp : 1);
   // 🏨 여관의 '명성' — 특수 용병에게만 붙는 배율
   const sp = t.special ? (BONUSES.specialUnitMult || 1) : 1;
-  u.maxHp     = Math.max(1, Math.round((t.hp + BONUSES.unitHp) * (BONUSES.pactUnitHpMult || 1) * sp));
-  u.atk       = Math.round((t.atk + BONUSES.unitAtk) * sp);
+  u.maxHp     = Math.max(1, Math.round((t.hp + BONUSES.unitHp) * (BONUSES.unitHpMult || 1)
+                                       * (BONUSES.pactUnitHpMult || 1) * sp));
+  u.atk       = Math.round((t.atk + BONUSES.unitAtk) * (BONUSES.unitAtkMult || 1) * sp);
   u.def       = Math.round((t.def + BONUSES.unitDef + BONUSES.heroAura) * sp);
   u.skillAtk  = t.skillAtk  ? Math.round((t.skillAtk + BONUSES.unitAtk) * sp) : 0;
   u.healAmt   = t.healAmt   ? t.healAmt   + BONUSES.healBonus   : 0;
@@ -119,7 +120,8 @@ function createBattle() {
 
 // ─── 고용 / 해고 ─────────────────────────────────────────────────────────────
 function hireCost(typeId) {
-  return Math.max(1, UNIT_TYPES[typeId].cost - BONUSES.hireCostDiscount);
+  return Math.max(1, Math.round(UNIT_TYPES[typeId].cost * (1 - Math.min(0.75, BONUSES.hireCostPct || 0)))
+                     - BONUSES.hireCostDiscount);
 }
 
 function hireUnit(battle, typeId, gold) {

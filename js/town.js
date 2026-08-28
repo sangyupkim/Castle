@@ -45,18 +45,20 @@ const TOWN_BUILDINGS = [
     desc:'타워 성능을 연구하는 시설',
     lvCost:35, lvMult:1.7,
     tracks:[
-      { id:'t_dmg',  name:'날붙이 연마', icon:'⚔️', unlockLv:0, cost:12, costMult:1.42, step:2,    growth:0.20,
-        desc:v=>`모든 타워 공격력 +${Math.round(v)}`,        apply:(b,v)=>{ b.towerDmg += v; } },
+      // 정액이 아니라 배율이다. v1은 +38을 통째로 얹었는데 화살탑 기본 공격력이 2라
+      // 10층에서 산 강화가 26층까지 그대로 통했다 — 적 체력 곡선이 아무 의미가 없었다.
+      { id:'t_dmg',  name:'날붙이 연마', icon:'⚔️', unlockLv:0, cost:12, costMult:1.42, step:0.06, growth:0.06,
+        desc:v=>`모든 타워 공격력 +${pct(v)}`,               apply:(b,v)=>{ b.towerDmgMult *= 1 + v; } },
       { id:'t_rng',  name:'조준경',     icon:'🔭', unlockLv:0, cost:15, costMult:1.45, step:0.03, growth:0.14,
         desc:v=>`타워 사거리 +${pct(v)}`,                    apply:(b,v)=>{ b.towerRangeMult += v; } },
       { id:'t_spd',  name:'속사 장치',   icon:'⚡', unlockLv:1, cost:22, costMult:1.48, step:0.04, growth:0.12,
         desc:v=>`타워 공격속도 +${pct(v)}`,                  apply:(b,v)=>{ b.towerSpdMult += v; } },
       { id:'t_cost', name:'대량 생산',   icon:'🏭', unlockLv:2, cost:26, costMult:1.55, step:1,    growth:0.10,
         desc:v=>`타워 건설비 -${Math.round(v)}`,             apply:(b,v)=>{ b.towerCostDiscount += Math.round(v); } },
-      { id:'t_heavy',name:'강화 탄두',  icon:'💥', unlockLv:4, cost:60, costMult:1.55, step:5, growth:0.16, maxLv:8,
-        desc:v=>`모든 타워 공격력 +${Math.round(v)}`,        apply:(b,v)=>{ b.towerDmg += v; } },
-      { id:'t_inf',  name:'정밀 세공',   icon:'♾️', unlockLv:BUILDING_MAX_LEVEL-1, cost:180, costMult:1.26, step:4, growth:0.06, maxLv:Infinity,
-        desc:v=>`모든 타워 공격력 +${Math.round(v)}`,        apply:(b,v)=>{ b.towerDmg += v; } },
+      { id:'t_heavy',name:'강화 탄두',  icon:'💥', unlockLv:4, cost:60, costMult:1.55, step:0.09, growth:0.07, maxLv:8,
+        desc:v=>`모든 타워 공격력 +${pct(v)}`,               apply:(b,v)=>{ b.towerDmgMult *= 1 + v; } },
+      { id:'t_inf',  name:'정밀 세공',   icon:'♾️', unlockLv:BUILDING_MAX_LEVEL-1, cost:180, costMult:1.26, step:0.03, growth:0.004, maxLv:Infinity,
+        desc:v=>`모든 타워 공격력 +${pct(v)}`,               apply:(b,v)=>{ b.towerDmgMult *= 1 + v; } },
     ]
   },
   {
@@ -128,6 +130,25 @@ const TOWN_BUILDINGS = [
     ]
   },
   {
+    id:'forge', name:'대장간', icon:'⚒️', buildCost:55, color:'#fb923c',
+    desc:'장비를 연마하고 타워 심을 벼리는 곳',
+    lvCost:45, lvMult:1.72,
+    // 대장간의 본체는 보석을 쓰는 세 갈래(연마·합성·담금질)이고 아래 트랙은 곁가지다.
+    tracks:[
+      { id:'f_gearcost', name:'풀무 개량', icon:'🔥', unlockLv:0, cost:20, costMult:1.50, step:0.04, growth:0.08, maxLv:8,
+        desc:v=>`장비 연마 효과 +${pct(v)}`,                 apply:(b,v)=>{ b.gearPlusBonus += v; } },
+      { id:'f_sell',     name:'고철 회수', icon:'♻️', unlockLv:1, cost:24, costMult:1.50, step:0.05, growth:0.08,
+        desc:v=>`타워 매각가 +${pct(v)}`,                    apply:(b,v)=>{ b.towerSellBonus += v; } },
+      { id:'f_repair',   name:'성벽 담금질', icon:'🧱', unlockLv:2, cost:30, costMult:1.52, step:0.04, growth:0.10,
+        desc:v=>`기지 피해 감소 +${pct(v)}`,                 apply:(b,v)=>{ b.baseDefPct += v; } },
+      { id:'f_luck',     name:'장인의 눈', icon:'👁️', unlockLv:4, cost:48, costMult:1.58, step:0.02, growth:0.06, maxLv:8,
+        desc:v=>`합성 성공 확률 +${pct(v)}`,                 apply:(b,v)=>{ b.fuseLuck += v; } },
+      { id:'f_inf',      name:'끝없는 망치', icon:'♾️', unlockLv:BUILDING_MAX_LEVEL-1, cost:175, costMult:1.26, step:0.025, growth:0.05, maxLv:Infinity,
+        desc:v=>`타워 공격력 +${pct(v)} · 아군 공격력 +${pct(v)}`,
+        apply:(b,v)=>{ b.towerDmgMult *= 1+v; b.unitAtkMult *= 1+v; } },
+    ]
+  },
+  {
     id:'cave', name:'몬스터 케이브', icon:'🗿', buildCost:0, color:'#6b7280',
     desc:'몬스터 던전을 관리합니다', alwaysBuilt:true,
     lvCost:0, lvMult:1, tracks:[]
@@ -166,9 +187,11 @@ function createTown() {
       barracks: { built:false, level:0, upgrades:{} },
       heroShop: { built:false, level:0, upgrades:{} },
       inn:      { built:false, level:0, upgrades:{} },
+      forge:    { built:false, level:0, upgrades:{} },
       cave:     { built:true,  level:0, upgrades:{} },
     },
     gear:createHeroGear(),
+    forgeTab:'gear',   // 대장간 — 'gear' | 'fuse' | 'temper'
     shopItems:[],
     waveBuffs:[],
   };
@@ -285,6 +308,8 @@ function reapplyAllBonuses(gs) {
   applyPacts();          // 서약은 스킬 트리 뒤, 마을 강화 앞에 적용한다
   applyTownUpgrades(gs);
   applyRunUpgrades(gs);   // 이번 판에 집은 강화 카드
+  applyForge(gs);         // ⚒️ 대장간 담금질 숙련도
+  applyCharms(gs);        // 🎴 이번 판에 들고 온 부적
   // 각인은 마지막에 — 스킬 트리와 마을 강화 위에 얹힌다
   const sg = (typeof activeSigil === 'function') ? activeSigil() : null;
   if (sg && sg.apply) sg.apply(BONUSES);

@@ -41,6 +41,7 @@ const SaveManager = {
       totalGoldEarned: gs.battle ? gs.battle.totalGoldEarned : 0,
       townBuildings: JSON.parse(JSON.stringify(gs.town?.buildings || {})),
       townGear:      gs.town?.gear ? JSON.parse(JSON.stringify(gs.town.gear)) : null,
+
       // ── 판에 세워둔 것 ──
       // v8까지 골드·웨이브·건물만 담고 타워와 편성을 빼먹었다. 강제 종료 후 돌아오면
       // 골드는 그대로인데 판이 텅 비어 있었다 — 한 판에서 제일 오래 쌓은 것이 사라졌다.
@@ -61,6 +62,9 @@ const SaveManager = {
       metaUpgrades:   gs.metaUpgrades || {},
       clearedStages:  gs.clearedStages || new Array(10).fill(false),
       skillLevels:    gs.skillLevels || {},
+      forge:          gs.forge ? JSON.parse(JSON.stringify(gs.forge)) : null,
+      charms:         gs.charms ? JSON.parse(JSON.stringify(gs.charms)) : [],
+      charmSlots:     gs.charmSlots ? gs.charmSlots.slice() : [null, null],
       unlocked:       gs.unlocked || [],
       pacts:          gs.pacts    || [],
       seenMobs:       gs.seenMobs || [],

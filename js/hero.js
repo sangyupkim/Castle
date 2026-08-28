@@ -256,8 +256,11 @@ function isSkillEquipped(gs, uid) { return heroGear(gs).skillSlots.includes(uid)
 function applyHeroGear(gs) {
   const g = heroGear(gs);
   for (const s of EQUIP_SLOTS) {
-    const item = equippedItem(gs, s.id);
-    if (item) applyStatBlock(BONUSES, item.stats);
+    const uid  = g.equipped[s.id];
+    const e    = uid == null ? null : invEntry(gs, uid);
+    const item = e ? equipDef(e.itemId) : null;
+    // ⚒️ 대장간에서 그 칸을 연마해뒀으면 무엇을 끼든 그만큼 커진다
+    if (item) applyStatBlock(BONUSES, item.stats, slotPlusMult(gs, s.id));
   }
   const n = skillSlotCount(gs);
   for (let i = 0; i < n; i++) {

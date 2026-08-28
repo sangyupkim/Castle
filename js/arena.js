@@ -67,6 +67,12 @@ function makeArenaMob(typeId, waveIndex, killCount, caveLevel, eliteBonus) {
   const gm = goldBase * (1 + (killCount || 0) * KILL_SCALE)
            * cv.goldMult * (isElite ? ELITE_GOLD_MULT : 1);
   const hp = Math.max(1, Math.round(t.hp * sm * BONUSES.mobHpMult));
+  // 방어력만 sm을 그대로 먹으면 층이 깊어질수록 아군 공격이 통째로 막힌다.
+  // 아군 공격력은 정액 합산(마을 트랙·트리)이라 곱셈 곡선을 따라갈 수가 없다 —
+  // 40층 마왕이 방어력 111인데 궁수 공격력이 117이라 유효타가 6이었다.
+  // 방어력은 지수를 눌러 완만하게, 공격력은 조금만 눌러 위협은 남긴다.
+  const defSm = Math.pow(Math.max(1, sm), ARENA_DEF_EXP);
+  const atkSm = Math.pow(Math.max(1, sm), ARENA_ATK_EXP);
 
   return {
     id: ++_aid, typeId, isPlayer: false, isBoss: !!t.isBoss, isElite,
@@ -74,8 +80,8 @@ function makeArenaMob(typeId, waveIndex, killCount, caveLevel, eliteBonus) {
     icon: t.icon, color: isElite ? '#f43f5e' : t.color,
     behavior: t.behavior, ranged: !!t.ranged,
     hp, maxHp: hp,
-    atk: Math.max(1, Math.round(t.atk * sm)),
-    def: Math.max(0, Math.round(t.def * sm)),
+    atk: Math.max(1, Math.round(t.atk * atkSm)),
+    def: Math.max(0, Math.round(t.def * defSm)),
     atkPeriod: t.atkPeriod, atkCd: Math.random() * t.atkPeriod,
     range: t.range, moveSpd: t.moveSpd * (isElite ? 1.1 : 1),
     radius: bodyRadius(t.radius) * (isElite ? 1.25 : 1),
@@ -85,6 +91,12 @@ function makeArenaMob(typeId, waveIndex, killCount, caveLevel, eliteBonus) {
     flashTimer: 0, flashColor: '#fff',
     slowUntil: 0, dashCd: 3 + Math.random() * 2, dashing: 0
   };
+}
+
+// 아레나 피해 계산 — 방어력을 빼되 원 공격력의 ARENA_DMG_FLOOR 아래로는 안 내려간다.
+// "아무리 때려도 1씩만 들어가는" 상황을 없애려는 것이지 방어력을 무의미하게 만드는 게 아니다.
+function arenaDamage(atk, def) {
+  return Math.max(Math.ceil(atk * ARENA_DMG_FLOOR), Math.round(atk - (def || 0)), 1);
 }
 
 // 가장자리 밴드에서, 아군 부대 중심으로부터 SPAWN_SAFE_RADIUS 밖에 자리를 잡는다
@@ -365,7 +377,7 @@ function applyTerrainTick(gs, e, dt, isAlly) {
 function allyAttack(gs, u, target) {
   const crit = BONUSES.critChance > 0 && Math.random() < BONUSES.critChance;
   const rage = arenaBuff(gs, 'rage');   // 🔥 분노
-  const dmg  = Math.max(1, Math.round((crit ? u.atk * 1.8 : u.atk) * rage - target.def));
+  const dmg  = arenaDamage((crit ? u.atk * 1.8 : u.atk) * rage, target.def);
   if (u.ranged) {
     target.pendingDmg = (target.pendingDmg || 0) + dmg;
     gs.arena.shots.push({
@@ -380,7 +392,7 @@ function allyAttack(gs, u, target) {
     if (th > 0 && !u.dead) hurtAlly(gs, u, Math.max(1, Math.round(dmg * th)), '#84cc16');
   }
   if (BONUSES.comboChance > 0 && Math.random() < BONUSES.comboChance) {
-    hurtMob(gs, target, Math.max(1, u.atk - target.def), '#fb923c');
+    hurtMob(gs, target, arenaDamage(u.atk, target.def), '#fb923c');
   }
 }
 
@@ -425,7 +437,7 @@ function allySkill(gs, u, mobs, allies) {
       if (dist(m, u) > rad + m.radius) continue;
       // 🔥 화염 폭발은 맞은 적을 둔화시킨다 — 술사가 거리를 유지할 수 있는 이유
       if (kind === 'nova') m.slowUntil = Math.max(m.slowUntil || 0, 2.0);
-      hurtMob(gs, m, Math.max(1, u.skillAtk - m.def), u.skillColor);
+      hurtMob(gs, m, arenaDamage(u.skillAtk, m.def), u.skillColor);
       hits++;
     }
     a.bursts.push({ x: u.x, y: u.y, r: rad, color: u.skillColor, t: 0, dur: 0.4 });
@@ -440,7 +452,7 @@ function allySkill(gs, u, mobs, allies) {
                         .slice(0, u.skillHits || 3);
     if (!targets.length) { u.skillCdLeft = 1.0; return; }
     targets.forEach((t, i) => {
-      const dmg = Math.max(1, u.skillAtk - t.def);
+      const dmg = arenaDamage(u.skillAtk, t.def);
       t.pendingDmg = (t.pendingDmg || 0) + dmg;
       a.shots.push({
         x: u.x, y: u.y, tx: t.x, ty: t.y, target: t,
@@ -503,18 +515,18 @@ function updateMob(gs, m, allies, dt) {
     if (m.ranged) {
       gs.arena.shots.push({
         x: m.x, y: m.y, tx: target.x, ty: target.y, target,
-        dmg: Math.max(1, m.atk - target.def), color: m.color, spd: 320, fromAlly: false, life: 1.5
+        dmg: arenaDamage(m.atk, target.def), color: m.color, spd: 320, fromAlly: false, life: 1.5
       });
     } else if (m.behavior === 'slam') {
       // 마왕 — 광역 내려찍기
       const rad = 52;
       for (const t of allies) {
-        if (dist(t, m) <= rad) hurtAlly(gs, t, Math.max(1, m.atk - t.def), '#db2777');
+        if (dist(t, m) <= rad) hurtAlly(gs, t, arenaDamage(m.atk, t.def), '#db2777');
       }
       gs.arena.bursts.push({ x: m.x, y: m.y, r: rad, color: '#db2777', t: 0, dur: 0.4 });
       if (typeof FX !== 'undefined') FX.shake(3, 0.15);
     } else {
-      hurtAlly(gs, target, Math.max(1, m.atk - target.def), '#fca5a5');
+      hurtAlly(gs, target, arenaDamage(m.atk, target.def), '#fca5a5');
     }
   }
 }
