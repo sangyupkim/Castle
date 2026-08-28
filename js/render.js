@@ -335,7 +335,7 @@ function renderHeroInDefense(ctx, hero) {
   ctx.fillText('👑', hx, hy+1);
 
   // HP 바 + 레벨 뱃지
-  const hMax = Math.round(lv.hp * BONUSES.heroStatMult * BONUSES.sigilHeroHpMult);
+  const hMax = Math.round((lv.hp + BONUSES.heroHpFlat) * BONUSES.heroStatMult * BONUSES.sigilHeroHpMult);
   drawHPBar(ctx, hx-16, hy+r+2, 32, 4, hero.hp/hMax);
   ctx.fillStyle=COLORS.hero; ctx.font='bold 8px sans-serif';
   ctx.textAlign='center'; ctx.textBaseline='top';
@@ -1661,7 +1661,7 @@ function renderSigilPicker(ctx, gs, y) {
   ctx.fillStyle='#f59e0b'; ctx.font='bold 11px sans-serif';
   ctx.fillText('👑 각인 — 아레나 스킬을 정합니다', 14, y);
   ctx.textAlign='right'; ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif';
-  ctx.fillText('언제든 바꿀 수 있습니다', CW-14, y+1);
+  ctx.fillText('연 각인은 언제든 바꿀 수 있습니다', CW-14, y+1);
   ctx.textAlign='left';
   y += 18;
 
@@ -1669,21 +1669,31 @@ function renderSigilPicker(ctx, gs, y) {
   HERO_SIGILS.forEach((sg, i) => {
     const cx = 12 + i*(cw+4);
     const on = sg.id === cur.id;
+    // 각인은 보석으로 연다 — 심연에서 모은 보석이 "다음 영웅"이 되게
+    const open = sigilUnlocked(gs, sg.id);
+    const cost = SIGIL_UNLOCK_COST[sg.id] || 0;
+    const canBuy = !open && (gs.soulStones||0) >= cost;
     roundRect(ctx, cx, y, cw, ch, 6);
-    ctx.fillStyle = on ? '#1a1508' : '#0a0e18'; ctx.fill();
-    ctx.strokeStyle = on ? sg.color : '#1e293b'; ctx.lineWidth = on ? 2 : 1; ctx.stroke();
+    ctx.fillStyle = on ? '#1a1508' : open ? '#0a0e18' : '#080a12'; ctx.fill();
+    ctx.strokeStyle = on ? sg.color : canBuy ? '#f59e0b' : open ? '#1e293b' : '#161d2b';
+    ctx.lineWidth = on ? 2 : 1; ctx.stroke();
     ctx.textAlign='center'; ctx.textBaseline='top';
-    ctx.font='17px sans-serif'; ctx.globalAlpha = on ? 1 : 0.5;
+    ctx.font='17px sans-serif'; ctx.globalAlpha = on ? 1 : open ? 0.5 : 0.25;
     ctx.fillStyle='#e2e8f0'; ctx.fillText(sg.icon, cx+cw/2, y+7);
     ctx.globalAlpha = 1;
-    ctx.font='bold 11px sans-serif'; ctx.fillStyle = on ? sg.color : '#64748b';
+    ctx.font='bold 11px sans-serif'; ctx.fillStyle = on ? sg.color : open ? '#64748b' : '#3b4658';
     ctx.fillText(sg.name, cx+cw/2, y+29);
     ctx.font='8px sans-serif'; ctx.fillStyle = on ? '#78716c' : '#334155';
     ctx.fillText(sg.tagline, cx+cw/2, y+44);
-    ctx.font='bold 8px sans-serif'; ctx.fillStyle = on ? sg.color : '#334155';
-    ctx.fillText(sg.skill.name, cx+cw/2, y+57);
+    if (open) {
+      ctx.font='bold 8px sans-serif'; ctx.fillStyle = on ? sg.color : '#334155';
+      ctx.fillText(sg.skill.name, cx+cw/2, y+57);
+    } else {
+      ctx.font='bold 9px sans-serif'; ctx.fillStyle = canBuy ? '#fbbf24' : '#475569';
+      ctx.fillText(`🔒 💎${cost}`, cx+cw/2, y+56);
+    }
     if (on) { ctx.fillStyle=sg.color; ctx.fillRect(cx+cw/2-9, y+ch-4, 18, 2); }
-    gs.ui.sigilCards.push({x:cx, y, w:cw, h:ch, id:sg.id});
+    gs.ui.sigilCards.push({x:cx, y, w:cw, h:ch, id:sg.id, locked:!open});
   });
   y += ch + 8;
 
@@ -2236,7 +2246,7 @@ function _renderSkillTree(ctx, gs, tree, startY) {
 
 // ─── 건물 서브 화면 ───────────────────────────────────────────────────────────
 function renderBuildingScreen(ctx, gs, buildingId) {
-  if (buildingId==='heroShop') { renderHeroShopScreen(ctx,gs); return; }
+  if (buildingId==='heroShop' && (gs.town.shopTab||'buy')==='buy') { renderHeroShopScreen(ctx,gs); return; }
   const def=TOWN_BUILDINGS.find(b=>b.id===buildingId);
   const bs=gs.town.buildings[buildingId];
   if (!def||!bs) return;
@@ -2289,9 +2299,13 @@ function renderBuildingScreen(ctx, gs, buildingId) {
   ctx.fillText(`Lv.${curLv+1} / ${BUILDING_MAX_LEVEL}` +
     (nextTracks.length ? `   다음 승급: ${nextTracks.map(t=>t.icon+t.name).join(' ')} 개방` : ''), 6, hY+26);
 
+  // 영웅 상점은 매대와 강화가 한 건물 안에 있다 — 여기서도 돌아갈 길을 낸다
+  const isShop = def.id==='heroShop';
+  if (isShop) drawShopTabs(ctx, gs, hY+40);
+
   // ── 강화 목록 (스크롤) ───────────────────────────────────────────────────
   // 10레벨이면 항목이 화면을 넘는다. 드래그로 훑을 수 있게 잘라 그린다.
-  const listTop = SCR_TOP+50, listBot = CH-8, listH = listBot-listTop;
+  const listTop = SCR_TOP+(isShop?72:50), listBot = CH-8, listH = listBot-listTop;
   const open   = buildingTracks(def, curLv);
   const locked = (def.tracks||[]).filter(t => (t.unlockLv||0) > curLv);
   const rowH = 40, gapH = 4, lockH = 26;
@@ -2394,27 +2408,58 @@ function renderBuildingScreen(ctx, gs, buildingId) {
 }
 
 // ─── 영웅 상점 ───────────────────────────────────────────────────────────────
+// 매대와 강화가 한 건물 안에 있다. 예전에는 상점 카드를 누르면 매대만 나와서
+// 이 건물의 강화 트랙(👑 영웅 단련 등)에 아예 손이 닿지 않았다.
+function drawShopTabs(ctx, gs, y) {
+  const tabs = [{id:'buy', label:'🛒 매대'}, {id:'upgrade', label:'⚒️ 강화'}];
+  const tw = 66, th = 20, x0 = CW/2 - tw - 3;
+  const cur = gs.town.shopTab || 'buy';
+  tabs.forEach((t,i)=>{
+    const tx = x0 + i*(tw+6), on = cur===t.id;
+    roundRect(ctx,tx,y,tw,th,4);
+    ctx.fillStyle = on?'#2d1b69':'#0f172a'; ctx.fill();
+    ctx.strokeStyle = on?'#a78bfa':'#1e293b'; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle = on?'#c4b5fd':'#64748b'; ctx.font='bold 9px sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(t.label, tx+tw/2, y+th/2);
+    if (t.id==='buy') gs.ui.shopTabBuy = {x:tx,y,w:tw,h:th};
+    else              gs.ui.shopTabUp  = {x:tx,y,w:tw,h:th};
+  });
+}
+
 function renderHeroShopScreen(ctx, gs) {
-  ctx.fillStyle='#0c0f1a'; ctx.fillRect(0,BATTLE_Y,CW,BATTLE_H);
-  const hY=BATTLE_Y+6;
+  const SCR_TOP = 92;
+  ctx.fillStyle='#0c0f1a'; ctx.fillRect(0,SCR_TOP,CW,CH-SCR_TOP);
+  const hY=SCR_TOP+6;
   ctx.fillStyle='#a78bfa'; ctx.font='bold 13px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
   ctx.fillText('🏪 영웅 상점',CW/2,hY);
   roundRect(ctx,6,hY,50,22,4); ctx.fillStyle='#1e293b'; ctx.fill(); ctx.strokeStyle='#475569'; ctx.lineWidth=1; ctx.stroke();
   ctx.fillStyle='#94a3b8'; ctx.font='9px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.fillText('← 뒤로',31,hY+11);
   gs.ui.townBackBtn={x:6,y:hY,w:50,h:22};
-  gs.ui.shopItemBtns=[];
+  ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif'; ctx.textAlign='right'; ctx.textBaseline='middle';
+  ctx.fillText(`Lv.${(gs.town.buildings.heroShop.level||0)+1}`, CW-8, hY+11);
+  drawShopTabs(ctx, gs, hY+22);
 
-  let sy=BATTLE_Y+34;
-  // Fixed items
+  gs.ui.shopItemBtns=[];
+  gs.ui.skillBuyBtns=[];
+
+  // 매대는 길다 — 잘라 그리고 드래그로 훑는다
+  const listTop = SCR_TOP+52, listBot = CH-8, listH = listBot-listTop;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, listTop, CW, listH); ctx.clip();
+  let sy = listTop - (gs.town.scroll||0);
+
+  // ── 소비 아이템 ─────────────────────────────────────────────────────────
   ctx.fillStyle='#a5b4fc'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillText('소비 아이템',8,sy); sy+=14;
   for (const item of HERO_SHOP_FIXED) {
     const ih=38;
-    const gc=item.grade==='rare'?'#60a5fa':'#94a3b8';
+    const gc=GRADE_COLOR[item.grade]||'#94a3b8';
     roundRect(ctx,6,sy,CW-12,ih,5); ctx.fillStyle='#0d1929'; ctx.fill(); ctx.strokeStyle=gc; ctx.lineWidth=1; ctx.stroke();
-    ctx.font='16px sans-serif'; ctx.textBaseline='middle'; ctx.fillText(item.icon,12,sy+ih/2);
-    ctx.fillStyle='#f1f5f9'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.fillText(item.name,30,sy+ih/2-7);
+    ctx.font='16px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.fillStyle='#e2e8f0';
+    ctx.fillText(item.icon,12,sy+ih/2);
+    ctx.fillStyle='#f1f5f9'; ctx.font='bold 10px sans-serif'; ctx.fillText(item.name,30,sy+ih/2-7);
     ctx.fillStyle='#cbd5e1'; ctx.font='bold 9px sans-serif'; ctx.fillText(item.desc,30,sy+ih/2+6);
     const canAff=gs.gold>=item.cost;
     const bw=60,bh=20,bx=CW-8-bw,by2=sy+(ih-bh)/2;
@@ -2425,23 +2470,33 @@ function renderHeroShopScreen(ctx, gs) {
     sy+=ih+4;
   }
 
-  sy+=4;
+  // ── 장비 ────────────────────────────────────────────────────────────────
+  sy+=6;
   ctx.fillStyle='#a5b4fc'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText('영웅 장비 (웨이브마다 갱신)',8,sy); sy+=14;
+  ctx.fillText('영웅 장비 (웨이브마다 갱신)',8,sy);
+  ctx.textAlign='right'; ctx.fillStyle='#475569'; ctx.font='bold 8px sans-serif';
+  ctx.fillText('산 장비는 보관함으로 — 출전준비에서 장착', CW-8, sy+1);
+  ctx.textAlign='left'; sy+=14;
   const shopItems=gs.town.buildings.heroShop.built?gs.town.shopItems:[];
   if (!gs.town.buildings.heroShop.built) {
     ctx.fillStyle='#374151'; ctx.font='9px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText('영웅 상점 건설 후 이용 가능',CW/2,sy+20);
+    sy += 40;
   }
+  const _owned = new Set(heroGear(gs).inventory.map(e=>e.itemId));
   for (const item of shopItems) {
     const ih=38;
-    const gc=item.grade==='epic'?'#a78bfa':item.grade==='rare'?'#60a5fa':'#94a3b8';
-    const owned=gs.town.equippedItems.includes(item.id);
-    roundRect(ctx,6,sy,CW-12,ih,5); ctx.fillStyle=owned?'#141e0d':'#0d1929'; ctx.fill(); ctx.strokeStyle=gc; ctx.lineWidth=owned?2:1; ctx.stroke();
-    ctx.font='18px sans-serif'; ctx.textBaseline='middle'; ctx.fillText(item.icon,12,sy+ih/2);
-    ctx.fillStyle=gc; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.fillText(`[${item.slot}] ${item.name}`,32,sy+ih/2-8);
-    ctx.fillStyle='#cbd5e1'; ctx.font='bold 9px sans-serif'; ctx.fillText(item.desc,32,sy+ih/2+5);
-    if (owned) { ctx.fillStyle='#22c55e'; ctx.font='bold 9px sans-serif'; ctx.textAlign='right'; ctx.textBaseline='middle'; ctx.fillText('장착중',CW-10,sy+ih/2); }
+    const gc=GRADE_COLOR[item.grade]||'#94a3b8';
+    const have=_owned.has(item.id);
+    roundRect(ctx,6,sy,CW-12,ih,5); ctx.fillStyle=have?'#141e0d':'#0d1929'; ctx.fill(); ctx.strokeStyle=gc; ctx.lineWidth=have?2:1; ctx.stroke();
+    ctx.font='18px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.fillStyle='#e2e8f0';
+    ctx.fillText(item.icon,12,sy+ih/2);
+    const sl=EQUIP_SLOTS.find(s2=>s2.accepts===item.slot);
+    ctx.fillStyle=gc; ctx.font='bold 10px sans-serif';
+    ctx.fillText(`[${item.slot==='acc'?'악세':(sl?sl.name:item.slot)}] ${item.name}`,32,sy+ih/2-8);
+    ctx.fillStyle='#cbd5e1'; ctx.font='bold 9px sans-serif';
+    ctx.fillText(statsLine(item.stats),32,sy+ih/2+5);
+    if (have) { ctx.fillStyle='#22c55e'; ctx.font='bold 9px sans-serif'; ctx.textAlign='right'; ctx.textBaseline='middle'; ctx.fillText('보유 중',CW-10,sy+ih/2); }
     else {
       const canAff=gs.gold>=item.cost;
       const bw=60,bh=22,bx=CW-8-bw,by2=sy+(ih-bh)/2;
@@ -2453,14 +2508,75 @@ function renderHeroShopScreen(ctx, gs) {
     sy+=ih+4;
   }
 
-  // Equipped items display
-  if (gs.town.equippedItems.length>0) {
-    sy+=4; ctx.fillStyle='#a5b4fc'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
-    ctx.fillText('장착 중인 아이템:',8,sy); sy+=11;
-    const icons=gs.town.equippedItems.map(id=>HERO_EQUIPMENT_POOL.find(e=>e.id===id)).filter(Boolean);
-    ctx.font='14px sans-serif'; ctx.textBaseline='top';
-    icons.forEach((item,i)=>{ ctx.fillText(item.icon,8+i*20,sy); });
+  // ── 🔮 스킬 매대 ─────────────────────────────────────────────────────────
+  // 상점을 키워야 열린다. 잠겨 있을 때도 자리를 보여준다 — 무엇을 위해 올리는지 알아야 한다.
+  sy+=6;
+  const _open = skillShopOpen(gs);
+  ctx.fillStyle=_open?'#f0abfc':'#4b5563'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText('🔮 영웅 스킬',8,sy);
+  ctx.textAlign='right'; ctx.fillStyle='#475569'; ctx.font='bold 8px sans-serif';
+  ctx.fillText(_open?'같은 스킬도 굴림값에 따라 성능이 다릅니다':`상점 Lv.${SKILL_SHOP_LEVEL} 필요`, CW-8, sy+1);
+  ctx.textAlign='left'; sy+=14;
+  if (!_open) {
+    roundRect(ctx,6,sy,CW-12,32,5); ctx.fillStyle='#0b0f1a'; ctx.fill(); ctx.strokeStyle='#1f2937'; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle='#4b5563'; ctx.font='9px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(`🔒 영웅 상점을 Lv.${SKILL_SHOP_LEVEL}까지 올리면 스킬을 팝니다`,CW/2,sy+16);
+    ctx.textAlign='left'; sy+=36;
+  } else {
+    const offers = heroGear(gs).skillOffers || [];
+    if (!offers.length) {
+      ctx.fillStyle='#374151'; ctx.font='9px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('이번 웨이브 매물은 모두 팔렸습니다',CW/2,sy+16); ctx.textAlign='left'; sy+=34;
+    }
+    for (const off of offers) {
+      const def=skillDef(off.skillId); if (!def) continue;
+      const ih=40, gc=GRADE_COLOR[def.grade]||'#94a3b8';
+      roundRect(ctx,6,sy,CW-12,ih,5); ctx.fillStyle='#120d1e'; ctx.fill(); ctx.strokeStyle=gc; ctx.lineWidth=1; ctx.stroke();
+      ctx.font='18px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.fillStyle='#e2e8f0';
+      ctx.fillText(def.icon,12,sy+ih/2);
+      ctx.fillStyle=gc; ctx.font='bold 10px sans-serif';
+      ctx.fillText(`${def.name} ${rollStars(off.roll)}`,32,sy+ih/2-9);
+      ctx.fillStyle='#cbd5e1'; ctx.font='bold 9px sans-serif';
+      ctx.fillText(statsLine(skillStats(off)),32,sy+ih/2+5);
+      const cost=skillOfferCost(off), canAff=gs.gold>=cost;
+      const bw=60,bh=22,bx=CW-8-bw,by2=sy+(ih-bh)/2;
+      roundRect(ctx,bx,by2,bw,bh,4); ctx.fillStyle=canAff?'#3b1d5e':'#1e293b'; ctx.fill();
+      ctx.fillStyle=canAff?gc:'#475569'; ctx.font='bold 8px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(`${cost}💰`,bx+bw/2,by2+bh/2);
+      gs.ui.skillBuyBtns.push({x:bx,y:by2,w:bw,h:bh,uid:off.uid});
+      sy+=ih+4;
+    }
   }
+
+  // ── 지금 낀 것 요약 ──────────────────────────────────────────────────────
+  const _g = heroGear(gs);
+  sy+=6; ctx.fillStyle='#a5b4fc'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText('장착 중',8,sy);
+  ctx.textAlign='right'; ctx.fillStyle='#475569'; ctx.font='bold 8px sans-serif';
+  ctx.fillText(`보관함 ${_g.inventory.length} · 스킬 ${_g.skills.length}`, CW-8, sy+1);
+  ctx.textAlign='left'; sy+=15;
+  ctx.font='14px sans-serif'; ctx.textBaseline='top';
+  EQUIP_SLOTS.forEach((sl,i)=>{
+    const it=equippedItem(gs,sl.id);
+    ctx.globalAlpha=it?1:0.22;
+    ctx.fillStyle='#e2e8f0'; ctx.fillText(it?it.icon:sl.icon,10+i*24,sy);
+    ctx.globalAlpha=1;
+  });
+  sy += 22;
+  ctx.restore();
+
+  // 스크롤 범위 — 그린 만큼으로 되돌려 계산한다
+  const contentH = (sy + (gs.town.scroll||0)) - listTop + 6;
+  const maxScroll = Math.max(0, contentH - listH);
+  gs.town.scroll = Math.max(0, Math.min(maxScroll, gs.town.scroll||0));
+  if (maxScroll > 0) {
+    const trackH = listH-8, thumbH = Math.max(24, trackH*listH/contentH);
+    const ty = listTop+4 + (trackH-thumbH) * (gs.town.scroll/maxScroll);
+    ctx.fillStyle='rgba(148,163,184,0.12)'; ctx.fillRect(CW-4, listTop+4, 2, trackH);
+    ctx.fillStyle='rgba(148,163,184,0.55)'; ctx.fillRect(CW-4, ty, 2, thumbH);
+  }
+  gs.ui.buildingScroll = maxScroll>0 ? {x:0,y:listTop,w:CW,h:listH,max:maxScroll} : null;
+  gs.ui.buildingLvUpBtn = null;
 }
 
 
@@ -2688,10 +2804,285 @@ function renderTownPageBuildingGrid(ctx, gs, startY) {
   _townBottom = stripY + 44;
 }
 
+// ─── 👑 영웅 상세 (출전준비 › 영웅 정보) ─────────────────────────────────────
+// 장비 칸 · 스킬 칸 · 보관함 · 스탯창을 한 화면에 놓는다.
+// 무언가를 고르면 스탯창이 "지금 → 바꾼 뒤"를 나란히 보여준다 — 끼워보기 전에 안다.
+function heroPickPreview(gs) {
+  const pick = gs.town.pick;
+  if (!pick) return null;
+  const g = heroGear(gs);
+  if (pick.kind === 'item') {
+    const e = invEntry(gs, pick.uid); if (!e) return null;
+    const item = equipDef(e.itemId); if (!item) return null;
+    if (isEquipped(gs, pick.uid)) {
+      // 이미 낀 것을 고르면 "빼면 어떻게 되는지"를 보여준다
+      return heroStatPreview(gs, () => {
+        for (const sl of EQUIP_SLOTS) if (g.equipped[sl.id] === pick.uid) g.equipped[sl.id] = null;
+      });
+    }
+    const fits = slotsForItem(item);
+    const target = pick.slot && fits.includes(pick.slot) ? pick.slot
+                 : (fits.find(sl => g.equipped[sl] == null) || fits[0]);
+    return heroStatPreview(gs, () => { g.equipped[target] = pick.uid; });
+  }
+  if (pick.kind === 'skill') {
+    const n = skillSlotCount(gs);
+    if (n <= 0) return null;
+    if (isSkillEquipped(gs, pick.uid)) {
+      return heroStatPreview(gs, () => {
+        const i = g.skillSlots.indexOf(pick.uid); if (i >= 0) g.skillSlots[i] = null;
+      });
+    }
+    let t = g.skillSlots.findIndex((v,i) => i < n && v == null);
+    if (t < 0) t = 0;
+    return heroStatPreview(gs, () => { g.skillSlots[t] = pick.uid; });
+  }
+  return null;
+}
+
+function renderHeroDetail(ctx, gs, startY) {
+  const hero = gs.hero, lv = HERO_LEVELS[hero.level];
+  const g = heroGear(gs);
+  const now = heroStatSnapshot(gs);
+  const prev = heroPickPreview(gs);
+  let y = startY;
+
+  gs.ui.heroBackBtn = null; gs.ui.equipSlotBtns = []; gs.ui.invCards = [];
+  gs.ui.skillSlotBtns = []; gs.ui.skillCards = []; gs.ui.heroPickBtn = null;
+
+  // ── 머리글 ──────────────────────────────────────────────────────────────
+  roundRect(ctx,6,y,CW-12,30,6); ctx.fillStyle='#151f2e'; ctx.fill();
+  ctx.strokeStyle=COLORS.hero; ctx.lineWidth=1.5; ctx.stroke();
+  roundRect(ctx,10,y+5,48,20,4); ctx.fillStyle='#1e293b'; ctx.fill();
+  ctx.strokeStyle='#475569'; ctx.lineWidth=1; ctx.stroke();
+  ctx.fillStyle='#94a3b8'; ctx.font='bold 9px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('← 뒤로',34,y+15);
+  gs.ui.heroBackBtn = {x:10,y:y+5,w:48,h:20};
+  ctx.fillStyle=COLORS.hero; ctx.font='bold 12px sans-serif'; ctx.textAlign='left';
+  ctx.fillText(`👑 영웅  Lv.${hero.level}`,68,y+15);
+  const _sg = activeSigil();
+  ctx.textAlign='right'; ctx.fillStyle=_sg.color; ctx.font='bold 9px sans-serif';
+  ctx.fillText(`${_sg.icon} ${_sg.name} · ${_sg.skill.name}`, CW-12, y+15);
+  ctx.textAlign='left';
+  y += 36;
+
+  // ── 왼쪽: 장비 칸 / 오른쪽: 스탯창 ───────────────────────────────────────
+  const colW = 268, rowH = 27, gap = 3;
+  const panelX = colW + 14, panelW = CW - panelX - 6;
+  const slotsTop = y;
+
+  ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText('장비 — 칸을 탭하면 해제',6,y);
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif';
+  ctx.fillText('스탯',panelX,y);
+  y += 12;
+
+  EQUIP_SLOTS.forEach((sl,i)=>{
+    const ry = y + i*(rowH+gap);
+    const item = equippedItem(gs, sl.id);
+    const uid = g.equipped[sl.id];
+    const picked = gs.town.pick && gs.town.pick.kind==='item' && gs.town.pick.uid===uid && uid!=null;
+    // 고른 물건이 들어갈 수 있는 칸은 테두리로 알려준다
+    let fitHint = false;
+    if (gs.town.pick && gs.town.pick.kind==='item') {
+      const pe = invEntry(gs, gs.town.pick.uid);
+      const pd = pe ? equipDef(pe.itemId) : null;
+      if (pd && slotsForItem(pd).includes(sl.id)) fitHint = true;
+    }
+    const gc = item ? (GRADE_COLOR[item.grade]||'#94a3b8') : '#243044';
+    roundRect(ctx,6,ry,colW,rowH,4);
+    ctx.fillStyle = picked?'#20262e' : item?'#101a28':'#0a0f1a'; ctx.fill();
+    ctx.strokeStyle = picked?'#fbbf24' : fitHint?'#22c55e' : gc; ctx.lineWidth = (picked||fitHint)?1.6:1; ctx.stroke();
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.font='13px sans-serif'; ctx.globalAlpha=item?1:0.3;
+    ctx.fillStyle='#e2e8f0'; ctx.fillText(item?item.icon:sl.icon, 20, ry+rowH/2);
+    ctx.globalAlpha=1;
+    ctx.textAlign='left';
+    ctx.fillStyle='#475569'; ctx.font='bold 8px sans-serif';
+    ctx.fillText(sl.name, 34, ry+rowH/2-6);
+    if (item) {
+      ctx.fillStyle=gc; ctx.font='bold 9px sans-serif';
+      ctx.fillText(item.name, 34, ry+rowH/2+5);
+      ctx.textAlign='right'; ctx.fillStyle='#7c8ba1'; ctx.font='bold 8px sans-serif';
+      ctx.fillText(statsLine(item.stats), colW, ry+rowH/2);
+      ctx.textAlign='left';
+    } else {
+      ctx.fillStyle='#334155'; ctx.font='8px sans-serif';
+      ctx.fillText('비어 있음', 34, ry+rowH/2+5);
+    }
+    gs.ui.equipSlotBtns.push({x:6,y:ry,w:colW,h:rowH,slot:sl.id});
+  });
+  const slotsBottom = y + EQUIP_SLOTS.length*(rowH+gap);
+
+  // ── 스탯창 ──────────────────────────────────────────────────────────────
+  const panelH = EQUIP_SLOTS.length*(rowH+gap) - gap;
+  roundRect(ctx,panelX,y,panelW,panelH,5);
+  ctx.fillStyle='#0a0f1a'; ctx.fill(); ctx.strokeStyle=prev?'#fbbf24':'#1e293b'; ctx.lineWidth=1; ctx.stroke();
+  const srH = panelH / STAT_PANEL_ROWS.length;
+  STAT_PANEL_ROWS.forEach((row,i)=>{
+    const ry = y + i*srH;
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.fillStyle='#5b6b80'; ctx.font='bold 8px sans-serif';
+    ctx.fillText(row.label, panelX+6, ry+srH/2);
+    const a = now[row.key], b = prev ? prev[row.key] : a;
+    ctx.textAlign='right';
+    if (prev && Math.abs(b-a) > 1e-6) {
+      const up = b > a;
+      ctx.fillStyle='#64748b'; ctx.font='bold 8px sans-serif';
+      ctx.fillText(row.fmt(a), panelX+panelW-46, ry+srH/2);
+      ctx.fillStyle=up?'#4ade80':'#f87171'; ctx.font='bold 9px sans-serif';
+      ctx.fillText(`${up?'▲':'▼'}${row.fmt(b)}`, panelX+panelW-5, ry+srH/2);
+    } else {
+      ctx.fillStyle='#cbd5e1'; ctx.font='bold 9px sans-serif';
+      ctx.fillText(row.fmt(a), panelX+panelW-5, ry+srH/2);
+    }
+  });
+  ctx.textAlign='left';
+  y = slotsBottom + 6;
+
+  // ── 고른 것 처리 버튼 ───────────────────────────────────────────────────
+  const pick = gs.town.pick;
+  if (pick) {
+    let label = '', color = '#22c55e', name = '';
+    if (pick.kind === 'item') {
+      const e = invEntry(gs, pick.uid), it = e ? equipDef(e.itemId) : null;
+      if (it) { name = `${it.icon} ${it.name}`; const on = isEquipped(gs, pick.uid);
+                label = on ? '해제' : '장착'; color = on ? '#f87171' : '#22c55e'; }
+    } else {
+      const e = skillEntry(gs, pick.uid), sd = e ? skillDef(e.skillId) : null;
+      if (sd) { name = `${sd.icon} ${sd.name} ${rollStars(e.roll)}`; const on = isSkillEquipped(gs, pick.uid);
+                label = on ? '해제' : '장착'; color = on ? '#f87171' : '#22c55e'; }
+    }
+    if (label) {
+      roundRect(ctx,6,y,CW-12,26,5); ctx.fillStyle='#141b26'; ctx.fill();
+      ctx.strokeStyle='#fbbf24'; ctx.lineWidth=1; ctx.stroke();
+      ctx.fillStyle='#e2e8f0'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
+      ctx.fillText(name, 12, y+13);
+      const bw=62,bh=19,bx=CW-14-bw;
+      roundRect(ctx,bx,y+3.5,bw,bh,4); ctx.fillStyle=color; ctx.fill();
+      ctx.fillStyle='#07121a'; ctx.font='bold 9px sans-serif'; ctx.textAlign='center';
+      ctx.fillText(label, bx+bw/2, y+13);
+      gs.ui.heroPickBtn={x:bx,y:y+3.5,w:bw,h:bh};
+      ctx.textAlign='right'; ctx.fillStyle='#475569'; ctx.font='bold 8px sans-serif';
+      ctx.fillText('칸을 탭해도 됩니다', bx-8, y+13);
+      ctx.textAlign='left';
+      y += 32;
+    }
+  }
+
+  // ── 🔮 스킬 칸 ──────────────────────────────────────────────────────────
+  const nSlots = skillSlotCount(gs), nextLv = nextSkillSlotLevel(gs);
+  ctx.fillStyle='#f0abfc'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText(`🔮 스킬 칸 ${nSlots}/${SKILL_SLOT_LEVELS.length}`,6,y);
+  ctx.textAlign='right'; ctx.fillStyle='#475569'; ctx.font='bold 8px sans-serif';
+  ctx.fillText(nextLv ? `다음 칸 — 영웅 Lv.${nextLv}` : '모든 칸 개방', CW-6, y+1);
+  ctx.textAlign='left'; y += 14;
+  const skW = (CW-12-3*6)/4, skH = 40;
+  for (let i=0;i<SKILL_SLOT_LEVELS.length;i++) {
+    const sx = 6 + i*(skW+6);
+    const open = i < nSlots;
+    const e = open ? skillEquippedAt(gs, i) : null;
+    const def = e ? skillDef(e.skillId) : null;
+    const gc = def ? (GRADE_COLOR[def.grade]||'#94a3b8') : '#243044';
+    roundRect(ctx,sx,y,skW,skH,5);
+    ctx.fillStyle = open ? (def?'#140f22':'#0a0f1a') : '#080b12'; ctx.fill();
+    ctx.strokeStyle = open ? gc : '#1a2130'; ctx.lineWidth = def?1.5:1; ctx.stroke();
+    ctx.textAlign='center'; ctx.textBaseline='top';
+    if (!open) {
+      ctx.fillStyle='#334155'; ctx.font='13px sans-serif'; ctx.fillText('🔒',sx+skW/2,y+7);
+      ctx.fillStyle='#334155'; ctx.font='bold 8px sans-serif';
+      ctx.fillText(`Lv.${SKILL_SLOT_LEVELS[i]}`,sx+skW/2,y+25);
+    } else if (def) {
+      ctx.fillStyle='#e2e8f0'; ctx.font='15px sans-serif'; ctx.fillText(def.icon,sx+skW/2,y+4);
+      ctx.fillStyle=gc; ctx.font='bold 8px sans-serif'; ctx.fillText(def.name,sx+skW/2,y+22);
+      ctx.fillStyle='#fbbf24'; ctx.font='bold 7px sans-serif'; ctx.fillText(rollStars(e.roll)||`×${e.roll.toFixed(2)}`,sx+skW/2,y+31);
+      gs.ui.skillSlotBtns.push({x:sx,y,w:skW,h:skH,idx:i});
+    } else {
+      ctx.fillStyle='#334155'; ctx.font='14px sans-serif'; ctx.fillText('＋',sx+skW/2,y+8);
+      ctx.fillStyle='#334155'; ctx.font='bold 8px sans-serif'; ctx.fillText('비어 있음',sx+skW/2,y+26);
+      gs.ui.skillSlotBtns.push({x:sx,y,w:skW,h:skH,idx:i});
+    }
+  }
+  ctx.textAlign='left';
+  y += skH + 10;
+
+  // ── 보유 스킬 ───────────────────────────────────────────────────────────
+  ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif'; ctx.textBaseline='top';
+  ctx.fillText(`보유 스킬 ${g.skills.length}개`,6,y); y += 13;
+  if (!g.skills.length) {
+    roundRect(ctx,6,y,CW-12,26,4); ctx.fillStyle='#0a0f1a'; ctx.fill(); ctx.strokeStyle='#1a2130'; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle='#334155'; ctx.font='9px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(`🏪 영웅 상점 Lv.${SKILL_SHOP_LEVEL}에서 스킬을 살 수 있습니다`,CW/2,y+13);
+    ctx.textAlign='left'; y += 32;
+  } else {
+    const rH = 26;
+    g.skills.forEach((e,i)=>{
+      const def = skillDef(e.skillId); if (!def) return;
+      const ry = y + i*(rH+3);
+      const on = isSkillEquipped(gs, e.uid);
+      const picked = pick && pick.kind==='skill' && pick.uid===e.uid;
+      const gc = GRADE_COLOR[def.grade]||'#94a3b8';
+      roundRect(ctx,6,ry,CW-12,rH,4);
+      ctx.fillStyle = picked?'#20262e' : on?'#101a12':'#0a0f1a'; ctx.fill();
+      ctx.strokeStyle = picked?'#fbbf24' : on?'#22c55e':gc; ctx.lineWidth = picked?1.6:1; ctx.stroke();
+      ctx.textAlign='left'; ctx.textBaseline='middle';
+      ctx.fillStyle='#e2e8f0'; ctx.font='13px sans-serif'; ctx.fillText(def.icon,12,ry+rH/2);
+      ctx.fillStyle=gc; ctx.font='bold 9px sans-serif';
+      ctx.fillText(`${def.name} ${rollStars(e.roll)}`,30,ry+rH/2-5);
+      ctx.fillStyle='#7c8ba1'; ctx.font='bold 8px sans-serif';
+      ctx.fillText(statsLine(skillStats(e)),30,ry+rH/2+6);
+      if (on) { ctx.textAlign='right'; ctx.fillStyle='#22c55e'; ctx.font='bold 8px sans-serif';
+                ctx.fillText('장착 중',CW-12,ry+rH/2); ctx.textAlign='left'; }
+      gs.ui.skillCards.push({x:6,y:ry,w:CW-12,h:rH,uid:e.uid});
+    });
+    y += g.skills.length*(rH+3) + 6;
+  }
+
+  // ── 보관함 ──────────────────────────────────────────────────────────────
+  ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText(`🎒 보관함 ${g.inventory.length}개`,6,y);
+  ctx.textAlign='right'; ctx.fillStyle='#475569'; ctx.font='bold 8px sans-serif';
+  ctx.fillText('탭해서 고르고 → 칸에 장착', CW-6, y+1);
+  ctx.textAlign='left'; y += 13;
+  if (!g.inventory.length) {
+    roundRect(ctx,6,y,CW-12,26,4); ctx.fillStyle='#0a0f1a'; ctx.fill(); ctx.strokeStyle='#1a2130'; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle='#334155'; ctx.font='9px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('🏪 영웅 상점에서 장비를 사면 여기에 쌓입니다',CW/2,y+13);
+    ctx.textAlign='left'; y += 30;
+  } else {
+    const cols=5, cw=(CW-12-(cols-1)*5)/cols, chh=48;
+    g.inventory.forEach((e,i)=>{
+      const item = equipDef(e.itemId); if (!item) return;
+      const col=i%cols, row=Math.floor(i/cols);
+      const cx=6+col*(cw+5), cy=y+row*(chh+5);
+      const on = isEquipped(gs, e.uid);
+      const picked = pick && pick.kind==='item' && pick.uid===e.uid;
+      const gc = GRADE_COLOR[item.grade]||'#94a3b8';
+      roundRect(ctx,cx,cy,cw,chh,5);
+      ctx.fillStyle = picked?'#20262e' : on?'#101a12':'#0c1220'; ctx.fill();
+      ctx.strokeStyle = picked?'#fbbf24' : on?'#22c55e':gc; ctx.lineWidth = picked?1.8:1; ctx.stroke();
+      ctx.textAlign='center'; ctx.textBaseline='top';
+      ctx.fillStyle='#e2e8f0'; ctx.font='17px sans-serif'; ctx.fillText(item.icon,cx+cw/2,cy+4);
+      ctx.fillStyle=gc; ctx.font='bold 8px sans-serif'; ctx.fillText(item.name,cx+cw/2,cy+25);
+      ctx.fillStyle= on?'#22c55e':'#475569'; ctx.font='bold 7px sans-serif';
+      ctx.fillText(on?'장착 중':GRADE_NAME[item.grade]||'',cx+cw/2,cy+36);
+      gs.ui.invCards.push({x:cx,y:cy,w:cw,h:chh,uid:e.uid});
+    });
+    y += Math.ceil(g.inventory.length/cols)*(chh+5) + 4;
+  }
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  _townBottom = y + 10;
+}
+
 function renderTownPageArmy(ctx, gs, startY) {
+  // 영웅 정보를 누르면 같은 탭 안에서 상세 화면으로 갈아탄다
+  if (gs.town.heroView) { renderHeroDetail(ctx, gs, startY); return; }
+  gs.ui.heroBackBtn = null; gs.ui.equipSlotBtns = []; gs.ui.invCards = [];
+  gs.ui.skillSlotBtns = []; gs.ui.skillCards = []; gs.ui.heroPickBtn = null;
   const {battle,hero}=gs;
   const lv=HERO_LEVELS[hero.level];
-  const hMax=Math.round(lv.hp*BONUSES.heroStatMult*BONUSES.sigilHeroHpMult);
+  const hMax=Math.round((lv.hp+BONUSES.heroHpFlat)*BONUSES.heroStatMult*BONUSES.sigilHeroHpMult);
   let y=startY;
 
   // ── 영웅 ─────────────────────────────────────────────────────────────────
@@ -2718,7 +3109,17 @@ function renderTownPageArmy(ctx, gs, startY) {
   ctx.fillStyle='#f59e0b'; ctx.fillRect(12,y+42,(CW-28)*Math.min(1,expR),8);
   ctx.fillStyle='#94a3b8'; ctx.font='8px sans-serif'; ctx.textAlign='right'; ctx.textBaseline='middle';
   ctx.fillText(maxed?'MAX LEVEL':`EXP ${Math.floor(hero.exp)}/${lv.expNeeded}`,CW-12,y+46);
-  y+=66;
+  // 카드 전체가 상세 화면으로 가는 문이다 — 장비와 스킬은 여기서 만진다
+  gs.ui.heroInfoBtn={x:6,y,w:CW-12,h:58};
+  const _gear = heroGear(gs);
+  const _eqN  = EQUIP_SLOTS.filter(sl=>_gear.equipped[sl.id]!=null).length;
+  const _skN  = skillSlotCount(gs);
+  const _skOn = _gear.skillSlots.filter((u,i)=>i<_skN && u!=null).length;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillStyle='#fbbf24'; ctx.font='bold 8px sans-serif';
+  ctx.fillText(`🎒 장비 ${_eqN}/${EQUIP_SLOTS.length}  ·  🔮 스킬 ${_skOn}/${_skN}  ·  탭하여 장착·스킬`, CW/2, y+69);
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  y+=84;
 
   // ── 영웅 배치 ────────────────────────────────────────────────────────────
   ctx.fillStyle='#64748b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';

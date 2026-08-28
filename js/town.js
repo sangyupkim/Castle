@@ -151,26 +151,16 @@ const HERO_SHOP_FIXED = [
   { id:'scroll_def', name:'방어 두루마리',icon:'📜', cost:15, type:'scroll',     grade:'rare',   desc:'이번 웨이브 아군 방어 +5',      apply:gs=>{ gs.town.waveBuffs.push('unit_def'); } },
 ];
 
-const HERO_EQUIPMENT_POOL = [
-  { id:'sword_iron',   name:'강철 검',        icon:'⚔️', cost:30, grade:'common', slot:'무기',   desc:'영웅 ATK +8',                    apply:b=>{ b.heroAtk += 8; } },
-  { id:'sword_silver', name:'은빛 검',        icon:'⚔️', cost:55, grade:'rare',   slot:'무기',   desc:'영웅 ATK +18, 스탯 +10%',        apply:b=>{ b.heroAtk += 18; b.heroStatMult *= 1.10; } },
-  { id:'armor_chain',  name:'사슬 갑옷',      icon:'🥋', cost:35, grade:'common', slot:'방어구', desc:'아군 방어 오라 +4',               apply:b=>{ b.heroAura += 4; } },
-  { id:'ring_hp',      name:'생명의 반지',    icon:'💍', cost:25, grade:'common', slot:'장신구', desc:'영웅 재생 +3/s',                  apply:b=>{ b.heroRegen += 3; } },
-  { id:'amulet_power', name:'힘의 부적',      icon:'🔮', cost:45, grade:'rare',   slot:'장신구', desc:'아군 ATK +5, 영웅 ATK +10',       apply:b=>{ b.heroAtk += 10; b.unitAtk += 5; } },
-  { id:'boots_swift',  name:'신속의 장화',    icon:'👟', cost:30, grade:'common', slot:'방어구', desc:'타워 공속 +15%',                  apply:b=>{ b.towerSpdMult *= 1.15; } },
-  { id:'helm_warrior', name:'전사의 투구',    icon:'⛑️', cost:40, grade:'rare',   slot:'방어구', desc:'아군 방어 오라 +3',               apply:b=>{ b.heroAura += 3; } },
-  { id:'staff_mage',   name:'마법사 지팡이',  icon:'🪄', cost:50, grade:'rare',   slot:'무기',   desc:'영웅 스탯 +15%',                  apply:b=>{ b.heroStatMult *= 1.15; } },
-  { id:'cape_shadow',  name:'그림자 망토',    icon:'🦸', cost:65, grade:'epic',   slot:'방어구', desc:'불굴의 의지 + 콤보 +15%',         apply:b=>{ b.undying=true; b.comboChance+=0.15; } },
-  { id:'ring_gold',    name:'황금 반지',      icon:'💍', cost:35, grade:'common', slot:'장신구', desc:'처치 골드 +20%',                  apply:b=>{ b.battleGoldMult *= 1.20; } },
-  { id:'cross_holy',   name:'성스러운 십자가',icon:'✝️', cost:55, grade:'rare',   slot:'장신구', desc:'처치 시 아군 HP +5 회복',          apply:b=>{ b.killHeal += 5; } },
-  { id:'scroll_epic',  name:'마법의 두루마리',icon:'📜', cost:70, grade:'epic',   slot:'장신구', desc:'전사해도 결장 없음',                apply:b=>{ b.heroInstantRevive=true; } },
-];
+// 영웅 장비 도감과 착용 규칙은 js/hero.js로 옮겼다 — 칸이 정해진 이상 마을 코드가 아니다.
 
 function createTown() {
   return {
     screen:'main',   // 'main' | building.id
     scroll:0,        // 건물 강화 목록 스크롤
     tab:'town',      // 'town' | 'army'
+    heroView:false,  // 출전준비 › 영웅 상세 (장비·스킬)
+    pick:null,       // 상세 화면에서 고른 장비/스킬 { kind, uid }
+    shopTab:'buy',   // 영웅 상점 — 'buy' | 'upgrade'
     buildings:{
       workshop:{ built:false, level:0, upgrades:{} },
       barracks: { built:false, level:0, upgrades:{} },
@@ -178,20 +168,23 @@ function createTown() {
       inn:      { built:false, level:0, upgrades:{} },
       cave:     { built:true,  level:0, upgrades:{} },
     },
-    equippedItems:[],
+    gear:createHeroGear(),
     shopItems:[],
     waveBuffs:[],
   };
 }
 
 function refreshHeroShop(gs) {
-  const pool = HERO_EQUIPMENT_POOL.filter(e=>!gs.town.equippedItems.includes(e.id));
+  // 이미 가진 물건은 매대에서 빼둔다 — 같은 검이 세 자루 쌓이면 매대가 벌이 된다
+  const owned = new Set((heroGear(gs).inventory || []).map(e => e.itemId));
+  const pool = HERO_EQUIPMENT_POOL.filter(e => !owned.has(e.id));
   const picked=[], avail=[...pool];
   while (picked.length<3 && avail.length>0) {
     const i=Math.floor(Math.random()*avail.length);
     picked.push(avail.splice(i,1)[0]);
   }
   gs.town.shopItems = picked;
+  if (skillShopOpen(gs)) refreshSkillOffers(gs);
 }
 
 function buildBuilding(id, gs) {
@@ -217,6 +210,11 @@ function levelUpBuilding(id, gs) {
   const cost=buildingLevelCost(def, nextLv);
   if (gs.gold<cost) return false;
   gs.gold-=cost; bs.level=nextLv;
+  // 스킬 매대가 막 열렸다면 첫 매물을 바로 깔아준다 — 다음 웨이브까지 빈 칸이 아니라
+  if (id==='heroShop' && skillShopOpen(gs) && !(heroGear(gs).skillOffers||[]).length) {
+    refreshSkillOffers(gs);
+    if (typeof tut !== 'undefined' && tut && tut.showTip) tut.showTip('skillslot');
+  }
   reapplyAllBonuses(gs);
   return true;
 }
@@ -242,11 +240,16 @@ function buyShopItem(item, gs) {
   if (item.type==='consumable'||item.type==='scroll') {
     item.apply(gs);
   } else {
-    if (!gs.town.equippedItems.includes(item.id)) {
-      gs.town.equippedItems.push(item.id);
-      item.apply(BONUSES);
-    }
-    refreshHeroShop(gs);
+    // 산 물건은 보관함으로 간다. 끼우는 것은 출전준비에서 직접 — 사는 것과 고르는 것은 다른 결정이다.
+    const g = heroGear(gs);
+    const entry = { uid:gearUid(), itemId:item.id };
+    g.inventory.push(entry);
+    // 그 칸이 비어 있으면 바로 끼워준다 (첫 장비를 사고 어디로 갔는지 헤매지 않게)
+    const free = slotsForItem(item).find(sl => g.equipped[sl] == null);
+    if (free) equipGear(gs, entry.uid, free);
+    else reapplyAllBonuses(gs);
+    if (typeof tut !== 'undefined' && tut && tut.showTip) tut.showTip('gear');
+    gs.town.shopItems = gs.town.shopItems.filter(it => it.id !== item.id);
   }
   return true;
 }
@@ -269,10 +272,7 @@ function applyTownUpgrades(gs) {
       if (n>0) tr.apply(BONUSES, trackTotal(tr, n));
     }
   }
-  for (const itemId of (gs.town.equippedItems||[])) {
-    const item=HERO_EQUIPMENT_POOL.find(e=>e.id===itemId);
-    if (item) item.apply(BONUSES);
-  }
+  applyHeroGear(gs);
   for (const buff of (gs.town.waveBuffs||[])) {
     if (buff==='hero_atk') BONUSES.heroStatMult*=1.30;
     if (buff==='unit_def') BONUSES.unitDef+=5;

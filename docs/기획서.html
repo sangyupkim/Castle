@@ -219,7 +219,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <div class="wrap">
 <header class="cover">
-  <div class="eyebrow">Game Design Document · v4.3 · 스폰 시간과 정리 시간</div>
+  <div class="eyebrow">Game Design Document · v4.4 · 영웅에게 칸을 준다</div>
   <h1>듀얼 프론티어</h1>
   <p class="tagline">한 화면에서 두 개의 전선을 동시에 굴리는 모바일 웹 로그라이트.
      끝은 없다 — 얼마나 깊이 내려갔는지가 기록이다.</p>
@@ -228,7 +228,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
     <div><dt>플랫폼</dt><dd>모바일 웹 (480×800 캔버스)</dd></div>
     <div><dt>1회 하강</dt><dd>10~30분 (도달 층에 비례)</dd></div>
     <div><dt>현재 볼륨</dt><dd>훈련 30웨이브 + ∞ 무한 (알고리즘 생성)</dd></div>
-    <div><dt>이번 개정</dt><dd>타이머 = 스폰 시간 · 판이 비어야 종료 · 1-1 완화 (v4.3)</dd></div>
+    <div><dt>이번 개정</dt><dd>영웅 장비 7칸 · 스킬 굴림 · 각인 보석 해금 (v4.4)</dd></div>
   </dl>
 </header>
 
@@ -954,6 +954,106 @@ v1.0의 "그룹 순환 + 보상 체감" 구조를 이 압력 곡선이 대체한
 <tr><td>7</td><td class="num">720</td><td class="num">55</td><td class="num">215</td><td class="num">16</td><td class="num">4.4칸</td></tr>
 <tr class="total"><td>10</td><td class="num">MAX</td><td class="num">105</td><td class="num">360</td><td class="num">26</td><td class="num">5.2칸</td></tr>
 </tbody></table></div>
+
+
+<h3>장비는 정해진 칸에만 <span class="rev">v4.4</span></h3>
+
+<p class="lede">플레이 보고: <strong>"지금은 영웅 상점에서 아무렇게나 사서 장착할 수 있는데,
+이제는 무기 갑옷 헬멧 바지 신발 악세사리 2개 이렇게만 장착할 수 있게 하고,
+산 아이템을 출전준비에서 영웅 탭을 선택하면 인벤토리창도 볼 수 있게 해서 장착·해제할 수 있게 해줘."</strong></p>
+
+<p>이전에는 산 장비가 <strong>사는 즉시 영구히</strong> 붙었다. 고를 것이 없었다 —
+비싼 것을 사면 그게 정답이었고, 뺄 수도 없었으니 실수할 여지조차 없었다.
+칸을 정하면 비로소 <em>무엇을 포기할지</em>가 생긴다.</p>
+
+<div class="tw"><table>
+<caption>장비 체계 — 이전 / 지금</caption>
+<thead><tr><th></th><th>이전</th><th>지금</th></tr></thead>
+<tbody>
+<tr><td>칸</td><td>없음 (무제한 누적)</td><td><strong>무기 · 투구 · 갑옷 · 각반 · 신발 · 악세 ×2 = 7칸</strong></td></tr>
+<tr><td>구매</td><td>즉시 장착 · 영구</td><td>🎒보관함으로 · 장착은 출전준비에서</td></tr>
+<tr><td>해제</td><td>불가</td><td>언제든</td></tr>
+<tr><td>도감</td><td class="num">12종</td><td class="num">21종 (칸마다 3~4등급)</td></tr>
+</tbody></table></div>
+
+<p>아이템은 임의의 <span class="mono">apply(b)</span> 클로저 대신 <strong>스탯 블록</strong>
+(<span class="mono">{atk:8}</span>)으로 값을 준다. 그래야 "끼우면 얼마나 바뀌는지"를 계산할 수 있다 —
+클로저였다면 미리보기가 원리적으로 불가능했다.</p>
+
+<p>스탯 키 10종: <span class="mono">atk · hp · def · regen · aspd · range · skill · crit · gold · exp</span>.
+새 보너스 키 <span class="mono">heroHpFlat · heroSpdMult · heroRangeMult · heroSkillMult</span>가
+각인 배율과 곱해진다.</p>
+
+<h3>스탯창 — 끼우기 전에 안다 <span class="rev">v4.4</span></h3>
+
+<p>보관함에서 하나 고르면 오른쪽 스탯창이 <strong>지금 → 바꾼 뒤</strong>를 나란히 보여준다.
+올라가면 ▲초록, 내려가면 ▼빨강.</p>
+
+<p>미리보기는 <strong>실제로 끼워보고 되돌리는</strong> 방식이다
+(<span class="mono">heroStatPreview</span>). 보너스 재계산은 어차피 매 웨이브 도는 연산이라
+한 번 더 도는 비용은 무시할 수 있고, 근사치가 아니라 정확한 값이 나온다.</p>
+
+<h3>🔮 영웅 스킬 — 레벨이 칸을 열고, 굴림이 값을 정한다 <span class="rev">v4.4</span></h3>
+
+<p class="lede">플레이 보고: <strong>"레벨이 올라가면 스킬칸이 생겨서 스킬을 배울 수 있게 할 건데
+스킬은 랜덤성을 부여해보자. 영웅 상점을 업그레이드하면 스킬 구매를 할 수 있게 뜨고."</strong></p>
+
+<div class="tw"><table>
+<caption>스킬 체계</caption>
+<thead><tr><th>요소</th><th>값</th></tr></thead>
+<tbody>
+<tr><td>칸 개방</td><td>영웅 <strong>Lv.3 · 7 · 12 · 18</strong> — 최대 4칸</td></tr>
+<tr><td>판매 조건</td><td>🏪영웅 상점 <strong>Lv.3</strong> 이상</td></tr>
+<tr><td>종류</td><td class="num">10종 (일반 3 · 희귀 5 · 영웅 2)</td></tr>
+<tr><td>굴림값</td><td>0.70 ~ 1.40 · 등급별 하한 (일반 0.70 / 희귀 0.85 / 영웅 1.00)</td></tr>
+<tr><td>값</td><td><span class="mono">기본가 × (0.6 + 굴림×0.55)</span> — 좋은 굴림은 비싸다</td></tr>
+<tr><td>매대</td><td>웨이브마다 새로 굴린다 (여관 손님과 같은 규칙)</td></tr>
+</tbody></table></div>
+
+<p>같은 '광폭'이라도 0.72짜리와 1.34짜리는 다른 물건이다. 좋은 굴림을 뽑는 것 자체가
+매 웨이브 상점을 들여다볼 이유가 된다. ★~★★★로 굴림을 먼저 읽히게 했다.</p>
+
+<h3>영웅 상점의 강화 트랙이 다시 잡힌다 <span class="rev">v4.4 · 버그</span></h3>
+
+<p><span class="mono">renderBuildingScreen</span>이 <span class="mono">heroShop</span>이면
+매대를 그리고 <strong>바로 return</strong>했다. 그래서 이 건물의 강화 트랙
+(👑영웅 단련 · 📖전투 교본 · ✨영웅 각성 · 🎖️지휘 오라 · 🕊️구원의 손 · ♾️전설의 무구)과
+레벨 승급 버튼에 <strong>아예 손이 닿지 않았다</strong>. 정의만 있고 살 수 없는 강화가 6종이었다.</p>
+
+<p>🛒매대 / ⚒️강화 두 탭으로 나눴다. 매대도 하단 패널(390px)이 아니라 전체 화면
+(<span class="mono">SCR_TOP=92</span>)으로 올리고 스크롤을 달았다 — 스킬 매대가 붙으면서
+390px으로는 더 이상 담기지 않는다.</p>
+
+<h3>각인은 보석으로 연다 <span class="rev">v4.4</span></h3>
+
+<p class="lede">플레이 보고: <strong>"캠프에서 지금 영웅을 3개 선택할 수 있게 해놨는데
+이거도 보석으로 해금하는 방식으로 가자. 나중에 보석이 쌓이면 이걸로 영웅도 해금해서 쓸 수 있게."</strong></p>
+
+<div class="tw"><table>
+<caption>각인 해금</caption>
+<thead><tr><th>각인</th><th>스킬</th><th class="num">해금</th></tr></thead>
+<tbody>
+<tr><td>⚔️ 검성</td><td>회전베기 — 가장 넓은 근접기</td><td class="num">처음부터</td></tr>
+<tr><td>🛡️ 수호자</td><td>불굴의 함성 — 보호막 + 도발</td><td class="num">💎15</td></tr>
+<tr><td>🔥 술사</td><td>화염 폭발 — 최대 범위 + 둔화</td><td class="num">💎25</td></tr>
+</tbody></table></div>
+
+<p>셋 다 처음부터 열려 있으면 고르는 데 값이 없다. 심연에서 모은 보석이
+"다음 영웅"이라는 목표가 되게 했다. 한 번 열면 <strong>언제든 무료로 갈아 끼운다</strong> —
+층 조합에 맞춰 바꾸는 것이 각인의 목적이므로 교체까지 잠그면 그냥 안 쓰게 된다.</p>
+
+<h3>전투 탭도 스크롤된다 <span class="rev">v4.4</span></h3>
+
+<p class="lede">플레이 보고: <strong>"전투탭에서는 스크롤이 안 생겨서 정보가 더 나오면 밑에 내용이 잘려."</strong></p>
+
+<p>준비 화면(브리핑)은 480×390 패널에 그대로 그려졌다. 심층 이벤트와 완주 보너스가 붙으면서
+아래 줄이 잘렸고, 그 안에 <strong>🏰마을 버튼</strong>이 있었다 — 준비를 하러 갈 수가 없었다.</p>
+
+<p>마을 탭이 쓰던 드래그·휠 배관을 그대로 붙였다.
+<span class="mono">renderBriefing(ctx, gs, top)</span>이 <span class="mono">BATTLE_Y - scroll</span>을 받고,
+내부 좌표는 전부 <span class="mono">TOP+</span>로 옮겼다. 배경 두 장만 화면에 고정해 둔다 —
+같이 움직이면 패널 밖이 비어 보인다. 측정: 20층 기준 44px 스크롤, 마을 버튼이 y=714에서 눌린다.</p>
+
 </section>
 
 
@@ -2705,6 +2805,7 @@ v3.0에서 변형과 이벤트를 넣은 이유가 그것이었는데, 그 풀�
 <tr><td class="mono">upgrade.js</td><td class="num">—</td><td class="wrap">스킬 트리 정의 유지 · <span class="mono">calcSoulStones</span> 정산식 교체 (12절)</td></tr>
 <tr><td class="mono">defense.js · town.js</td><td class="num">638</td><td class="wrap">변경 없음</td></tr>
 <tr><td class="mono">audio.js · fx.js · save.js · tutorial.js</td><td class="num">228</td><td class="wrap">tutorial 재작성 · save 버전업</td></tr>
+<tr><td class="mono">hero.js</td><td class="num">신규</td><td class="wrap">영웅 장비 칸 · 스탯 블록 · 스킬 굴림 · 각인 해금 · 세이브 정규화 <span class="rev">v4.4</span></td></tr>
 </tbody></table></div>
 
 <h4>성능 예산</h4>

@@ -278,6 +278,7 @@ function createWaveManager() {
       tickHeroDown(gs);              // 전사한 영웅의 결장 층을 하나 센다
       restHealTeam(gs.battle);       // 생존 병력 휴식 회복
       refreshInnOffers(gs);          // 여관에 새 손님이 온다
+      refreshHeroShop(gs);           // 상점 매대도 새로 깐다 (장비 · 스킬)
 
       // 훈련 마지막 웨이브만 강화 없이 결과로 넘긴다. 무한은 매 층 강화를 고른다.
       const atCampaignEnd = (gs.mode !== 'endless') && (this.waveIndex + 1 >= TRAINING_WAVES);

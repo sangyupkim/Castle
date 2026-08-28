@@ -19,6 +19,8 @@ function createDefaultBonuses() {
     eliteChance: 0, dropChance: 0,
     // 영웅
     heroAtk: 0, heroRegen: 0, heroAura: 0,
+    // 장비·스킬이 얹는 영웅 전용 값 (각인 배율과 곱해서 쓴다)
+    heroHpFlat: 0, heroSpdMult: 1.0, heroRangeMult: 1.0, heroSkillMult: 1.0,
     heroExpMult: 1.0, heroInstantRevive: false,
     heroStartExp: 0, heroReviveReduction: 0, heroStatMult: 1.0,
     // 각인 — 영웅에게만 걸리는 배율. heroStatMult와 곱해서 쓴다.

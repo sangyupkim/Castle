@@ -60,6 +60,7 @@ let _pacts          = [];   // 걸어둔 서약
 let _seenMobs       = [];   // 도감
 let _clearedGates   = [];   // 최초 돌파한 무한 관문 (10층 단위)
 let _heroSigil      = DEFAULT_SIGIL;   // 👑 영웅 각인 — 캠프에서 고르는 길
+let _unlockedSigils = [DEFAULT_SIGIL];  // 보석으로 연 각인
 let _stats          = createStats();
 
 // ─── 초기 상태 ────────────────────────────────────────────────────────────────
@@ -134,6 +135,8 @@ function newState() {
     set clearedGates(v) { _clearedGates = v; },
     get heroSigil()  { return _heroSigil; },
     set heroSigil(v) { _heroSigil = v; },
+    get unlockedSigils()  { return _unlockedSigils; },
+    set unlockedSigils(v) { _unlockedSigils = v; },
     get stats()  { return _stats; },
     set stats(v) { _stats = v; },
   };
@@ -160,6 +163,9 @@ let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적�
   _seenMobs       = sv.seenMobs      || [];
   _clearedGates   = sv.clearedGates  || [];
   _heroSigil      = sv.heroSigil     || DEFAULT_SIGIL;
+  _unlockedSigils = sv.unlockedSigils || [DEFAULT_SIGIL];
+  if (!_unlockedSigils.includes(DEFAULT_SIGIL)) _unlockedSigils.push(DEFAULT_SIGIL);
+  if (!sigilUnlocked(gs, _heroSigil)) _heroSigil = DEFAULT_SIGIL;
   _stats          = Object.assign(createStats(), sv.stats || {});
 
   if (!sv.inRun) return;   // 로비에서 종료했다면 런은 새로 시작한다
@@ -186,7 +192,8 @@ let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적�
       if (gs.town.buildings[k]) gs.town.buildings[k] = v;
     }
   }
-  gs.town.equippedItems = sv.townEquipped || [];
+  // 보관함 — 옛 세이브(townEquipped: 장착 아이디 배열)도 받아들인다
+  gs.town.gear = normalizeHeroGear(sv.townGear, sv.townEquipped);
   gs.innOffers = sv.innOffers || [];
 
   // ── 판에 세워둔 것 복원 ──
@@ -247,7 +254,7 @@ function _applyStartBonuses() {
 }
 
 function baseHpMax()     { return Math.max(20, Math.round((BASE_HP_MAX + BONUSES.baseHpMax) * (BONUSES.pactBaseHpMult || 1))); }
-function heroMaxHp()     { return Math.round(HERO_LEVELS[gs.hero.level].hp * BONUSES.heroStatMult * BONUSES.sigilHeroHpMult); }
+function heroMaxHp()     { return Math.round((HERO_LEVELS[gs.hero.level].hp + BONUSES.heroHpFlat) * BONUSES.heroStatMult * BONUSES.sigilHeroHpMult); }
 
 tut.start();
 
@@ -580,6 +587,8 @@ function tap({x,y}) {
 const _PAGE_UI_KEYS = [
   'buildingCards','wallRepairBtn','caveBtn','tabTownBtn','townBackBtn',
   'buildingLvUpBtn','upgradeBtns','buildingScroll','pageScroll','briefScroll','hireCards','hiredSlots',
+  'heroInfoBtn','heroBackBtn','equipSlotBtns','invCards','skillSlotBtns','skillCards','heroPickBtn',
+  'shopItemBtns','skillBuyBtns','shopTabBuy','shopTabUp',
   'specialCards','specialSlots','heroDefBtn','heroBatBtn','bountyBtn','eliteBtn','towerMiniGrid',
   'lobbyTabBtns','sortieBtn','trainBtn','metaCards','unlockBtns','pactBtns','sigilCards',
   'towerTabBtn','heroTabBtn','supportTabBtn','backupExportBtn','backupImportBtn',
@@ -609,6 +618,16 @@ function handleLobbyTap(x, y) {
   if (L.tab === 'skill') {
     for (const c of gs.ui.sigilCards||[]) {
       if (hitTest(x,y,c)) {
+        if (c.locked) {
+          const sg = sigilDef(c.id);
+          if (unlockSigil(gs, c.id)) {
+            SaveManager.save(gs);
+            spawnFloaty(`${sg.icon} ${sg.name} 해금!`, x, y, '#fbbf24'); SFX.upgrade();
+          } else {
+            spawnFloaty(`보석 부족 — 💎${SIGIL_UNLOCK_COST[c.id]} 필요`, x, y, '#ef4444'); SFX.denied();
+          }
+          return;
+        }
         if (gs.heroSigil !== c.id) {
           gs.heroSigil = c.id;
           reapplyAllBonuses(gs);
@@ -725,6 +744,7 @@ function resetAllProgress() {
   _skillTreeOwned = [];
   _unlocked = [];
   _heroSigil = DEFAULT_SIGIL;
+  _unlockedSigils = [DEFAULT_SIGIL];
   _pacts = [];
   _seenMobs = [];
   _clearedGates = [];
@@ -789,6 +809,85 @@ function returnToLobby() {
   SaveManager.save(gs);
 }
 
+// ─── 👑 영웅 상세 화면 ────────────────────────────────────────────────────────
+// 고르기(pick)와 끼우기를 나눴다. 한 번 탭해 고르면 스탯창이 바뀔 값을 보여주고,
+// 칸이나 장착 버튼을 누르면 그때 실제로 들어간다.
+function handleHeroDetailTap(x,y) {
+  const t = gs.town;
+  if (hitTest(x,y,gs.ui.heroBackBtn||{})) { t.heroView=false; t.pick=null; t.scroll=0; SFX.click(); return; }
+
+  // 장착/해제 버튼 — 고른 것을 그대로 처리한다
+  if (t.pick && hitTest(x,y,gs.ui.heroPickBtn||{})) { applyHeroPick(x,y,null); return; }
+
+  // 장비 칸
+  for (const b of gs.ui.equipSlotBtns||[]) {
+    if (!hitTest(x,y,b)) continue;
+    if (t.pick && t.pick.kind==='item') { applyHeroPick(x,y,b.slot); return; }
+    if (unequipGear(gs, b.slot)) { spawnFloaty('해제',x,y,'#f87171'); SFX.click(); SaveManager.save(gs); }
+    return;
+  }
+  // 스킬 칸
+  for (const b of gs.ui.skillSlotBtns||[]) {
+    if (!hitTest(x,y,b)) continue;
+    if (t.pick && t.pick.kind==='skill') { applyHeroPick(x,y,b.idx); return; }
+    if (unequipSkill(gs, b.idx)) { spawnFloaty('해제',x,y,'#f87171'); SFX.click(); SaveManager.save(gs); }
+    return;
+  }
+  // 보관함 · 보유 스킬 — 탭하면 고른다 (같은 것을 다시 탭하면 취소)
+  for (const c of gs.ui.invCards||[]) {
+    if (!hitTest(x,y,c)) continue;
+    t.pick = (t.pick && t.pick.kind==='item' && t.pick.uid===c.uid) ? null : {kind:'item', uid:c.uid};
+    SFX.click(); return;
+  }
+  for (const c of gs.ui.skillCards||[]) {
+    if (!hitTest(x,y,c)) continue;
+    t.pick = (t.pick && t.pick.kind==='skill' && t.pick.uid===c.uid) ? null : {kind:'skill', uid:c.uid};
+    SFX.click(); return;
+  }
+}
+
+// 고른 것을 실제로 끼우거나 뺀다. target은 장비면 칸 id, 스킬이면 칸 번호.
+function applyHeroPick(x, y, target) {
+  const t = gs.town, pick = t.pick;
+  if (!pick) return;
+  if (pick.kind==='item') {
+    if (isEquipped(gs, pick.uid)) {
+      for (const sl of EQUIP_SLOTS) {
+        if (heroGear(gs).equipped[sl.id]===pick.uid) { unequipGear(gs, sl.id); break; }
+      }
+      spawnFloaty('해제', x, y, '#f87171');
+    } else if (equipGear(gs, pick.uid, target)) {
+      spawnFloaty('장착!', x, y, '#4ade80');
+    } else { spawnFloaty('낄 수 없는 칸입니다', x, y, '#ef4444'); SFX.denied(); return; }
+  } else {
+    if (isSkillEquipped(gs, pick.uid)) {
+      const i = heroGear(gs).skillSlots.indexOf(pick.uid);
+      unequipSkill(gs, i);
+      spawnFloaty('해제', x, y, '#f87171');
+    } else if (skillSlotCount(gs) <= 0) {
+      spawnFloaty(`스킬 칸은 영웅 Lv.${SKILL_SLOT_LEVELS[0]}부터`, x, y, '#ef4444'); SFX.denied(); return;
+    } else if (equipSkill(gs, pick.uid, target)) {
+      spawnFloaty('장착!', x, y, '#4ade80');
+    } else { spawnFloaty('장착 실패', x, y, '#ef4444'); SFX.denied(); return; }
+  }
+  t.pick = null;
+  // 편성된 영웅은 새 스탯으로 다시 만든다 — 마을에서 낀 것이 판에 반영되도록
+  refreshDeployedHero();
+  SFX.upgrade();
+  SaveManager.save(gs);
+}
+
+// 장비·스킬·각인이 바뀌면 이미 편성된 영웅 유닛도 새로 만든다
+function refreshDeployedHero() {
+  if (!gs.battle) return;
+  const i = gs.battle.ourTeam.findIndex(u => u.isHero);
+  if (i < 0) return;
+  const hpRatio = gs.battle.ourTeam[i].maxHp > 0 ? gs.battle.ourTeam[i].hp / gs.battle.ourTeam[i].maxHp : 1;
+  const u = makeHeroUnit(gs.hero);
+  u.hp = Math.max(1, Math.round(u.maxHp * Math.min(1, hpRatio)));
+  gs.battle.ourTeam[i] = u;
+}
+
 function handleTownTap(x,y) {
   const t=gs.town;
 
@@ -803,14 +902,24 @@ function handleTownTap(x,y) {
     if (hitTest(x,y,gs.ui.tabTowersBtn||{})) { t.screen='main'; t.tab='towers'; t.scroll=0; gs.ui.towerAction=null; return; }
     if (hitTest(x,y,gs.ui.townBackBtn||{})) { t.screen='main'; t.scroll=0; return; }
     if (t.screen==='heroShop') {
+      if (hitTest(x,y,gs.ui.shopTabBuy||{})) { t.shopTab='buy';     t.scroll=0; SFX.click(); return; }
+      if (hitTest(x,y,gs.ui.shopTabUp ||{})) { t.shopTab='upgrade'; t.scroll=0; SFX.click(); return; }
       for (const btn of gs.ui.shopItemBtns||[]) {
         if (hitTest(x,y,btn)) {
-          if (!buyShopItem(btn.item,gs)) spawnFloaty('골드 부족!',x,y,'#ef4444');
-          else spawnFloaty(`${btn.item.icon} 구매!`,x,y,'#a78bfa');
+          if (!buyShopItem(btn.item,gs)) { spawnFloaty('골드 부족!',x,y,'#ef4444'); SFX.denied(); }
+          else { spawnFloaty(`${btn.item.icon} 구매 — 🎒보관함`,x,y,'#a78bfa'); SFX.upgrade(); SaveManager.save(gs); }
           return;
         }
       }
-      return;
+      for (const btn of gs.ui.skillBuyBtns||[]) {
+        if (hitTest(x,y,btn)) {
+          if (!buySkillOffer(gs, btn.uid)) { spawnFloaty('골드 부족!',x,y,'#ef4444'); SFX.denied(); }
+          else { spawnFloaty('🔮 스킬 습득!',x,y,'#f0abfc'); SFX.upgrade(); SaveManager.save(gs); }
+          return;
+        }
+      }
+      // 매대 탭에서는 강화 버튼이 없다 — 나머지 탭 전환만 위에서 처리된다
+      if ((t.shopTab||'buy')==='buy') return;
     }
     if (hitTest(x,y,gs.ui.buildingLvUpBtn||{})) {
       if (levelUpBuilding(t.screen,gs)) spawnFloaty('건물 레벨업!',x,y,'#f59e0b');
@@ -897,6 +1006,9 @@ function handleTownTap(x,y) {
   }
 
   if (t.tab==='army') {
+    // ── 👑 영웅 상세 — 장비·스킬 ────────────────────────────────────────────
+    if (t.heroView) { handleHeroDetailTap(x,y); return; }
+    if (hitTest(x,y,gs.ui.heroInfoBtn||{})) { t.heroView=true; t.pick=null; t.scroll=0; SFX.click(); return; }
     if (hitTest(x,y,gs.ui.heroDefBtn||{})) { gs.hero.placement=gs.hero.placement==='defense'?'none':'defense'; if (gs.hero.placement==='defense') gs.battle.ourTeam=gs.battle.ourTeam.filter(u=>!u.isHero); return; }
     if (hitTest(x,y,gs.ui.heroBatBtn||{})) {
       if (gs.hero.placement==='battle') { gs.hero.placement='none'; gs.battle.ourTeam=gs.battle.ourTeam.filter(u=>!u.isHero); }

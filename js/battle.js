@@ -75,7 +75,7 @@ function makeHeroUnit(hero) {
   const lv  = HERO_LEVELS[hero.level];
   const sm  = BONUSES.heroStatMult;
   const atk = Math.round((lv.atk + BONUSES.heroAtk) * sm * BONUSES.sigilHeroAtkMult);
-  const hp  = Math.round(lv.hp * sm * BONUSES.sigilHeroHpMult);
+  const hp  = Math.round((lv.hp + BONUSES.heroHpFlat) * sm * BONUSES.sigilHeroHpMult);
   const def = Math.round((lv.def + BONUSES.heroAura) * sm);
   const A   = HERO_ARENA;
   // 각인이 아레나 스킬을 통째로 갈아치운다 — 이름·종류·쿨다운·범위 전부
@@ -86,12 +86,12 @@ function makeHeroUnit(hero) {
     name:'영웅', icon:'👑', color:COLORS.hero,
     sigil:sg.id,
     hp:Math.min(hp, Math.max(1, hero.hp)), maxHp:hp, atk, def, shield:0,
-    atkPeriod:A.atkPeriod / BONUSES.sigilHeroSpdMult, atkCd:0,
-    range:A.range * BONUSES.sigilHeroRangeMult, moveSpd:A.moveSpd, radius:A.radius,
+    atkPeriod:A.atkPeriod / (BONUSES.sigilHeroSpdMult * BONUSES.heroSpdMult), atkCd:0,
+    range:A.range * BONUSES.sigilHeroRangeMult * BONUSES.heroRangeMult, moveSpd:A.moveSpd, radius:A.radius,
     ranged:false, isTank:false,
     skillName:sk.name, skillKind:sk.kind, skillCd:sk.cd, skillCdLeft:sk.cd,
     skillRadius:sk.radius, skillHits:1, skillColor:sk.color,
-    skillAtk:Math.floor(atk * sk.mult * BONUSES.sigilSkillMult),
+    skillAtk:Math.floor(atk * sk.mult * BONUSES.sigilSkillMult * BONUSES.heroSkillMult),
     healAmt:0,
     // 🛡 수호자의 함성은 최대 HP에 비례한다 — 단단할수록 부대를 더 감싼다
     shieldAmt: sk.kind === 'bulwark' ? Math.max(6, Math.round(hp * 0.32)) : 0,
