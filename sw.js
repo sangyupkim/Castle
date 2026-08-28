@@ -5,15 +5,22 @@
 // 설치할 때 통째로 캐시에 넣고 그 뒤로는 캐시에서 바로 준다.
 //
 // 버전을 올리면 새 캐시를 만들고 옛 캐시를 지운다 — 게임을 고칠 때마다 CACHE만 올리면 된다.
-const CACHE = 'dual-frontier-v0.5.1';
+// 스프라이트 목록은 게임과 같은 파일에서 읽는다 — 두 군데에 적으면 반드시 어긋난다
+try { importScripts('assets/images/manifest.js'); } catch (e) {}
+
+const CACHE = 'dual-frontier-v0.6.1';
 
 const SHELL = [
   '.', 'index.html', 'manifest.webmanifest',
-  'js/constants.js', 'js/audio.js', 'js/fx.js', 'js/upgrade.js', 'js/hero.js', 'js/town.js',
+  'assets/images/manifest.js', 'js/constants.js', 'js/sprites.js', 'js/audio.js', 'js/fx.js', 'js/upgrade.js', 'js/hero.js', 'js/town.js',
   'js/save.js', 'js/lobby.js', 'js/defense.js', 'js/battle.js', 'js/arena.js',
   'js/formation.js', 'js/wave.js', 'js/tutorial.js', 'js/render.js', 'js/game.js',
   'assets/images/mainpage.png',
-  'assets/images/icon-192.png', 'assets/images/icon-512.png', 'assets/images/icon-maskable-512.png'
+  'assets/images/icon-192.png', 'assets/images/icon-512.png', 'assets/images/icon-maskable-512.png',
+  // 스프라이트 — 매니페스트에 켜둔 것만 담는다.
+  // 하나라도 실패하면 설치가 통째로 실패하던 문제가 있어 개별로 담으므로(아래),
+  // 여기 없는 파일이 있어도 나머지는 정상 설치된다.
+  ...Object.values((self.SPRITE_FILES) || {}).map(p => 'assets/images/' + p)
 ];
 
 self.addEventListener('install', e => {

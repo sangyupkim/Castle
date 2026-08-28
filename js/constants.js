@@ -1,7 +1,7 @@
 'use strict';
 
 // 타이틀 화면에 표기되는 버전
-const GAME_VERSION = 'v0.6.0';
+const GAME_VERSION = 'v0.6.1';
 
 // 포기하고 정산하면 보석을 깎는다. 한 판이 10~30분이라 접을 길은 있어야 하지만,
 // 접는 쪽이 늘 이득이면 아무도 마지막 층을 버티지 않는다.
@@ -482,7 +482,23 @@ const ARENA_Y = BATTLE_Y + ARENA_STATUS_H;
 const ARENA_W = CW;
 const ARENA_H = BATTLE_H - ARENA_STATUS_H - ARENA_CTRL_H;   // 330
 
-const ARENA_MAX_MOBS      = 28;    // 동시 생존 상한 — 가독성 + 성능
+// ── 개체 몸집 ────────────────────────────────────────────────────────────────
+// 아군 반지름이 7.5px였다. 이모지는 그 크기에서도 실루엣이 읽히지만 그림은 안 읽힌다 —
+// 지름 15px짜리 점에 캐릭터를 그려 넣을 수는 없다.
+//
+// 몸집을 키우면 같은 판에 들어가는 수가 줄어야 한다. 안 그러면 서로 겹쳐서
+// 무엇이 몇 마리인지 보이지 않는다. 그래서 상한을 함께 내린다.
+//
+// 근접 사거리는 대상의 '표면'까지로 재므로(dist − target.radius), 몸이 커져도
+// 자기 반지름보다 사거리가 길기만 하면 계속 닿는다. 가장 빠듯한 것이
+// 오우거(19 vs 26) · 보스(20.9 vs 30)이고, 둘 다 여유가 있다.
+const ARENA_BODY_SCALE    = 1.85;  // 몸집 배율 — 반지름 7.5 → 13.9
+function bodyRadius(r) { return Math.round((r || 0) * ARENA_BODY_SCALE * 10) / 10; }
+// 그림은 몸보다 조금 크게 그린다 — 충돌원은 발밑, 그림은 그 위로 선다
+const ARENA_ART_W_MULT    = 2.1;   // 그림 가로 = 반지름 × 이 값
+const ARENA_ART_H_MULT    = 2.7;   // 그림 세로
+
+const ARENA_MAX_MOBS      = 20;    // 동시 생존 상한 — 가독성 + 성능 (몸집을 키우며 28 → 20)
 const ARENA_SPAWN_BAND    = 26;    // 가장자리 스폰 밴드 두께
 const SPAWN_BASE_INTERVAL = 1.6;   // 초. 경과에 따라 짧아진다
 const SPAWN_RAMP          = 0.03;  // 간격 = base / (1 + 경과초 × RAMP)

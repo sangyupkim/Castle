@@ -78,7 +78,7 @@ function makeArenaMob(typeId, waveIndex, killCount, caveLevel, eliteBonus) {
     def: Math.max(0, Math.round(t.def * sm)),
     atkPeriod: t.atkPeriod, atkCd: Math.random() * t.atkPeriod,
     range: t.range, moveSpd: t.moveSpd * (isElite ? 1.1 : 1),
-    radius: t.radius * (isElite ? 1.25 : 1),
+    radius: bodyRadius(t.radius) * (isElite ? 1.25 : 1),
     goldReward: Math.max(1, Math.round(t.goldReward * gm)),
     x: 0, y: 0, vx: 0, vy: 0,
     target: null, dead: false, deadTimer: 0,

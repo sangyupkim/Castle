@@ -3,12 +3,15 @@
 // ─── 대형 · 자동/수동 이동 ────────────────────────────────────────────────────
 // 플레이어는 개별 유닛을 조작하지 않는다. 집결 지점 하나를 찍으면
 // 부대가 역할에 따라 스스로 자리를 잡는다.
-//   방패병 — 진행 방향 앞 24px (먼저 닿아서 맞는 것이 역할)
+//   방패병 — 진행 방향 앞 34px (먼저 닿아서 맞는 것이 역할)
 //   영웅 · 검사 — 중앙
-//   궁수 · 마법사 · 치유사 — 뒤 22px, 좌우로 분산
+//   궁수 · 마법사 · 치유사 — 뒤 32px, 좌우로 분산
 
-const FORM_TANK_AHEAD = 24;
-const FORM_BACK_DIST  = 22;
+// 몸집을 1.85배로 키우면서 대형 간격도 함께 벌렸다.
+// 지름 28px짜리가 24px 간격으로 서면 서로 밀어내느라 자리에 서 있질 못한다.
+const FORM_TANK_AHEAD = 34;
+const FORM_BACK_DIST  = 32;
+const FORM_SPREAD     = 34;
 
 function formationRole(u) {
   if (u.isTank) return 'front';
@@ -41,9 +44,9 @@ function assignFormationSlots(arena, allies) {
     });
   };
 
-  place(front,  FORM_TANK_AHEAD, 26);
-  place(mid,    0,               24);
-  place(back,  -FORM_BACK_DIST,  26);
+  place(front,  FORM_TANK_AHEAD, FORM_SPREAD);
+  place(mid,    0,               FORM_SPREAD - 2);
+  place(back,  -FORM_BACK_DIST,  FORM_SPREAD);
 }
 
 // 매 프레임 호출 — 수동이면 집결 지점 기준 대형, 자동이면 슬롯을 쓰지 않는다

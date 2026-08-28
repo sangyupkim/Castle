@@ -34,6 +34,14 @@ resize();
 // ─── 타이틀 이미지 ───────────────────────────────────────────────────────────
 const _titleImg = new Image();
 _titleImg.src = 'assets/images/mainpage.png';
+
+// ── 🖼 스프라이트 프리로드 ────────────────────────────────────────────────────
+// 매니페스트가 비어 있으면 즉시 끝나고 로딩 화면도 뜨지 않는다.
+let _assetsLoading = Sprites.total > 0 || !Sprites.ready;
+Sprites.load().then(() => {
+  _assetsLoading = false;
+  if (Sprites.total) console.info('[스프라이트]', Sprites.report());
+});
 let _titleScreen = true;  // 앱 시작 시 타이틀 화면 표시
 let _resetArmed  = false; // 리셋 버튼 1차 확인 상태
 let _resetArmedAt = 0;
@@ -419,6 +427,7 @@ function lockTapsBriefly() { _tapLockUntil = (typeof performance !== 'undefined'
 function tapsLocked() { return (typeof performance !== 'undefined' ? performance.now() : Date.now()) < _tapLockUntil; }
 
 function tap({x,y}) {
+  if (_assetsLoading) return;   // 로딩 화면에서는 아무것도 안 받는다
   if (_titleScreen) {
     SFX.unlock();
     // 리셋은 두 번 눌러야 실행된다 — 실수로 세이브를 날리지 않도록
@@ -1485,6 +1494,8 @@ function loop(ts) {
 function frame(ts) {
   const dt=Math.min((ts-_last)/1000,0.05); _last=ts;
   ctx.clearRect(0,0,CW,CH);
+  if (_assetsLoading && !Sprites.ready) { renderLoadingScreen(ctx, Sprites.progress); return; }
+  _assetsLoading = false;
   clearStalePageUI();
 
   const [shx, shy] = FX.shakeOffset();

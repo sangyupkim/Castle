@@ -14,7 +14,7 @@ function makeUnit(typeId) {
     hp:0, maxHp:0, atk:0, def:0, shield:0,
     // 실시간 전투 필드
     atkPeriod:t.atkPeriod, atkCd:0,
-    range:t.range, moveSpd:t.moveSpd, radius:t.radius,
+    range:t.range, moveSpd:t.moveSpd, radius:bodyRadius(t.radius),
     ranged:!!t.ranged, isTank:!!t.isTank,
     skillName:t.skillName, skillKind:t.skillKind, skillCd:t.skillCd, skillCdLeft:t.skillCd,
     skillRadius:t.skillRadius||0, skillHits:t.skillHits||1, skillColor:t.skillColor,
@@ -87,7 +87,7 @@ function makeHeroUnit(hero) {
     sigil:sg.id,
     hp:Math.min(hp, Math.max(1, hero.hp)), maxHp:hp, atk, def, shield:0,
     atkPeriod:A.atkPeriod / (BONUSES.sigilHeroSpdMult * BONUSES.heroSpdMult), atkCd:0,
-    range:A.range * BONUSES.sigilHeroRangeMult * BONUSES.heroRangeMult, moveSpd:A.moveSpd, radius:A.radius,
+    range:A.range * BONUSES.sigilHeroRangeMult * BONUSES.heroRangeMult, moveSpd:A.moveSpd, radius:bodyRadius(A.radius),
     ranged:false, isTank:false,
     skillName:sk.name, skillKind:sk.kind, skillCd:sk.cd, skillCdLeft:sk.cd,
     skillRadius:sk.radius, skillHits:1, skillColor:sk.color,
