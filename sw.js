@@ -7,12 +7,16 @@
 // 버전을 올리면 새 캐시를 만들고 옛 캐시를 지운다 — 게임을 고칠 때마다 CACHE만 올리면 된다.
 // 스프라이트 목록은 게임과 같은 파일에서 읽는다 — 두 군데에 적으면 반드시 어긋난다
 try { importScripts('assets/images/manifest.js'); } catch (e) {}
+// 버전은 게임과 같은 파일에서 읽는다 — 캐시 키를 따로 적어 두면 반드시 어긋난다.
+// (실제로 게임이 v0.8.0 → v0.9.3으로 가는 동안 키는 v0.8.0에 멈춰 있었고,
+//  activate가 '키가 다른 캐시'만 지우므로 설치한 사람은 영영 옛 파일을 받았다.)
+try { importScripts('js/version.js'); } catch (e) {}
 
-const CACHE = 'dual-frontier-v0.8.0';
+const CACHE = 'dual-frontier-' + (self.GAME_VERSION || 'dev');
 
 const SHELL = [
   '.', 'index.html', 'manifest.webmanifest',
-  'assets/images/manifest.js', 'js/constants.js', 'js/sprites.js', 'js/audio.js', 'js/fx.js', 'js/upgrade.js', 'js/hero.js', 'js/forge.js', 'js/town.js',
+  'assets/images/manifest.js', 'js/version.js', 'js/constants.js', 'js/sprites.js', 'js/audio.js', 'js/fx.js', 'js/upgrade.js', 'js/hero.js', 'js/forge.js', 'js/town.js',
   'js/save.js', 'js/lobby.js', 'js/defense.js', 'js/battle.js', 'js/arena.js',
   'js/formation.js', 'js/wave.js', 'js/tutorial.js', 'js/render.js', 'js/game.js',
   'assets/images/mainpage.png',
@@ -45,24 +49,46 @@ self.addEventListener('activate', e => {
   );
 });
 
-// 캐시 우선 — 게임 파일은 자주 바뀌지 않고, 오프라인이 기본 동작이어야 한다.
-// 캐시에 없으면 받아서 넣어둔다.
+// 코드(html·js)는 네트워크 우선, 그림·소리는 캐시 우선.
+//
+// 예전에는 전부 캐시 우선이었다. 그러면 캐시 키를 올리는 것을 한 번만 잊어도
+// 설치한 사람은 무엇을 고치든 옛 파일을 계속 받는다 — 실제로 그렇게 됐다.
+// 코드만 네트워크를 먼저 보게 하면 키를 잊어도 다음 접속에서 저절로 최신이 된다.
+// 받아온 것은 캐시에 덮어써 두므로 오프라인 동작은 그대로다.
+// 그림·소리는 용량이 크고 거의 안 바뀌므로 예전처럼 캐시에서 바로 준다.
+function isCode(url) {
+  return url.pathname.endsWith('.js') ||
+         url.pathname.endsWith('.html') ||
+         url.pathname.endsWith('/') ||
+         url.pathname === '' ||
+         url.pathname.endsWith('.webmanifest');
+}
+
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 
+  const putCopy = res => {
+    if (res && res.ok && res.type === 'basic') {
+      const copy = res.clone();
+      caches.open(CACHE).then(c => c.put(req, copy));
+    }
+    return res;
+  };
+
+  if (isCode(url) || req.mode === 'navigate') {
+    // 네트워크 우선 — 실패하면 캐시, 캐시도 없으면 index.html
+    e.respondWith(
+      fetch(req).then(putCopy)
+        .catch(() => caches.match(req).then(hit => hit || caches.match('index.html')))
+    );
+    return;
+  }
+
   e.respondWith(
-    caches.match(req).then(hit => {
-      if (hit) return hit;
-      return fetch(req).then(res => {
-        if (res && res.ok && res.type === 'basic') {
-          const copy = res.clone();
-          caches.open(CACHE).then(c => c.put(req, copy));
-        }
-        return res;
-      }).catch(() => caches.match('index.html'));
-    })
+    caches.match(req).then(hit => hit || fetch(req).then(putCopy)
+      .catch(() => caches.match('index.html')))
   );
 });
