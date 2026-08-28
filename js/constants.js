@@ -1,7 +1,7 @@
 'use strict';
 
 // 타이틀 화면에 표기되는 버전
-const GAME_VERSION = 'v0.9.1';
+const GAME_VERSION = 'v0.9.2';
 
 // 포기하고 정산하면 보석을 깎는다. 한 판이 10~30분이라 접을 길은 있어야 하지만,
 // 접는 쪽이 늘 이득이면 아무도 마지막 층을 버티지 않는다.
@@ -298,7 +298,9 @@ const TOWER_AFFINITY = {
   frost:  { small:1.10, medium:1.25, large:0.70, air:0.50 },
   cannon: { small:0.65, medium:1.10, large:1.50, air:0.30 },
   sniper: { small:0.70, medium:1.05, large:1.45, air:1.20 },
-  tesla:  { small:1.40, medium:0.90, large:0.55, air:1.60 }
+  tesla:  { small:1.40, medium:0.90, large:0.55, air:1.60 },
+  // 장판은 오래 밟을수록 아프다 — 느린 대형에게 가장 세고 비행은 그냥 지나간다
+  poison: { small:0.80, medium:1.20, large:1.55, air:0.35 }
 };
 const HERO_AFFINITY = { small:1.00, medium:1.00, large:0.85, air:0.55 };
 
@@ -316,43 +318,64 @@ function affinityLabel(mult) {
 }
 
 // ─── Tower Types ─────────────────────────────────────────────────────────────
+// ─── ☠️ 독탑 ─────────────────────────────────────────────────────────────────
+const POISON_POOL_DPS    = 0.55;  // 장판이 초당 주는 피해 = 탑 실효 공격력 × 이 값
+const POISON_POOL_RADIUS = 34;    // 장판 반경(px)
+const POISON_POOL_DUR    = 4.0;   // 장판 지속(초)
+const POISON_POOL_MAX    = 24;    // 동시에 깔릴 수 있는 장판 수 — 프레임을 지키는 상한
+
+// 기본 공격력은 v0.9.2에서 1.7배로 올렸다.
+// v0.9.0에서 강화를 전부 배율로 바꿨는데 화살탑 기본값이 2였다 — 6% 강화는 2.12,
+// 반올림하면 그대로 2다. 즉 심연 1층에서 골드로 살 수 있는 것이 아무 효과가 없었고,
+// 한 대 2로는 체력 14짜리 고블린을 지나가는 동안 죽이지 못해 한 마리도 못 잡았다.
+// 배율이 물릴 바닥이 있어야 배율형 강화가 작동한다.
 const TOWER_TYPES = {
   arrow: {
     id:'arrow', name:'화살탑', cost:5,
-    dmg:2, spd:1.0, range: CELL_W * 2.4,
+    dmg:3.4, spd:1.0, range: CELL_W * 2.4,
     color:'#22c55e', projColor:'#fbbf24', icon:'🏹',
     desc:'저렴한 단일 연사'
   },
   frost: {
     id:'frost', name:'서리탑', cost:12,
-    dmg:1, spd:0.9, range: CELL_W * 2.2,
+    dmg:1.7, spd:0.9, range: CELL_W * 2.2,
     slow: 0.45, slowDur: 1.6,
     color:'#38bdf8', projColor:'#7dd3fc', icon:'❄️',
     desc:'이동속도 45% 감속'
   },
   cannon: {
     id:'cannon', name:'대포탑', cost:18,
-    dmg:8, spd:0.5, range: CELL_W * 2.0,
+    dmg:13.6, spd:0.5, range: CELL_W * 2.0,
     splash: 40,
     color:'#f97316', projColor:'#fb923c', icon:'💣',
     desc:'착탄 지점 범위 피해'
   },
   sniper: {
     id:'sniper', name:'저격탑', cost:26,
-    dmg:18, spd:0.35, range: CELL_W * 5.0,
+    dmg:30, spd:0.35, range: CELL_W * 5.0,
     pierceArmor: true, targetMode:'strongest',
     color:'#e879f9', projColor:'#f0abfc', icon:'🎯',
     desc:'초장거리·방어 무시'
   },
   tesla: {
     id:'tesla', name:'번개탑', cost:22,
-    dmg:6, spd:1.4, range: CELL_W * 2.6,
+    dmg:10, spd:1.4, range: CELL_W * 2.6,
     chain: 2, chainRange: CELL_W * 1.5,
     color:'#22d3ee', projColor:'#67e8f9', icon:'⚡',
     desc:'대공 특화·연쇄'
+  },
+  // ☠️ 독탑 — 다른 탑은 전부 "지나가는 순간에만" 값을 낸다. 독탑은 자리에 값을 남긴다.
+  // 한 발이 느리고 약한 대신 착탄점에 장판이 깔리고, 그 위를 밟는 동안 계속 깎인다.
+  // 밀집한 무리와 느린 대형에게 강하고, 한 마리씩 스쳐 지나가면 거의 무의미하다.
+  poison: {
+    id:'poison', name:'독탑', cost:20,
+    dmg:5, spd:0.45, range: CELL_W * 2.2,
+    poolDps: POISON_POOL_DPS, poolRadius: POISON_POOL_RADIUS, poolDur: POISON_POOL_DUR,
+    color:'#84cc16', projColor:'#bef264', icon:'☠️',
+    desc:'착탄점에 독 장판'
   }
 };
-const TOWER_ORDER = ['arrow', 'frost', 'cannon', 'sniper', 'tesla'];
+const TOWER_ORDER = ['arrow', 'frost', 'cannon', 'sniper', 'tesla', 'poison'];
 
 // ─── 해금 (로비에서 보석으로 영구 개방) ──────────────────────────────────────
 // 처음부터 열려 있는 것은 화살탑 · 궁수 · 검사뿐이다.
@@ -362,9 +385,11 @@ const UNLOCK_DEFS = [
   { id:'healer',   kind:'unit',  cost:5,  name:'치유사',   icon:'✚',   desc:'주변 아군 회복' },
   { id:'cannon',   kind:'tower', cost:8,  name:'대포탑',   icon:'💣',  desc:'착탄 범위 피해' },
   { id:'guardian', kind:'unit',  cost:9,  name:'방패병',   icon:'🛡️', desc:'전방 방벽 · 도발' },
+  { id:'rogue',    kind:'unit',  cost:10, name:'도적',     icon:'🗡️', desc:'은신 · 기습 · 드랍 회수' },
   { id:'mage',     kind:'unit',  cost:12, name:'마법사',   icon:'✨',  desc:'자기 중심 광역' },
   { id:'tesla',    kind:'tower', cost:11, name:'번개탑',   icon:'⚡',  desc:'대공 특화 · 연쇄' },
   { id:'sniper',   kind:'tower', cost:14, name:'저격탑',   icon:'🎯',  desc:'초장거리 · 방어 무시' },
+  { id:'poison',   kind:'tower', cost:13, name:'독탑',     icon:'☠️', desc:'착탄점에 독 장판' },
 ];
 const UNLOCK_TOTAL_COST = UNLOCK_DEFS.reduce((a, u) => a + u.cost, 0);
 const INITIAL_UNLOCKED  = ['arrow', 'archer', 'swordsman'];
@@ -535,7 +560,7 @@ const DROP_SCATTER_MAX    = 66;    // 최대 거리 — 수거 반경보다 넓�
 const ARENA_GOLD_SCALE    = 0.58;
 const DROP_SPECIAL_CHANCE = 0.075; // 처치당 특수 드랍 확률
 const ARENA_BUFF_DURATION = 9;     // 일시 버프 지속(초)
-const DROP_HEAL_PCT       = 0.15;  // ❤️ 응급 치료가 되살리는 최대 HP 비율
+const DROP_HEAL_PCT       = 0.10;  // ❤️ 응급 치료가 되살리는 최대 HP 비율
 
 // ─── 🌊 아레나 쇄도 ──────────────────────────────────────────────────────────
 // 한두 마리씩 꾸준히 나오는 리듬만 있으면 60초가 평탄해진다. 위험이 오르내려야
@@ -590,8 +615,18 @@ const SEPARATION_FORCE    = 26;    // 개체가 서로 완전히 겹치지 않�
 // 전투에서 벗어나면 회복한다. 틱 전투에서는 한 웨이브가 짧은 그룹전 3번이었지만
 // 실시간에서는 60초 내내 노출되므로, 사거리 밖으로 빼는 행동에 값을 줘야 한다.
 // 수동 조작(빼고 다시 붙이기)이 이득이 되는 것도 이 규칙 덕분이다.
-const ARENA_REGEN_DELAY = 3.5;   // 마지막 피격 후 이 시간이 지나야 회복 시작
-const ARENA_REGEN_PCT   = 0.045; // 초당 최대 HP 비율
+// ─── 🗡️ 도적 ─────────────────────────────────────────────────────────────────
+const ROGUE_STEALTH_CD    = 7.0;   // 은신 재사용 대기(초)
+const ROGUE_STEALTH_DUR   = 2.6;   // 은신 지속. 이 안에 때리면 기습이 터진다
+const ROGUE_AMBUSH_MULT   = 3.2;   // 은신을 풀며 넣는 첫 타격 배율
+const ROGUE_STEALTH_SPD   = 1.45;  // 은신 중 이동속도 배율 — 파고들라고 준다
+const ROGUE_GREED_CHANCE  = 0.55;  // 드랍이 떨어졌을 때 주우러 갈 확률
+
+const ARENA_REGEN_DELAY = 4.0;   // 마지막 피격 후 이 시간이 지나야 회복 시작
+// 기본 자연 회복은 없앴다. 4.5%/s면 22초면 만피가 되어, 전투가 끝났을 때 부대는
+// 늘 "죽었거나 멀쩡하거나" 둘 중 하나였다 — 그 사이가 없으면 🏨여관이 할 일이 없다.
+// 이제 재생은 카드·장비·스킬(regenBonus)로만 붙는다. 회복은 여관에서 사는 것이다.
+const ARENA_REGEN_PCT   = 0.0;   // 초당 최대 HP 비율 (기본값 — 이제 0)
 
 function spawnInterval(elapsed) {
   const base = SPAWN_BASE_INTERVAL * (BONUSES.pactSpawnMult || 1) / (BONUSES.spawnSpeedMult || 1);
@@ -639,6 +674,19 @@ const UNIT_TYPES = {
     hp:80, atk:9,  def:1, atkPeriod:1.00, range:110, moveSpd:82, radius:7.5, ranged:true,
     skillName:'화염 폭발', skillKind:'nova', skillAtk:22, skillCd:7, skillRadius:78, skillColor:'#f97316',
     color:'#f97316', icon:'✨', role:'뭉친 적에게 광역'
+  },
+  // 🗡️ 도적 — 다른 용병은 "얼마나 세게 맞고 얼마나 세게 때리나"뿐이라
+  // 조합이 결국 앞줄/뒷줄 두 갈래로 수렴했다. 도적은 그 축 밖에 선다.
+  //   은신 — 쿨다운마다 사라진다. 사라진 동안은 맞지 않고 표적도 되지 않는다.
+  //   기습 — 은신을 풀며 넣는 첫 타격이 크게 들어간다.
+  //   탐욕 — 바닥에 떨어진 것을 확률적으로 주우러 간다. 알아서 챙기는 대신
+  //          그동안 전열에서 빠지므로, 쓸모와 손해가 같이 온다.
+  rogue: {
+    id:'rogue',     name:'도적',   cost:13,
+    hp:82, atk:14, def:1, atkPeriod:0.62, range:26, moveSpd:112, radius:7.5,
+    skillName:'은신', skillKind:'stealth', skillAtk:0, skillCd:ROGUE_STEALTH_CD, skillColor:'#c084fc',
+    stealth:true, greed:ROGUE_GREED_CHANCE,
+    color:'#c084fc', icon:'🗡️', role:'은신 · 기습 · 드랍 회수'
   }
 };
 // ─── 특수 용병 ───────────────────────────────────────────────────────────────
@@ -646,11 +694,13 @@ const UNIT_TYPES = {
 // 런 안에서 여관을 올려야 열리므로 "이번 판에 무엇을 지을까"의 선택지가 된다.
 // 일반 용병보다 비싸고 확실히 강하다 — 후반 골드의 사용처이기도 하다.
 const SPECIAL_UNIT_TYPES = {
-  rogue: {
-    id:'rogue', name:'도적', cost:20, innLevel:0,
-    hp:88, atk:19, def:2, atkPeriod:0.60, range:28, moveSpd:112, radius:7.5,
-    skillName:'급소 찌르기', skillKind:'spin', skillAtk:34, skillCd:5, skillRadius:46, skillColor:'#f43f5e',
-    color:'#f43f5e', icon:'🗡️', role:'가장 빠른 근접 DPS · 물몸', special:true
+  // 도적이 일반 용병으로 나갔으므로 그 자리를 광전사가 메운다 —
+  // 여관의 첫 손님은 "싸고 빠른 근접 DPS"여야 조합이 이어진다.
+  berserker: {
+    id:'berserker', name:'광전사', cost:22, innLevel:0,
+    hp:130, atk:21, def:2, atkPeriod:0.58, range:28, moveSpd:104, radius:8,
+    skillName:'광란', skillKind:'spin', skillAtk:36, skillCd:5, skillRadius:52, skillColor:'#f43f5e',
+    color:'#f43f5e', icon:'🪓', role:'가장 빠른 근접 DPS · 물몸', special:true
   },
   paladin: {
     id:'paladin', name:'성기사', cost:28, innLevel:1,
@@ -665,7 +715,7 @@ const SPECIAL_UNIT_TYPES = {
     color:'#22d3ee', icon:'🎯', role:'사거리 180 · 아레나 절반을 덮는다', special:true
   }
 };
-const SPECIAL_UNIT_ORDER = ['rogue', 'paladin', 'marksman'];
+const SPECIAL_UNIT_ORDER = ['berserker', 'paladin', 'marksman'];
 
 // ─── 특수 용병은 매 웨이브 여관에 "들르는" 것이다 ────────────────────────────
 // 항상 고용할 수 있으면 그냥 비싼 일반 용병일 뿐이다.
@@ -705,7 +755,7 @@ function specialSlotMax() {
 // 일반 용병과 특수 용병을 한 표에서 찾을 수 있게 합쳐 둔다
 Object.assign(UNIT_TYPES, SPECIAL_UNIT_TYPES);
 
-const UNIT_ORDER = ['archer', 'swordsman', 'healer', 'guardian', 'mage'];
+const UNIT_ORDER = ['archer', 'swordsman', 'rogue', 'healer', 'guardian', 'mage'];
 
 const HERO_ARENA = {
   atkPeriod:0.80, range:34, moveSpd:95, radius:9,
@@ -984,7 +1034,7 @@ function rollArenaMob(pool) {
 // 성장 곡선: 초반은 완만한 선형, 후반은 지수가 지배한다.
 // 선형만 쓰면 반드시 따라잡히고, 지수만 쓰면 1~10층이 지루하게 똑같다.
 const ENDLESS_LINEAR   = 0.11;    // 층당 가산 (상단)
-const ENDLESS_EXP      = 1.062;   // 층당 배율 — 상단 체력. 1.055는 26층이 무피해로 막혔다
+const ENDLESS_EXP      = 1.068;   // 층당 배율 — 상단 체력. 1.055는 26층이 무피해로 막혔다
 const ENDLESS_ARENA_EXP= 1.034;   // 하단 체력 곡선 — 1.040은 26층부터 처리량을 못 따라갔다
 const ENDLESS_ARENA_LINEAR = 0.06;// 하단은 가산도 따로 쓴다. 상단을 올리자고 하단까지 끌려가면 안 된다
 // 하단 몹의 방어력·공격력은 체력 배율(sm)을 그대로 쓰지 않는다. 지수를 눌러 쓴다.
@@ -1563,6 +1613,9 @@ const OVERLOAD_DURATION = 5;    // 과부하 지속(초)
 const OVERLOAD_COOLDOWN = 20;   // 재사용 대기(초)
 const OVERLOAD_SPD_MULT = 3;    // 공격속도 배율
 const HERO_DEF_MOVE_SPD = 105;  // 상단 영웅 이동속도(px/s)
+// 👑 영웅과 겹친 적은 느려진다 — 상단에 세우는 것이 "몸으로 막는" 선택이 되도록
+const HERO_BLOCK_SLOW      = 0.45;  // 이동속도 배율
+const HERO_BLOCK_SLOW_DUR  = 0.35;  // 겹침이 끊겨도 이만큼은 남는다(초)
 
 const CAVE_MAX_LEVEL = CAVE_LEVELS.length - 1;
 
@@ -1577,7 +1630,7 @@ const WAVE_GOLD_SCALE = 0.045;  // 웨이브 1당 보상 +4.5%
 
 
 // 웨이브 종료 후 생존 병력이 회복하는 최대 HP 비율
-const REST_HEAL_PCT    = 0.30;
+const REST_HEAL_PCT    = 0.16;   // 웨이브 사이 무상 회복. 나머지는 🏨여관에서 산다
 
 const WAVE_DURATION    = 60;
 const INTERMISSION     = 15;

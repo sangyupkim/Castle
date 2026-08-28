@@ -253,6 +253,7 @@ function createWaveManager() {
       }
       gs.defenseEnemies    = survivors;
       gs.projectiles       = [];
+      gs.poisonPools       = [];
       gs.bountyPending     = false;
       this.bountyTimer     = null;
       for (const t of gs.towers) t.overloadUntil = 0;

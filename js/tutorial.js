@@ -162,13 +162,27 @@ const TUTORIAL_TIPS = {
 const TUTORIAL_VERSION = 3;
 const TIP_KEY_PREFIX = `df_tip${TUTORIAL_VERSION}_`;
 
+// 한 번 끝냈거나 건너뛴 안내는 다시 자동으로 뜨지 않는다.
+// 이 표시만 데이터 초기화에서 살아남는다 — 테스트든 새 출발이든 안내를 또 보는 건
+// "처음부터"가 아니라 그냥 성가신 일이다. 캠프의 📖 다시 보기로는 여전히 볼 수 있다.
+const TUT_SEEN_KEY   = 'df_tut_seen';
+// 건너뛰면 안내를 끝까지 봤을 때 벌었을 만큼(평균)을 보석으로 대신 준다
+const TUTORIAL_SKIP_GEMS = 3;
+
+function tutorialEverSeen() {
+  try { return localStorage.getItem(TUT_SEEN_KEY) === '1'; } catch (e) { return false; }
+}
+function markTutorialSeen() {
+  try { localStorage.setItem(TUT_SEEN_KEY, '1'); } catch (e) {}
+}
+
 function createTutorial() {
   return {
     active: false, step: 0, done: false,
     tip: null,          // 지금 떠 있는 쪽지 (있으면 본 튜토리얼보다 우선)
 
     start() {
-      if (localStorage.getItem('df_tut9') === '1') { this.done = true; return; }
+      if (tutorialEverSeen() || localStorage.getItem('df_tut9') === '1') { this.done = true; return; }
       this.active = true; this.step = 0;
     },
 
@@ -190,6 +204,7 @@ function createTutorial() {
       if (this.step >= TUTORIAL_STEPS.length) {
         this.active = false; this.done = true;
         localStorage.setItem('df_tut9', '1');
+        markTutorialSeen();
       }
     },
 
@@ -200,12 +215,19 @@ function createTutorial() {
 
     // 건너뛰기는 "전부"를 뜻한다. 본 튜토리얼만 끄고 쪽지 14장이 층마다 계속 뜨면
     // 플레이어가 보기엔 튜토리얼이 안 꺼진 것이다 — 실제로 그렇게 보고가 왔다.
+    // 건너뛰기는 "전부"를 뜻한다. 본 튜토리얼만 끄고 쪽지 14장이 층마다 계속 뜨면
+    // 플레이어가 보기엔 튜토리얼이 안 꺼진 것이다.
+    // 끝까지 본 사람만 손해 보면 안 되므로, 처음 건너뛸 때 보석을 대신 준다.
+    // 돌려주는 값: 이미 받았는지 여부(true/false).
     skip() {
+      const first = !tutorialEverSeen();
       this.tip = null;
       this.active = false; this.done = true;
       this.step = TUTORIAL_STEPS.length;
       try { localStorage.setItem('df_tut9', '1'); } catch (e) {}
+      markTutorialSeen();
       markAllTipsSeen();
+      return first;
     },
 
     current() {

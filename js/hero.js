@@ -87,8 +87,8 @@ const HERO_EQUIPMENT_POOL = [
 
   // 각반 — 체력 · 재생
   { id:'p_cloth',   name:'천 각반',       icon:'👖', slot:'pants',  grade:'common', cost:20,  stats:{hp:16} },
-  { id:'p_guard',   name:'수호의 각반',   icon:'🩳', slot:'pants',  grade:'rare',   cost:46,  stats:{hp:36, regen:2} },
-  { id:'p_titan',   name:'거인의 각반',   icon:'🦿', slot:'pants',  grade:'epic',   cost:112, stats:{hp:66, def:6, regen:3} },
+  { id:'p_guard',   name:'수호의 각반',   icon:'🩳', slot:'pants',  grade:'rare',   cost:46,  stats:{hp:36, regen:1} },
+  { id:'p_titan',   name:'거인의 각반',   icon:'🦿', slot:'pants',  grade:'epic',   cost:112, stats:{hp:66, def:6, regen:1.5} },
 
   // 신발 — 공속 · 사거리
   { id:'b_swift',   name:'신속의 장화',   icon:'👟', slot:'boots',  grade:'common', cost:28,  stats:{aspd:0.08} },
@@ -96,10 +96,10 @@ const HERO_EQUIPMENT_POOL = [
   { id:'b_sky',     name:'천공의 신발',   icon:'🩰', slot:'boots',  grade:'epic',   cost:124, stats:{aspd:0.26, range:0.20, hp:24} },
 
   // 악세 — 잡다한 배율
-  { id:'c_ringhp',  name:'생명의 반지',   icon:'💍', slot:'acc',    grade:'common', cost:26,  stats:{regen:3} },
+  { id:'c_ringhp',  name:'생명의 반지',   icon:'💍', slot:'acc',    grade:'common', cost:26,  stats:{regen:1.5} },
   { id:'c_ringgold',name:'황금 반지',     icon:'🪙', slot:'acc',    grade:'common', cost:32,  stats:{gold:0.18} },
   { id:'c_amulet',  name:'힘의 부적',     icon:'🔮', slot:'acc',    grade:'rare',   cost:52,  stats:{atk:11, crit:0.05} },
-  { id:'c_cross',   name:'성스러운 십자가',icon:'✝️',slot:'acc',    grade:'rare',   cost:58,  stats:{hp:34, regen:4} },
+  { id:'c_cross',   name:'성스러운 십자가',icon:'✝️',slot:'acc',    grade:'rare',   cost:58,  stats:{hp:34, regen:2} },
   { id:'c_tome',    name:'현자의 서',     icon:'📕', slot:'acc',    grade:'epic',   cost:118, stats:{skill:0.30, exp:0.20} },
 ];
 function equipDef(id) { return HERO_EQUIPMENT_POOL.find(e => e.id === id); }
@@ -126,7 +126,7 @@ const HERO_SKILL_POOL = [
   { id:'s_surge',  name:'마력 증폭',  icon:'✨', grade:'rare',   cost:78,
     base:{skill:0.30},        note:'스킬 피해' },
   { id:'s_vital',  name:'재생 각인',  icon:'💚', grade:'rare',   cost:68,
-    base:{regen:5, hp:30},    note:'재생' },
+    base:{regen:2, hp:30},    note:'재생' },
   { id:'s_greed',  name:'탐욕',       icon:'💰', grade:'rare',   cost:66,
     base:{gold:0.25, exp:0.12}, note:'수급' },
   { id:'s_titan',  name:'거인의 심장',icon:'🫀', grade:'epic',   cost:135,

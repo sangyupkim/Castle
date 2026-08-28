@@ -85,6 +85,10 @@ function towerStats(t) {
     splash:      tpl.splash || 0,
     pierceArmor: !!tpl.pierceArmor,
     pierce:      BONUSES.towerPierce || 0,
+    // ☠️ 독탑 — 장판 피해는 그 탑의 실효 공격력에 비례한다. 강화가 장판에도 붙는다.
+    poolDps:     tpl.poolDps || 0,
+    poolRadius:  tpl.poolRadius || 0,
+    poolDur:     tpl.poolDur || 0,
     targetMode:  tpl.targetMode || 'nearest',
     chain:       tpl.chain || 0,
     chainRange:  tpl.chainRange || 0,
@@ -190,6 +194,11 @@ function updateDefenseEnemies(enemies, dt) {
       mult = 1 - e.slowFactor;
       if (e.slowTimer === 0) e.slowFactor = 0;
     }
+    // 👑 영웅이 몸으로 막고 있다 — 서리와 겹쳐도 더 느려지지, 서로 덮어쓰지 않는다
+    if (e.heroBlockUntil > 0) {
+      e.heroBlockUntil = Math.max(0, e.heroBlockUntil - dt);
+      mult *= HERO_BLOCK_SLOW;
+    }
 
     if (e.wpIdx >= e.path.length - 1) { e.reached = true; continue; }
 
@@ -270,6 +279,7 @@ function updateTowers(towers, enemies, projectiles, dt) {
       splash: st.splash || (BONUSES.towerSplash ? 34 : 0),
       pierceArmor: st.pierceArmor,
       pierce: st.pierce || 0,
+      poolDps: st.poolDps || 0, poolRadius: st.poolRadius || 0, poolDur: st.poolDur || 0,
       spd: tower.typeId === 'sniper' ? 620 : 320,
       owner: tower,
       towerTypeId: tower.typeId,
@@ -279,6 +289,57 @@ function updateTowers(towers, enemies, projectiles, dt) {
     projectiles.push(proj);
     if (typeof SFX !== 'undefined') {
       if (tower.typeId === 'cannon') SFX.cannon(); else SFX.shoot();
+    }
+  }
+}
+
+// ─── ☠️ 독 장판 ──────────────────────────────────────────────────────────────
+// 같은 자리에 겹쳐 깔면 피해가 곱절이 된다. 겹치는 것 자체는 허용하되
+// 아주 가까운 장판은 시간만 새로 채워서, 독탑 도배가 무한 중첩이 되지 않게 한다.
+function spawnPoisonPool(x, y, p) {
+  const pools = gs.poisonPools || (gs.poisonPools = []);
+  const r = p.poolRadius || POISON_POOL_RADIUS;
+  for (const q of pools) {
+    if (Math.hypot(q.x - x, q.y - y) < r * 0.45) {
+      q.life = Math.max(q.life, p.poolDur || POISON_POOL_DUR);
+      q.dps  = Math.max(q.dps, p.dmg * (p.poolDps || POISON_POOL_DPS));
+      return;
+    }
+  }
+  if (pools.length >= POISON_POOL_MAX) pools.shift();
+  pools.push({
+    x, y, r,
+    dps:   p.dmg * (p.poolDps || POISON_POOL_DPS),
+    life:  p.poolDur || POISON_POOL_DUR,
+    maxLife: p.poolDur || POISON_POOL_DUR,
+    owner: p.owner || null,
+    towerTypeId: p.towerTypeId || 'poison',
+    pierce: p.pierce || 0
+  });
+}
+
+// 밟고 있는 적을 계속 깎는다. 피해가 1을 넘을 때만 실제로 적용한다 —
+// 프레임마다 소수점을 반올림하면 배속에 따라 총량이 달라진다.
+function updatePoisonPools(enemies, onKill, dt) {
+  const pools = gs.poisonPools;
+  if (!pools || !pools.length) return;
+  for (let i = pools.length - 1; i >= 0; i--) {
+    const q = pools[i];
+    q.life -= dt;
+    if (q.life <= 0) { pools.splice(i, 1); continue; }
+    for (const e of enemies) {
+      if (e.dead || e.reached || e.flying) continue;   // 비행은 장판 위를 지나간다
+      if (Math.hypot(e.x - q.x, e.y - q.y) > q.r + (e.radius || 0)) continue;
+      const aff = affinityOf(q.towerTypeId, e);
+      e._poisonAccum = (e._poisonAccum || 0) + q.dps * aff * dt;
+      if (e._poisonAccum < 1) continue;
+      const tick = Math.floor(e._poisonAccum);
+      e._poisonAccum -= tick;
+      const dealt = hurtDefenseEnemy(e, tick, false, victim => {
+        if (q.owner) q.owner.kills++;
+        if (onKill) onKill(victim, q.owner);
+      }, 1, q.pierce);
+      if (q.owner) q.owner.damageDealt += dealt;
     }
   }
 }
@@ -312,6 +373,8 @@ function updateProjectiles(projectiles, onKill, dt) {
       if (p.owner) p.owner.kills++;
       if (onKill) onKill(victim, p.owner);
     };
+    // ☠️ 독탑 — 맞은 자리에 장판을 깐다. 한 발의 값보다 자리에 남는 값이 크다.
+    if (p.poolDps > 0) spawnPoisonPool(p.tx, p.ty, p);
     const aff   = p.towerTypeId ? affinityOf(p.towerTypeId, tgt) : 1;
     const dealt = hurtDefenseEnemy(tgt, p.dmg, p.pierceArmor, credit, aff, p.pierce);
     if (p.owner) p.owner.damageDealt += dealt;

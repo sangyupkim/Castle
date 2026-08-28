@@ -9,11 +9,14 @@ let _aid = 0;
 
 function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
 
+// 🗡️ 은신 중인 도적은 없는 것으로 친다 — 표적이 되지도, 맞지도 않는다
+function isHidden(u) { return !!u && (u.stealthLeft || 0) > 0; }
+
 // 사거리 안에서 가장 가까운 대상. range를 주지 않으면 무제한.
 function nearestOf(list, from, range) {
   let best = null, bestD = range !== undefined ? range : Infinity;
   for (const e of list) {
-    if (e.dead) continue;
+    if (e.dead || isHidden(e)) continue;
     const d = dist(e, from) - (e.radius || 0);
     if (d <= bestD) { bestD = d; best = e; }
   }
@@ -26,7 +29,7 @@ function pickAttackTarget(list, from, range) {
   let best = null, bestD = range !== undefined ? range : Infinity;
   let fallback = null, fallbackD = bestD;
   for (const e of list) {
-    if (e.dead) continue;
+    if (e.dead || isHidden(e)) continue;
     const d = dist(e, from) - (e.radius || 0);
     if (d > (range !== undefined ? range : Infinity)) continue;
     if (d < fallbackD) { fallbackD = d; fallback = e; }
@@ -276,10 +279,19 @@ function updateArenaFx(a, dt) {
 function updateAlly(gs, u, mobs, allies, dt) {
   if (u.flashTimer > 0) u.flashTimer = Math.max(0, u.flashTimer - dt);
 
+  // 🗡️ 은신 — 시간이 다 되면 기습 기회도 같이 사라진다
+  if (u.stealthLeft > 0) {
+    u.stealthLeft = Math.max(0, u.stealthLeft - dt);
+    if (u.stealthLeft === 0) u.ambushReady = false;
+  }
+
   // 전투 이탈 회복 — 맞지 않고 버틴 시간에 값을 준다
   u.noHitFor = (u.noHitFor || 0) + dt;
-  if (u.noHitFor >= ARENA_REGEN_DELAY && u.hp < u.maxHp) {
-    u.hp = Math.min(u.maxHp, u.hp + u.maxHp * ARENA_REGEN_PCT * (1 + (BONUSES.regenBonus || 0)) * (BONUSES.pactRegenMult || 1) * dt);
+  // regenBonus는 이제 "기본값에 곱하는 보너스"가 아니라 초당 최대 HP 비율 그 자체다.
+  // 기본값이 0이 됐으므로 곱셈으로 두면 카드를 아무리 먹어도 0에 머문다.
+  const regenPct = ARENA_REGEN_PCT + (BONUSES.regenBonus || 0);
+  if (regenPct > 0 && u.noHitFor >= ARENA_REGEN_DELAY && u.hp < u.maxHp) {
+    u.hp = Math.min(u.maxHp, u.hp + u.maxHp * regenPct * (BONUSES.pactRegenMult || 1) * dt);
   }
 
   // 목표: 사거리 안에서 가장 가까운 적
@@ -297,7 +309,8 @@ function updateAlly(gs, u, mobs, allies, dt) {
 
   // 스킬 — 쿨다운마다 자동 발동
   u.skillCdLeft -= dt;
-  if (u.skillCdLeft <= 0 && (inRange || u.skillKind === 'heal' || u.skillKind === 'bulwark')) {
+  if (u.skillCdLeft <= 0 && !isHidden(u) &&
+      (inRange || u.skillKind === 'heal' || u.skillKind === 'bulwark' || u.skillKind === 'stealth')) {
     u.skillCdLeft = u.skillCd;
     allySkill(gs, u, mobs, allies);
   }
@@ -305,7 +318,20 @@ function updateAlly(gs, u, mobs, allies, dt) {
   // 이동 — 수렁 위에서는 느려진다
   applyTerrainTick(gs, u, dt, true);
   if (u.dead) return;
-  const spd = u.moveSpd * terrainSpeedMult(gs.arena.terrain, u);
+  const spd = u.moveSpd * terrainSpeedMult(gs.arena.terrain, u)
+            * (isHidden(u) ? ROGUE_STEALTH_SPD : 1);
+
+  // 🗡️ 탐욕 — 점찍은 드랍이 아직 살아 있으면 그쪽이 우선이다.
+  // 전열에서 빠지는 값을 치르고 바닥의 것을 챙긴다.
+  if (u.greedTarget) {
+    const dp = gs.arena.drops.indexOf(u.greedTarget) >= 0 ? u.greedTarget : null;
+    if (!dp) { u.greedTarget = null; }
+    else {
+      moveToward(u, dp.x, dp.y, spd, dt, 2);
+      return;
+    }
+  }
+
   if (gs.arena.mode === 'manual' && gs.arena.rally) {
     moveToward(u, u.slotX, u.slotY, spd, dt, 3);
   } else if (!inRange) {
@@ -377,7 +403,15 @@ function applyTerrainTick(gs, e, dt, isAlly) {
 function allyAttack(gs, u, target) {
   const crit = BONUSES.critChance > 0 && Math.random() < BONUSES.critChance;
   const rage = arenaBuff(gs, 'rage');   // 🔥 분노
-  const dmg  = arenaDamage((crit ? u.atk * 1.8 : u.atk) * rage, target.def);
+  // 🗡️ 기습 — 은신을 풀며 넣는 첫 타격. 여기서 은신도 함께 끝난다.
+  const ambush = !!u.ambushReady && isHidden(u);
+  const mult   = ambush ? ROGUE_AMBUSH_MULT : 1;
+  if (ambush) {
+    u.stealthLeft = 0; u.ambushReady = false;
+    gs.arena.bursts.push({ x: target.x, y: target.y, r: 30, color: '#c084fc', t: 0, dur: 0.3 });
+    addFloaty(gs.battle, '기습!', u.x, u.y - u.radius - 14, '#c084fc');
+  }
+  const dmg  = arenaDamage((crit ? u.atk * 1.8 : u.atk) * rage * mult, target.def);
   if (u.ranged) {
     target.pendingDmg = (target.pendingDmg || 0) + dmg;
     gs.arena.shots.push({
@@ -443,6 +477,16 @@ function allySkill(gs, u, mobs, allies) {
     a.bursts.push({ x: u.x, y: u.y, r: rad, color: u.skillColor, t: 0, dur: 0.4 });
     if (hits && typeof SFX !== 'undefined') SFX.cannon();
     if (!hits) u.skillCdLeft = 1.0;
+    return;
+  }
+
+  // 🗡️ 은신 — 사라진다. 다음 한 방이 기습이 된다.
+  if (kind === 'stealth') {
+    u.stealthLeft = ROGUE_STEALTH_DUR;
+    u.ambushReady = true;
+    a.bursts.push({ x: u.x, y: u.y, r: 26, color: '#c084fc', t: 0, dur: 0.35 });
+    addFloaty(gs.battle, '🌫 은신', u.x, u.y - u.radius - 8, '#c084fc');
+    if (typeof SFX !== 'undefined') SFX.skill();
     return;
   }
 
@@ -617,7 +661,7 @@ function updateDrops(gs, allies, dt) {
   for (let i = a.drops.length - 1; i >= 0; i--) {
     const dp = a.drops[i];
     dp.life -= dt;
-    if (dp.life <= 0) { a.drops.splice(i, 1); continue; }
+    if (dp.life <= 0) { releaseGreed(allies, dp); a.drops.splice(i, 1); continue; }
 
     let picker = null;
     for (const u of allies) {
@@ -626,10 +670,15 @@ function updateDrops(gs, allies, dt) {
     if (!picker) continue;
 
     collectDrop(gs, dp, picker);
+    releaseGreed(allies, dp);
     a.drops.splice(i, 1);
   }
   // 지난 버프 정리
   if (a.buffs && a.buffs.length) a.buffs = a.buffs.filter(b => b.until > a.elapsed);
+}
+
+function releaseGreed(allies, dp) {
+  for (const u of allies) if (u.greedTarget === dp) u.greedTarget = null;
 }
 
 function collectDrop(gs, dp, picker) {
@@ -716,11 +765,25 @@ function spawnSpecialDrop(gs, m, baseGold) {
   else if (d.id === 'exp')  amount = Math.max(6, Math.round((m.goldReward || 3) * ARENA_EXP_BASE * 12));
   else if (d.id === 'heal') amount = DROP_HEAL_PCT;
 
-  gs.arena.drops.push({
+  const dp = {
     x: p.x, y: p.y, kind: d.id, icon: d.icon, color: d.color, label: d.label,
     buff: d.buff || null, amount, life: DROP_LIFETIME,
     big: d.id === 'gold' || !!d.buff
-  });
+  };
+  gs.arena.drops.push(dp);
+  claimDropForGreed(gs, dp);
+}
+
+// 🗡️ 떨어진 것을 주우러 갈 도적을 고른다. 확률에 걸리면 그쪽으로 달려간다.
+function claimDropForGreed(gs, dp) {
+  const greedy = (gs.battle.ourTeam || []).filter(
+    u => !u.dead && (UNIT_TYPES[u.typeId] || {}).greed > 0 && !u.greedTarget);
+  if (!greedy.length) return;
+  greedy.sort((a, b) => dist(a, dp) - dist(b, dp));
+  const u = greedy[0];
+  if (Math.random() >= (UNIT_TYPES[u.typeId].greed || 0)) return;
+  u.greedTarget = dp;
+  addFloaty(gs.battle, '👀', u.x, u.y - u.radius - 8, '#fbbf24');
 }
 
 // 지금 걸린 아레나 버프 배율
@@ -776,6 +839,7 @@ function hurtMob(gs, m, dmg, color) {
   if (m.isBoss) {
     if (typeof FX !== 'undefined') { FX.ring(m.x, m.y, '#fbbf24', 22); FX.shake(5, 0.3); }
   }
+  // 처치 회복도 전반적으로 눌렀다 — 잡기만 하면 차오르면 자연 회복을 없앤 뜻이 없다
   if (BONUSES.killHeal > 0) {
     for (const u of gs.battle.ourTeam) {
       if (!u.dead) u.hp = Math.min(u.maxHp, u.hp + BONUSES.killHeal);
@@ -832,6 +896,7 @@ function applyDeathAffixes(gs, m) {
 
 function hurtAlly(gs, u, dmg, color) {
   if (u.dead) return;
+  if (isHidden(u)) return;   // 🗡️ 은신 중에는 맞지 않는다
   let remain = Math.max(1, Math.round(dmg * arenaBuff(gs, 'guard')));   // 🛡️ 수호
   if (dmg <= 0) remain = 0;
   if (u.shield > 0) {

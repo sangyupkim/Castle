@@ -94,7 +94,7 @@ function newState() {
     inRun:false,         // 로비 밖(런 안)에 있는가
     gold:10, baseHP:BASE_HP_MAX,
     caveLevel:1,
-    towers:[], defenseEnemies:[], projectiles:[], chargers:[],
+    towers:[], defenseEnemies:[], projectiles:[], chargers:[], poisonPools:[],
     battle: null,
     arena: createArena(),
     lobby: createLobby(),
@@ -508,9 +508,17 @@ function tap({x,y}) {
   }
   if (tut.active) {
     if (hitTest(x,y,gs.ui.tutSkipBtn||{})) {
-      tut.skip();
-      SFX.click();
-      spawnFloaty('안내를 모두 껐습니다 — 초기화하면 다시 볼 수 있습니다', CW/2, CH/2, '#94a3b8');
+      const first = tut.skip();
+      if (first) {
+        gs.soulStones += TUTORIAL_SKIP_GEMS;
+        gs.stats.totalGems = (gs.stats.totalGems || 0) + TUTORIAL_SKIP_GEMS;
+        SaveManager.save(gs);
+        SFX.levelUp();
+        spawnFloaty(`💎 +${TUTORIAL_SKIP_GEMS} — 안내를 건너뛰었습니다`, CW/2, CH/2, '#a78bfa');
+      } else {
+        SFX.click();
+        spawnFloaty('안내를 모두 껐습니다', CW/2, CH/2, '#94a3b8');
+      }
       return;
     }
     if (hitTest(x,y,gs.ui.tutBackBtn||{})) { tut.back(); SFX.click(); return; }
@@ -636,6 +644,15 @@ function tap({x,y}) {
     if (tower) {
       const same = gs.ui.towerAction?.col===cell.c && gs.ui.towerAction?.row===cell.r;
       gs.ui.towerAction = same ? null : { col:cell.c, row:cell.r, tower, readonly:true };
+      SFX.click();
+    } else if (gs.hero.placement==='defense' && !gs.hero.dead) {
+      // 준비 단계에서도 영웅 자리는 잡을 수 있어야 한다.
+      // 웨이브가 시작된 뒤에야 옮길 수 있으면 첫 몇 초는 늘 엉뚱한 곳에 서 있다.
+      const ctr = cellCenter(cell.c, cell.r);
+      gs.hero.moveX = ctr.x; gs.hero.moveY = ctr.y;
+      gs.hero.defX  = ctr.x; gs.hero.defY  = ctr.y;   // 준비 중이므로 즉시 이동
+      gs.hero.moveX = gs.hero.moveY = null;
+      spawnFloaty('👑 여기서 시작', ctr.x, ctr.y - 14, COLORS.hero);
       SFX.click();
     } else if (!isBlockedCell(cell.c, cell.r)) {
       spawnFloaty('타워 배치는 🏰마을에서', CW/2, DEFENSE_H-30, '#94a3b8');
@@ -894,7 +911,9 @@ function resetAllProgress() {
   gs.selectedTowerType = 'arrow';
   applyPathVariant(0);
 
-  tut.done = false; tut.active = false; tut.step = 0;
+  // 안내는 '한 번 봤으면 끝'이 초기화보다 우선한다 — df_tut_seen은 위에서 지우지 않았다
+  tut.active = false; tut.step = 0;
+  tut.done = tutorialEverSeen();
   _titleScreen = true; _fadingOut = false; _titleAlpha = 1;
   if (typeof SFX !== 'undefined') SFX.levelUp();
 }
@@ -1512,24 +1531,37 @@ function updateHeroDefense(dt) {
     }
   }
 
-  // 근접한 적의 반격 — 영웅도 죽을 수 있다
-  hero.hitCooldown = Math.max(0, (hero.hitCooldown || 0) - dt);
-  if (hero.hitCooldown <= 0) {
-    let incoming = 0;
-    for (const e of gs.defenseEnemies) {
-      if (e.dead || e.reached) continue;
-      if (Math.hypot(e.x - hero.defX, e.y - hero.defY) < CELL_W * 0.75) incoming += e.dmg;
-    }
-    if (incoming > 0) {
-      hero.hitCooldown = 1.0;
-      const def  = Math.round(lv.def * BONUSES.heroStatMult);
-      const real = Math.max(1, incoming - def);
-      hero.hp -= real;
-      spawnFloaty(`-${real}`, hero.defX, hero.defY - 18, '#ef4444');
-      FX.burst(hero.defX, hero.defY, '#ef4444', 5, 10);
-      if (hero.hp <= 0) killHero(gs);
-    }
+  // 근접한 적의 반격 — 영웅도 죽을 수 있다.
+  //
+  // 예전에는 "1초마다, 반경 안의 모든 적의 공격력 합"을 통째로 맞았다.
+  // 경로 한가운데 서면 지나가는 무리 전체가 매 초 다시 계산되므로,
+  // 30마리짜리 웨이브에서는 영웅이 몇 초 만에 녹았다 — 서 있을 이유가 없어진다.
+  //
+  // 이제 적 하나는 **한 번 지나갈 때 한 대만** 친다. 사거리 밖으로 나갔다가
+  // 다시 들어오면 그때 또 한 대다. 대신 부딪히는 동안 그 적은 느려진다 —
+  // 영웅을 경로에 세우는 것이 "몸으로 막는" 선택이 되도록.
+  const touchR = CELL_W * 0.75;
+  let incoming = 0, touched = 0;
+  for (const e of gs.defenseEnemies) {
+    if (e.dead || e.reached) continue;
+    const near = Math.hypot(e.x - hero.defX, e.y - hero.defY) < touchR;
+    if (!near) { e._heroHit = false; continue; }
+    touched++;
+    // 몸으로 막는다 — 영웅과 겹친 동안 이동이 느려진다
+    e.heroBlockUntil = HERO_BLOCK_SLOW_DUR;
+    if (e._heroHit) continue;          // 이번 통과에서 이미 한 대 쳤다
+    e._heroHit = true;
+    incoming += e.dmg;
   }
+  if (incoming > 0) {
+    const def  = Math.round(lv.def * BONUSES.heroStatMult);
+    const real = Math.max(1, incoming - def);
+    hero.hp -= real;
+    spawnFloaty(`-${real}`, hero.defX, hero.defY - 18, '#ef4444');
+    FX.burst(hero.defX, hero.defY, '#ef4444', 5, 10);
+    if (hero.hp <= 0) { killHero(gs); return; }
+  }
+  hero.blocking = touched;
 }
 
 // 기억해둔 자리에 영웅을 다시 세운다. 층이 넘어갈 때와 부활할 때 부른다.
@@ -1662,6 +1694,7 @@ function update(dt) {
   if (gs.overloadReady > 0) gs.overloadReady = Math.max(0, gs.overloadReady - dt);
   updateTowers(gs.towers,gs.defenseEnemies,gs.projectiles,dt);
   updateProjectiles(gs.projectiles, e => onDefenseKill(e, false), dt);
+  updatePoisonPools(gs.defenseEnemies, e => onDefenseKill(e, false), dt);
   gs.defenseEnemies=gs.defenseEnemies.filter(e=>!e.dead&&!e.reached);
 
   updateHeroDefense(dt);
@@ -1861,6 +1894,7 @@ function resetGame() {
 // 주기적으로, 그리고 화면이 가려지는 순간에 반드시 한 번 더 쓴다.
 // ─── 📖 안내 다시 보기 ────────────────────────────────────────────────────────
 function replayTutorial() {
+  // df_tut_seen은 일부러 그대로 둔다 — 자동 진입은 영영 막고, 여기서만 다시 본다
   try { localStorage.removeItem('df_tut9'); } catch (e) {}
   tut.done = false; tut.tip = null; tut.step = 0; tut.active = true;
   SFX.click();

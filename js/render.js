@@ -188,6 +188,29 @@ function renderDefense(ctx, gs) {
     }
   }
 
+  // ☠️ 독 장판 — 타워 아래에 깔린다. 남은 시간만큼 옅어진다.
+  for (const q of (gs.poisonPools || [])) {
+    const fade = Math.min(1, q.life / Math.max(0.001, q.maxLife));
+    const grad = ctx.createRadialGradient(q.x, q.y, q.r * 0.15, q.x, q.y, q.r);
+    grad.addColorStop(0, `rgba(132,204,22,${0.52 * fade})`);
+    grad.addColorStop(1, `rgba(101,163,13,${0.10 * fade})`);
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(q.x, q.y, q.r, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = `rgba(163,230,53,${0.6 * fade})`; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(q.x, q.y, q.r, 0, Math.PI*2); ctx.stroke();
+    // 보글보글 — 장판이 살아 있다는 표시
+    const t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+    for (let k = 0; k < 3; k++) {
+      const ph = (t0 * 0.9 + k * 0.37 + (q.x + q.y) * 0.01) % 1;
+      const ang = (k * 2.1 + (q.x % 7)) * 1.3;
+      const rr = q.r * (0.25 + 0.55 * ph);
+      ctx.fillStyle = `rgba(190,242,100,${(1 - ph) * 0.5 * fade})`;
+      ctx.beginPath();
+      ctx.arc(q.x + Math.cos(ang) * rr, q.y + Math.sin(ang) * rr, 2.2 * (1 - ph * 0.5), 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+
   for (const t of gs.towers) renderTower(ctx, t);
   for (const p of gs.projectiles) {
     // 그림이 있으면 날아가는 방향으로 돌려 그린다. 없으면 예전처럼 색 점.
@@ -1100,7 +1123,21 @@ function renderArenaPhase(ctx, gs) {
 
   // 몹 → 아군 순으로 그려 아군이 위에 오게 한다
   for (const m of a.mobs) renderArenaEntity(ctx, m, m.dead ? Math.max(0, 1 - m.deadTimer/0.5) : 1);
-  for (const u of b.ourTeam) if (!u.dead) renderArenaEntity(ctx, u, 1);
+  for (const u of b.ourTeam) {
+    if (u.dead) continue;
+    // 🗡️ 은신 중인 도적은 반투명하게 — 사라진 게 보여야 은신이 은신으로 읽힌다
+    const hid = (u.stealthLeft || 0) > 0;
+    if (hid) ctx.globalAlpha = 0.34;
+    renderArenaEntity(ctx, u, 1);
+    if (hid) {
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = 'rgba(192,132,252,0.55)'; ctx.lineWidth = 1.5;
+      ctx.setLineDash([3,3]);
+      ctx.beginPath(); ctx.arc(u.x, u.y, u.radius + 4, 0, Math.PI*2); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    ctx.globalAlpha = 1;
+  }
 
   // 투사체
   for (const sh of a.shots) {
@@ -4339,7 +4376,7 @@ function renderTutorial(ctx, tut) {
   // 이전 / 건너뛰기 — 카드 바깥에 둬서 본문 탭(=다음)과 겹치지 않게 한다.
   // 건너뛰기는 남은 쪽지까지 전부 끈다. 쪽지가 층마다 계속 뜨면
   // 플레이어에겐 튜토리얼이 안 꺼진 것과 같다.
-  const bw=104, bh=28, by=cy+ch+12;
+  const bw=126, bh=28, by=cy+ch+12;
   const left = tipsRemaining();
   if (!isTip && tut.step > 0) {
     const bx=cx;
@@ -4355,9 +4392,17 @@ function renderTutorial(ctx, tut) {
   ctx.fillStyle='#1c1420'; ctx.fill(); ctx.strokeStyle='#4b5563'; ctx.lineWidth=1; ctx.stroke();
   ctx.fillStyle='#cbd5e1'; ctx.font='bold 11px sans-serif';
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText('✕ 안내 전부 끄기', sx+bw/2, by+bh/2-5);
-  ctx.fillStyle='#64748b'; ctx.font='8px sans-serif';
-  ctx.fillText(left ? `남은 안내 ${left}장까지` : '다시 안 뜹니다', sx+bw/2, by+bh/2+8);
+  const rewardable = typeof tutorialEverSeen === 'function' && !tutorialEverSeen();
+  if (rewardable) {
+    ctx.fillStyle='#fbbf24'; ctx.font='bold 11px sans-serif';
+    ctx.fillText(`⏭ 건너뛰기 💎+${TUTORIAL_SKIP_GEMS}`, sx+bw/2, by+bh/2-5);
+    ctx.fillStyle='#64748b'; ctx.font='8px sans-serif';
+    ctx.fillText('안내는 다시 뜨지 않습니다', sx+bw/2, by+bh/2+8);
+  } else {
+    ctx.fillText('✕ 안내 전부 끄기', sx+bw/2, by+bh/2-5);
+    ctx.fillStyle='#64748b'; ctx.font='8px sans-serif';
+    ctx.fillText(left ? `남은 안내 ${left}장까지` : '다시 안 뜹니다', sx+bw/2, by+bh/2+8);
+  }
   gs.ui.tutSkipBtn={x:sx,y:by,w:bw,h:bh};
 
   if (!isTip) {

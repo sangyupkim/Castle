@@ -20,6 +20,8 @@ function makeUnit(typeId) {
     skillRadius:t.skillRadius||0, skillHits:t.skillHits||1, skillColor:t.skillColor,
     skillAtk:0, healAmt:0, shieldAmt:0,
     x:0, y:0, slotX:0, slotY:0,
+    // 🗡️ 도적 — 은신 남은 시간 · 기습 대기 · 주우러 간 드랍
+    stealthLeft:0, ambushReady:false, greedTarget:null,
     dead:false, undyingUsed:false,
     flashTimer:0, flashColor:'#fff'
   };
@@ -97,6 +99,8 @@ function makeHeroUnit(hero) {
     // 🛡 수호자의 함성은 최대 HP에 비례한다 — 단단할수록 부대를 더 감싼다
     shieldAmt: sk.kind === 'bulwark' ? Math.max(6, Math.round(hp * 0.32)) : 0,
     x:0, y:0, slotX:0, slotY:0,
+    // 🗡️ 도적 — 은신 남은 시간 · 기습 대기 · 주우러 간 드랍
+    stealthLeft:0, ambushReady:false, greedTarget:null,
     dead:false, undyingUsed:false,
     flashTimer:0, flashColor:'#fff'
   };
