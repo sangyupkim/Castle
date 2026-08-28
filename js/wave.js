@@ -67,6 +67,8 @@ function createWaveManager() {
       this.bountyTimer = gs.bountyPending ? BOUNTY_SPAWN_DELAY : null;
 
       reapplyAllBonuses(gs);
+      // 지난 웨이브에서 달려들던 것들은 여기서 정리한다 — 넘어오면 두 번 물린다
+      gs.chargers = [];
       startFighting(gs.battle);
       startArena(gs, this.waveIndex);
       if (typeof SFX !== 'undefined') SFX.waveStart();
@@ -84,12 +86,15 @@ function createWaveManager() {
         gs.battle.totalGoldEarned += left;
         addLog(gs.battle, `후퇴하며 드랍 회수 +${left}💰`, COLORS.gold);
       }
-      // 하단을 비운 대가 — 성벽 HP를 조용히 깎는 대신,
-      // 거기 있던 것들이 그대로 상단 경로로 올라온다. 타워가 감당할 수 있다면
-      // 후퇴는 여전히 옳은 선택이고, 아니라면 값을 치른다.
-      const spilled = spillToDefense(gs, 'retreat');
+      // 하단을 비운 대가 — 남은 시간만큼 성벽이 깎인다.
+      // 일찍 뺄수록 비싸고, 거의 다 버티고 뺐다면 거의 공짜다.
+      // 값은 예전 그대로지만 이제 눈에 보인다 — 남은 무리가 성문으로 달려들고,
+      // 한 마리가 닿을 때마다 HP가 깎인다.
+      const cost = retreatCost(this.timer);
+      if (cost > 0) launchCharge(gs, cost, 'retreat');
+      else addLog(gs.battle, '🛡 후퇴 — 병력을 보존했습니다', '#38bdf8');
+      clearArena(gs);
       gs.battle.phase = 'retreated';
-      if (spilled <= 0) addLog(gs.battle, '🛡 후퇴 — 넘어올 무리가 없었습니다', '#38bdf8');
       if (typeof SFX !== 'undefined') SFX.click();
       return true;
     },
@@ -124,7 +129,7 @@ function createWaveManager() {
             hp:     bountyHp(n, this.waveIndex),
             reward: bountyGold(n, this.waveIndex)
           });
-          e.gems = bountyGems(n);
+          e.gems = Math.round(bountyGems(n) * (BONUSES.summonRewardMult || 1));
           gs.defenseEnemies.push(e);
           gs.bountyPending = false;
           spawnFloaty(`💰 현상수배 등장! 처치 시 보석 +${e.gems}`, CW/2, 60, '#fbbf24');
@@ -137,14 +142,15 @@ function createWaveManager() {
       // 하단 아레나
       updateArena(gs, dt);
 
-      // 아군 전멸 — 후퇴와 같다. 하단이 비었으니 남은 것들이 상단으로 올라온다.
-      // 예전에는 아레나에 남은 몹이 보이지 않는 DPS로 성벽을 갉았는데,
-      // 화면 밖에서 숫자만 줄어드는 것이라 막을 방법도 없고 읽히지도 않았다.
+      // 아군 전멸 — 남은 무리가 성으로 달려든다.
+      // 예전에는 화면 밖에서 DPS로 성벽이 갉였는데, 얼마나 못 막았는지가 보이지 않았다.
+      // 이제는 달려드는 것이 보이고, 한 마리 닿을 때마다 HP가 떨어진다.
       if (gs.battle.phase === 'lost') {
         gs.battle.phase = 'idle_defeated';
         this.wipedAt = this.elapsed;
         addLog(gs.battle, '☠️ 병력 전멸 — 하단이 뚫렸습니다', '#ef4444');
-        spillToDefense(gs, 'wipe');
+        launchCharge(gs, wipeCost(this.timer, this.waveIndex), 'wipe');
+        clearArena(gs);
       }
 
       // ── 종료 조건 ──
@@ -153,7 +159,8 @@ function createWaveManager() {
       //   상단: 스폰이 끝나고 경로 위에 살아 있는 적이 없다 (죽었거나 기지에 닿았다)
       //   하단: 몹이 다 죽었거나, 후퇴했거나, 전멸해서 더 진행될 여지가 없다
       const defClear = this.defenseQueues.every(q => q.remaining <= 0) &&
-                       !gs.defenseEnemies.some(e => !e.dead && !e.reached);
+                       !gs.defenseEnemies.some(e => !e.dead && !e.reached) &&
+                       !(gs.chargers || []).some(c => !c.dead);   // 달려드는 무리도 결말이 나야 한다
       const arenaClear = !gs.arena.mobs.some(m => !m.dead);
       const batClear = (gs.battle.phase === 'retreated') ||
                        (gs.battle.phase === 'idle_defeated' && arenaClear) ||
@@ -287,7 +294,8 @@ function createWaveManager() {
         // 기준은 '판을 시작할 때의 최고 기록'이다 — 판이 진행되며 갱신되는 값을 쓰면
         // 매 층이 자기 자신을 갱신해서 전부 첫 돌파가 돼 버린다.
         const first = et > (gs.runBestAtStart || 0);
-        const step  = endlessGemStepFor(et, gs.runBestAtStart) * fev('gemMult', 1);
+        const step  = endlessGemStepFor(et, gs.runBestAtStart)
+                    * fev('gemMult', 1) * (BONUSES.gemMult || 1);
         gs.endlessGems = (gs.endlessGems || 0) + step;
         if (first) gs.endlessGemsNew = (gs.endlessGemsNew || 0) + step;
         else       gs.endlessGemsOld = (gs.endlessGemsOld || 0) + step;

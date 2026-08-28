@@ -76,6 +76,7 @@ function towerStats(t) {
   return {
     sealed,
     dmg:   sealed ? 0 : Math.round((tpl.dmg + BONUSES.towerDmg) * m.dmg
+             * (BONUSES.towerDmgMult || 1)
              * (BONUSES.pactTowerDmgMult || 1) * fev('towerDmgMult', 1)),
     spd:   tpl.spd   * m.spd   * BONUSES.towerSpdMult * (overloaded ? OVERLOAD_SPD_MULT : 1),
     range: sealed ? 0 : tpl.range * m.range * BONUSES.towerRangeMult * fev('towerRangeMult', 1),
@@ -83,6 +84,7 @@ function towerStats(t) {
     slowDur:     tpl.slowDur || 0,
     splash:      tpl.splash || 0,
     pierceArmor: !!tpl.pierceArmor,
+    pierce:      BONUSES.towerPierce || 0,
     targetMode:  tpl.targetMode || 'nearest',
     chain:       tpl.chain || 0,
     chainRange:  tpl.chainRange || 0,
@@ -147,20 +149,21 @@ function makeProjectile(sx, sy, target, dmg, color, opts) {
   return Object.assign({
     x: sx, y: sy, tx: target.x, ty: target.y,
     target, dmg, color, spd: 320,
-    slow: 0, slowDur: 0, splash: 0, pierceArmor: false
+    slow: 0, slowDur: 0, splash: 0, pierceArmor: false, pierce: 0
   }, opts || {});
 }
 
 // 상성 배율은 방어력 차감보다 먼저 곱한다 — 약한 타워는 방어력까지 겹쳐 더 안 통한다
-function defDamage(enemy, dmg, pierceArmor, affinity) {
+function defDamage(enemy, dmg, pierceArmor, affinity, pierce) {
   const base = dmg * (affinity === undefined ? 1 : affinity);
   if (pierceArmor) return Math.max(1, Math.round(base));
-  return Math.max(1, Math.round(base - (enemy.armor || 0)));
+  const armor = Math.max(0, (enemy.armor || 0) - (pierce || 0));
+  return Math.max(1, Math.round(base - armor));
 }
 
-function hurtDefenseEnemy(e, dmg, pierceArmor, onKill, affinity) {
+function hurtDefenseEnemy(e, dmg, pierceArmor, onKill, affinity, pierce) {
   if (e.dead || e.reached) return 0;
-  const real = defDamage(e, dmg, pierceArmor, affinity);
+  const real = defDamage(e, dmg, pierceArmor, affinity, pierce);
   e.hp -= real;
   e.hitFlash = 0.12;
   if (e.hp <= 0) {
@@ -175,8 +178,7 @@ function hurtDefenseEnemy(e, dmg, pierceArmor, onKill, affinity) {
 function updateDefenseEnemies(enemies, dt) {
   for (const e of enemies) {
     if (e.dead || e.reached) continue;
-    // 하단에서 넘어온 무리는 한 줄로 겹치지 않게 시간차를 두고 들어온다.
-    // 대기 중에는 움직이지도, 보이지도, 맞지도 않는다.
+    // 시간차를 두고 들어오는 적 (지금은 쓰지 않지만 배관은 남긴다)
     if (e.spawnDelay > 0) { e.spawnDelay = Math.max(0, e.spawnDelay - dt); continue; }
     if (e.hitFlash > 0) e.hitFlash = Math.max(0, e.hitFlash - dt);
     // 🌱 재생 — 꾸준히 깎지 못하면 원점으로 돌아간다. 단발 화력보다 지속 화력을 요구한다.
@@ -267,6 +269,7 @@ function updateTowers(towers, enemies, projectiles, dt) {
       slow: st.slow, slowDur: st.slowDur,
       splash: st.splash || (BONUSES.towerSplash ? 34 : 0),
       pierceArmor: st.pierceArmor,
+      pierce: st.pierce || 0,
       spd: tower.typeId === 'sniper' ? 620 : 320,
       owner: tower,
       towerTypeId: tower.typeId,
@@ -310,7 +313,7 @@ function updateProjectiles(projectiles, onKill, dt) {
       if (onKill) onKill(victim, p.owner);
     };
     const aff   = p.towerTypeId ? affinityOf(p.towerTypeId, tgt) : 1;
-    const dealt = hurtDefenseEnemy(tgt, p.dmg, p.pierceArmor, credit, aff);
+    const dealt = hurtDefenseEnemy(tgt, p.dmg, p.pierceArmor, credit, aff, p.pierce);
     if (p.owner) p.owner.damageDealt += dealt;
     // 상성이 갈리는 순간을 눈에 보이게 — 왜 안 죽는지 알아야 배치를 바꾼다
     if (typeof spawnFloaty === 'function' && p.towerTypeId && (aff >= 1.2 || aff <= 0.6)) {
@@ -334,7 +337,7 @@ function updateProjectiles(projectiles, onKill, dt) {
         if (!next) break;
         hit.add(next);
         const cAff = affinityOf(p.towerTypeId, next);
-        const cd = hurtDefenseEnemy(next, p.dmg * 0.6, p.pierceArmor, credit, cAff);
+        const cd = hurtDefenseEnemy(next, p.dmg * 0.6, p.pierceArmor, credit, cAff, p.pierce);
         if (p.owner) p.owner.damageDealt += cd;
         if (typeof FX !== 'undefined') FX.spark(from.x, from.y, next.x, next.y, p.color);
         from = next;
@@ -351,7 +354,8 @@ function updateProjectiles(projectiles, onKill, dt) {
         if (e === tgt || e.dead || e.reached) continue;
         if (Math.hypot(e.x - tgt.x, e.y - tgt.y) < p.splash) {
           const d = hurtDefenseEnemy(e, p.dmg * 0.5, p.pierceArmor, credit,
-                                     p.towerTypeId ? affinityOf(p.towerTypeId, e) : 1);
+                                     p.towerTypeId ? affinityOf(p.towerTypeId, e) : 1,
+                                     p.pierce);
           if (p.owner) p.owner.damageDealt += d;
         }
       }

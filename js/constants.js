@@ -547,15 +547,15 @@ function surgeCount(tier) {
 //
 // 이제 하단을 비우면 거기 있던 것들이 그대로 위로 올라온다. 후퇴는 벌이 아니라
 // 전선을 옮기는 결정이 된다 — 타워로 감당할 수 있다면 여전히 옳은 선택이다.
-const SPILL_PENDING_MAX  = 10;   // 아직 안 나온 몫을 넘길 상한
-const SPILL_TOTAL_MAX    = 18;   // 한 번에 올려보낼 최대 마릿수
-const SPILL_HP_MULT      = 0.72; // 위로 올라오면 조금 약해진다 — 아래에서 이미 싸웠으므로
-const SPILL_STAGGER      = 0.55; // 한 마리씩 들어오는 간격(초)
-// 아레나 몹 → 상단 적. 없는 것은 오크로 떨어진다.
-const ARENA_TO_DEFENSE = {
-  goblin:'goblin', hound:'runner', orc:'orc',
-  darkarch:'orc', ogre:'brute', boss:'boss'
-};
+// 전멸은 후퇴보다 비싸다 — 병력까지 잃었으므로.
+// 예전 돌파(DPS × 15초)가 주던 양을 한 번에 환산해 같은 무게로 맞춘다.
+const WIPE_BASE   = 14;    // 기본 성벽 피해
+const WIPE_PER_SEC= 0.34;  // 남은 스폰 시간 1초당 가산
+const WIPE_TIER   = 0.55;  // 층당 가산
+function wipeCost(remainSec, waveIndex) {
+  const t = Math.max(0, waveIndex || 0);
+  return Math.round(WIPE_BASE + Math.max(0, remainSec || 0) * WIPE_PER_SEC + t * WIPE_TIER);
+}
 
 const DROP_TYPES = [
   { id:'gold',  icon:'💰', w:30, color:'#fbbf24', label:'금화 더미' },
@@ -829,9 +829,6 @@ function baseDamageMult() {
   return 1 - Math.min(BASE_DEF_PCT_CAP, BONUSES.baseDefPct || 0);
 }
 
-// (v0.8.0부터 쓰지 않는다) 후퇴는 성벽 HP 정액 차감이 아니라
-// 남은 무리가 상단으로 넘어오는 것으로 바뀌었다 — spillToDefense를 보라.
-// 서약·기록 화면이 아직 이 곡선을 참고하므로 정의는 남겨 둔다.
 function retreatCost(remainSec) {
   // 무한 구간에서는 후퇴 단가도 같이 오른다. 상수로 두면 깊은 층에서
   // "매 웨이브 후퇴"가 전멸(층에 비례)보다 압도적으로 싸져 다시 정답이 된다.
@@ -851,9 +848,6 @@ function clearBonusGold(waveIndex) {
 
 // 아군이 전멸하면 아레나에 남은 몬스터가 기지로 돌파해 초당 피해를 준다.
 // 두 전선을 연결해, 하단에서 지는 것도 실제 패배로 이어지게 만든다.
-// 전멸해도 남은 무리는 상단으로 올라가므로(spillToDefense) 아레나가 비어
-// 아래 돌파 피해는 사실상 걸리지 않는다. 넘김이 상한(SPILL_TOTAL_MAX)에 걸려
-// 아레나에 몹이 남는 경우에만 예전처럼 동작한다.
 const BREAKTHROUGH_DPS      = 0.03;  // 몹 공격력 1당 초당 기지 피해
 const BREAKTHROUGH_MAX      = 1.8;   // 초당 상한 — 한 웨이브 전멸이 즉사가 되지 않도록
 // v1.0에서는 2.5(전멸 1회당 37HP)였다. 그룹 전투에서 전멸은 예외였지만
@@ -1388,8 +1382,19 @@ function floorEventOf(tier) {
 // 현재 층의 이벤트에서 값 하나를 꺼낸다 (없으면 기본값)
 function fev(key, dflt) {
   const e = (typeof gs !== 'undefined' && gs) ? gs.floorEvent : null;
-  return (e && e[key] !== undefined) ? e[key] : dflt;
+  if (!e || e[key] === undefined) return dflt;
+  const v = e[key];
+  // 🏮 등불 — 배율형 이벤트가 나에게 불리한 쪽이면 중립(1)으로 그만큼 끌어당긴다.
+  // 유리한 쪽은 건드리지 않는다. 노드 이름 그대로 "완화"지 "무효"가 아니다.
+  const soft = (typeof BONUSES !== 'undefined' && BONUSES.eventSoften) || 0;
+  if (soft > 0 && typeof v === 'number' && _FEV_MUL.indexOf(key) >= 0) {
+    const good = _FEV_GOOD_HIGH.indexOf(key) >= 0 ? v > 1 : v < 1;
+    if (!good) return v + (1 - v) * Math.min(0.8, soft);
+  }
+  return v;
 }
+// 값이 높을수록 나에게 이로운 키 — 나머지는 낮을수록 이롭다
+const _FEV_GOOD_HIGH = ['towerRangeMult','towerDmgMult','goldMult','gemMult'];
 // 이 시간은 이제 "웨이브 길이"가 아니라 "몹이 나오는 시간"이다.
 // 예전에는 타이머가 0이 되면 경로 위에 몹이 남아 있어도 웨이브가 끝났다 —
 // 서리탑으로 느리게 만들수록 손해를 보는 이상한 규칙이었고,

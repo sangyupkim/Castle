@@ -117,16 +117,17 @@ function unlockProgress() {
   };
 }
 
+// 트리 v2 — 노드 수가 아니라 "쌓은 레벨 수"로 진행도를 센다
 function skillProgress(gs) {
-  let total = 0, owned = 0, spent = 0, totalCost = 0;
-  const has = gs.skillTreeOwned || [];
-  for (const tree of Object.values(SKILL_TREES)) {
-    for (const s of tree.skills) {
-      total++; totalCost += s.cost;
-      if (has.includes(s.id)) { owned++; spent += s.cost; }
+  let total = 0, owned = 0, spent = 0;
+  for (const treeId of SKILL_TREE_ORDER) {
+    for (const s of SKILL_TREES[treeId].skills) {
+      const max = skillMaxLv(s), lv = skillLevel(gs, s.id);
+      total += max; owned += lv;
+      for (let i = 1; i <= lv; i++) spent += skillLevelCost(s, i);
     }
   }
-  return { owned, total, spent, totalCost };
+  return { owned, total, spent, totalCost: skillTreeTotalCost() };
 }
 
 // ─── 출격 가능 여부 ──────────────────────────────────────────────────────────

@@ -882,58 +882,48 @@ function startArena(gs, waveIndex) {
   allies.forEach((u, i) => spawnAllyIntoArena(a, u, i, allies.length));
 }
 
-// ─── 🏳 남은 무리를 상단으로 올려보낸다 ──────────────────────────────────────
-// 후퇴하거나 전멸하면 아레나에 남아 있던 것들과, 아직 나오지 않았던 몫의 일부가
-// 그대로 상단 경로로 들어온다. 하단을 비우는 것은 도망이 아니라 전선을 옮기는 일이다.
-// 지금 하단을 비우면 몇 마리가 위로 올라오는지. 버튼에 띄우는 값과 실제가 같아야 한다.
+// ─── 🏳 하단을 비우면 남은 무리가 성으로 돌진한다 ────────────────────────────
+// 한때 이것들을 상단 경로로 올려보내 타워가 잡게 했었다. 그러면 게임이 바뀐다 —
+// 타워만 끝까지 올리면 하단을 통째로 버려도 되고, 위아래를 저울질하는 재미가 사라진다.
+// 그래서 값은 예전 그대로(성벽 HP)로 돌리되, **눈에 보이게** 만든다.
+// 숫자가 조용히 깎이는 것과, 열두 마리가 성문으로 달려드는 것을 보는 것은 다른 일이다.
+const CHARGE_MAX_SHOWN = 12;    // 화면에 세울 최대 돌격병 — 그 이상은 뭉쳐서 안 읽힌다
+const CHARGE_SPEED     = 165;   // px/초 — 연출이 늘어지면 안 된다
+const CHARGE_SPREAD    = 150;   // 출발 지점 좌우 퍼짐
+
+// 지금 하단을 비우면 성벽이 얼마나 깎이는지. 버튼에 띄우는 값과 실제가 같아야 한다.
 function spillPreview(gs) {
-  const a = gs.arena;
-  if (!a) return 0;
-  const live = a.mobs.filter(m => !m.dead).length;
-  let pending = 0;
-  if (typeof wm !== 'undefined' && wm && wm.timer > 0) {
-    const iv = Math.max(0.3, spawnInterval(a.elapsed) * (a.spawnMult || 1));
-    pending = Math.min(SPILL_PENDING_MAX, Math.floor(wm.timer / iv));
-  }
-  return Math.min(SPILL_TOTAL_MAX, live + pending);
+  return retreatCost(typeof wm !== 'undefined' && wm ? wm.timer : 0);
 }
 
-function spillToDefense(gs, why) {
-  const a = gs.arena, b = gs.battle;
-  const live = a.mobs.filter(m => !m.dead);
+// 남은 무리를 성으로 달려들게 한다. total만큼의 피해를 나눠 물고 간다.
+function launchCharge(gs, total, why) {
+  if (total <= 0) return 0;
+  const live = gs.arena.mobs.filter(m => !m.dead);
+  // 마릿수는 남은 몹과 피해량 둘 다를 본다. 아레나가 비어 있어도 값을 치렀다면
+  // 그만큼은 달려드는 것이 보여야 하고, 40HP가 한 마리로 들어오면 읽히지 않는다.
+  const n = Math.max(1, Math.min(CHARGE_MAX_SHOWN, Math.max(live.length, Math.ceil(total / 6))));
+  const base = cellCenter(4, 6);                    // 기지 칸
+  gs.chargers = gs.chargers || [];
 
-  // 아직 안 나온 몫 — 남은 스폰 시간을 지금 간격으로 나눈 만큼
-  let pending = 0;
-  if (typeof wm !== 'undefined' && wm && wm.timer > 0) {
-    const iv = Math.max(0.3, spawnInterval(a.elapsed) * (a.spawnMult || 1));
-    pending = Math.min(SPILL_PENDING_MAX, Math.floor(wm.timer / iv));
+  // 피해를 마릿수로 쪼갠다. 나머지는 앞쪽 몇에게 하나씩 더 얹어 총합을 정확히 맞춘다.
+  const each = Math.floor(total / n), extra = total - each * n;
+  for (let i = 0; i < n; i++) {
+    const src = live[i] || live[0];
+    gs.chargers.push({
+      typeId: src ? src.typeId : 'goblin',
+      x: base.x + (i - (n - 1) / 2) * (CHARGE_SPREAD / Math.max(1, n - 1)) * (n > 1 ? 1 : 0),
+      y: GRID_OY - 10 - Math.random() * 26,
+      dmg: each + (i < extra ? 1 : 0),
+      radius: src ? Math.max(9, src.radius * 0.7) : 10,
+      delay: i * 0.12,
+      hitFlash: 0, dead: false
+    });
   }
-
-  const picks = [];
-  for (const m of live) picks.push(m.typeId);
-  for (let i = 0; i < pending; i++) picks.push(rollArenaMob(a.pool));
-  const total = Math.min(SPILL_TOTAL_MAX, picks.length);
-
-  for (let i = 0; i < total; i++) {
-    const defType = ARENA_TO_DEFENSE[picks[i]] || 'orc';
-    if (!ENEMY_TYPES[defType]) continue;
-    const e = makeDefenseEnemy(defType, a.waveIndex);
-    e.hp = e.maxHp = Math.max(1, Math.round(e.maxHp * SPILL_HP_MULT));
-    // 한 줄로 겹쳐 들어오지 않게 시간차를 준다
-    e.spawnDelay = i * SPILL_STAGGER;
-    e.spilled = true;
-    gs.defenseEnemies.push(e);
-  }
-
-  clearArena(gs);
-
-  if (total > 0) {
-    addLog(b, `⬆️ 하단을 비운 대가 — ${total}마리가 상단으로 넘어옵니다`, '#f97316');
-    spawnFloaty(`⬆️ ${total}마리 상단 진입!`, CW / 2, DEFENSE_H - 40, '#f97316');
-    if (typeof FX !== 'undefined') FX.shake(5, 0.4);
-    if (typeof SFX !== 'undefined') SFX.baseHit();
-  }
-  return total;
+  addLog(gs.battle, why === 'wipe'
+    ? `☠️ 전멸 — 남은 ${live.length}마리가 성으로 달려듭니다`
+    : `🛡 후퇴 — 남은 무리가 성으로 달려듭니다`, '#f87171');
+  return n;
 }
 
 function clearArena(gs) {

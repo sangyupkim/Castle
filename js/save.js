@@ -60,7 +60,7 @@ const SaveManager = {
       soulStones:     gs.soulStones  || 0,
       metaUpgrades:   gs.metaUpgrades || {},
       clearedStages:  gs.clearedStages || new Array(10).fill(false),
-      skillTreeOwned: gs.skillTreeOwned || [],
+      skillLevels:    gs.skillLevels || {},
       unlocked:       gs.unlocked || [],
       pacts:          gs.pacts    || [],
       seenMobs:       gs.seenMobs || [],

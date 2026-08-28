@@ -70,7 +70,7 @@ function cycleSpeed()  { _speedIdx = (_speedIdx + 1) % SPEED_STEPS.length; _spee
 let _soulStones    = 0;
 let _metaUpgrades  = {};
 let _clearedStages = new Array(10).fill(false);
-let _skillTreeOwned = [];
+let _skillLevels   = {};   // 스킬 노드 id → 레벨(0~10)
 let _unlocked       = [];   // 보석으로 연 타워/유닛
 let _pacts          = [];   // 걸어둔 서약
 let _seenMobs       = [];   // 도감
@@ -87,7 +87,7 @@ function newState() {
     inRun:false,         // 로비 밖(런 안)에 있는가
     gold:10, baseHP:BASE_HP_MAX,
     caveLevel:1,
-    towers:[], defenseEnemies:[], projectiles:[],
+    towers:[], defenseEnemies:[], projectiles:[], chargers:[],
     battle: null,
     arena: createArena(),
     lobby: createLobby(),
@@ -130,7 +130,7 @@ function newState() {
     resultBanked:false,
     floaties:[],
     ui:{ waveBtn:{}, hireCards:[], hiredSlots:[], specialCards:[], specialSlots:[], heroDefBtn:{}, heroBatBtn:{},
-         metaCards:[], towerTabBtn:{}, heroTabBtn:{}, supportTabBtn:{},
+         metaCards:[], skillTreeTabs:[],
          lobbyTabBtns:[], unlockBtns:[], pactBtns:[], sortieBtn:{}, trainBtn:null, resultBtn:{},
          buildingScroll:null, pageScroll:null, briefScroll:null, lobbyScroll:null,
          pauseResumeBtn:null, pauseGiveUpBtn:null,
@@ -144,8 +144,8 @@ function newState() {
     set metaUpgrades(v) { _metaUpgrades = v; },
     get clearedStages()  { return _clearedStages; },
     set clearedStages(v) { _clearedStages = v; },
-    get skillTreeOwned()  { return _skillTreeOwned; },
-    set skillTreeOwned(v) { _skillTreeOwned = v; },
+    get skillLevels()  { return _skillLevels; },
+    set skillLevels(v) { _skillLevels = v; },
     get unlocked()  { return _unlocked; },
     set unlocked(v) { _unlocked = v; },
     get pacts()  { return _pacts; },
@@ -178,7 +178,10 @@ let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적�
   _soulStones     = sv.soulStones    || 0;
   _metaUpgrades   = sv.metaUpgrades  || {};
   _clearedStages  = sv.clearedStages || new Array(10).fill(false);
-  _skillTreeOwned = sv.skillTreeOwned|| [];
+  _skillLevels    = sv.skillLevels || {};
+  // 트리 v2 이전 세이브 — 노드 구성이 통째로 바뀌었으므로 습득분은 보석으로 환급한다
+  if (!sv.skillLevels && Array.isArray(sv.skillTreeOwned) && sv.skillTreeOwned.length)
+    _soulStones += sv.skillTreeOwned.length * SKILL_V1_REFUND;
   _unlocked       = sv.unlocked      || [];
   _pacts          = sv.pacts         || [];
   _seenMobs       = sv.seenMobs      || [];
@@ -572,7 +575,8 @@ function tap({x,y}) {
           SFX.denied();
         } else {
           tw.overloadUntil  = OVERLOAD_DURATION;
-          gs.overloadReady  = OVERLOAD_COOLDOWN * fev('overloadCdMult', 1);
+          gs.overloadReady  = OVERLOAD_COOLDOWN * fev('overloadCdMult', 1)
+                            * (BONUSES.overloadCdMult || 1);
           const ctr = cellCenter(tw.col, tw.row);
           spawnFloaty('⚡ 과부하!', ctr.x, ctr.y - 18, '#fbbf24');
           FX.ring(ctr.x, ctr.y, '#fbbf24', 12);
@@ -639,7 +643,7 @@ const _PAGE_UI_KEYS = [
   'shopItemBtns','skillBuyBtns','shopTabBuy','shopTabUp',
   'specialCards','specialSlots','heroDefBtn','heroBatBtn','bountyBtn','eliteBtn','towerMiniGrid',
   'lobbyTabBtns','sortieBtn','trainBtn','metaCards','unlockBtns','pactBtns','sigilCards',
-  'towerTabBtn','heroTabBtn','supportTabBtn','backupExportBtn','backupImportBtn',
+  'skillTreeTabs','backupExportBtn','backupImportBtn',
   'tutReplayBtn','tutResetTipBtn','bgmToggleBtn','sfxToggleBtn',
   'resultBtn','waveBtn','battleWaveStartBtn','briefTownBtn','retreatBtn','modeBtn'
 ];
@@ -665,6 +669,8 @@ function handleLobbyTap(x, y) {
   if (hitTest(x,y,gs.ui.sortieBtn||{})) { startRun(endlessUnlocked() ? 'endless' : 'campaign'); return; }
 
   if (L.tab === 'skill') {
+    // 스킬 탭도 스크롤된 채 그려진다 — 좌표를 같은 기준으로 맞춘다
+    y = y + (gs.lobbyScroll || 0);
     for (const c of gs.ui.sigilCards||[]) {
       if (hitTest(x,y,c)) {
         if (c.locked) {
@@ -693,13 +699,18 @@ function handleLobbyTap(x, y) {
         return;
       }
     }
-    if (hitTest(x,y,gs.ui.towerTabBtn||{}))   { L.skillTree='tower';   SFX.click(); return; }
-    if (hitTest(x,y,gs.ui.heroTabBtn||{}))    { L.skillTree='hero';    SFX.click(); return; }
-    if (hitTest(x,y,gs.ui.supportTabBtn||{})) { L.skillTree='support'; SFX.click(); return; }
+    for (const t of gs.ui.skillTreeTabs||[]) {
+      if (hitTest(x,y,t)) { L.skillTree=t.id; gs.lobbyScroll=0; SFX.click(); return; }
+    }
     for (const card of gs.ui.metaCards||[]) {
       if (hitTest(x,y,card)) {
-        if (buySkillNode(card.skillId, gs)) { SaveManager.save(gs); spawnFloaty(`${card.icon} 습득!`,x,y,'#a78bfa'); SFX.upgrade(); }
-        else { spawnFloaty('보석 부족 또는 선행 필요!',x,y,'#ef4444'); SFX.denied(); }
+        const lv = skillLevel(gs, card.skillId) + 1;
+        if (buySkillNode(card.skillId, gs)) {
+          SaveManager.save(gs);
+          spawnFloaty(`${card.icon} Lv${lv}!`,x,y,'#a78bfa'); SFX.upgrade();
+        } else {
+          spawnFloaty('보석 부족 또는 잠김!',x,y,'#ef4444'); SFX.denied();
+        }
         return;
       }
     }
@@ -797,7 +808,7 @@ function resetAllProgress() {
   _soulStones = 0;
   _metaUpgrades = {};
   _clearedStages = new Array(10).fill(false);
-  _skillTreeOwned = [];
+  _skillLevels = {};
   _unlocked = [];
   _heroSigil = DEFAULT_SIGIL;
   _unlockedSigils = [DEFAULT_SIGIL];
@@ -1424,6 +1435,9 @@ function update(dt) {
 
   updateBattleFx(gs.battle, dt);
 
+  // 성문으로 달려드는 무리는 웨이브가 끝나도 끝까지 간다.
+  // 조기 반환 뒤에 두면 웨이브가 먼저 끝났을 때 화면 위에 얼어붙는다.
+  updateChargers(dt);
 
   if (!gs.waveActive) { wm.updateIntermission(gs,dt); return; }
 
@@ -1462,6 +1476,38 @@ function update(dt) {
 
 // ─── 돌파: 아군 전멸 시 남은 몬스터가 기지를 때린다 ──────────────────────────
 let _breachAccum = 0;
+// ─── 🐗 성문으로 달려드는 무리 ───────────────────────────────────────────────
+// 하단을 비웠을 때 남은 것들이 기지로 달려간다. 타워는 이들을 잡지 못한다 —
+// 잡을 수 있으면 하단을 버리고 상단만 키우는 쪽이 정답이 되어 버린다.
+// 이건 막을 수 있는 적이 아니라, 이미 치른 값을 눈으로 보여주는 연출이다.
+function updateChargers(dt) {
+  const list = gs.chargers;
+  if (!list || !list.length) return;
+  const base = cellCenter(4, 6);
+  for (const c of list) {
+    if (c.dead) continue;
+    if (c.delay > 0) { c.delay -= dt; continue; }
+    const dx = base.x - c.x, dy = base.y - c.y;
+    const d  = Math.hypot(dx, dy);
+    if (d < 10) {
+      c.dead = true;
+      const dmg = Math.max(0, Math.round(c.dmg * baseDamageMult()));
+      if (dmg > 0) {
+        gs.baseHP = Math.max(0, gs.baseHP - dmg);
+        spawnFloaty(`-${dmg}HP`, base.x, base.y - 16, '#ef4444');
+        FX.shake(Math.min(7, 2 + dmg * 0.3), 0.22);
+        FX.burst(base.x, base.y, '#ef4444', 8, 10);
+        SFX.baseHit();
+        if (gs.baseHP <= 0) { gs.gameOver = true; bankRunResult(); return; }
+      }
+      continue;
+    }
+    const step = CHARGE_SPEED * dt;
+    c.x += dx / d * step; c.y += dy / d * step;
+  }
+  gs.chargers = list.filter(c => !c.dead);
+}
+
 function updateBreakthrough(dt) {
   const b = gs.battle;
   if (b.phase !== 'idle_defeated' && b.phase !== 'lost') { _breachAccum = 0; return; }

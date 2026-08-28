@@ -4,8 +4,8 @@
 function createDefaultBonuses() {
   return {
     // 타워
-    towerDmg: 0, towerSpdMult: 1.0, towerRangeMult: 1.0,
-    towerCostDiscount: 0, towerSplash: false,
+    towerDmg: 0, towerDmgMult: 1.0, towerSpdMult: 1.0, towerRangeMult: 1.0,
+    towerCostDiscount: 0, towerSplash: false, towerPierce: 0,
     // 유닛
     unitAtk: 0, unitHp: 0, unitDef: 0,
     hireCostDiscount: 0, maxSlotBonus: 0,
@@ -30,6 +30,8 @@ function createDefaultBonuses() {
     baseHpMax: 0, baseDefPct: 0, baseRegen: 0,
     // 자원
     startGoldBonus: 0, defenseGoldMult: 1.0,
+    // 심연 — 스킬 트리 5번째 나무가 얹는 값
+    gemMult: 1.0, summonRewardMult: 1.0, eventSoften: 0, overloadCdMult: 1.0,
     // 유닛 공속 (실시간 전투)
     unitAtkSpdMult: 1.0,
     // 서약 — 로비에서 스스로 거는 난이도 (전부 배율형)
@@ -129,50 +131,214 @@ const UPGRADE_CARDS = [
 ];
 
 // ─── 스킬 트리 정의 ────────────────────────────────────────────────────────────
+// ─── 캠프 스킬 트리 v2 ────────────────────────────────────────────────────────
+// v1은 노드 하나당 한 번만 찍는 27개짜리였다. 전부 48보석이라 두세 판이면 다 찍혔고,
+// 그 뒤로 보석은 쓸 데가 없어졌다 — 26층에서 140개가 남았다는 보고가 그 결과다.
+//
+// v2는 노드마다 10레벨이다. 레벨이 오를수록 값이 오르고(레벨 × 기본값),
+// 아래 줄은 위에서 5레벨을 쌓아야 열린다. 나무도 셋에서 다섯으로 늘렸다.
+//
+// 효과는 대부분 **배율**로 바꿨다. v1은 타워 공격력을 정액으로 얹었는데,
+// 기본 공격력이 2인 화살탑에 +880이 붙으니 층이 아무리 깊어져도 적이 녹았다 —
+// 26층까지 무피해로 막힌다는 보고가 정확히 이것이다.
+// 배율이면 적 체력 곡선과 같은 축에서 겨루므로 깊이가 의미를 되찾는다.
+
+// 퍼센트 표기 헬퍼 — 트리 설명은 전부 이걸 쓴다
+function skpct(x) { return Math.round(x * 1000) / 10 + '%'; }
+
+const SKILL_MAX_LV   = 10;   // 노드 하나가 오를 수 있는 최대 레벨
+const SKILL_ROW_GATE = 5;    // 아랫줄을 열려면 윗줄들에 쌓아야 하는 레벨 수
+
+// 레벨 L을 찍는 값 = 기본값 × L. 10레벨까지 다 올리면 기본값 × 55.
+function skillLevelCost(sk, level) { return Math.max(1, (sk.cost || 1) * Math.max(1, level)); }
+function skillNodeTotal(sk) {
+  let t = 0; for (let i = 1; i <= SKILL_MAX_LV; i++) t += skillLevelCost(sk, i); return t;
+}
+
 const SKILL_TREES = {
   tower: {
     name: '타워', icon: '🏹', color: '#22c55e',
     skills: [
-      { id:'tw_s1', name:'정밀 조준',   icon:'🎯', cost:1, req:null,   row:0, col:1, desc:'타워 공격력 +6',        apply:b=>{ b.towerDmg+=6; } },
-      { id:'tw_s2', name:'강화 화살',   icon:'🏹', cost:1, req:'tw_s1', row:1, col:0, desc:'타워 공격력 +12',       apply:b=>{ b.towerDmg+=12; } },
-      { id:'tw_s3', name:'속사',        icon:'⚡', cost:1, req:'tw_s1', row:1, col:1, desc:'타워 공속 +25%',        apply:b=>{ b.towerSpdMult*=1.25; } },
-      { id:'tw_s4', name:'요새화',      icon:'🏗️', cost:1, req:'tw_s1', row:1, col:2, desc:'타워 건설 비용 -3',     apply:b=>{ b.towerCostDiscount+=3; } },
-      { id:'tw_s5', name:'저격 강화',   icon:'👁️', cost:2, req:'tw_s2', row:2, col:0, desc:'사거리 +25%, 공격력 +8',apply:b=>{ b.towerRangeMult*=1.25; b.towerDmg+=8; } },
-      { id:'tw_s6', name:'연사 기계',   icon:'⚡', cost:2, req:'tw_s3', row:2, col:1, desc:'타워 공속 +40%',        apply:b=>{ b.towerSpdMult*=1.40; } },
-      { id:'tw_s7', name:'비용 절감',   icon:'💰', cost:2, req:'tw_s4', row:2, col:2, desc:'타워 건설 비용 -4, 사거리+15%',apply:b=>{ b.towerCostDiscount+=4; b.towerRangeMult*=1.15; } },
-      { id:'tw_s8', name:'폭발 화살',   icon:'💥', cost:3, req:'tw_s5', row:3, col:0, desc:'타워 범위 피해 + 공격력+15', apply:b=>{ b.towerSplash=true; b.towerDmg+=15; } },
-      { id:'tw_s9', name:'타워 마스터', icon:'🌟', cost:3, req:'tw_s6', row:3, col:1, desc:'공속 +30%, 공격력 +20',  apply:b=>{ b.towerSpdMult*=1.30; b.towerDmg+=20; } },
+      { id:'tw_s1', name:'정밀 조준', icon:'🎯', cost:1, row:0, col:1,
+        desc:v=>`타워 공격력 +${skpct(v*0.05)}`,      apply:(b,v)=>{ b.towerDmgMult *= 1 + v*0.05; } },
+      { id:'tw_s2', name:'강화 촉',   icon:'🏹', cost:1, row:1, col:0,
+        desc:v=>`타워 공격력 +${Math.round(v*2)}`,   apply:(b,v)=>{ b.towerDmg += v*2; } },
+      { id:'tw_s3', name:'속사',      icon:'⚡', cost:1, row:1, col:1,
+        desc:v=>`타워 공격속도 +${skpct(v*0.04)}`,     apply:(b,v)=>{ b.towerSpdMult *= 1 + v*0.04; } },
+      { id:'tw_s4', name:'요새화',    icon:'🏗️', cost:1, row:1, col:2,
+        desc:v=>`타워 건설비 -${Math.round(v)}`,     apply:(b,v)=>{ b.towerCostDiscount += Math.round(v); } },
+      { id:'tw_s5', name:'저격 조준', icon:'👁️', cost:2, row:2, col:0,
+        desc:v=>`타워 사거리 +${skpct(v*0.035)}`,      apply:(b,v)=>{ b.towerRangeMult *= 1 + v*0.035; } },
+      { id:'tw_s6', name:'관통탄',    icon:'🔩', cost:2, row:2, col:1,
+        desc:v=>`적 방어 무시 +${Math.round(v)}`,    apply:(b,v)=>{ b.towerPierce += Math.round(v); } },
+      { id:'tw_s7', name:'연사 기계', icon:'⚙️', cost:2, row:2, col:2,
+        desc:v=>`타워 공격속도 +${skpct(v*0.05)}`,     apply:(b,v)=>{ b.towerSpdMult *= 1 + v*0.05; } },
+      { id:'tw_s8', name:'폭발 화살', icon:'💥', cost:3, row:3, col:0,
+        desc:v=>`범위 피해 · 공격력 +${skpct(v*0.04)}`, apply:(b,v)=>{ b.towerSplash = true; b.towerDmgMult *= 1 + v*0.04; } },
+      { id:'tw_s9', name:'타워 숙련', icon:'🌟', cost:3, row:3, col:1,
+        desc:v=>`공격력 +${skpct(v*0.05)} · 공속 +${skpct(v*0.03)}`,
+        apply:(b,v)=>{ b.towerDmgMult *= 1 + v*0.05; b.towerSpdMult *= 1 + v*0.03; } },
     ]
   },
+
+  unit: {
+    name: '병력', icon: '⚔️', color: '#f97316',
+    skills: [
+      { id:'un_s1', name:'기초 훈련', icon:'⚔️', cost:1, row:0, col:1,
+        desc:v=>`아군 공격력 +${Math.round(v*2)}`,   apply:(b,v)=>{ b.unitAtk += v*2; } },
+      { id:'un_s2', name:'체력 단련', icon:'💪', cost:1, row:1, col:0,
+        desc:v=>`아군 HP +${Math.round(v*10)}`,       apply:(b,v)=>{ b.unitHp += v*10; } },
+      { id:'un_s3', name:'방어 훈련', icon:'🛡️', cost:1, row:1, col:1,
+        desc:v=>`아군 방어력 +${Math.round(v)}`,      apply:(b,v)=>{ b.unitDef += Math.round(v); } },
+      { id:'un_s4', name:'속공',      icon:'🌀', cost:1, row:1, col:2,
+        desc:v=>`아군 공격속도 +${skpct(v*0.03)}`,      apply:(b,v)=>{ b.unitAtkSpdMult *= 1 + v*0.03; } },
+      { id:'un_s5', name:'급소 교본', icon:'💥', cost:2, row:2, col:0,
+        desc:v=>`치명타 확률 +${skpct(v*0.02)}`,        apply:(b,v)=>{ b.critChance += v*0.02; } },
+      { id:'un_s6', name:'연계 공격', icon:'🔗', cost:2, row:2, col:1,
+        desc:v=>`추가 타격 확률 +${skpct(v*0.025)}`,    apply:(b,v)=>{ b.comboChance += v*0.025; } },
+      { id:'un_s7', name:'전장 치유', icon:'💚', cost:2, row:2, col:2,
+        desc:v=>`처치 시 아군 회복 +${Math.round(v*2)}`, apply:(b,v)=>{ b.killHeal += v*2; } },
+      { id:'un_s8', name:'정예 부대', icon:'🔥', cost:3, row:3, col:0,
+        desc:v=>`아군 공격력 +${Math.round(v*3)} · HP +${Math.round(v*14)}`,
+        apply:(b,v)=>{ b.unitAtk += v*3; b.unitHp += v*14; } },
+      { id:'un_s9', name:'대열 확장', icon:'➕', cost:3, row:3, col:1, maxLv:4,
+        desc:v=>`편성 슬롯 +${Math.round(v)}`,        apply:(b,v)=>{ b.maxSlotBonus += Math.round(v); } },
+    ]
+  },
+
   hero: {
     name: '영웅', icon: '👑', color: '#f59e0b',
     skills: [
-      { id:'hr_s1', name:'영웅 훈련',   icon:'⚔️', cost:1, req:null,   row:0, col:1, desc:'영웅 공격력 +8',         apply:b=>{ b.heroAtk+=8; } },
-      { id:'hr_s2', name:'투사',        icon:'🗡️', cost:1, req:'hr_s1', row:1, col:0, desc:'영웅 공격력 +15',        apply:b=>{ b.heroAtk+=15; } },
-      { id:'hr_s3', name:'재생',        icon:'💚', cost:1, req:'hr_s1', row:1, col:1, desc:'영웅 HP 재생 +5/초',      apply:b=>{ b.heroRegen+=5; } },
-      { id:'hr_s4', name:'경험 축적',   icon:'📖', cost:1, req:'hr_s1', row:1, col:2, desc:'영웅 시작 EXP +40',       apply:b=>{ b.heroStartExp+=40; } },
-      { id:'hr_s5', name:'신의 강림',   icon:'👑', cost:2, req:'hr_s2', row:2, col:0, desc:'영웅 모든 스탯 +20%',     apply:b=>{ b.heroStatMult*=1.20; b.heroAtk+=10; } },
-      { id:'hr_s6', name:'영웅의 오라', icon:'✨', cost:2, req:'hr_s3', row:2, col:1, desc:'아군 방어력 오라 +5',      apply:b=>{ b.heroAura+=5; } },
-      { id:'hr_s7', name:'빠른 성장',   icon:'⬆️', cost:2, req:'hr_s4', row:2, col:2, desc:'영웅 EXP +80%, 시작EXP+30',apply:b=>{ b.heroExpMult*=1.80; b.heroStartExp+=30; } },
-      { id:'hr_s8', name:'불사의 영웅', icon:'🔮', cost:3, req:'hr_s5', row:3, col:0, desc:'전사해도 결장 없음',        apply:b=>{ b.heroInstantRevive=true; } },
-      { id:'hr_s9', name:'영웅 전설',   icon:'🌟', cost:3, req:'hr_s6', row:3, col:1, desc:'스탯 +25%, 오라 +8',       apply:b=>{ b.heroStatMult*=1.25; b.heroAura+=8; } },
+      { id:'hr_s1', name:'영웅 훈련', icon:'⚔️', cost:1, row:0, col:1,
+        desc:v=>`영웅 공격력 +${Math.round(v*3)}`,    apply:(b,v)=>{ b.heroAtk += v*3; } },
+      { id:'hr_s2', name:'투사',      icon:'🗡️', cost:1, row:1, col:0,
+        desc:v=>`영웅 전체 능력 +${skpct(v*0.03)}`,     apply:(b,v)=>{ b.heroStatMult *= 1 + v*0.03; } },
+      { id:'hr_s3', name:'재생',      icon:'💚', cost:1, row:1, col:1,
+        desc:v=>`영웅 재생 +${Math.round(v*1.5)}/s`,   apply:(b,v)=>{ b.heroRegen += v*1.5; } },
+      { id:'hr_s4', name:'경험 축적', icon:'📖', cost:1, row:1, col:2,
+        desc:v=>`영웅 EXP +${skpct(v*0.08)}`,           apply:(b,v)=>{ b.heroExpMult *= 1 + v*0.08; } },
+      { id:'hr_s5', name:'지휘 오라', icon:'🎖️', cost:2, row:2, col:0,
+        desc:v=>`아군 방어 오라 +${Math.round(v)}`,    apply:(b,v)=>{ b.heroAura += Math.round(v); } },
+      { id:'hr_s6', name:'각인 증폭', icon:'✨', cost:2, row:2, col:1,
+        desc:v=>`영웅 스킬 피해 +${skpct(v*0.05)}`,      apply:(b,v)=>{ b.heroSkillMult *= 1 + v*0.05; } },
+      { id:'hr_s7', name:'질풍',      icon:'🌀', cost:2, row:2, col:2,
+        desc:v=>`영웅 공격속도 +${skpct(v*0.03)}`,       apply:(b,v)=>{ b.heroSpdMult *= 1 + v*0.03; } },
+      { id:'hr_s8', name:'불굴',      icon:'🔮', cost:3, row:3, col:0, maxLv:5,
+        desc:v=>v>=5 ? '전사해도 결장 없음' : `복귀 HP +${Math.round(v*8)}%p`,
+        apply:(b,v)=>{ b.heroReviveReduction += v; if (v>=5) b.heroInstantRevive = true; } },
+      { id:'hr_s9', name:'영웅 전설', icon:'🌟', cost:3, row:3, col:1,
+        desc:v=>`영웅 전체 능력 +${skpct(v*0.04)}`,      apply:(b,v)=>{ b.heroStatMult *= 1 + v*0.04; } },
     ]
   },
-  support: {
-    name: '보조', icon: '⚙️', color: '#60a5fa',
+
+  base: {
+    name: '기지', icon: '🏰', color: '#60a5fa',
     skills: [
-      { id:'sp_s1', name:'기지 강화',   icon:'🏰', cost:1, req:null,   row:0, col:1, desc:'기지 최대HP +30',         apply:b=>{ b.baseHpMax+=30; } },
-      { id:'sp_s2', name:'철옹성',      icon:'🛡️', cost:1, req:'sp_s1', row:1, col:0, desc:'기지 피해 -15%',          apply:b=>{ b.baseDefPct+=0.15; } },
-      { id:'sp_s3', name:'병력 강화',   icon:'⚔️', cost:1, req:'sp_s1', row:1, col:1, desc:'아군 공격력 +5, HP +20',   apply:b=>{ b.unitAtk+=5; b.unitHp+=20; } },
-      { id:'sp_s4', name:'황금 광맥',   icon:'💰', cost:1, req:'sp_s1', row:1, col:2, desc:'전투 골드 +25%',           apply:b=>{ b.battleGoldMult*=1.25; } },
-      { id:'sp_s5', name:'난공불락',    icon:'🏰', cost:2, req:'sp_s2', row:2, col:0, desc:'기지 피해 -20%, HP +40',    apply:b=>{ b.baseDefPct+=0.20; b.baseHpMax+=40; } },
-      { id:'sp_s6', name:'정예 부대',   icon:'🔥', cost:2, req:'sp_s3', row:2, col:1, desc:'아군 공격력+10, 슬롯+1',    apply:b=>{ b.unitAtk+=10; b.maxSlotBonus+=1; } },
-      { id:'sp_s7', name:'엘도라도',    icon:'🌟', cost:2, req:'sp_s4', row:2, col:2, desc:'전투 골드 +40%, 초기골드+25',apply:b=>{ b.battleGoldMult*=1.40; b.startGoldBonus+=25; } },
-      { id:'sp_s8', name:'성채',        icon:'🏯', cost:3, req:'sp_s5', row:3, col:0, desc:'기지 피해 -30%, 최대HP+50', apply:b=>{ b.baseDefPct+=0.30; b.baseHpMax+=50; } },
-      { id:'sp_s9', name:'병력 만개',   icon:'⚔️', cost:3, req:'sp_s6', row:3, col:1, desc:'아군 ATK+15, HP+30, 슬롯+1',apply:b=>{ b.unitAtk+=15; b.unitHp+=30; b.maxSlotBonus+=1; } },
+      { id:'bs_s1', name:'성벽 증축', icon:'🏰', cost:1, row:0, col:1,
+        desc:v=>`기지 최대 HP +${Math.round(v*12)}`,  apply:(b,v)=>{ b.baseHpMax += v*12; } },
+      { id:'bs_s2', name:'철갑',      icon:'🛡️', cost:1, row:1, col:0, maxLv:8,
+        desc:v=>`기지 피해 -${skpct(v*0.04)}`,          apply:(b,v)=>{ b.baseDefPct += v*0.04; } },
+      { id:'bs_s3', name:'자가 수복', icon:'🔧', cost:1, row:1, col:1,
+        desc:v=>`기지 재생 +${(v*0.15).toFixed(1)}/s`, apply:(b,v)=>{ b.baseRegen += v*0.15; } },
+      { id:'bs_s4', name:'보급 창고', icon:'📦', cost:1, row:1, col:2,
+        desc:v=>`시작 골드 +${Math.round(v*8)}`,       apply:(b,v)=>{ b.startGoldBonus += v*8; } },
+      { id:'bs_s5', name:'황금 광맥', icon:'💰', cost:2, row:2, col:0,
+        desc:v=>`전투 골드 +${skpct(v*0.05)}`,           apply:(b,v)=>{ b.battleGoldMult *= 1 + v*0.05; } },
+      { id:'bs_s6', name:'교대 근무', icon:'🛏️', cost:2, row:2, col:1,
+        desc:v=>`웨이브 후 회복 +${skpct(v*0.03)}`,      apply:(b,v)=>{ b.restHealBonus += v*0.03; } },
+      { id:'bs_s7', name:'상단 계약', icon:'🤝', cost:2, row:2, col:2,
+        desc:v=>`고용비 -${Math.round(v)} · 타워 건설비 -${Math.round(v*0.5)}`,
+        apply:(b,v)=>{ b.hireCostDiscount += Math.round(v); b.towerCostDiscount += Math.round(v*0.5); } },
+      { id:'bs_s8', name:'난공불락', icon:'🏯', cost:3, row:3, col:0,
+        desc:v=>`기지 최대 HP +${Math.round(v*18)} · 재생 +${(v*0.2).toFixed(1)}/s`,
+        apply:(b,v)=>{ b.baseHpMax += v*18; b.baseRegen += v*0.2; } },
+      { id:'bs_s9', name:'전시 경제', icon:'🏦', cost:3, row:3, col:1,
+        desc:v=>`전투 골드 +${skpct(v*0.06)} · 시작 골드 +${Math.round(v*10)}`,
+        apply:(b,v)=>{ b.battleGoldMult *= 1 + v*0.06; b.startGoldBonus += v*10; } },
+    ]
+  },
+
+  // 🌊 심연 — 무한 모드에만 값이 붙는 나무. 깊이 내려갈 사람을 위한 갈래다.
+  abyss: {
+    name: '심연', icon: '🌊', color: '#a78bfa',
+    skills: [
+      { id:'ab_s1', name:'심연 적응', icon:'🌊', cost:1, row:0, col:1,
+        desc:v=>`적 체력 -${skpct(v*0.015)}`,           apply:(b,v)=>{ b.mobHpMult *= 1 - Math.min(0.30, v*0.015); } },
+      { id:'ab_s2', name:'보석 감식', icon:'💎', cost:1, row:1, col:0,
+        desc:v=>`층당 보석 +${skpct(v*0.04)}`,           apply:(b,v)=>{ b.gemMult *= 1 + v*0.04; } },
+      { id:'ab_s3', name:'현상금 사냥', icon:'🎯', cost:1, row:1, col:1,
+        desc:v=>`소환 보상 +${skpct(v*0.06)}`,           apply:(b,v)=>{ b.summonRewardMult *= 1 + v*0.06; } },
+      { id:'ab_s4', name:'등불',      icon:'🏮', cost:1, row:1, col:2,
+        desc:v=>`불리한 층 이벤트 완화 ${skpct(v*0.05)}`, apply:(b,v)=>{ b.eventSoften += v*0.05; } },
+      { id:'ab_s5', name:'과부하 회로', icon:'⚡', cost:2, row:2, col:0,
+        desc:v=>`과부하 쿨다운 -${skpct(v*0.05)}`,        apply:(b,v)=>{ b.overloadCdMult *= 1 - Math.min(0.6, v*0.05); } },
+      { id:'ab_s6', name:'정예 사냥', icon:'⚔️', cost:2, row:2, col:1,
+        desc:v=>`정예 등장 +${skpct(v*0.015)} · 보상 +${skpct(v*0.04)}`,
+        apply:(b,v)=>{ b.eliteChance += v*0.015; b.summonRewardMult *= 1 + v*0.04; } },
+      { id:'ab_s7', name:'드랍 감지', icon:'🔎', cost:2, row:2, col:2,
+        desc:v=>`특수 드랍 확률 +${skpct(v*0.012)}`,      apply:(b,v)=>{ b.dropChance += v*0.012; } },
+      { id:'ab_s8', name:'심층 내성', icon:'🌑', cost:3, row:3, col:0,
+        desc:v=>`적 이동속도 -${skpct(v*0.02)}`,          apply:(b,v)=>{ b.pactEnemySpdMult *= 1 - Math.min(0.35, v*0.02); } },
+      { id:'ab_s9', name:'심연의 부름', icon:'🌟', cost:3, row:3, col:1,
+        desc:v=>`층당 보석 +${skpct(v*0.05)} · 적 체력 -${skpct(v*0.01)}`,
+        apply:(b,v)=>{ b.gemMult *= 1 + v*0.05; b.mobHpMult *= 1 - Math.min(0.20, v*0.01); } },
     ]
   }
 };
+
+const SKILL_V1_REFUND  = 2;   // 구 트리 노드 하나당 환급 보석
+const SKILL_TREE_ORDER = ['tower','unit','hero','base','abyss'];
+
+// 한 노드의 현재 레벨
+function skillLevel(gs, id) { return (gs.skillLevels && gs.skillLevels[id]) || 0; }
+// 그 나무에서 특정 줄보다 위에 쌓인 총 레벨
+function treeLevelsAbove(gs, treeId, row) {
+  const tree = SKILL_TREES[treeId]; if (!tree) return 0;
+  let n = 0;
+  for (const sk of tree.skills) if (sk.row < row) n += skillLevel(gs, sk.id);
+  return n;
+}
+function skillMaxLv(sk) { return sk.maxLv || SKILL_MAX_LV; }
+// 이 노드를 지금 한 단계 올릴 수 있는가
+function skillCanBuy(gs, treeId, sk) {
+  const lv = skillLevel(gs, sk.id);
+  if (lv >= skillMaxLv(sk)) return { ok:false, why:'max' };
+  const need = sk.row * SKILL_ROW_GATE;
+  if (treeLevelsAbove(gs, treeId, sk.row) < need) return { ok:false, why:'gate', need };
+  const cost = skillLevelCost(sk, lv + 1);
+  if ((gs.soulStones || 0) < cost) return { ok:false, why:'gems', cost };
+  return { ok:true, cost };
+}
+function buySkillNode(id, gs) {
+  for (const treeId of SKILL_TREE_ORDER) {
+    const sk = SKILL_TREES[treeId].skills.find(x => x.id === id);
+    if (!sk) continue;
+    const chk = skillCanBuy(gs, treeId, sk);
+    if (!chk.ok) return false;
+    gs.soulStones -= chk.cost;
+    gs.skillLevels = gs.skillLevels || {};
+    gs.skillLevels[id] = skillLevel(gs, id) + 1;
+    reapplyAllBonuses(gs);
+    return true;
+  }
+  return false;
+}
+function applySkillTree(gs) {
+  for (const treeId of SKILL_TREE_ORDER) {
+    for (const sk of SKILL_TREES[treeId].skills) {
+      const lv = skillLevel(gs, sk.id);
+      if (lv > 0) sk.apply(BONUSES, lv);
+    }
+  }
+}
+// 트리 전체를 다 올리는 데 드는 보석 (표시용)
+function skillTreeTotalCost() {
+  let t = 0;
+  for (const id of SKILL_TREE_ORDER)
+    for (const sk of SKILL_TREES[id].skills)
+      for (let i = 1; i <= skillMaxLv(sk); i++) t += skillLevelCost(sk, i);
+  return t;
+}
 
 // ─── 랜덤 카드 3장 뽑기 ──────────────────────────────────────────────────────
 function rollUpgradeCards(taken, count) {
@@ -227,33 +393,6 @@ function applyRunUpgrades(gs) {
     if (c.persist)      c.persist(BONUSES);
     else if (!c.once)   c.apply(BONUSES, gs);
   }
-}
-
-// ─── 스킬 트리를 BONUSES에 반영 ──────────────────────────────────────────────
-function applySkillTree(gs) {
-  const owned = gs.skillTreeOwned || [];
-  for (const tree of Object.values(SKILL_TREES)) {
-    for (const skill of tree.skills) {
-      if (owned.includes(skill.id)) skill.apply(BONUSES);
-    }
-  }
-}
-
-function buySkillNode(skillId, gs) {
-  let found = null;
-  for (const tree of Object.values(SKILL_TREES)) {
-    const s = tree.skills.find(sk => sk.id === skillId);
-    if (s) { found = s; break; }
-  }
-  if (!found) return false;
-  if ((gs.skillTreeOwned||[]).includes(skillId)) return false;
-  if (found.req && !(gs.skillTreeOwned||[]).includes(found.req)) return false;
-  if (gs.soulStones < found.cost) return false;
-  gs.soulStones -= found.cost;
-  if (!gs.skillTreeOwned) gs.skillTreeOwned = [];
-  gs.skillTreeOwned.push(skillId);
-  reapplyAllBonuses(gs);
-  return true;
 }
 
 // ─── 보석 정산 ────────────────────────────────────────────────────────────────

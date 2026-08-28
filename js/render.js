@@ -210,6 +210,25 @@ function renderDefense(ctx, gs) {
     if (enemyActive(e)) renderDefEnemy(ctx, e);
   }
 
+  // 🐗 성문으로 달려드는 무리 — 막을 수 없다는 것이 보이도록 붉게 두른다
+  for (const c of gs.chargers || []) {
+    if (c.dead || c.delay > 0) continue;
+    const pulse = 0.45 + 0.35 * Math.sin(Date.now() / 110 + c.x);
+    ctx.beginPath(); ctx.arc(c.x, c.y, c.radius + 5, 0, Math.PI*2);
+    ctx.strokeStyle = `rgba(239,68,68,${pulse})`; ctx.lineWidth = 2; ctx.stroke();
+    const drew = drawMobActor(ctx, c, c.y, true);
+    if (!drew) {
+      ctx.beginPath(); ctx.arc(c.x, c.y, c.radius, 0, Math.PI*2);
+      ctx.fillStyle = '#ef4444'; ctx.fill();
+      ctx.strokeStyle = '#fecaca'; ctx.lineWidth = 1.5; ctx.stroke();
+    }
+    ctx.fillStyle = '#fca5a5'; ctx.font = 'bold 9px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.shadowColor = '#000'; ctx.shadowBlur = 3;
+    ctx.fillText(`-${c.dmg}`, c.x, c.y - c.radius - 4);
+    ctx.shadowBlur = 0;
+  }
+
   // 영웅 (상단 배치 시)
   if (gs.hero.placement === 'defense') {
     renderHeroInDefense(ctx, gs.hero);
@@ -611,12 +630,11 @@ function renderBattleControls(ctx, gs) {
             manual?'#4c1d95':'#111c2e', manual?'#ddd6fe':'#94a3b8', true, 10);
     gs.ui.modeBtn={x:mx,y:by,w:mw,h:bh};
 
-    // 지금 빼면 몇 마리가 위로 올라오는지 버튼에 직접 띄운다 —
-    // 누르기 전에 값을 알아야 판단이 된다
-    const up = spillPreview(gs);
+    // 후퇴 비용을 버튼에 직접 띄운다 — 누르기 전에 값을 알아야 판단이 된다
+    const cost = retreatCost(wm.timer);
     const rw=104, rx=mx+mw+7;
-    drawBtn(ctx,rx,by,rw,bh, up>0?`🛡 후퇴 ⬆${up}`:'🛡 후퇴',
-            up>=10?'#4c1020':'#1e3a4f', up>=10?'#fca5a5':'#7dd3fc', true, 10);
+    drawBtn(ctx,rx,by,rw,bh, cost>0?`🛡 후퇴 -${cost}HP`:'🛡 후퇴',
+            cost>=14?'#4c1020':'#1e3a4f', cost>=14?'#fca5a5':'#7dd3fc', true, 10);
     gs.ui.retreatBtn={x:rx,y:by,w:rw,h:bh};
   } else {
     gs.ui.modeBtn=null;
@@ -1294,18 +1312,18 @@ function renderArenaOverlay(ctx, gs) {
     ctx.fillStyle='#7dd3fc'; ctx.font='bold 20px sans-serif';
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(`🛡 후퇴  획득 ${gs.battle.goldEarned}💰`, cx, cy-10);
-    const upR = gs.defenseEnemies.filter(e=>e.spilled && !e.dead && !e.reached).length;
-    ctx.fillStyle = upR > 0 ? '#fca5a5' : '#94a3b8'; ctx.font='bold 11px sans-serif';
-    ctx.fillText(upR > 0 ? `⬆️ ${upR}마리가 상단으로 넘어갔습니다 — 타워로 막으세요`
+    const chR = (gs.chargers||[]).filter(c=>!c.dead).length;
+    ctx.fillStyle = chR > 0 ? '#fca5a5' : '#94a3b8'; ctx.font='bold 11px sans-serif';
+    ctx.fillText(chR > 0 ? `🐗 ${chR}마리가 성문으로 달려듭니다`
                          : '상단이 끝나면 웨이브가 마무리됩니다', cx, cy+16);
   } else if (ph === 'idle_defeated' || ph === 'lost') {
     ctx.fillStyle='rgba(40,0,0,0.62)'; ctx.fillRect(ARENA_X,ARENA_Y,ARENA_W,ARENA_H);
     ctx.fillStyle='#ef4444'; ctx.font='bold 20px sans-serif';
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(`병력 전멸  획득 ${gs.battle.goldEarned}💰`, cx, cy-14);
-    const up = gs.defenseEnemies.filter(e=>e.spilled && !e.dead && !e.reached).length;
+    const ch = (gs.chargers||[]).filter(c=>!c.dead).length;
     ctx.fillStyle='#fca5a5'; ctx.font='bold 12px sans-serif';
-    ctx.fillText(up > 0 ? `⬆️ ${up}마리가 상단으로 넘어갔습니다 — 타워로 막으세요`
+    ctx.fillText(ch > 0 ? `🐗 ${ch}마리가 성문으로 달려듭니다 — 막을 수 없습니다`
                         : '상단이 끝나면 웨이브가 마무리됩니다', cx, cy+14);
   }
 }
@@ -1592,7 +1610,7 @@ function renderLobby(ctx, gs) {
 
   // 기록 탭은 내용이 화면을 넘는다 — 마을과 같은 드래그 스크롤을 붙인다.
   // 나머지 탭은 한 화면에 들어가므로 예전처럼 고정으로 둔다.
-  const scrollable = (L.tab === 'record');
+  const scrollable = (L.tab === 'record' || L.tab === 'skill');
   const sc = scrollable ? (gs.lobbyScroll || 0) : 0;
   _lobbyBottom = LOBBY_BODY_Y;
 
@@ -1760,17 +1778,21 @@ function renderLobbySortie(ctx, gs) {
   ctx.textAlign='right'; ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif';
   ctx.fillText(`${sp.owned}/${sp.total}`, CW-18, y+9);
   ctx.textAlign='left';
-  const owned = gs.skillTreeOwned || [];
-  if (owned.length) {
+  const lvd = [];
+  for (const tid of SKILL_TREE_ORDER)
+    for (const sk of SKILL_TREES[tid].skills) {
+      const lv = skillLevel(gs, sk.id);
+      if (lv > 0) lvd.push([sk, lv]);
+    }
+  if (lvd.length) {
     let sx = 18;
-    for (const tree of Object.values(SKILL_TREES)) {
-      for (const sk of tree.skills) {
-        if (!owned.includes(sk.id)) continue;
-        ctx.font='13px sans-serif'; ctx.fillStyle='#e2e8f0';
-        ctx.fillText(sk.icon, sx, y+28);
-        sx += 20;
-        if (sx > CW-40) break;
-      }
+    for (const [sk, lv] of lvd) {
+      if (sx > CW-46) { ctx.fillStyle='#475569'; ctx.font='9px sans-serif'; ctx.fillText('…', sx, y+30); break; }
+      ctx.font='13px sans-serif'; ctx.fillStyle='#e2e8f0';
+      ctx.fillText(sk.icon, sx, y+24);
+      ctx.font='bold 8px sans-serif'; ctx.fillStyle='#a78bfa';
+      ctx.fillText(String(lv), sx+2, y+38);
+      sx += 22;
     }
   } else {
     ctx.fillStyle='#475569'; ctx.font='10px sans-serif';
@@ -1778,7 +1800,7 @@ function renderLobbySortie(ctx, gs) {
   }
   // 진행 바
   ctx.fillStyle='#1e293b'; ctx.fillRect(18, y+46, CW-36, 5);
-  ctx.fillStyle='#a78bfa'; ctx.fillRect(18, y+46, (CW-36)*(sp.spent/sp.totalCost), 5);
+  ctx.fillStyle='#a78bfa'; ctx.fillRect(18, y+46, (CW-36)*(sp.total ? sp.owned/sp.total : 0), 5);
   y += sh + 10;
 
   // 서약
@@ -1845,34 +1867,34 @@ function renderLobbySortie(ctx, gs) {
 }
 
 // ── 🌳 스킬 ─────────────────────────────────────────────────────────────────
+// v2 — 나무 다섯, 노드마다 10레벨, 아랫줄은 윗줄에 레벨을 쌓아야 열린다.
 function renderLobbySkill(ctx, gs) {
   const L = gs.lobby;
-  const tabs = [
-    { id:'tower',   label:'🏹 타워', color:'#22c55e' },
-    { id:'hero',    label:'👑 영웅', color:'#f59e0b' },
-    { id:'support', label:'⚙️ 보조', color:'#60a5fa' },
-  ];
-  const tabW=(CW-16)/3, tabH=30, tabY=LOBBY_BODY_Y+8;
+  if (!SKILL_TREES[L.skillTree]) L.skillTree = 'tower';   // v1 세이브의 'support' 탭
+  const tabs = SKILL_TREE_ORDER.map(id => ({ id, ...SKILL_TREES[id] }));
+  const n = tabs.length;
+  const tabW = (CW - 16 - (n-1)*4) / n, tabH = 32, tabY = LOBBY_BODY_Y + 8;
+  gs.ui.skillTreeTabs = [];
   tabs.forEach((tab,i) => {
     const tx = 8 + i*(tabW+4);
     const active = L.skillTree === tab.id;
     roundRect(ctx,tx,tabY,tabW,tabH,5);
     ctx.fillStyle = active ? '#1e293b' : '#0a0d18'; ctx.fill();
     ctx.strokeStyle = active ? tab.color : '#334155'; ctx.lineWidth = active ? 2 : 1; ctx.stroke();
-    ctx.fillStyle = active ? tab.color : '#64748b'; ctx.font='bold 11px sans-serif';
     ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(tab.label, tx+tabW/2, tabY+tabH/2);
-    if (tab.id==='tower')        gs.ui.towerTabBtn   = {x:tx,y:tabY,w:tabW,h:tabH};
-    else if (tab.id==='hero')    gs.ui.heroTabBtn    = {x:tx,y:tabY,w:tabW,h:tabH};
-    else                         gs.ui.supportTabBtn = {x:tx,y:tabY,w:tabW,h:tabH};
+    ctx.fillStyle = active ? tab.color : '#64748b';
+    ctx.font='13px sans-serif'; ctx.fillText(tab.icon, tx+tabW/2, tabY+11);
+    ctx.font='bold 9px sans-serif'; ctx.fillText(tab.name, tx+tabW/2, tabY+24);
+    gs.ui.skillTreeTabs.push({x:tx,y:tabY,w:tabW,h:tabH,id:tab.id});
   });
 
   gs.ui.metaCards = [];
-  const treeTop = tabY + tabH + 14;
-  _renderSkillTree(ctx, gs, SKILL_TREES[L.skillTree] || SKILL_TREES.tower, treeTop);
+  const treeTop = tabY + tabH + 12;
+  const bottom = _renderSkillTree(ctx, gs, L.skillTree, treeTop);
   // 각인은 영웅 탭 아래 빈 자리에 — 스킬 트리를 밀어내지 않는다
   gs.ui.sigilCards = [];
-  if (L.skillTree === 'hero') renderSigilPicker(ctx, gs, treeTop + 4*(68+40) - 14);
+  if (L.skillTree === 'hero') renderSigilPicker(ctx, gs, bottom + 8);
+  _lobbyBottom = (L.skillTree === 'hero') ? bottom + 8 + 130 : bottom;
 }
 
 // ── 👑 영웅 각인 ────────────────────────────────────────────────────────────
@@ -2360,13 +2382,9 @@ function renderResult(ctx, gs) {
   const affordable = UNLOCK_DEFS.filter(u => !isUnlocked(u.id) && gs.soulStones >= u.cost);
   const nextLocked = UNLOCK_DEFS.find(u => !isUnlocked(u.id));
   const buyable    = [];
-  for (const tree of Object.values(SKILL_TREES)) {
-    for (const sk of tree.skills) {
-      if ((gs.skillTreeOwned||[]).includes(sk.id)) continue;
-      if (sk.req && !(gs.skillTreeOwned||[]).includes(sk.req)) continue;
-      if (gs.soulStones >= sk.cost) buyable.push(sk);
-    }
-  }
+  for (const tid of SKILL_TREE_ORDER)
+    for (const sk of SKILL_TREES[tid].skills)
+      if (skillCanBuy(gs, tid, sk).ok) buyable.push(sk);
 
   const ph = 96;
   roundRect(ctx,20,y,CW-40,ph,8);
@@ -2417,82 +2435,107 @@ function renderResult(ctx, gs) {
   ctx.fillText('보석은 캠프에서 스킬과 해금에 쓸 수 있습니다', CW/2, by+bh+10);
 }
 
-function _renderSkillTree(ctx, gs, tree, startY) {
-  const nodeW=110, nodeH=68, hGap=15, vGap=40;
+// 나무 하나를 그린다. 그린 맨 아래 y를 돌려준다.
+function _renderSkillTree(ctx, gs, treeId, startY) {
+  const tree = SKILL_TREES[treeId] || SKILL_TREES.tower;
+  const nodeW=112, nodeH=78, hGap=14, vGap=20;
   const totalW = 3*nodeW + 2*hGap;
   const offX = (CW - totalW) / 2;
+  const getPos = (row, col) => ({ x: offX + col*(nodeW+hGap), y: startY + row*(nodeH+vGap) });
 
-  const getPos = (row, col) => ({
-    x: offX + col*(nodeW+hGap),
-    y: startY + row*(nodeH+vGap)
-  });
-
-  const owned = gs.skillTreeOwned || [];
-
-  // Draw connection lines first
-  for (const skill of tree.skills) {
-    if (!skill.req) continue;
-    const parent = tree.skills.find(s => s.id === skill.req);
-    if (!parent) continue;
-    const pp = getPos(parent.row, parent.col);
-    const cp = getPos(skill.row, skill.col);
-    const canReach = owned.includes(skill.req);
-    ctx.strokeStyle = canReach ? (owned.includes(skill.id) ? '#22c55e' : '#334155') : '#1e293b';
-    ctx.lineWidth = 2;
-    ctx.setLineDash(canReach ? [] : [4,4]);
-    ctx.beginPath();
-    ctx.moveTo(pp.x+nodeW/2, pp.y+nodeH);
-    ctx.lineTo(cp.x+nodeW/2, cp.y);
-    ctx.stroke();
+  // 줄 사이 게이트 안내 — 어느 줄이 왜 잠겼는지 한 줄로 보인다
+  const rows = [...new Set(tree.skills.map(s=>s.row))].sort((a,b)=>a-b);
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  for (const row of rows) {
+    if (row === 0) continue;
+    const need = row * SKILL_ROW_GATE, have = treeLevelsAbove(gs, treeId, row);
+    const gy = startY + row*(nodeH+vGap) - vGap/2;
+    const open = have >= need;
+    ctx.strokeStyle = open ? tree.color : '#1e293b'; ctx.lineWidth = open ? 2 : 1;
+    ctx.setLineDash(open ? [] : [4,4]);
+    ctx.beginPath(); ctx.moveTo(offX+10, gy); ctx.lineTo(offX+totalW-10, gy); ctx.stroke();
     ctx.setLineDash([]);
+    const label = open ? `${row+1}단` : `🔒 윗줄 ${have}/${need}Lv`;
+    ctx.font='bold 9px sans-serif';
+    const lw = ctx.measureText(label).width + 12;
+    ctx.fillStyle='#080b14'; ctx.fillRect(CW/2-lw/2, gy-7, lw, 14);
+    ctx.fillStyle = open ? tree.color : '#64748b';
+    ctx.fillText(label, CW/2, gy);
   }
 
-  // Draw nodes
-  for (const skill of tree.skills) {
-    const {x,y} = getPos(skill.row, skill.col);
-    const isOwned = owned.includes(skill.id);
-    const reqMet = !skill.req || owned.includes(skill.req);
-    const canBuy = !isOwned && reqMet && gs.soulStones >= skill.cost;
+  for (const sk of tree.skills) {
+    const {x,y} = getPos(sk.row, sk.col);
+    const lv    = skillLevel(gs, sk.id);
+    const max   = skillMaxLv(sk);
+    const chk   = skillCanBuy(gs, treeId, sk);
+    const maxed = lv >= max;
+    const gated = chk.why === 'gate';
+    const canBuy = chk.ok;
 
     roundRect(ctx,x,y,nodeW,nodeH,8);
-    ctx.fillStyle = isOwned ? '#0d2a1a' : canBuy ? '#0d1929' : '#080d18'; ctx.fill();
-    ctx.strokeStyle = isOwned ? tree.color : canBuy ? '#4b6cb7' : '#1e293b';
-    ctx.lineWidth = isOwned ? 2.5 : canBuy ? 2 : 1; ctx.stroke();
+    ctx.fillStyle = maxed ? '#0d2a1a' : canBuy ? '#0d1929' : '#080d18'; ctx.fill();
+    ctx.strokeStyle = maxed ? tree.color : canBuy ? '#4b6cb7' : lv>0 ? '#334155' : '#1e293b';
+    ctx.lineWidth = maxed ? 2.5 : canBuy ? 2 : 1; ctx.stroke();
+    ctx.globalAlpha = gated ? 0.4 : 1;
 
-    ctx.font='22px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
-    ctx.globalAlpha = reqMet ? 1.0 : 0.35;
-    ctx.fillText(skill.icon, x+nodeW/2, y+5);
+    // 아이콘 + 이름 + 레벨
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.font='16px sans-serif'; ctx.fillText(sk.icon, x+7, y+6);
+    ctx.fillStyle = lv>0 ? tree.color : '#cbd5e1';
+    ctx.font='bold 9px sans-serif'; ctx.fillText(sk.name, x+27, y+10);
+    ctx.textAlign='right';
+    ctx.fillStyle = maxed ? '#86efac' : lv>0 ? '#e2e8f0' : '#475569';
+    ctx.font='bold 9px sans-serif'; ctx.fillText(`${lv}/${max}`, x+nodeW-7, y+10);
 
-    ctx.fillStyle = isOwned ? tree.color : reqMet ? '#e2e8f0' : '#475569';
-    ctx.font='bold 9px sans-serif'; ctx.textBaseline='top';
-    ctx.fillText(skill.name, x+nodeW/2, y+30);
+    // 레벨 눈금 — 칸 수만큼 잘라 채운다
+    const bx=x+7, bw=nodeW-14, by=y+26, seg=bw/max;
+    for (let i=0;i<max;i++) {
+      ctx.fillStyle = i < lv ? tree.color : '#1a2333';
+      ctx.fillRect(bx + i*seg + 0.5, by, seg-1.5, 4);
+    }
 
-    ctx.fillStyle = isOwned ? '#86efac' : reqMet ? '#94a3b8' : '#374151';
+    // 지금 효과(레벨 0이면 1레벨 미리보기)
+    ctx.textAlign='left';
+    ctx.fillStyle = lv>0 ? '#94a3b8' : '#64748b';
     ctx.font='8px sans-serif';
-    const descWords = skill.desc.split(',');
-    if (descWords.length > 1) {
-      ctx.fillText(descWords[0]+',', x+nodeW/2, y+42);
-      ctx.fillText(descWords[1].trim(), x+nodeW/2, y+52);
-    } else {
-      ctx.fillText(skill.desc, x+nodeW/2, y+44);
-    }
+    const txt = sk.desc(lv > 0 ? lv : 1);
+    _wrapSkillDesc(ctx, txt, x+7, y+36, nodeW-14, 10, 2);
 
-    if (isOwned) {
+    // 아래줄 — 다음 레벨 값
+    ctx.textAlign='center';
+    if (maxed) {
       ctx.fillStyle='#22c55e'; ctx.font='bold 9px sans-serif';
-      ctx.fillText('✓ 습득', x+nodeW/2, y+nodeH-8);
-    } else if (reqMet) {
-      const costColor = canBuy ? '#f59e0b' : '#64748b';
-      ctx.fillStyle=costColor; ctx.font='bold 9px sans-serif';
-      ctx.fillText(`💎 ${skill.cost}`, x+nodeW/2, y+nodeH-8);
-      gs.ui.metaCards.push({x,y,w:nodeW,h:nodeH,skillId:skill.id,icon:skill.icon});
+      ctx.fillText('★ 최대', x+nodeW/2, y+nodeH-13);
+    } else if (gated) {
+      ctx.fillStyle='#475569'; ctx.font='bold 8px sans-serif';
+      ctx.fillText(`🔒 윗줄 ${sk.row*SKILL_ROW_GATE}Lv 필요`, x+nodeW/2, y+nodeH-12);
     } else {
-      ctx.fillStyle='#374151'; ctx.font='8px sans-serif';
-      ctx.fillText('🔒 선행 필요', x+nodeW/2, y+nodeH-8);
+      const cost = skillLevelCost(sk, lv+1);
+      ctx.fillStyle = canBuy ? '#f59e0b' : '#64748b';
+      ctx.font='bold 10px sans-serif';
+      ctx.fillText(`💎 ${cost}  →  Lv${lv+1}`, x+nodeW/2, y+nodeH-13);
+      gs.ui.metaCards.push({x,y,w:nodeW,h:nodeH,skillId:sk.id,icon:sk.icon});
     }
-    ctx.globalAlpha = 1.0;
+    ctx.globalAlpha = 1;
   }
+
+  const lastRow = rows.length ? rows[rows.length-1] : 0;
+  return startY + (lastRow+1)*(nodeH+vGap);
 }
 
+// 폭에 맞춰 잘라 그린다 — 설명이 노드를 넘지 않게
+function _wrapSkillDesc(ctx, text, x, y, maxW, lh, maxLines) {
+  const words = String(text).split(' ');
+  let line = '', n = 0;
+  for (const w of words) {
+    const t = line ? line + ' ' + w : w;
+    if (ctx.measureText(t).width > maxW && line) {
+      ctx.fillText(line, x, y + n*lh); n++; line = w;
+      if (n >= maxLines) { line=''; break; }
+    } else line = t;
+  }
+  if (line && n < maxLines) ctx.fillText(line, x, y + n*lh);
+}
 
 
 // ─── 건물 서브 화면 ───────────────────────────────────────────────────────────
