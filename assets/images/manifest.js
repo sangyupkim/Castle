@@ -64,6 +64,123 @@ self.SPRITE_FILES = {
   'crew.tesla':  'crew/tesla.png',      // 마법 상인
   'crew.poison': 'crew/poison.png',     // 연금술사
 
+  // 🧱 석대 — 0x72 던전 팩의 진짜 석재 타일. 예전에는 캔버스 도형으로 그렸는데
+  // 사람만 픽셀 아트고 받침만 도형이라 재질이 따로 놀았다.
+  'keep.wall':   'keep/wall.png',       // 벽돌 몸통 (16×16, 세로로 이어 붙인다)
+  'keep.top.l':  'keep/top_l.png',      // 처마 왼쪽 끝
+  'keep.top.m':  'keep/top_m.png',      // 처마 가운데
+  'keep.top.r':  'keep/top_r.png',      // 처마 오른쪽 끝
+  'keep.hole':   'keep/hole.png',       // 총안 구멍
+  'keep.door':   'keep/door.png',       // 출입문 (32×32)
+  // ★5 분기 깃발 — 분기 색에 가장 가까운 것을 건다
+  'keep.banner.red':    'keep/banner_red.png',
+  'keep.banner.blue':   'keep/banner_blue.png',
+  'keep.banner.green':  'keep/banner_green.png',
+  'keep.banner.yellow': 'keep/banner_yellow.png',
+
+  // ⚔️ 용병 · 👑 영웅 · 👾 아레나 몹 — 전부 4프레임 걷기.
+  // 훅(unit.* / hero.* / mob.*)은 예전부터 있었는데 그림이 없어서
+  // 스무 종류가 전부 '색깔 원 + 이모지'로 그려지고 있었다.
+  // 한 장짜리로 두면 실시간 아레나에서 죽은 것처럼 보여 프레임을 넣었다.
+
+  // 기사
+  'unit.swordsman.0': 'units/swordsman_0.png',
+  'unit.swordsman.1': 'units/swordsman_1.png',
+  'unit.swordsman.2': 'units/swordsman_2.png',
+  'unit.swordsman.3': 'units/swordsman_3.png',
+  // 궁수
+  'unit.archer.0': 'units/archer_0.png',
+  'unit.archer.1': 'units/archer_1.png',
+  'unit.archer.2': 'units/archer_2.png',
+  'unit.archer.3': 'units/archer_3.png',
+  // 주교
+  'unit.healer.0': 'units/healer_0.png',
+  'unit.healer.1': 'units/healer_1.png',
+  'unit.healer.2': 'units/healer_2.png',
+  'unit.healer.3': 'units/healer_3.png',
+  // 대형 기사
+  'unit.guardian.0': 'units/guardian_0.png',
+  'unit.guardian.1': 'units/guardian_1.png',
+  'unit.guardian.2': 'units/guardian_2.png',
+  'unit.guardian.3': 'units/guardian_3.png',
+  // 마법사
+  'unit.mage.0': 'units/mage_0.png',
+  'unit.mage.1': 'units/mage_1.png',
+  'unit.mage.2': 'units/mage_2.png',
+  'unit.mage.3': 'units/mage_3.png',
+  // 도둑
+  'unit.rogue.0': 'units/rogue_0.png',
+  'unit.rogue.1': 'units/rogue_1.png',
+  'unit.rogue.2': 'units/rogue_2.png',
+  'unit.rogue.3': 'units/rogue_3.png',
+  // 백정
+  'unit.berserker.0': 'units/berserker_0.png',
+  'unit.berserker.1': 'units/berserker_1.png',
+  'unit.berserker.2': 'units/berserker_2.png',
+  'unit.berserker.3': 'units/berserker_3.png',
+  // 정예 기사
+  'unit.paladin.0': 'units/paladin_0.png',
+  'unit.paladin.1': 'units/paladin_1.png',
+  'unit.paladin.2': 'units/paladin_2.png',
+  'unit.paladin.3': 'units/paladin_3.png',
+  // 전령
+  'unit.marksman.0': 'units/marksman_0.png',
+  'unit.marksman.1': 'units/marksman_1.png',
+  'unit.marksman.2': 'units/marksman_2.png',
+  'unit.marksman.3': 'units/marksman_3.png',
+
+  // 검성 — 중장 기사
+  'hero.blade.0': 'hero/blade_0.png',
+  'hero.blade.1': 'hero/blade_1.png',
+  'hero.blade.2': 'hero/blade_2.png',
+  'hero.blade.3': 'hero/blade_3.png',
+  // 수호자 — 대형 정예 기사
+  'hero.warden.0': 'hero/warden_0.png',
+  'hero.warden.1': 'hero/warden_1.png',
+  'hero.warden.2': 'hero/warden_2.png',
+  'hero.warden.3': 'hero/warden_3.png',
+  // 술사 — 마법 상인
+  'hero.sorcerer.0': 'hero/sorcerer_0.png',
+  'hero.sorcerer.1': 'hero/sorcerer_1.png',
+  'hero.sorcerer.2': 'hero/sorcerer_2.png',
+  'hero.sorcerer.3': 'hero/sorcerer_3.png',
+
+  // 고블린
+  'mob.goblin.0': 'mobs2/goblin_0.png',
+  'mob.goblin.1': 'mobs2/goblin_1.png',
+  'mob.goblin.2': 'mobs2/goblin_2.png',
+  'mob.goblin.3': 'mobs2/goblin_3.png',
+  // 사냥개
+  'mob.hound.0': 'mobs2/hound_0.png',
+  'mob.hound.1': 'mobs2/hound_1.png',
+  'mob.hound.2': 'mobs2/hound_2.png',
+  'mob.hound.3': 'mobs2/hound_3.png',
+  // 오크
+  'mob.orc.0': 'mobs2/orc_0.png',
+  'mob.orc.1': 'mobs2/orc_1.png',
+  'mob.orc.2': 'mobs2/orc_2.png',
+  'mob.orc.3': 'mobs2/orc_3.png',
+  // 암흑궁수
+  'mob.darkarch.0': 'mobs2/darkarch_0.png',
+  'mob.darkarch.1': 'mobs2/darkarch_1.png',
+  'mob.darkarch.2': 'mobs2/darkarch_2.png',
+  'mob.darkarch.3': 'mobs2/darkarch_3.png',
+  // 오우거
+  'mob.ogre.0': 'mobs2/ogre_0.png',
+  'mob.ogre.1': 'mobs2/ogre_1.png',
+  'mob.ogre.2': 'mobs2/ogre_2.png',
+  'mob.ogre.3': 'mobs2/ogre_3.png',
+  // 보스
+  'mob.boss.0': 'mobs2/boss_0.png',
+  'mob.boss.1': 'mobs2/boss_1.png',
+  'mob.boss.2': 'mobs2/boss_2.png',
+  'mob.boss.3': 'mobs2/boss_3.png',
+  // 군주
+  'mob.warlord.0': 'mobs2/warlord_0.png',
+  'mob.warlord.1': 'mobs2/warlord_1.png',
+  'mob.warlord.2': 'mobs2/warlord_2.png',
+  'mob.warlord.3': 'mobs2/warlord_3.png',
+
   // 👹 마왕 — 0x72 던전 팩의 big_demon(32×36). 100층에 한 마리만 나오므로
   // 배우(SPRITE_ACTORS)로 등록하지 않고 낱장 8프레임을 시간으로 돌린다.
   'mob.demon.idle.0': 'mobs/demon/idle_0.png',

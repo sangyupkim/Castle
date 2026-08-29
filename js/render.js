@@ -504,51 +504,68 @@ function towerArtMode() {
 
 // 석대 본체 — 사다리꼴로 쌓은 돌탑. 티어가 오르면 높아지고 총안이 붙는다.
 // 사람이 설 자리(y)를 돌려준다.
+// 분기 색에 가장 가까운 깃발을 고른다 — 깃발은 넷뿐이고 분기는 열여덟이다
+function bannerKeyFor(hex) {
+  if (!hex) return null;
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex); if (!m) return null;
+  const n = parseInt(m[1], 16);
+  const r = (n>>16)&255, g = (n>>8)&255, b = n&255;
+  const cands = { red:[220,60,60], blue:[70,130,220], green:[80,200,110], yellow:[230,190,60] };
+  let best = 'red', bd = Infinity;
+  for (const k in cands) {
+    const c = cands[k];
+    const d = (r-c[0])**2 + (g-c[1])**2 + (b-c[2])**2;
+    if (d < bd) { bd = d; best = k; }
+  }
+  return Sprites.pick(`keep.banner.${best}`);
+}
+
+// 석대 — 0x72 석재 타일을 쌓아 올린다. 사람이 설 자리(y)를 돌려준다.
+// 타일이 아직 안 실렸으면 예전 도형 방식으로 물러난다.
 function drawTowerKeep(ctx, x, groundY, tier, tintColor) {
-  const w = 26, h = 10 + tier * 7;             // ★1~2:17 ★3~4:24 ★5~:31
+  const wallK = Sprites.pick('keep.wall');
+  const T = 13;                                 // 타일 한 장을 이만큼으로 그린다
+  const cols = 2, rows = 1 + tier;              // ★1~2:1줄 ★3~4:2줄 ★5~:3줄
+  const w = cols * T, h = rows * T;
   const top = groundY - h;
-  // 색은 기존 타워 그림에서 뽑았다 (#657392 몸통 / #2a2f4e 그늘) — 팔레트가
-  // 어긋나면 사람만 새 팩이고 석대만 도형인 티가 난다.
-  const BODY = '#657392', DARK = '#4a5573', LIGHT = '#8b98b5', LINE = '#2a2f4e';
-  // 몸통 — 아래가 넓은 사다리꼴
-  ctx.beginPath();
-  ctx.moveTo(x - w/2 - 2, groundY);
-  ctx.lineTo(x + w/2 + 2, groundY);
-  ctx.lineTo(x + w/2,     top);
-  ctx.lineTo(x - w/2,     top);
-  ctx.closePath();
-  ctx.fillStyle = BODY; ctx.fill();
-  // 돌 줄눈 — 한 줄 걸러 반 칸씩 어긋나게 놓아 벽돌로 읽히게 한다
-  ctx.fillStyle = LINE;
-  let row = 0;
-  for (let yy = top + 5; yy < groundY - 1; yy += 5, row++) {
-    ctx.fillRect(x - w/2 - 1, yy, w + 2, 1);
-    const ox = row % 2 ? 0 : w/4;
-    ctx.fillRect(x - w/4 + ox, yy, 1, 5);
+
+  if (!wallK) {                                  // ── 폴백: 도형 ──
+    ctx.fillStyle = '#657392';
+    ctx.fillRect(x - w/2, top, w, h);
+    ctx.fillStyle = '#2a2f4e'; ctx.fillRect(x - w/2, top, w, 1);
+    return top;
   }
-  // 왼쪽 밝게 / 오른쪽 어둡게
-  ctx.fillStyle = LIGHT; ctx.fillRect(x - w/2, top, 2, h);
-  ctx.fillStyle = DARK;  ctx.fillRect(x + w/2 - 2, top, 2, h);
-  // 아치형 출입구 — 이게 있어야 '건물'로 읽힌다
-  const dw = 8, dh = Math.min(10, h - 6);
-  ctx.fillStyle = LINE;
-  ctx.beginPath();
-  ctx.moveTo(x - dw/2, groundY);
-  ctx.lineTo(x - dw/2, groundY - dh + dw/2);
-  ctx.arc(x, groundY - dh + dw/2, dw/2, Math.PI, 0);
-  ctx.lineTo(x + dw/2, groundY);
-  ctx.closePath(); ctx.fill();
-  // 난간 — 사람이 서는 발판
-  ctx.fillStyle = tintColor || LIGHT;
-  ctx.fillRect(x - w/2 - 3, top - 3, w + 6, 3);
-  ctx.fillStyle = 'rgba(0,0,0,0.25)';
-  ctx.fillRect(x - w/2 - 3, top, w + 6, 1);
-  // ★5 — 총안
+
+  // 몸통 — 벽돌을 격자로 채운다
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++)
+      Sprites.draw(ctx, wallK, x - w/2 + c*T, top + r*T, T, T);
+
+  // 출입구 — 맨 아랫줄 가운데. '건물'로 읽히게 하는 것은 결국 문이다.
+  const doorK = Sprites.pick('keep.door');
+  if (doorK && rows >= 1) {
+    const dw = T * 0.9, dh = T * 0.95;
+    Sprites.draw(ctx, doorK, x - dw/2, groundY - dh, dw, dh);
+  }
+  // 총안 — 2줄 이상이면 가운뎃줄에 구멍 하나
+  const holeK = Sprites.pick('keep.hole');
+  if (holeK && rows >= 2) Sprites.draw(ctx, holeK, x - T*0.35, top + T*0.35, T*0.7, T*0.7);
+
+  // 처마 — 왼끝/가운데/오른끝. 사람은 이 위에 선다.
+  const tl = Sprites.pick('keep.top.l'), tm = Sprites.pick('keep.top.m'), tr = Sprites.pick('keep.top.r');
+  const eaveH = T, eaveY = top - T * 0.72;
+  if (tl && tm && tr) {
+    Sprites.draw(ctx, tl, x - w/2 - T*0.30, eaveY, T, eaveH);
+    for (let c = 1; c < cols - 1; c++) Sprites.draw(ctx, tm, x - w/2 + c*T, eaveY, T, eaveH);
+    Sprites.draw(ctx, tr, x + w/2 - T*0.70, eaveY, T, eaveH);
+  }
+
+  // ★5 — 분기 깃발을 몸통에 건다
   if (tier >= 2) {
-    ctx.fillStyle = tintColor || LIGHT;
-    for (let i = 0; i < 4; i++) ctx.fillRect(x - w/2 - 3 + i*8, top - 6, 4, 3);
+    const bk = bannerKeyFor(tintColor);
+    if (bk) Sprites.draw(ctx, bk, x - T*0.5, top + T*0.15, T, T);
   }
-  return top - 3;                              // 난간 윗면 = 발판
+  return top - T * 0.06;                         // 처마 윗면 = 발판
 }
 
 function renderTower(ctx, t) {
@@ -1595,11 +1612,18 @@ function drawMobActor(ctx, e, drawY, arena) {
 }
 
 // 아레나 개체 그림 키 — 영웅은 각인별로, 나머지는 타입 아이디로 찾는다.
-//   unit.swordsman · unit.rogue · hero.blade · mob.goblin …
+//   unit.swordsman.0~3 · hero.blade.0~3 · mob.goblin.0~3
+// 넷씩 돌린다. 한 장으로 두면 실시간 아레나에서 죽은 것처럼 보인다.
+// 개체마다 위상을 어긋나게 해서 스무 마리가 한 박자로 움직이는 것을 막는다.
+const ARENA_ANIM_FPS = 8;
 function arenaSpriteKey(e) {
-  if (e.isHero)   return Sprites.pick(`hero.${e.sigil || DEFAULT_SIGIL}`, 'hero.blade');
-  if (e.isPlayer) return Sprites.pick(`unit.${e.typeId}`);
-  return Sprites.pick(`mob.${e.typeId}`);
+  const f = (Math.floor(Date.now() / (1000 / ARENA_ANIM_FPS)) + (e.id || 0)) % 4;
+  if (e.isHero) {
+    const sg = e.sigil || DEFAULT_SIGIL;
+    return Sprites.pick(`hero.${sg}.${f}`, `hero.${sg}.0`, `hero.blade.0`);
+  }
+  if (e.isPlayer) return Sprites.pick(`unit.${e.typeId}.${f}`, `unit.${e.typeId}.0`);
+  return Sprites.pick(`mob.${e.typeId}.${f}`, `mob.${e.typeId}.0`);
 }
 
 function renderArenaEntity(ctx, e, alpha) {
@@ -1624,8 +1648,18 @@ function renderArenaEntity(ctx, e, alpha) {
   }
   // 그림이 있으면 몸 대신 그린다. 충돌원은 발밑, 그림은 그 위로 선다.
   const skey = arenaSpriteKey(e);
-  const drewArt = skey ? Sprites.drawFoot(ctx, skey, e.x, e.y + r, r*ARENA_ART_W_MULT, r*ARENA_ART_H_MULT)
-                       : (!e.isPlayer && drawMobActor(ctx, e, e.y, true));
+  // 그림마다 비율이 다르다 (16×16 고블린 ~ 32×36 오우거 ~ 32×32 용병).
+  // 가로·세로에 각각 고정 배수를 곱하면 정사각 그림은 늘어나고 세로긴 그림은 눌린다.
+  // 가로를 기준으로 잡고 세로는 원본 비율을 따라가게 한다.
+  let drewArt = false;
+  if (skey) {
+    const sz = Sprites.size(skey);
+    const w  = r * ARENA_ART_W_MULT;
+    const h  = sz ? w * (sz.h / sz.w) : r * ARENA_ART_H_MULT;
+    drewArt = Sprites.drawFoot(ctx, skey, e.x, e.y + r, w, h);
+  } else if (!e.isPlayer) {
+    drewArt = drawMobActor(ctx, e, e.y, true);
+  }
   if (!drewArt) {
   ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, Math.PI*2);
   ctx.fillStyle = e.isHero ? COLORS.hero : e.color; ctx.fill();
