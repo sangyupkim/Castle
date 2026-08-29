@@ -4,15 +4,49 @@
 function hpColor(r) {
   return r > 0.6 ? COLORS.hpGreen : r > 0.3 ? COLORS.hpYellow : COLORS.hpRed;
 }
+// ─── 🖼 9슬라이스 패널 ───────────────────────────────────────────────────────
+// Cryo's Mini GUI의 24×24 판을 8px 모서리 기준으로 늘린다.
+// 모서리는 그대로 두고 변과 가운데만 늘려야 테두리 장식이 안 뭉개진다.
+// 그림이 없으면 false를 돌려주고, 부르는 쪽이 예전 roundRect로 물러난다.
+const PANEL9_CORNER = 8;
+function drawPanel9(ctx, key, x, y, w, h) {
+  const k = Sprites.pick(key); if (!k) return false;
+  const sz = Sprites.size(k);  if (!sz) return false;
+  const c = PANEL9_CORNER;
+  if (w < c*2 || h < c*2) return false;      // 너무 작으면 모서리끼리 겹친다
+  const sw = sz.w, sh = sz.h, sc = c;
+  const px = [x, x+c, x+w-c], pw = [c, w-2*c, c];
+  const sx = [0, sc, sw-sc],  ssw = [sc, sw-2*sc, sc];
+  const py = [y, y+c, y+h-c], ph = [c, h-2*c, c];
+  const sy = [0, sc, sh-sc],  ssh = [sc, sh-2*sc, sc];
+  for (let r = 0; r < 3; r++)
+    for (let q = 0; q < 3; q++)
+      Sprites.blitRect(ctx, k, sx[q], sy[r], ssw[q], ssh[r], px[q], py[r], pw[q], ph[r]);
+  return true;
+}
+// 막대 채움 — 가로로만 늘린다 (원본이 가로 줄무늬라 세로로 늘려도 무늬가 안 깨진다)
+function drawBarSprite(ctx, key, x, y, w, h) {
+  const k = Sprites.pick(key); if (!k || w <= 0) return false;
+  return Sprites.draw(ctx, k, x, y, w, h);
+}
+
 function drawHPBar(ctx, x, y, w, h, ratio) {
+  const f = Math.max(0, Math.min(1, ratio));
   ctx.fillStyle = '#1e293b'; ctx.fillRect(x,y,w,h);
-  ctx.fillStyle = hpColor(Math.max(0,ratio));
-  ctx.fillRect(x, y, Math.max(0, w*ratio), h);
+  // 색으로 위급함을 알리던 규칙은 그대로 두고, 칠만 팩 그림으로 바꾼다
+  const key = f > 0.5 ? 'ui.bar.green' : f > 0.25 ? 'ui.bar.orange' : 'ui.bar.red';
+  if (!drawBarSprite(ctx, key, x, y, w*f, h)) {
+    ctx.fillStyle = hpColor(f);
+    ctx.fillRect(x, y, Math.max(0, w*f), h);
+  }
 }
 function drawMPBar(ctx, x, y, w, h, ratio) {
+  const f = Math.max(0, Math.min(1, ratio));
   ctx.fillStyle = '#1e293b'; ctx.fillRect(x,y,w,h);
-  ctx.fillStyle = COLORS.mp;
-  ctx.fillRect(x, y, Math.max(0, w*Math.max(0,ratio)), h);
+  if (!drawBarSprite(ctx, 'ui.bar.blue', x, y, w*f, h)) {
+    ctx.fillStyle = COLORS.mp;
+    ctx.fillRect(x, y, Math.max(0, w*f), h);
+  }
 }
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
@@ -54,10 +88,23 @@ function wrapLines(ctx, text, maxW) {
 }
 
 function drawBtn(ctx, x, y, w, h, label, bg, fg, on) {
-  roundRect(ctx, x, y, w, h, 5);
-  ctx.fillStyle = on!==false ? bg : '#374151'; ctx.fill();
-  ctx.strokeStyle = on!==false ? fg : '#4b5563'; ctx.lineWidth=1.5; ctx.stroke();
-  ctx.fillStyle = on!==false ? fg : '#6b7280';
+  const live = on !== false;
+  // 팩의 9슬라이스 틀을 깔고 그 위에 원래 색을 옅게 얹는다.
+  // 색을 통째로 그림에 넘기면 초록=준비 / 빨강=위험 같은 신호가 사라진다 —
+  // 틀은 팩에서, 뜻은 색에서 가져오는 것이 요점이다.
+  const framed = drawPanel9(ctx, live ? 'ui.panel.dark' : 'ui.panel.navy', x, y, w, h);
+  if (framed) {
+    ctx.save();
+    roundRect(ctx, x+2, y+2, w-4, h-4, 4); ctx.clip();
+    ctx.globalAlpha = live ? 0.42 : 0.20;
+    ctx.fillStyle = live ? bg : '#374151'; ctx.fillRect(x+2, y+2, w-4, h-4);
+    ctx.restore();
+  } else {
+    roundRect(ctx, x, y, w, h, 5);
+    ctx.fillStyle = live ? bg : '#374151'; ctx.fill();
+    ctx.strokeStyle = live ? fg : '#4b5563'; ctx.lineWidth=1.5; ctx.stroke();
+  }
+  ctx.fillStyle = live ? fg : '#6b7280';
   ctx.font='bold 10px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.fillText(label, x+w/2, y+h/2);
 }
@@ -531,7 +578,14 @@ function renderTower(ctx, t) {
   const key = towerSpriteKey(t.typeId, t.level);
   const ksz = key && Sprites.size(key);
   const br0 = towerBranchOf(t);
-  const crewKey = Sprites.pick(`crew.${t.typeId}`);
+  // 점유자 — ★5 분기를 골랐으면 그 분기 전용 얼굴, 아니면 종류 기본값.
+  // 두 겹으로 가른 값어치가 여기서 나온다: 18갈래에 18명이 붙는데 석대는 그대로다.
+  // 넷씩 돌린다 — 칸마다 위상을 어긋나게 해서 마흔 기가 한 박자로 흔들리지 않게.
+  const cf = (Math.floor(Date.now() / 160) + t.col * 3 + t.row * 5) % 4;
+  const crewKey = Sprites.pick(
+    br0 ? `crew.${br0.id}.${cf}` : `crew.${t.typeId}.${cf}`,
+    br0 ? `crew.${br0.id}.0`     : `crew.${t.typeId}.0`,
+    `crew.${t.typeId}.${cf}`, `crew.${t.typeId}.0`);
   if (crewKey) {
     // 👷 석대 + 사람
     const groundY = y + CELL_H/2 - 2;
@@ -1818,9 +1872,19 @@ function renderUpgradePick(ctx, gs) {
     const gradeBg    = card.grade==='epic' ? '#1e0a3c'
                      : card.grade==='rare' ? '#0a1e3c' : '#0f172a';
 
-    roundRect(ctx, cx, cy, cardW, cardH, 8);
-    ctx.fillStyle=gradeBg; ctx.fill();
-    ctx.strokeStyle=gradeColor; ctx.lineWidth=2; ctx.stroke();
+    // 강화 카드는 매 층 멈춰 서서 고르는 화면이다 — 여기만큼은 진짜 틀을 두른다.
+    // 등급 색은 틀 위에 얹어 남긴다 (영웅=보라 / 희귀=파랑).
+    if (drawPanel9(ctx, card.grade==='common' ? 'ui.panel.dark' : 'ui.panel.gold', cx, cy, cardW, cardH)) {
+      ctx.save(); roundRect(ctx, cx+3, cy+3, cardW-6, cardH-6, 6); ctx.clip();
+      ctx.globalAlpha = 0.55; ctx.fillStyle = gradeBg;
+      ctx.fillRect(cx+3, cy+3, cardW-6, cardH-6); ctx.restore();
+      roundRect(ctx, cx+1, cy+1, cardW-2, cardH-2, 7);
+      ctx.strokeStyle=gradeColor; ctx.lineWidth=1.5; ctx.stroke();
+    } else {
+      roundRect(ctx, cx, cy, cardW, cardH, 8);
+      ctx.fillStyle=gradeBg; ctx.fill();
+      ctx.strokeStyle=gradeColor; ctx.lineWidth=2; ctx.stroke();
+    }
 
     // 등급 배지
     const gradeLabel = card.grade==='epic'?'★ EPIC':card.grade==='rare'?'◆ RARE':'● COMMON';
