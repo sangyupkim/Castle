@@ -157,7 +157,7 @@ function newState() {
          buildingScroll:null, pageScroll:null, briefScroll:null, lobbyScroll:null,
          pauseResumeBtn:null, pauseGiveUpBtn:null,
          backupExportBtn:null, backupImportBtn:null, backupMsg:null,
-         tutReplayBtn:null, tutResetTipBtn:null, bgmToggleBtn:null, sfxToggleBtn:null,
+         tutReplayBtn:null, tutResetTipBtn:null, guideReplayBtn:null, bgmToggleBtn:null, sfxToggleBtn:null,
          tutSkipBtn:null, tutBackBtn:null, sigilCards:[] },
     // 영구 데이터 참조
     get soulStones()    { return _soulStones; },
@@ -202,6 +202,8 @@ function newState() {
 let gs  = newState();
 const wm  = createWaveManager();
 const tut = createTutorial();
+// 🧭 첫걸음 안내 — 글이 아니라 손가락. 눌러야 할 버튼을 짚고, 할 때까지 기다린다.
+const guide = createGuide();
 
 gs.battle = createBattle();
 
@@ -339,6 +341,7 @@ function baseHpMax()     { return Math.max(20, Math.round((BASE_HP_MAX + BONUSES
 function heroMaxHp()     { return Math.round((HERO_LEVELS[gs.hero.level].hp + BONUSES.heroHpFlat) * BONUSES.heroStatMult * BONUSES.sigilHeroHpMult); }
 
 tut.start();
+guide.start();
 
 // ─── 입력 ────────────────────────────────────────────────────────────────────
 function pt(e) {
@@ -555,6 +558,11 @@ function tap({x,y}) {
     tut.next(); SFX.click(); return;
   }
 
+  // 🧭 안내 끄기 — 안내가 먹는 탭은 이 버튼 하나뿐이다. 나머지는 전부 통과한다.
+  if (typeof guide !== 'undefined' && guide.active && hitTest(x,y,gs.ui.guideSkipBtn||{})) {
+    guide.finish(); SFX.click(); return;
+  }
+
   if (gs.page === 'lobby')  { handleLobbyTap(x,y);  return; }
   if (gs.page === 'result') { handleResultTap(x,y); return; }
 
@@ -739,7 +747,7 @@ const _PAGE_UI_KEYS = [
   'lobbyTabBtns','sortieBtn','trainBtn','unboundedBtn','nightmareBtns','metaCards','unlockBtns','pactBtns','sigilCards',
   'skillTreeTabs','ascendBtn','trainSkipBtn','skillResetBtn','heroActiveBtns','heroAutoBtn',
   'backupExportBtn','backupImportBtn',
-  'tutReplayBtn','tutResetTipBtn','bgmToggleBtn','sfxToggleBtn',
+  'tutReplayBtn','tutResetTipBtn','guideReplayBtn','bgmToggleBtn','sfxToggleBtn','guideSkipBtn',
   'resultBtn','waveBtn','battleWaveStartBtn','briefTownBtn','retreatBtn','modeBtn'
 ];
 let _lastUiPage = null;
@@ -906,6 +914,7 @@ function handleLobbyTap(x, y) {
     if (hitTest(x,ry,gs.ui.backupImportBtn||{})) { importSaveCode(); return; }
     if (hitTest(x,ry,gs.ui.tutReplayBtn||{}))    { replayTutorial(); return; }
     if (hitTest(x,ry,gs.ui.tutResetTipBtn||{}))  { resetTutorialTips(); return; }
+    if (hitTest(x,ry,gs.ui.guideReplayBtn||{}))  { replayGuide(); return; }
     if (hitTest(x,ry,gs.ui.bgmToggleBtn||{})) { BGM.toggle(); BGM.sync(gs, wm); SFX.click(); return; }
     if (hitTest(x,ry,gs.ui.sfxToggleBtn||{})) { const m=SFX.toggleMute(); if (m) BGM.stop(0.3); else BGM.sync(gs,wm); return; }
     return;
@@ -2111,9 +2120,13 @@ function frame(ts) {
   drawFloaties(ctx);
   if (_paused && !_titleScreen && !tut.active && gs.page!=='lobby' && gs.page!=='result') renderPauseOverlay(ctx);
   renderTutorial(ctx,tut);
+  // 안내는 튜토리얼 글이 떠 있지 않을 때만 — 둘이 겹치면 무엇을 보라는지 알 수 없다
+  if (!tut.active) renderGuide(ctx,gs);
   if (_titleScreen || _fadingOut) renderTitleScreen(ctx, _titleAlpha);
   // 배경음 — 화면과 상황에 맞는 곡으로. 같은 곡이면 아무 일도 하지 않는다.
   if (!_titleScreen) { try { BGM.sync(gs, wm); } catch (e) {} }
+  // 🧭 시킨 일을 해냈는지 매 프레임 본다. 확인 버튼이 없으므로 이게 유일한 진행 수단이다.
+  if (!_titleScreen && !tut.active) { try { guide.update(gs, dt); } catch (e) {} }
 
   if ((_paused || tut.active) && !_titleScreen && !_fadingOut) {
     FX.update(dt); updateFloaties(dt);
@@ -2154,6 +2167,12 @@ function replayTutorial() {
   // df_tut_seen은 일부러 그대로 둔다 — 자동 진입은 영영 막고, 여기서만 다시 본다
   try { localStorage.removeItem('df_tut9'); } catch (e) {}
   tut.done = false; tut.tip = null; tut.step = 0; tut.active = true;
+  SFX.click();
+}
+// 🧭 첫걸음 안내를 다시 — 로비 첫 단계부터 시작하므로 로비로 보내 준다
+function replayGuide() {
+  guide.reset();
+  gs.page = 'lobby'; gs.lobby.tab = 'sortie';
   SFX.click();
 }
 function resetTutorialTips() {

@@ -2852,8 +2852,30 @@ function renderLobbyRecord(ctx, gs) {
   const left = (typeof tipsRemaining === 'function') ? tipsRemaining() : 0;
   ctx.fillText(left > 0 ? `아직 안 뜬 쪽지 ${left}개 — 해당 상황에서 뜹니다`
                         : '쪽지를 모두 봤습니다. 다시 보려면 아래를 누르세요.', 14, y); y += 15;
-  gs.ui.tutReplayBtn  = mk(12,      '📖 처음부터 다시', '기본 설명 6장', '#a78bfa', false);
-  gs.ui.tutResetTipBtn= mk(18+kw,   '🔁 쪽지 초기화',   '상황별 안내를 다시', '#22c55e', false);
+  // 안내가 세 가지(글 6장 · 상황별 쪽지 · 🧭 손가락)라 한 줄에 셋을 놓는다.
+  // 처음엔 밑에 한 줄을 더 달았는데, 그 줄이 로비 하단 고정 출격 바(y749~) 밑으로
+  // 들어가 아예 누를 수 없었다 — 스크롤로도 닿지 않는 자리였다.
+  const kw3 = (CW - 36) / 3;
+  const mk3 = (bx2, label, sub, col, dim) => {
+    uiPanel(ctx, bx2,y,kw3,kh,6, dim ? '#0a0e18' : '#111c2e', dim ? '#1e293b' : col, 1);
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle = dim ? '#334155' : col; ctx.font='bold 10px sans-serif';
+    ctx.fillText(label, bx2+kw3/2, y+12);
+    ctx.fillStyle = dim ? '#1e293b' : '#475569'; ctx.font='8px sans-serif';
+    ctx.fillText(sub, bx2+kw3/2, y+25);
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    return {x:bx2,y:y,w:kw3,h:kh};
+  };
+  gs.ui.tutReplayBtn  = mk3(12,           '📖 기본 설명',  '6장 다시 보기',  '#a78bfa', false);
+  gs.ui.tutResetTipBtn= mk3(18+kw3,       '🔁 쪽지 초기화','상황별 안내',    '#22c55e', false);
+  // 🧭 손가락 안내도 한 번 끝나면 다시 볼 길이 있어야 한다 — 글 설명과 같은 대우
+  {
+    const off = (typeof guide !== 'undefined') && guide.seen() && !guide.active;
+    gs.ui.guideReplayBtn = mk3(24+kw3*2, '🧭 첫걸음 안내',
+                               off ? '버튼을 짚어 준다' : '지금 켜져 있음',
+                               off ? '#fbbf24' : '#475569', !off);
+    if (!off) gs.ui.guideReplayBtn = null;
+  }
   y += kh + 12;
 
   // ── 🎵 소리 ───────────────────────────────────────────────────────────────
@@ -5049,6 +5071,90 @@ function renderTownPageTowers(ctx, gs, startY) {
   ry+=13;
   ctx.fillText('∞ 경로는 같은 칸을 두 번 지나므로 교차 지점이 가장 효율적입니다.',18,ry);
   _townBottom = Math.max(infoY + infoH, ry + 16);
+}
+
+// ─── 🧭 첫걸음 안내 ──────────────────────────────────────────────────────────
+// 짚는 자리만 남기고 나머지를 덮는다. 덮개는 **그림일 뿐** — 탭은 그대로 통과한다.
+// 여기서 입력을 막으면 "진짜 버튼을 진짜로 누른다"는 전제가 깨진다.
+function renderGuide(ctx, gs) {
+  gs.ui.guideSkipBtn = null;
+  if (typeof guide === 'undefined' || !guide.active) return;
+  const view = guide.view(gs);
+  if (!view) return;                        // 다른 페이지에 있어 짚을 것이 없을 때만 감춘다
+  // (단계 객체는 view가 들고 있다)
+  const spot = view.rect;
+  const accent = view.detour ? '#38bdf8' : '#fbbf24';   // 우회 안내는 색을 달리해 구분한다
+  const t = (Date.now() % 1200) / 1200;
+
+  // ── 덮개 — 짚은 자리만 도려낸다 ────────────────────────────────────────
+  ctx.save();
+  if (spot) {
+    const pad = 6;
+    const sx = spot.x - pad, sy = spot.y - pad;
+    const sw = spot.w + pad*2, sh = spot.h + pad*2;
+    // 구멍 뚫기 — roundRect 헬퍼는 안에서 beginPath를 부르므로 여기서는 쓸 수 없다.
+    // 헬퍼를 부르면 방금 쌓은 전체 화면 사각형이 지워져서, 짚은 자리에 구멍이 나는 대신
+    // 그 자리만 불투명하게 덮여 버린다 (버튼이 안내에 가려져 안 보이던 원인).
+    const rr = Math.max(0, Math.min(8, sw/2, sh/2));
+    ctx.beginPath();
+    ctx.rect(0, 0, CW, CH);
+    ctx.moveTo(sx+rr, sy);
+    ctx.lineTo(sx+sw-rr, sy);      ctx.arcTo(sx+sw, sy,      sx+sw, sy+rr,      rr);
+    ctx.lineTo(sx+sw, sy+sh-rr);   ctx.arcTo(sx+sw, sy+sh,   sx+sw-rr, sy+sh,   rr);
+    ctx.lineTo(sx+rr, sy+sh);      ctx.arcTo(sx, sy+sh,      sx, sy+sh-rr,      rr);
+    ctx.lineTo(sx, sy+rr);         ctx.arcTo(sx, sy,         sx+rr, sy,         rr);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(4,7,14,0.62)';
+    ctx.fill('evenodd');
+    // 짚은 자리 테두리 — 숨 쉬듯 굵기가 오간다
+    roundRect(ctx, sx, sy, sw, sh, 8);
+    ctx.strokeStyle = accent; ctx.lineWidth = 2 + Math.sin(t * Math.PI*2) * 1.2;
+    ctx.stroke();
+    // 바깥으로 퍼지는 고리
+    roundRect(ctx, sx - t*8, sy - t*8, sw + t*16, sh + t*16, 10);
+    ctx.strokeStyle = view.detour ? `rgba(56,189,248,${0.55*(1-t)})` : `rgba(251,191,36,${0.55*(1-t)})`;
+    ctx.lineWidth = 2; ctx.stroke();
+  } else {
+    // 짚을 곳이 없는 단계(예: 전투를 지켜보라는 안내)는 화면을 거의 덮지 않는다.
+    // 55%로 덮었더니 "두 전선이 함께 굴러가는 걸 보라"면서 그 전선을 가리고 있었다.
+    ctx.fillStyle = 'rgba(4,7,14,0.22)';
+    ctx.fillRect(0, 0, CW, CH);
+  }
+  ctx.restore();
+
+  // ── 말풍선 — 짚은 자리를 가리지 않는 쪽에 붙인다 ───────────────────────
+  const lines = String(view.text).split('\n');
+  const bw = CW - 36, bh = 34 + lines.length * 15 + 12;
+  let by;
+  if (!spot)                       by = CH/2 - bh/2;
+  else if (spot.y > CH * 0.45)     by = Math.max(70, spot.y - bh - 26);   // 짚은 곳이 아래면 위로
+  else                             by = Math.min(CH - bh - 20, spot.y + spot.h + 26);
+  const bx = 18;
+
+  uiPanel(ctx, bx, by, bw, bh, 9, '#0b1220', accent, 2);
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle=accent; ctx.font='bold 12px sans-serif';
+  ctx.fillText(`🧭 ${view.title}`, bx+14, by+11);
+  ctx.fillStyle='#7c8ba1'; ctx.font='bold 9px sans-serif'; ctx.textAlign='right';
+  ctx.fillText(`${guide.step+1} / ${GUIDE_STEPS.length}`, bx+bw-14, by+12);
+  ctx.textAlign='left';
+  ctx.fillStyle='#e2e8f0'; ctx.font='11px sans-serif';
+  lines.forEach((ln, i) => ctx.fillText(ln, bx+14, by+32 + i*15));
+
+  // 진행 막대 — 몇 걸음 남았는지
+  const pw2 = bw - 28, py2 = by + bh - 9;
+  ctx.fillStyle='#1e293b'; ctx.fillRect(bx+14, py2, pw2, 3);
+  ctx.fillStyle=accent;
+  ctx.fillRect(bx+14, py2, pw2 * ((guide.step+1) / GUIDE_STEPS.length), 3);
+
+  // 건너뛰기 — 안내를 못 끄면 그건 안내가 아니라 벽이다
+  const kw = 74, kh = 22, kx = CW - kw - 12, ky = 8;
+  uiPanel(ctx, kx, ky, kw, kh, 5, '#1e293b', '#64748b', 1);
+  ctx.fillStyle='#94a3b8'; ctx.font='bold 10px sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('안내 끄기', kx+kw/2, ky+kh/2);
+  gs.ui.guideSkipBtn = { x:kx, y:ky, w:kw, h:kh };
+  ctx.textAlign='left'; ctx.textBaseline='top';
 }
 
 // ─── Tutorial ─────────────────────────────────────────────────────────────────
