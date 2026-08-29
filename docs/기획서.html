@@ -221,7 +221,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <div class="wrap">
 <header class="cover">
-  <div class="eyebrow">Game Design Document · v4.17 · 영웅 액티브 스킬</div>
+  <div class="eyebrow">Game Design Document · v4.18 · ★5 분기 특화</div>
   <h1>듀얼 프론티어</h1>
   <p class="tagline">한 화면에서 두 개의 전선을 동시에 굴리는 모바일 웹 로그라이트.
      끝은 없다 — 얼마나 깊이 내려갔는지가 기록이다.</p>
@@ -230,7 +230,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
     <div><dt>플랫폼</dt><dd>모바일 웹 (480×800 캔버스)</dd></div>
     <div><dt>1회 하강</dt><dd>10~30분 (도달 층에 비례)</dd></div>
     <div><dt>현재 볼륨</dt><dd>훈련 30웨이브 + ∞ 무한 (알고리즘 생성)</dd></div>
-    <div><dt>이번 개정</dt><dd>영웅 액티브 8종 · 자동/수동 시전 · MP 자원화 (v4.17)</dd></div>
+    <div><dt>이번 개정</dt><dd>타워 ★5 분기 18종 · 재분기 · 교차 합성 반려 (v4.18)</dd></div>
   </dl>
 </header>
 
@@ -1014,6 +1014,142 @@ v1.0의 "그룹 순환 + 보상 체감" 구조를 이 압력 곡선이 대체한
 
 <p>같은 '광폭'이라도 0.72짜리와 1.34짜리는 다른 물건이다. 좋은 굴림을 뽑는 것 자체가
 매 웨이브 상점을 들여다볼 이유가 된다. ★~★★★로 굴림을 먼저 읽히게 했다.</p>
+
+<h3>★5 분기 특화 — 레벨이 성격을 바꾼다 <span class="rev">v4.18 · 신규</span></h3>
+
+<p class="lede">플레이 보고: <strong>"지금 활타워는 소형에 강한 기능만 있는데, 타워마다 타입에 강한 타입이
+있는 건 좋은데 사실 타워마다 능력이 있으니까 … 타워를 5강까지 하면 분기점을 만들어서 특화하는 기능을
+만들어줘. 분기점을 3가지로 가지는 게 좋을 것 같아. 화살탑을 예로 들면 공속 특화로 해서 스몰에 강한 건
+그대로인데 공속이 더 빨라지는 타워라든지, 미디움이 강화되는 타워, 공속은 느려지는데 라지에 강화되는
+그런 식으로."</strong></p>
+
+<p>지금까지 타워를 키우는 일은 <strong>"같은 것이 커진다"</strong>뿐이었다.
+Lv.1 화살탑도 Lv.5 화살탑도 소형에 강하고 대형에 약했다 — 레벨은 숫자만 올리고
+성격은 하나도 안 바꿨다. 상성표가 있어도 <strong>한 번 지으면 그 타워의 역할은 끝까지 고정</strong>이었다.</p>
+
+<p>★5에 닿으면 세 갈래 중 하나를 골라 골드로 특화한다. 고르면 그 타워는 다른 물건이 된다 —
+배율이 바뀌고, 상성 행이 통째로 다시 쓰이고, 고유 특성이 붙는다.
+<strong>레벨을 소모하지 않는다</strong> — ★5는 조건이지 재료가 아니다.</p>
+
+<h4>설계 규칙 셋</h4>
+
+<div class="grid g3">
+  <div class="card">
+    <h4>① 주고받는다</h4>
+    <p>모든 분기는 얻는 것이 있으면 잃는 것이 있다. 공짜로 세지는 갈래는 없다.</p>
+  </div>
+  <div class="card">
+    <h4>② 총량은 비슷하게</h4>
+    <p>세 분기의 총 DPS는 붙여 두고 <strong>어디에 쓰이는지</strong>를 가른다.
+       "무조건 이거"가 없어야 층 편성을 보고 고른다.</p>
+  </div>
+  <div class="card">
+    <h4>③ 상성은 곱한다</h4>
+    <p>원래 잘 잡던 것을 더 잘 잡거나, 원래 못 잡던 것을 잡을 수 있게 되거나
+       — 둘 중 하나지 둘 다는 아니다.</p>
+  </div>
+</div>
+
+<div class="tw"><table>
+<caption>분기 18종 — 6타워 × 3갈래</caption>
+<thead><tr><th>타워</th><th>분기</th><th>바뀌는 것</th><th>고유</th></tr></thead>
+<tbody>
+<tr><td rowspan="3">🏹 화살탑</td><td>💨 속사</td><td class="wrap">공격 ×0.72 · 공속 ×1.70 · 소형 ×1.15</td><td class="wrap">—</td></tr>
+<tr><td>🎯 관통</td><td class="wrap">공격 ×1.30 · 사거리 ×1.10 · 중형 ×1.40</td><td class="wrap">방어 관통 +3</td></tr>
+<tr><td>🏹 공성</td><td class="wrap">공격 ×2.80 · 공속 ×0.42 · 소형 ×0.55 · 대형 ×2.10</td><td class="wrap">—</td></tr>
+<tr><td rowspan="3">❄️ 서리탑</td><td>🧊 혹한</td><td class="wrap">공격 ×0.85 · 공속 ×1.10</td><td class="wrap">감속 70% · 지속 ×1.7</td></tr>
+<tr><td>💎 서릿발</td><td class="wrap">공격 ×1.65 · 공속 ×0.90</td><td class="wrap">감속 30%로 약화 · <strong>느려진 적에게 ×1.7</strong></td></tr>
+<tr><td>🌨️ 눈보라</td><td class="wrap">공격 ×0.95 · 사거리 ×1.20 · 비행 ×2.00</td><td class="wrap"><strong>범위 감속</strong> (46px)</td></tr>
+<tr><td rowspan="3">💣 대포탑</td><td>💥 융단</td><td class="wrap">공격 ×0.72 · 공속 ×1.35 · 소형 ×1.60</td><td class="wrap">범위 40 → 72</td></tr>
+<tr><td>🛡️ 철갑탄</td><td class="wrap">공격 ×1.32 · 공속 ×0.85 · 대형 ×1.30</td><td class="wrap">방어 무시 · 범위 40 → 22</td></tr>
+<tr><td>🚀 박격</td><td class="wrap">공격 ×1.25 · 사거리 ×1.75 · <strong>비행 ×3.83</strong></td><td class="wrap">—</td></tr>
+<tr><td rowspan="3">🎯 저격탑</td><td>🎯 헤드샷</td><td class="wrap">공격 ×1.20</td><td class="wrap">32% 확률 ×2.6 치명타</td></tr>
+<tr><td>🔫 연사 저격</td><td class="wrap">공격 ×0.50 · 공속 ×2.40 · 사거리 ×0.60</td><td class="wrap">—</td></tr>
+<tr><td>💀 대물 저격</td><td class="wrap">공격 ×2.10 · 공속 ×0.52 · 대형 ×1.35</td><td class="wrap"><strong>HP 14% 이하 즉시 처형</strong></td></tr>
+<tr><td rowspan="3">⚡ 번개탑</td><td>⛓️ 연쇄 증폭</td><td class="wrap">공격 ×0.78</td><td class="wrap">연쇄 2 → 5 · 연쇄 사거리 ×1.35</td></tr>
+<tr><td>🔋 과충전</td><td class="wrap">공격 ×1.75 · 공속 ×0.68</td><td class="wrap">연쇄 없음 · 18% 감전(0.5초)</td></tr>
+<tr><td>🛩️ 대공 관제</td><td class="wrap">공격 ×1.15 · 사거리 ×1.45 · <strong>비행 ×1.40</strong> · 지상 ×0.6~0.75</td><td class="wrap">—</td></tr>
+<tr><td rowspan="3">☠️ 독탑</td><td>☠️ 맹독</td><td class="wrap">공격 ×1.10</td><td class="wrap">장판 피해 ×2.0 · 지속 ×0.65</td></tr>
+<tr><td>🌫️ 확산</td><td class="wrap">공속 ×1.15</td><td class="wrap">반경 ×1.55 · 지속 ×1.45 · 피해 ×0.65</td></tr>
+<tr><td>🧪 부식</td><td class="wrap">공격 ×1.05 · 중형 ×1.15</td><td class="wrap"><strong>장판 위 적의 방어력 소거 + 받는 피해 +30%</strong></td></tr>
+</tbody></table></div>
+
+<h4>실측 — 세 갈래가 서로 다른 곳을 본다</h4>
+
+<div class="tw"><table>
+<caption>등급별 실효 DPS (★5 기준) — 총량은 비슷한데 향하는 곳이 갈린다</caption>
+<thead><tr><th>타워 · 등급</th><th class="num">기본</th><th>분기 1</th><th>분기 2</th><th>분기 3</th></tr></thead>
+<tbody>
+<tr><td>🏹 화살탑 · 소형</td><td class="num">37</td><td>속사 <strong>52</strong></td><td>관통 46</td><td>공성 24</td></tr>
+<tr><td>🏹 화살탑 · 중형</td><td class="num">29</td><td>속사 36</td><td>관통 <strong>52</strong></td><td>공성 35</td></tr>
+<tr><td>🏹 화살탑 · 대형</td><td class="num">18</td><td>속사 22</td><td>관통 22</td><td>공성 <strong>44</strong></td></tr>
+<tr><td>💣 대포탑 · 소형</td><td class="num">38</td><td>융단 <strong>60</strong></td><td>철갑탄 43</td><td>박격 31</td></tr>
+<tr><td>💣 대포탑 · 대형</td><td class="num">89</td><td>융단 87</td><td>철갑탄 <strong>130</strong></td><td>박격 73</td></tr>
+<tr><td>💣 대포탑 · 비행</td><td class="num">18</td><td>융단 17</td><td>철갑탄 20</td><td>박격 <strong>56</strong></td></tr>
+<tr><td>⚡ 번개탑 · 비행</td><td class="num">196</td><td>연쇄 152 <span class="mono">(6마리 타격)</span></td><td>과충전 234</td><td>대공 <strong>284</strong></td></tr>
+<tr><td>❄️ 서리탑 · 비행</td><td class="num">7</td><td>혹한 6 <span class="mono">(감속 70%)</span></td><td>서릿발 10</td><td>눈보라 <strong>12</strong> + 범위 감속</td></tr>
+</tbody></table></div>
+
+<p>🧪 <strong>부식</strong>의 값어치는 자기 DPS가 아니다. 방어력 30짜리 강철오크에게
+화살탑(공격 18)이 평소 <strong>1</strong>을 넣는데, 부식 장판 위에서는 <strong>14</strong>를 넣는다.
+혼자서는 약하고, 옆에 선 타워 전부를 세게 만든다 — 처음으로 <strong>타워끼리 맞물리는</strong> 조합이 생겼다.</p>
+
+<h3>분기를 섞지 않기로 한 이유 <span class="rev">v4.18 · 설계 판단</span></h3>
+
+<p class="lede">플레이 보고: <strong>"합성은 같은 분기로 강화된 타워끼리 하는 게 좋겠지?
+만약 다른 분기끼리 합성이 돼서 두 가지 특성을 가지는 식으로 되면 변수가 너무 많으려나?
+너가 생각해보고 만들어줘."</strong></p>
+
+<p>검토했고 <strong>하지 않기로 했다</strong>. 세 가지 이유다.</p>
+
+<div class="grid g3">
+  <div class="card dl">
+    <h4>① 겹치면 서로를 지운다</h4>
+    <p>분기가 전부 트레이드오프다. 속사(공속 ×1.70 · 공격 ×0.72)와
+       공성(공속 ×0.42 · 공격 ×2.80)을 합치면 <strong>공속 ×0.71 · 공격 ×2.02</strong> —
+       그냥 못한 공성이 된다. 값을 두 배 내고 나빠진다.</p>
+  </div>
+  <div class="card dl">
+    <h4>② 잡을 수가 없다</h4>
+    <p>6종 × 3분기 = 18개를 4등급에 맞춰 잡는 것도 벅찬데, 교차 조합까지 열면
+       18쌍이 더 붙어 <strong>36개 × 4등급 = 144개</strong>를 잡아야 한다.</p>
+  </div>
+  <div class="card dl">
+    <h4>③ 선택이 사라진다</h4>
+    <p>셋 중 하나를 고르는 것이 이 시스템의 전부인데, 결국 다 가질 수 있으면
+       그건 선택이 아니라 <strong>순서</strong>다.</p>
+  </div>
+</div>
+
+<p>대신 <strong>재분기</strong>를 뒀다 — 값을 더 내고 갈아탈 수는 있되,
+두 개를 동시에 갖지는 못한다. 층 편성이 바뀌어서 판단이 달라졌을 때 되돌릴 길은 열어 두고,
+"다 모으기"는 막는다.</p>
+
+<div class="tw"><table>
+<caption>분기 값</caption>
+<thead><tr><th>요소</th><th>값</th><th class="num">화살탑</th><th class="num">대포탑</th><th class="num">저격탑</th></tr></thead>
+<tbody>
+<tr><td>개방 조건</td><td>타워 ★5 도달 (레벨을 소모하지 않는다)</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>
+<tr><td>분기</td><td>타워 기본가 × 12</td><td class="num">60</td><td class="num">216</td><td class="num">312</td></tr>
+<tr><td>재분기</td><td>타워 기본가 × 26</td><td class="num">130</td><td class="num">468</td><td class="num">676</td></tr>
+</tbody></table></div>
+
+<h4>표시</h4>
+
+<p>격자의 타워에 <strong>분기 아이콘 배지</strong>가 붙는다 — 패널을 열어 봐야 아는 정보는 표시가 아니다.
+타워 패널의 등급별 피해 줄(S/M/L/A)이 <strong>분기를 반영해 다시 계산</strong>되고,
+준비 화면 말풍선과 마을 배치 현황에도 분기가 나온다.</p>
+
+<h3>곁다리로 고친 것 <span class="rev">v4.18 · 버그</span></h3>
+
+<ul>
+  <li><strong>범위 감속이 감속을 안 걸었다</strong> — <span class="mono">p.splash</span> 블록이
+      피해만 주고 slow를 옮기지 않아, 🌨️눈보라의 "착탄 범위 감속"이 그냥 범위 피해였다.
+      감속을 든 발사체는 범위에도 감속을 남기게 고쳤다.</li>
+  <li>한국어 줄바꿈 헬퍼 <span class="mono">wrapLines()</span>를 추가했다.
+      띄어쓰기가 드물어 어절 단위로만 자르면 한 줄이 통째로 넘치므로,
+      칸보다 긴 어절은 글자 단위로 다시 자른다.</li>
+</ul>
 
 <h3>⚡ 액티브 스킬 — 처음으로 누를 것이 생긴다 <span class="rev">v4.17 · 신규</span></h3>
 

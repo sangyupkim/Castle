@@ -57,6 +57,8 @@ function makeTower(col, row, typeId) {
   return {
     col, row, typeId,
     level: 1,
+    branch: null,        // ★5에서 고르는 특화. null이면 아직 안 골랐다.
+
     invested: TOWER_TYPES[typeId].cost,
     cooldown: 0,
     kills: 0,
@@ -73,27 +75,42 @@ function towerStats(t) {
   const overloaded = (t.overloadUntil || 0) > 0;
   // 층 이벤트 — 안개는 사거리를, 부식은 공격력을, 봉인은 한 종류를 통째로 막는다
   const sealed = fev('sealedTower', null) === t.typeId;
-  return {
+  // ★5 분기 — 배율(mult)과 고유 특성(special)을 얹는다. 상성(aff)은 affinityOf가 본다.
+  const br = towerBranchOf(t);
+  const bm = (br && br.mult) || {};
+  const sp = (br && br.special) || {};
+  const baseSlow = sp.slow !== undefined ? sp.slow : (tpl.slow || 0);
+  const st = {
     sealed,
-    dmg:   sealed ? 0 : Math.round((tpl.dmg + BONUSES.towerDmg) * m.dmg
+    branch: br ? br.id : null,
+    dmg:   sealed ? 0 : Math.round((tpl.dmg + BONUSES.towerDmg) * m.dmg * (bm.dmg || 1)
              * (BONUSES.towerDmgMult || 1)
              * (BONUSES.pactTowerDmgMult || 1) * fev('towerDmgMult', 1)),
-    spd:   tpl.spd   * m.spd   * BONUSES.towerSpdMult * (overloaded ? OVERLOAD_SPD_MULT : 1),
-    range: sealed ? 0 : tpl.range * m.range * BONUSES.towerRangeMult * fev('towerRangeMult', 1),
-    slow:        Math.min(0.8, (tpl.slow || 0) + (BONUSES.towerSlow || 0)),
-    slowDur:     tpl.slowDur || (BONUSES.towerSlow > 0 ? 0.9 : 0),
-    splash:      tpl.splash || 0,
-    pierceArmor: !!tpl.pierceArmor,
-    pierce:      BONUSES.towerPierce || 0,
+    spd:   tpl.spd   * m.spd   * (bm.spd || 1) * BONUSES.towerSpdMult * (overloaded ? OVERLOAD_SPD_MULT : 1),
+    range: sealed ? 0 : tpl.range * m.range * (bm.range || 1) * BONUSES.towerRangeMult * fev('towerRangeMult', 1),
+    slow:        Math.min(0.85, baseSlow + (BONUSES.towerSlow || 0)),
+    slowDur:     (tpl.slowDur || (BONUSES.towerSlow > 0 ? 0.9 : 0)) * (sp.slowDurMult || 1),
+    splash:      sp.splash !== undefined ? sp.splash : (tpl.splash || 0),
+    pierceArmor: sp.pierceArmor !== undefined ? !!sp.pierceArmor : !!tpl.pierceArmor,
+    pierce:      (BONUSES.towerPierce || 0) + (sp.pierce || 0),
     // ☠️ 독탑 — 장판 피해는 그 탑의 실효 공격력에 비례한다. 강화가 장판에도 붙는다.
-    poolDps:     tpl.poolDps || 0,
-    poolRadius:  tpl.poolRadius || 0,
-    poolDur:     tpl.poolDur || 0,
+    poolDps:     (tpl.poolDps || 0)    * (sp.poolDpsMult || 1),
+    poolRadius:  (tpl.poolRadius || 0) * (sp.poolRadiusMult || 1),
+    poolDur:     (tpl.poolDur || 0)    * (sp.poolDurMult || 1),
     targetMode:  tpl.targetMode || 'nearest',
-    chain:       tpl.chain || 0,
-    chainRange:  tpl.chainRange || 0,
+    chain:       sp.chain !== undefined ? sp.chain : (tpl.chain || 0),
+    chainRange:  (tpl.chainRange || 0) * (sp.chainRangeMult || 1),
+    // 분기 고유 — 발사체가 그대로 들고 간다
+    critChance:  sp.critChance || 0,
+    critMult:    sp.critMult   || 1,
+    execute:     sp.execute    || 0,
+    vsSlowed:    sp.vsSlowed   || 1,
+    stunChance:  sp.stunChance || 0,
+    stunDur:     sp.stunDur    || 0,
+    corrode:     sp.corrode    || 0,
     overloaded
   };
+  return st;
 }
 
 // ─── Defense Enemy ────────────────────────────────────────────────────────────
@@ -159,8 +176,10 @@ function makeProjectile(sx, sy, target, dmg, color, opts) {
 
 // 상성 배율은 방어력 차감보다 먼저 곱한다 — 약한 타워는 방어력까지 겹쳐 더 안 통한다
 function defDamage(enemy, dmg, pierceArmor, affinity, pierce) {
-  const base = dmg * (affinity === undefined ? 1 : affinity);
-  if (pierceArmor) return Math.max(1, Math.round(base));
+  // 🧪 부식 장판 위에서는 방어력이 지워지고 받는 피해가 늘어난다
+  const corroded = (enemy.corrodeUntil || 0) > 0;
+  const base = dmg * (affinity === undefined ? 1 : affinity) * (corroded ? 1 + enemy.corrodeAmt : 1);
+  if (pierceArmor || corroded) return Math.max(1, Math.round(base));
   const armor = Math.max(0, (enemy.armor || 0) - (pierce || 0));
   return Math.max(1, Math.round(base - armor));
 }
@@ -185,6 +204,8 @@ function updateDefenseEnemies(enemies, dt) {
     // 시간차를 두고 들어오는 적 (지금은 쓰지 않지만 배관은 남긴다)
     if (e.spawnDelay > 0) { e.spawnDelay = Math.max(0, e.spawnDelay - dt); continue; }
     if (e.hitFlash > 0) e.hitFlash = Math.max(0, e.hitFlash - dt);
+    // 🧪 부식 — 장판을 벗어나면 곧 풀린다 (장판이 매 프레임 다시 채워 준다)
+    if (e.corrodeUntil > 0) { e.corrodeUntil = Math.max(0, e.corrodeUntil - dt); if (!e.corrodeUntil) e.corrodeAmt = 0; }
     // 🌱 재생 — 꾸준히 깎지 못하면 원점으로 돌아간다. 단발 화력보다 지속 화력을 요구한다.
     if (e.regen > 0 && e.hp < e.maxHp) e.hp = Math.min(e.maxHp, e.hp + e.maxHp * e.regen * dt);
 
@@ -236,13 +257,13 @@ function pickTarget(enemies, center, range, mode) {
 // 아직 들어오지 않은(시간차 대기 중인) 적은 없는 것으로 친다
 function enemyActive(e) { return !e.dead && !e.reached && !(e.spawnDelay > 0); }
 
-function pickTargetSmart(enemies, center, range, mode, towerTypeId) {
+function pickTargetSmart(enemies, center, range, mode, towerTypeId, branchId) {
   let best = null, bestScore = -Infinity;
   for (const e of enemies) {
     if (e.dead || e.reached) continue;
     const d = Math.hypot(e.x - center.x, e.y - center.y);
     if (d > range) continue;
-    const aff = affinityOf(towerTypeId, e);
+    const aff = affinityOf(towerTypeId, e, branchId);
     // 거의 안 통하는 상대(0.5 미만)는 다른 표적이 있으면 넘긴다
     let score = aff * 100;
     if (mode === 'strongest') score += e.hp * 0.05;
@@ -266,7 +287,7 @@ function updateTowers(towers, enemies, projectiles, dt) {
 
     const st     = towerStats(tower);
     const center = cellCenter(tower.col, tower.row);
-    const best   = pickTargetSmart(enemies, center, st.range, st.targetMode, tower.typeId);
+    const best   = pickTargetSmart(enemies, center, st.range, st.targetMode, tower.typeId, st.branch);
     if (!best) continue;
 
     // spd가 0이나 NaN이면 1/spd가 Infinity·NaN이 되어 그 타워가 멈춘다
@@ -283,7 +304,12 @@ function updateTowers(towers, enemies, projectiles, dt) {
       spd: tower.typeId === 'sniper' ? 620 : 320,
       owner: tower,
       towerTypeId: tower.typeId,
-      chain: st.chain, chainRange: st.chainRange
+      branchId: st.branch,
+      chain: st.chain, chainRange: st.chainRange,
+      // ★5 분기 고유 — 명중 시점에 발사체가 그대로 들고 간다
+      critChance: st.critChance, critMult: st.critMult, execute: st.execute,
+      vsSlowed: st.vsSlowed, stunChance: st.stunChance, stunDur: st.stunDur,
+      corrode: st.corrode
     });
     proj._enemies = enemies;
     projectiles.push(proj);
@@ -314,6 +340,8 @@ function spawnPoisonPool(x, y, p) {
     maxLife: p.poolDur || POISON_POOL_DUR,
     owner: p.owner || null,
     towerTypeId: p.towerTypeId || 'poison',
+    branchId: p.branchId || null,
+    corrode: p.corrode || 0,
     pierce: p.pierce || 0
   });
 }
@@ -330,7 +358,10 @@ function updatePoisonPools(enemies, onKill, dt) {
     for (const e of enemies) {
       if (e.dead || e.reached || e.flying) continue;   // 비행은 장판 위를 지나간다
       if (Math.hypot(e.x - q.x, e.y - q.y) > q.r + (e.radius || 0)) continue;
-      const aff = affinityOf(q.towerTypeId, e);
+      const aff = affinityOf(q.towerTypeId, e, q.branchId);
+      // 🧪 부식 — 장판을 밟는 동안 방어력을 잃고 받는 피해가 늘어난다.
+      // 이 분기 혼자서는 약하다. 옆에 선 다른 타워 전부를 세게 만드는 것이 값어치다.
+      if (q.corrode > 0) { e.corrodeUntil = 0.6; e.corrodeAmt = Math.max(e.corrodeAmt || 0, q.corrode); }
       e._poisonAccum = (e._poisonAccum || 0) + q.dps * aff * dt;
       if (e._poisonAccum < 1) continue;
       const tick = Math.floor(e._poisonAccum);
@@ -375,9 +406,35 @@ function updateProjectiles(projectiles, onKill, dt) {
     };
     // ☠️ 독탑 — 맞은 자리에 장판을 깐다. 한 발의 값보다 자리에 남는 값이 크다.
     if (p.poolDps > 0) spawnPoisonPool(p.tx, p.ty, p);
-    const aff   = p.towerTypeId ? affinityOf(p.towerTypeId, tgt) : 1;
-    const dealt = hurtDefenseEnemy(tgt, p.dmg, p.pierceArmor, credit, aff, p.pierce);
+    const aff   = p.towerTypeId ? affinityOf(p.towerTypeId, tgt, p.branchId) : 1;
+
+    // ── ★5 분기 고유 ────────────────────────────────────────────────────
+    let dmg = p.dmg, crit = false;
+    // 💎 서릿발 — 이미 느려진 적에게만 값을 낸다. 혼자 두면 감속이 약해 손해다.
+    if (p.vsSlowed > 1 && (tgt.slowTimer > 0 || tgt.heroBlockUntil > 0)) dmg *= p.vsSlowed;
+    // 🎯 헤드샷 — 평균은 ×1.8이지만 한 발 한 발이 흔들린다
+    if (p.critChance > 0 && Math.random() < p.critChance) { dmg *= p.critMult; crit = true; }
+
+    const dealt = hurtDefenseEnemy(tgt, dmg, p.pierceArmor, credit, aff, p.pierce);
     if (p.owner) p.owner.damageDealt += dealt;
+    if (crit && typeof spawnFloaty === 'function') {
+      spawnFloaty('치명타!', tgt.x, tgt.y - (tgt.radius || 8) - 12, '#f0abfc');
+    }
+    // 💀 대물 저격 — 여기까지 깎았으면 끝낸다. 보스의 마지막 한 토막을 지운다.
+    if (p.execute > 0 && !tgt.dead && !tgt.reached && tgt.hp > 0
+        && tgt.hp <= tgt.maxHp * p.execute) {
+      const left = Math.ceil(tgt.hp);
+      hurtDefenseEnemy(tgt, left, true, credit, 1, 0);
+      if (p.owner) p.owner.damageDealt += left;
+      if (typeof spawnFloaty === 'function') spawnFloaty('💀 처형', tgt.x, tgt.y - 14, '#ef4444');
+      if (typeof FX !== 'undefined') FX.burst(tgt.x, tgt.y, '#ef4444', 12, 16);
+    }
+    // 🔋 과충전 — 감전. 스턴 전용 필드를 새로 만들지 않고 아주 센 감속으로 낸다.
+    if (p.stunChance > 0 && !tgt.dead && Math.random() < p.stunChance) {
+      tgt.slowFactor = Math.max(tgt.slowFactor, 0.95);
+      tgt.slowTimer  = Math.max(tgt.slowTimer, p.stunDur);
+      if (typeof FX !== 'undefined') FX.ring(tgt.x, tgt.y, '#facc15', 10);
+    }
     // 상성이 갈리는 순간을 눈에 보이게 — 왜 안 죽는지 알아야 배치를 바꾼다
     if (typeof spawnFloaty === 'function' && p.towerTypeId && (aff >= 1.2 || aff <= 0.6)) {
       if (Math.random() < 0.25) {
@@ -399,7 +456,7 @@ function updateProjectiles(projectiles, onKill, dt) {
         }
         if (!next) break;
         hit.add(next);
-        const cAff = affinityOf(p.towerTypeId, next);
+        const cAff = affinityOf(p.towerTypeId, next, p.branchId);
         const cd = hurtDefenseEnemy(next, p.dmg * 0.6, p.pierceArmor, credit, cAff, p.pierce);
         if (p.owner) p.owner.damageDealt += cd;
         if (typeof FX !== 'undefined') FX.spark(from.x, from.y, next.x, next.y, p.color);
@@ -417,9 +474,15 @@ function updateProjectiles(projectiles, onKill, dt) {
         if (e === tgt || e.dead || e.reached) continue;
         if (Math.hypot(e.x - tgt.x, e.y - tgt.y) < p.splash) {
           const d = hurtDefenseEnemy(e, p.dmg * 0.5, p.pierceArmor, credit,
-                                     p.towerTypeId ? affinityOf(p.towerTypeId, e) : 1,
+                                     p.towerTypeId ? affinityOf(p.towerTypeId, e, p.branchId) : 1,
                                      p.pierce);
           if (p.owner) p.owner.damageDealt += d;
+          // 🌨️ 눈보라 — 감속을 들고 있는 발사체는 범위에도 감속을 남긴다.
+          // 이게 없으면 "착탄 범위 감속"이 그냥 범위 피해였다.
+          if (p.slow > 0) {
+            e.slowFactor = Math.max(e.slowFactor, p.slow);
+            e.slowTimer  = Math.max(e.slowTimer, p.slowDur);
+          }
         }
       }
       if (typeof FX !== 'undefined') FX.burst(tgt.x, tgt.y, p.color, 10, p.splash * 0.4);

@@ -269,6 +269,8 @@ let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적�
     if (gs.towers.some(x => x.col === t.col && x.row === t.row)) continue;
     const tw = makeTower(t.col, t.row, t.typeId);
     tw.level    = Math.max(1, Math.min(TOWER_MAX_LEVEL, t.level || 1));
+    // ★5 분기 — 지금 정의에 없는 id면 버린다 (분기표가 바뀌어도 세이브가 안 깨지게)
+    tw.branch   = branchDef(t.typeId, t.branch) ? t.branch : null;
     tw.invested = t.invested || tw.invested;
     tw.kills    = t.kills || 0;
     tw.damageDealt = t.damageDealt || 0;
@@ -717,6 +719,7 @@ const _PAGE_UI_KEYS = [
   'buildingLvUpBtn','upgradeBtns','towerMoveBtn','buildingScroll','pageScroll','briefScroll','lobbyScroll','hireCards','hiredSlots',
   'heroInfoBtn','heroBackBtn','equipSlotBtns','invCards','skillSlotBtns','skillCards','heroPickBtn',
   'shopItemBtns','skillBuyBtns','activeBuyBtns','activeSlotBtns','shopTabBuy','shopTabUp',
+  'towerBranchBtns',
   'forgeTabs','forgeGearBtns','forgeFuseBtns','forgeTemperBtn','forgeCoreBtn',
   'charmRollBtn','charmCards','charmSlotBtns',
   'specialCards','specialSlots','heroDefBtn','heroBatBtn','bountyBtn','eliteBtn','towerMiniGrid',
@@ -1245,6 +1248,10 @@ function handleTownTap(x,y) {
     if (hitTest(x,y,gs.ui.towerUpgradeBtn||{})) { upgradeSelectedTower(x,y); return; }
     if (hitTest(x,y,gs.ui.towerMoveBtn||{}))    { beginTowerMove();          return; }
     if (hitTest(x,y,gs.ui.towerRemoveBtn||{}))  { sellSelectedTower(x,y);    return; }
+    // ★5 분기 — 세 갈래 중 하나
+    for (const b of gs.ui.towerBranchBtns||[]) {
+      if (hitTest(x,y,b)) { chooseTowerBranch(b.branchId, x, y); return; }
+    }
     for (const b of gs.ui.towerTypeBtns||[]) {
       if (hitTest(x,y,b)) { gs.selectedTowerType=b.typeId; gs.ui.towerAction=null; SFX.click(); return; }
     }
@@ -1426,6 +1433,38 @@ function upgradeSelectedTower(x, y) {
   const ctr = cellCenter(tower.col, tower.row);
   FX.ring(ctr.x, ctr.y, '#22c55e', 9);
   SFX.upgrade();
+}
+
+// ─── ★5 분기 특화 ────────────────────────────────────────────────────────────
+// ★5에 닿은 타워는 세 갈래 중 하나를 골라 골드로 특화한다.
+// 고른 뒤에도 값을 더 내면 갈아탈 수 있다(재분기). 두 개를 동시에 갖지는 못한다 —
+// 분기가 전부 트레이드오프라서 겹치면 서로를 지우고, 셋 중 하나를 고르는 것이
+// 이 시스템의 전부인데 다 가질 수 있으면 그 선택이 사라지기 때문이다.
+function chooseTowerBranch(branchId, x, y) {
+  const ta = gs.ui.towerAction;
+  if (!ta) return;
+  const tower = gs.towers.find(tw => tw.col === ta.col && tw.row === ta.row);
+  if (!tower) { gs.ui.towerAction = null; return; }
+  const def = branchDef(tower.typeId, branchId);
+  if (!def) return;
+  if ((tower.level || 1) < TOWER_BRANCH_LEVEL) {
+    spawnFloaty(`★${TOWER_BRANCH_LEVEL} 부터 분기할 수 있습니다`, x, y, '#f59e0b'); SFX.denied(); return;
+  }
+  if (tower.branch === branchId) {
+    spawnFloaty('이미 그 분기입니다', x, y, '#64748b'); SFX.denied(); return;
+  }
+  const rebrand = !!tower.branch;
+  const cost = rebrand ? towerRebranchCost(tower) : towerBranchCost(tower);
+  if (gs.gold < cost) { spawnFloaty(`골드 부족! ${cost}💰`, x, y, '#ef4444'); SFX.denied(); return; }
+  gs.gold -= cost;
+  tower.invested = (tower.invested || 0) + cost;
+  tower.branch = branchId;
+  spawnFloaty(`${def.icon} ${def.name}${rebrand ? ' 재분기' : ' 특화!'}`, x, y, def.color);
+  const ctr = cellCenter(tower.col, tower.row);
+  FX.ring(ctr.x, ctr.y, def.color, 12);
+  FX.burst(ctr.x, ctr.y, def.color, 14, 18);
+  SFX.upgrade();
+  SaveManager.save(gs);
 }
 
 // ─── 🔀 타워 이설 ────────────────────────────────────────────────────────────

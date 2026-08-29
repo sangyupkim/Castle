@@ -47,6 +47,7 @@ const SaveManager = {
       // 골드는 그대로인데 판이 텅 비어 있었다 — 한 판에서 제일 오래 쌓은 것이 사라졌다.
       towers: (gs.towers || []).map(t => ({
         col:t.col, row:t.row, typeId:t.typeId, level:t.level || 1, invested:t.invested || 0,
+        branch:t.branch || null,
         kills:t.kills || 0, damageDealt:t.damageDealt || 0
       })),
       team: (gs.battle?.ourTeam || []).filter(u => !u.isHero).map(u => ({
