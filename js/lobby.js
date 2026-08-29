@@ -24,6 +24,7 @@ function createLobby() {
   return {
     tab: 'sortie',
     skillTree: 'tower',   // 스킬 탭 안의 계열
+    nightmare: 0,         // 🌑 고른 악몽 단계 (0 = 심연)
     scroll: 0
   };
 }
@@ -80,13 +81,62 @@ function buyUnlock(id, gs) {
   return true;
 }
 
+// ─── 🌑 악몽 ─────────────────────────────────────────────────────────────────
+// _nightmareOpen은 '열린 데까지'를 센다.
+//   0  = 심연 100층을 아직 못 깼다 → 심연만 가능
+//   1  = 심연 클리어 → 악몽 1단계 개방
+//   N  = 악몽 N-1단계까지 깼다 → 악몽 N단계 개방
+//   11 = 악몽 10단계까지 깼다 → ♾️ 무한 개방
+function nightmareOpenLevel() {
+  return (typeof _nightmareOpen !== 'undefined') ? _nightmareOpen : 0;
+}
+// 이 단계를 지금 고를 수 있는가 (0 = 심연은 언제나)
+function nightmareAvailable(level) {
+  return level <= 0 || level <= nightmareOpenLevel();
+}
+function unboundedUnlocked() { return nightmareOpenLevel() > NIGHTMARE_MAX; }
+// 한 갈래를 깼다 — 다음 문이 열린다. 새로 열렸으면 true.
+function markNightmareCleared(level) {
+  const want = Math.max(0, Math.min(NIGHTMARE_MAX, level || 0)) + 1;
+  if (want <= nightmareOpenLevel()) return false;
+  _nightmareOpen = want;
+  return true;
+}
+
+// 심연·악몽 한 갈래를 끝냈다 — 문을 열고 보상을 준다
+function clearAbyssRun(gsp) {
+  const lv = gsp.nightmare || 0;
+  const opened = markNightmareCleared(lv);
+  // 클리어 보상 — 단계가 오를수록 크다. 처음 깬 판에만 준다.
+  if (opened) {
+    const bonus = NIGHTMARE_CLEAR_GEMS + lv * NIGHTMARE_CLEAR_GEMS_STEP;
+    gsp.soulStones += bonus;
+    gsp.stats.totalGems = (gsp.stats.totalGems || 0) + bonus;
+    gsp.clearBonusGems = bonus;
+  } else {
+    gsp.clearBonusGems = 0;
+  }
+  gsp.stats.bestNightmare = Math.max(gsp.stats.bestNightmare || 0, lv);
+  return opened;
+}
+
 // ─── 서약 ────────────────────────────────────────────────────────────────────
+// 악몽 단계가 걸려 있으면 그 사다리의 서약이 강제로 켜진다.
+// 플레이어가 캠프에서 직접 건 서약과 합쳐진다 — 악몽 위에 더 걸 수는 있어도 뺄 수는 없다.
+function forcedPacts() {
+  const gsp = (typeof gs !== 'undefined' && gs) ? gs : null;
+  if (!gsp || !gsp.inRun) return [];
+  return nightmarePacts(gsp.nightmare || 0);
+}
+function isPactForced(id) { return forcedPacts().includes(id); }
 function isPactOn(id) {
+  if (isPactForced(id)) return true;
   return (typeof _pacts !== 'undefined') && _pacts.includes(id);
 }
 
 function togglePact(id, gs) {
   if (!PACT_DEFS.some(p => p.id === id)) return false;
+  if (isPactForced(id)) return false;   // 악몽이 건 것은 뺄 수 없다
   const i = _pacts.indexOf(id);
   if (i >= 0) _pacts.splice(i, 1);
   else        _pacts.push(id);

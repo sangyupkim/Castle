@@ -88,6 +88,9 @@ let _unlocked       = [];   // 보석으로 연 타워/유닛
 let _pacts          = [];   // 걸어둔 서약
 let _seenMobs       = [];   // 도감
 let _clearedGates   = [];   // 최초 돌파한 무한 관문 (10층 단위)
+// 🌑 악몽 — 깬 최고 단계. 0 = 아직 심연 100층도 못 깼다, 1 = 심연 클리어(악몽 1단계 개방),
+// 11 = 악몽 10단계까지 다 깼다(♾️ 무한 개방). '깬 것'이 아니라 '열린 것'을 센다.
+let _nightmareOpen  = 0;
 let _heroSigil      = DEFAULT_SIGIL;   // 👑 영웅 각인 — 캠프에서 고르는 길
 let _unlockedSigils = [DEFAULT_SIGIL];  // 보석으로 연 각인
 let _stats          = createStats();
@@ -127,7 +130,10 @@ function newState() {
     wallRepairs:0,      // 이번 런에서 성벽을 몇 번 보수했는지 (비용 체증)
     rerolls:0,          // 이번 런에서 강화 카드를 몇 번 리롤했는지
     bountyUsed:0,       // 현상수배를 몇 번 불렀는지 (강해지고 보상도 오른다)
-    mode:'campaign',    // 'campaign'(훈련 30웨이브) | 'endless'(본편, 죽어야 끝난다)
+    mode:'campaign',    // 'campaign'(훈련 30웨이브) | 'endless'(심연·악몽·무한)
+    nightmare:0,        // 🌑 악몽 단계 — 서약이 그만큼 강제로 붙는다 (0 = 심연)
+    unbounded:false,    // ♾️ 무한 — 100층 결승선이 없다 (악몽 10단계를 깨야 열린다)
+    bossDefeated:false, // 👹 마왕을 잡았는가
     runSeed:0,          // 이 판의 시드 — 층 구성·변형·지형·경로를 흔든다
     pathChanged:null,   // 직전 층에서 경로가 바뀐 결과 (준비 화면 안내용)
     floorEvent:null,    // 이 층에만 걸리는 규칙 변화
@@ -147,6 +153,7 @@ function newState() {
     ui:{ waveBtn:{}, hireCards:[], hiredSlots:[], specialCards:[], specialSlots:[], heroDefBtn:{}, heroBatBtn:{},
          metaCards:[], skillTreeTabs:[], towerMove:null,
          lobbyTabBtns:[], unlockBtns:[], pactBtns:[], sortieBtn:{}, trainBtn:null, resultBtn:{},
+         unboundedBtn:null, nightmareBtns:[],
          buildingScroll:null, pageScroll:null, briefScroll:null, lobbyScroll:null,
          pauseResumeBtn:null, pauseGiveUpBtn:null,
          backupExportBtn:null, backupImportBtn:null, backupMsg:null,
@@ -181,6 +188,8 @@ function newState() {
     set seenMobs(v) { _seenMobs = v; },
     get clearedGates()  { return _clearedGates; },
     set clearedGates(v) { _clearedGates = v; },
+    get nightmareOpen()  { return _nightmareOpen; },
+    set nightmareOpen(v) { _nightmareOpen = v; },
     get heroSigil()  { return _heroSigil; },
     set heroSigil(v) { _heroSigil = v; },
     get unlockedSigils()  { return _unlockedSigils; },
@@ -219,6 +228,7 @@ let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적�
   _pacts          = sv.pacts         || [];
   _seenMobs       = sv.seenMobs      || [];
   _clearedGates   = sv.clearedGates  || [];
+  _nightmareOpen  = Math.max(0, Math.min(NIGHTMARE_MAX + 1, sv.nightmareOpen || 0));
   _heroSigil      = sv.heroSigil     || DEFAULT_SIGIL;
   _unlockedSigils = sv.unlockedSigils || [DEFAULT_SIGIL];
   if (!_unlockedSigils.includes(DEFAULT_SIGIL)) _unlockedSigils.push(DEFAULT_SIGIL);
@@ -241,6 +251,9 @@ let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적�
   gs.bountyUsed  = sv.bountyUsed  || 0;
   gs.eliteUsed   = sv.eliteUsed   || 0;
   gs.mode          = sv.mode === 'endless' ? 'endless' : 'campaign';
+  gs.nightmare     = Math.max(0, Math.min(NIGHTMARE_MAX, sv.nightmare || 0));
+  gs.unbounded     = !!sv.unbounded;
+  gs.bossDefeated  = !!sv.bossDefeated;
   gs.runSeed       = sv.runSeed || 0;
   gs.endlessGems    = sv.endlessGems || 0;
   gs.endlessGemsNew = sv.endlessGemsNew || 0;
@@ -723,7 +736,7 @@ const _PAGE_UI_KEYS = [
   'forgeTabs','forgeGearBtns','forgeFuseBtns','forgeTemperBtn','forgeCoreBtn',
   'charmRollBtn','charmCards','charmSlotBtns',
   'specialCards','specialSlots','heroDefBtn','heroBatBtn','bountyBtn','eliteBtn','towerMiniGrid',
-  'lobbyTabBtns','sortieBtn','trainBtn','metaCards','unlockBtns','pactBtns','sigilCards',
+  'lobbyTabBtns','sortieBtn','trainBtn','unboundedBtn','nightmareBtns','metaCards','unlockBtns','pactBtns','sigilCards',
   'skillTreeTabs','ascendBtn','trainSkipBtn','skillResetBtn','heroActiveBtns','heroAutoBtn',
   'backupExportBtn','backupImportBtn',
   'tutReplayBtn','tutResetTipBtn','bgmToggleBtn','sfxToggleBtn',
@@ -746,9 +759,24 @@ function handleLobbyTap(x, y) {
   for (const b of gs.ui.lobbyTabBtns || []) {
     if (hitTest(x,y,b)) { L.tab = b.id; SFX.click(); return; }
   }
-  // 출격은 두 갈래 — 해금 전에는 sortieBtn 하나가 훈련이다
+  // 🌑 악몽 사다리 — 내려갈 단계를 고른다
+  for (const b of gs.ui.nightmareBtns||[]) {
+    if (!hitTest(x,y,b)) continue;
+    if (!b.can) {
+      const prev = b.level - 1;
+      spawnFloaty(`🔒 ${prev <= 0 ? '∞ 심연' : `악몽 ${prev}단계`}의 마왕을 먼저 잡으세요`, x, y, '#f43f5e');
+      SFX.denied(); return;
+    }
+    gs.lobby.nightmare = b.level;
+    SFX.click(); return;
+  }
+  // 출격은 갈래가 여럿 — 해금 전에는 sortieBtn 하나가 훈련이다
   if (hitTest(x,y,gs.ui.trainBtn||{}))  { startRun('campaign'); return; }
-  if (hitTest(x,y,gs.ui.sortieBtn||{})) { startRun(endlessUnlocked() ? 'endless' : 'campaign'); return; }
+  if (hitTest(x,y,gs.ui.unboundedBtn||{})) { startRun('unbounded'); return; }
+  if (hitTest(x,y,gs.ui.sortieBtn||{})) {
+    if (!endlessUnlocked()) { startRun('campaign'); return; }
+    startRun('endless', gs.lobby.nightmare || 0); return;
+  }
 
   if (L.tab === 'sortie') {
     // 출격 탭도 스크롤된 채 그려진다
@@ -981,13 +1009,38 @@ function resetAllProgress() {
   if (typeof SFX !== 'undefined') SFX.levelUp();
 }
 
+// 👹 마왕을 잡았다 — 연출과 뒷정리. 클리어 판정은 웨이브가 끝날 때 본다.
+function markBossDefeated() {
+  gs.bossDefeated = true;
+  spawnFloaty('👹 마왕 처치!', CW/2, DEFENSE_H/2, '#fbbf24');
+  addLog(gs.battle, '👹 마왕을 쓰러뜨렸습니다', '#fbbf24');
+  if (typeof FX  !== 'undefined') FX.shake(10, 0.9);
+  if (typeof SFX !== 'undefined') SFX.win();
+  // 남은 호위는 함께 사라진다 — 주인이 죽었는데 정리를 더 시킬 이유가 없다
+  for (const en of gs.defenseEnemies) if (!en.isBoss) en.dead = true;
+  gs.chargers = [];
+}
+
 // ─── 런 시작 / 종료 ──────────────────────────────────────────────────────────
-function startRun(mode) {
+// mode: 'campaign'(훈련) | 'endless'(심연·악몽) | 'unbounded'(♾️ 무한)
+// nightmare: 0 = 심연, 1~10 = 악몽 N단계. 'unbounded'에서는 무시한다.
+function startRun(mode, nightmare) {
   SFX.click();
   resetGame();
   // 판마다 다른 시드 — 같은 층도 구성과 변형이 달라진다
   gs.runSeed = (Math.floor(Math.random() * 0x7FFFFFFF) | 0) || 1;
-  gs.mode  = (mode === 'endless' && endlessUnlocked()) ? 'endless' : 'campaign';
+  const wantAbyss = (mode === 'endless' || mode === 'unbounded') && endlessUnlocked();
+  // 곡선·층 생성은 전부 'endless' 하나로 돈다. 심연·악몽·무한의 차이는
+  // 강제 서약(nightmare)과 결승선(unbounded)뿐이다 — 엔진을 갈래마다 복제하지 않는다.
+  gs.mode  = wantAbyss ? 'endless' : 'campaign';
+  gs.unbounded = (mode === 'unbounded') && unboundedUnlocked();
+  gs.nightmare = gs.unbounded ? 0
+               : Math.max(0, Math.min(NIGHTMARE_MAX,
+                   nightmareAvailable(nightmare || 0) ? (nightmare || 0) : 0));
+  // inRun을 여기서 켠다 — 아래 reapplyAllBonuses가 forcedPacts()를 읽는데,
+  // 그게 gs.inRun을 보고 판단하기 때문이다. 예전처럼 맨 끝에서 켜면
+  // 악몽 서약이 '켜진 것으로 보이지만 BONUSES에는 안 붙은' 상태가 된다.
+  gs.inRun = true;
   // 판이 도는 동안 최고 기록은 계속 갱신된다. 첫 돌파를 판정하려면
   // 시작 시점의 기록을 따로 붙들고 있어야 한다.
   gs.runBestAtStart = (gs.stats && gs.stats.bestEndless) || 0;
@@ -998,11 +1051,17 @@ function startRun(mode) {
   consumeCharmsForRun(gs);
   reapplyAllBonuses(gs);
   applyHeroPlacePref(gs);   // 지난 판에 세워둔 자리 그대로 시작한다
-  gs.inRun = true;
   gs.page  = 'battle';
   wm.init(0);
   if (gs.mode === 'endless') {
-    spawnFloaty('∞ 심연 — 죽어야 끝납니다', CW/2, DEFENSE_H/2, '#a78bfa');
+    if (gs.unbounded) {
+      spawnFloaty('♾️ 무한 — 죽어야 끝납니다', CW/2, DEFENSE_H/2, '#fbbf24');
+    } else if (gs.nightmare > 0) {
+      spawnFloaty(`${nightmareName(gs.nightmare)} — 서약 ${gs.nightmare}개`,
+                  CW/2, DEFENSE_H/2, nightmareColor(gs.nightmare));
+    } else {
+      spawnFloaty(`∞ 심연 — ${ABYSS_FINAL_FLOOR}층의 마왕까지`, CW/2, DEFENSE_H/2, '#a78bfa');
+    }
   }
   SaveManager.save(gs);
 }
@@ -1578,6 +1637,11 @@ let _defGoldFrac = 0;
 
 function onDefenseKill(e, byHero) {
   const tpl  = ENEMY_TYPES[e.typeId] || {};
+  // 👹 마왕 처치는 죽는 순간에 잡는다.
+  // 예전에는 wm.updateBoss가 매 프레임 배열에서 죽은 보스를 '찾아' 판정했는데,
+  // 죽은 적은 그 프레임 안에서 gs.defenseEnemies에서 걸러져 나간다 —
+  // 다음 프레임에는 찾을 것이 없어 클리어가 영영 안 떴다.
+  if (e.isBoss && !gs.bossDefeated) markBossDefeated();
   // 상단은 막는 곳이지 버는 곳이 아니다 — 현상수배만 값을 그대로 받는다
   const scale = e.isBounty ? 1 : DEFENSE_GOLD_SCALE;
   _defGoldFrac += (e.reward || 1) * BONUSES.defenseGoldMult * scale;
@@ -1950,7 +2014,16 @@ function bankRunResult() {
     rows:     bd.rows,
     mult:     bd.mult,
     gaveUp:   !!gs.gaveUp,
-    newBest:  wasBest
+    newBest:  wasBest,
+    // 🌑 악몽 — 어느 갈래였고, 마왕을 잡았고, 다음 문이 열렸는가
+    nightmare:   gs.nightmare || 0,
+    unbounded:   !!gs.unbounded,
+    bossDown:    !!gs.bossDefeated,
+    clearGems:   gs.clearBonusGems || 0,
+    nextOpen:    (gs.bossDefeated && !gs.unbounded)
+                 ? ((gs.nightmare || 0) + 1 <= NIGHTMARE_MAX
+                     ? nightmareName((gs.nightmare || 0) + 1) : '♾️ 무한')
+                 : null
   };
 
   gs.inRun = false;

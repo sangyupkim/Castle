@@ -80,6 +80,13 @@ function createWaveManager() {
         extraMult: spawnMult / Math.max(0.01, density)
       });
 
+      // 👹 100층 — 마왕. 잡몹 대신 한 마리만 오고, 그 한 마리가 곧 결승선이다.
+      this.bossPhase = 0;
+      if (isBossFloor(gs, this.waveIndex)) {
+        this.defenseQueues = [];       // 일반 스폰은 없다
+        spawnDemonLord(gs, this.waveIndex);
+      }
+
       // 예약해둔 현상수배는 웨이브 시작 조금 뒤에 등장한다
       this.bountyTimer = gs.bountyPending ? BOUNTY_SPAWN_DELAY : null;
 
@@ -89,6 +96,32 @@ function createWaveManager() {
       startFighting(gs.battle);
       startArena(gs, this.waveIndex);
       if (typeof SFX !== 'undefined') SFX.waveStart();
+    },
+
+    // 👹 마왕 진행 — 페이즈 전환만. 처치 판정은 onDefenseKill이 죽는 순간에 한다
+    // (죽은 적은 그 프레임에 배열에서 걸러지므로 여기서 '찾아' 판정할 수 없다).
+    updateBoss(gs, dt) {
+      if (gs.bossDefeated) return;
+      const boss = (gs.defenseEnemies || []).find(e => e.isBoss && !e.dead && !e.reached);
+      if (!boss) return;
+      // 체력이 1/3씩 깎일 때마다 한 번씩
+      const frac = boss.hp / Math.max(1, boss.maxHp);
+      const want = Math.min(BOSS_PHASES - 1, Math.floor((1 - frac) * BOSS_PHASES));
+      while (this.bossPhase < want) {
+        this.bossPhase++;
+        boss.spd *= 1.10;                       // 갈수록 빨라진다 (총 ×1.21)
+        for (let i = 0; i < BOSS_ESCORT_EVERY; i++) {
+          const pick = i % 3 === 0 ? 'brute' : i % 3 === 1 ? 'orc' : 'runner';
+          const esc = makeDefenseEnemy(pick, this.waveIndex, { rewardMult: 0.4 });
+          esc.spawnDelay = i * 0.35;            // 한꺼번에 쏟지 않고 줄지어 나온다
+          gs.defenseEnemies.push(esc);
+        }
+        spawnFloaty(`👹 마왕 각성 ${this.bossPhase}/${BOSS_PHASES - 1} — 호위 소환!`,
+                    CW/2, DEFENSE_H/2, '#ef4444');
+        addLog(gs.battle, `👹 마왕이 호위 ${BOSS_ESCORT_EVERY}기를 불렀습니다`, '#ef4444');
+        if (typeof FX  !== 'undefined') FX.shake(7, 0.5);
+        if (typeof SFX !== 'undefined') SFX.baseHit();
+      }
     },
 
     // 하단 아레나에서 물러난다. 병력과 적립 골드를 지키고 남은 시간은 상단만 진행.
@@ -153,6 +186,20 @@ function createWaveManager() {
           addLog(gs.battle, `💰 현상수배 등장 — 놓치면 성벽 -${e.dmg}HP`, '#fbbf24');
           if (typeof FX  !== 'undefined') FX.shake(5, 0.35);
           if (typeof SFX !== 'undefined') SFX.waveStart();
+        }
+      }
+
+      // 👹 마왕 — 체력이 한 토막씩 깎일 때마다 호위를 부른다.
+      // 한 번 세운 배치로 끝까지 가지 못하게 하려는 것이다.
+      if (isBossFloor(gs, this.waveIndex)) {
+        this.updateBoss(gs, dt);
+        // 마왕을 잡으면 그 층은 거기서 끝난다. 100층의 목적은 마왕이지 시간 때우기가 아니다 —
+        // 잡고 나서 남은 40초를 아레나만 돌게 하면 최종전이 최종전으로 안 읽힌다.
+        if (gs.bossDefeated) {
+          clearArena(gs);
+          addLog(gs.battle, `🏆 ${ABYSS_FINAL_FLOOR}층 돌파`, '#fbbf24');
+          this.endWave(gs);
+          return;
         }
       }
 
@@ -295,7 +342,9 @@ function createWaveManager() {
       refreshHeroShop(gs);           // 상점 매대도 새로 깐다 (장비 · 스킬)
 
       // 훈련 마지막 웨이브만 강화 없이 결과로 넘긴다. 무한은 매 층 강화를 고른다.
-      const atCampaignEnd = (gs.mode !== 'endless') && (this.waveIndex + 1 >= TRAINING_WAVES);
+      // 👹 마왕을 잡은 층도 마찬가지다 — 다음 층이 없는데 강화를 고르게 할 이유가 없다.
+      const atCampaignEnd = ((gs.mode !== 'endless') && (this.waveIndex + 1 >= TRAINING_WAVES))
+                          || (runHasFinish(gs) && gs.bossDefeated);
       if (!atCampaignEnd) {
         this.phase = 'upgradePick';
         gs.upgradePick = { active: true, cards: rollUpgradeCards(gs.activeUpgrades, fev('cards', 3)) };
@@ -314,8 +363,11 @@ function createWaveManager() {
         // 기준은 '판을 시작할 때의 최고 기록'이다 — 판이 진행되며 갱신되는 값을 쓰면
         // 매 층이 자기 자신을 갱신해서 전부 첫 돌파가 돼 버린다.
         const first = et > (gs.runBestAtStart || 0);
+        // 🌑 악몽은 같은 100층을 다시 내려가는 것이라, 단계가 값을 만들어야 한다.
+        // 그러지 않으면 1단계를 깬 사람이 2단계로 갈 이유가 없다.
         const step  = endlessGemStepFor(et, gs.runBestAtStart)
-                    * fev('gemMult', 1) * (BONUSES.gemMult || 1);
+                    * fev('gemMult', 1) * (BONUSES.gemMult || 1)
+                    * nightmareGemMult(gs.nightmare || 0);
         gs.endlessGems = (gs.endlessGems || 0) + step;
         if (first) gs.endlessGemsNew = (gs.endlessGemsNew || 0) + step;
         else       gs.endlessGemsOld = (gs.endlessGemsOld || 0) + step;
@@ -365,10 +417,14 @@ function createWaveManager() {
 
       if (this.intermissionTimer <= 0) {
         const next = this.waveIndex + 1;
-        // 훈련은 TRAINING_WAVES에서 끝난다 (완주 = 심연 해금). 심연은 끝이 없다.
-        if (gs.mode !== 'endless' && next >= TRAINING_WAVES) {
+        // 훈련은 TRAINING_WAVES에서 끝난다 (완주 = 심연 해금).
+        // 심연·악몽은 100층 마왕에서 끝난다. ♾️ 무한만 끝이 없다.
+        const trainDone = gs.mode !== 'endless' && next >= TRAINING_WAVES;
+        const abyssDone = runHasFinish(gs) && gs.bossDefeated;
+        if (trainDone || abyssDone) {
           gs.stageCleared = true;
           gs.stats.clears = (gs.stats.clears || 0) + 1;
+          if (abyssDone) clearAbyssRun(gs);
           SaveManager.save(gs);
         } else {
           gs.wave = next;
