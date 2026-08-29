@@ -33,6 +33,20 @@ function createWaveManager() {
       this.defenseQueues = [];
       this.wipedAt   = null;
       this.bountyTimer = null;   // 현상수배 등장까지 남은 시간
+
+      // 편성 슬롯을 여기서 다시 센다.
+      // gs.battle.maxSlots는 계산해서 넣어두는 값인데, 그 입력 중 하나가
+      // 👥증원 같은 층 이벤트(fev('slotBonus'))다. 그런데 재계산은 웨이브가
+      // '끝날 때' 돌았고 층 이벤트는 그 뒤 여기 init에서 바뀌었다 — 즉 준비 화면 내내
+      // 슬롯 수가 '지난 층'의 이벤트를 들고 있었다. 그래서
+      //   · 증원 층에 들어와도 4칸 그대로였다가, 마을에서 아무 강화나 사면
+      //     (그게 재계산을 부르므로) 갑자기 6칸으로 튀었고
+      //   · 증원 층을 지나 다음 층에 가도 6칸이 그대로 남았다.
+      // 이벤트가 슬롯의 입력이면, 이벤트가 정해지는 자리에서 같이 세야 한다.
+      if (typeof gs !== 'undefined' && gs && typeof recalcMaxSlots === 'function') {
+        recalcMaxSlots(gs);
+        releaseOverCapUnits(gs);
+      }
       maybeFloorTips(idx);
     },
 

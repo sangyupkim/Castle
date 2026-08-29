@@ -456,6 +456,33 @@ function recalcMaxSlots(gs) {
     Math.floor((4 + BONUSES.maxSlotBonus) * (BONUSES.pactSlotMult || 1)) + fev('slotBonus', 0));
 }
 
+// 슬롯이 줄었는데 이미 그보다 많이 데리고 있으면 넘치는 만큼 돌려보낸다.
+// 👥증원은 '한 층짜리' 이벤트인데, 그 층에서 6명을 뽑으면 다음 층에도 6명이
+// 그대로 따라갔다 — 한 층만 걸리는 규칙이 영구 강화가 되고 있었다.
+// 내가 자른 것이 아니라 층이 끝나서 자리가 사라진 것이므로 고용비는 전액 돌려준다.
+function releaseOverCapUnits(gs) {
+  if (!gs || !gs.battle) return 0;
+  const team = gs.battle.ourTeam;
+  const isNormal = u => !u.isHero && !(UNIT_TYPES[u.typeId] || {}).special;
+  let over = team.filter(isNormal).length - gs.battle.maxSlots;
+  if (over <= 0) return 0;
+  let refund = 0, freed = 0;
+  // 나중에 뽑은 것부터 — 층 이벤트를 보고 추가로 뽑았을 쪽이다
+  for (let i = team.length - 1; i >= 0 && over > 0; i--) {
+    if (!isNormal(team[i])) continue;
+    refund += hireCost(team[i].typeId);
+    team.splice(i, 1);
+    over--; freed++;
+  }
+  if (freed > 0) {
+    gs.gold += refund;
+    if (typeof addLog === 'function') {
+      addLog(gs.battle, `👥 증원이 끝나 용병 ${freed}명 해산 +${refund}💰`, COLORS.gold);
+    }
+  }
+  return freed;
+}
+
 // ─── 이번 판에 집은 강화 카드를 BONUSES에 되살린다 ───────────────────────────
 // reapplyAllBonuses()가 resetBonuses()로 시작하는데 여기가 빠져 있었다.
 // 웨이브가 시작될 때마다 reapply가 돌므로, 집은 카드는 다음 웨이브에 통째로 사라졌다 —
