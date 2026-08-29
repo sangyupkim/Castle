@@ -18,7 +18,7 @@ const SHELL = [
   '.', 'index.html', 'manifest.webmanifest',
   'assets/images/manifest.js', 'js/version.js', 'js/constants.js', 'js/sprites.js', 'js/audio.js', 'js/fx.js', 'js/upgrade.js', 'js/hero.js', 'js/forge.js', 'js/town.js',
   'js/save.js', 'js/lobby.js', 'js/defense.js', 'js/battle.js', 'js/arena.js',
-  'js/formation.js', 'js/wave.js', 'js/tutorial.js', 'js/render.js', 'js/game.js',
+  'js/formation.js', 'js/wave.js', 'js/tutorial.js', 'js/guide.js', 'js/render.js', 'js/game.js',
   'assets/images/mainpage.png',
   'assets/images/icon-192.png', 'assets/images/icon-512.png', 'assets/images/icon-maskable-512.png',
   // 스프라이트 — 매니페스트에 켜둔 것만 담는다.
