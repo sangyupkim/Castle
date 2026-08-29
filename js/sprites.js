@@ -120,6 +120,12 @@ const Sprites = (() => {
     return true;
   }
   function drawC(ctx, key, cx, cy, w, h) { return draw(ctx, key, cx - w / 2, cy - h / 2, w, h); }
+  // 원본의 한 조각을 잘라 임의 크기로 늘린다 — 9슬라이스 패널이 쓴다
+  function blitRect(ctx, key, sx, sy, sw, sh, dx, dy, dw, dh) {
+    const im = imgs[key]; if (!im || dw <= 0 || dh <= 0) return false;
+    blit(ctx, im, sx, sy, sw, sh, dx, dy, dw, dh, false);
+    return true;
+  }
   // 발밑 기준 — 캐릭터와 타워는 바닥선이 맞아야 앞뒤가 읽힌다
   function drawFoot(ctx, key, cx, footY, w, h) { return draw(ctx, key, cx - w / 2, footY - h, w, h); }
 
@@ -179,7 +185,7 @@ const Sprites = (() => {
     return { 불러옴: ok.length, 실패: no.length, 없는파일: failed };
   }
 
-  return { load, has, pick, size, draw, drawC, drawFoot, drawFootH, frame, frameAt, actor, actorKey, actorHeadUp, tinted, report,
+  return { load, has, pick, size, draw, drawC, blitRect, drawFoot, drawFootH, frame, frameAt, actor, actorKey, actorHeadUp, tinted, report,
            get progress() { return total ? done / total : 1; },
            get total() { return total; },
            get ready() { return !total || done >= total; } };

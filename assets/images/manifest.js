@@ -56,13 +56,132 @@ self.SPRITE_FILES = {
 
   // 👷 타워 점유자 — Fantasy RPG NPC 팩(32×32, 발끝이 프레임 바닥에 맞춰져 있다).
   // 타워 그림을 종류·티어·분기마다 새로 그리는 대신 '석대 + 사람'으로 나눈다.
-  // 사람만 갈아 끼우면 조합이 곱셈으로 늘어난다.
-  'crew.arrow':  'crew/arrow.png',      // 궁수
-  'crew.frost':  'crew/frost.png',      // 마법사
-  'crew.cannon': 'crew/cannon.png',     // 대장장이
-  'crew.sniper': 'crew/sniper.png',     // 처형인
-  'crew.tesla':  'crew/tesla.png',      // 마법 상인
-  'crew.poison': 'crew/poison.png',     // 연금술사
+  // 사람만 갈아 끼우면 조합이 곱셈으로 늘어난다 — 이게 두 겹으로 가른 이유다.
+  // 분기를 안 골랐으면 종류 기본값, 골랐으면 그 분기 전용 얼굴로 바뀐다.
+
+  // ── 종류 기본 ──
+  // 궁수
+  'crew.arrow.0': 'crew/arrow_0.png',
+  'crew.arrow.1': 'crew/arrow_1.png',
+  'crew.arrow.2': 'crew/arrow_2.png',
+  'crew.arrow.3': 'crew/arrow_3.png',
+  // 마법사
+  'crew.frost.0': 'crew/frost_0.png',
+  'crew.frost.1': 'crew/frost_1.png',
+  'crew.frost.2': 'crew/frost_2.png',
+  'crew.frost.3': 'crew/frost_3.png',
+  // 대장장이
+  'crew.cannon.0': 'crew/cannon_0.png',
+  'crew.cannon.1': 'crew/cannon_1.png',
+  'crew.cannon.2': 'crew/cannon_2.png',
+  'crew.cannon.3': 'crew/cannon_3.png',
+  // 처형인
+  'crew.sniper.0': 'crew/sniper_0.png',
+  'crew.sniper.1': 'crew/sniper_1.png',
+  'crew.sniper.2': 'crew/sniper_2.png',
+  'crew.sniper.3': 'crew/sniper_3.png',
+  // 마법 상인
+  'crew.tesla.0': 'crew/tesla_0.png',
+  'crew.tesla.1': 'crew/tesla_1.png',
+  'crew.tesla.2': 'crew/tesla_2.png',
+  'crew.tesla.3': 'crew/tesla_3.png',
+  // 연금술사
+  'crew.poison.0': 'crew/poison_0.png',
+  'crew.poison.1': 'crew/poison_1.png',
+  'crew.poison.2': 'crew/poison_2.png',
+  'crew.poison.3': 'crew/poison_3.png',
+
+  // ── ★5 분기 18갈래 ──
+  // 💨 속사 — 도둑
+  'crew.a_rapid.0': 'crew/a_rapid_0.png',
+  'crew.a_rapid.1': 'crew/a_rapid_1.png',
+  'crew.a_rapid.2': 'crew/a_rapid_2.png',
+  'crew.a_rapid.3': 'crew/a_rapid_3.png',
+  // 🎯 관통 — 궁수
+  'crew.a_pierce.0': 'crew/a_pierce_0.png',
+  'crew.a_pierce.1': 'crew/a_pierce_1.png',
+  'crew.a_pierce.2': 'crew/a_pierce_2.png',
+  'crew.a_pierce.3': 'crew/a_pierce_3.png',
+  // 🏹 공성 — 대형 기사
+  'crew.a_siege.0': 'crew/a_siege_0.png',
+  'crew.a_siege.1': 'crew/a_siege_1.png',
+  'crew.a_siege.2': 'crew/a_siege_2.png',
+  'crew.a_siege.3': 'crew/a_siege_3.png',
+  // 🧊 혹한 — 키 큰 수녀
+  'crew.f_deep.0': 'crew/f_deep_0.png',
+  'crew.f_deep.1': 'crew/f_deep_1.png',
+  'crew.f_deep.2': 'crew/f_deep_2.png',
+  'crew.f_deep.3': 'crew/f_deep_3.png',
+  // 💎 서릿발 — 마법사
+  'crew.f_shatter.0': 'crew/f_shatter_0.png',
+  'crew.f_shatter.1': 'crew/f_shatter_1.png',
+  'crew.f_shatter.2': 'crew/f_shatter_2.png',
+  'crew.f_shatter.3': 'crew/f_shatter_3.png',
+  // 🌨️ 눈보라 — 수녀
+  'crew.f_blizzard.0': 'crew/f_blizzard_0.png',
+  'crew.f_blizzard.1': 'crew/f_blizzard_1.png',
+  'crew.f_blizzard.2': 'crew/f_blizzard_2.png',
+  'crew.f_blizzard.3': 'crew/f_blizzard_3.png',
+  // 💥 융단 — 백정
+  'crew.c_carpet.0': 'crew/c_carpet_0.png',
+  'crew.c_carpet.1': 'crew/c_carpet_1.png',
+  'crew.c_carpet.2': 'crew/c_carpet_2.png',
+  'crew.c_carpet.3': 'crew/c_carpet_3.png',
+  // 🛡️ 철갑탄 — 중장 기사
+  'crew.c_ap.0': 'crew/c_ap_0.png',
+  'crew.c_ap.1': 'crew/c_ap_1.png',
+  'crew.c_ap.2': 'crew/c_ap_2.png',
+  'crew.c_ap.3': 'crew/c_ap_3.png',
+  // 🚀 박격 — 대장장이
+  'crew.c_mortar.0': 'crew/c_mortar_0.png',
+  'crew.c_mortar.1': 'crew/c_mortar_1.png',
+  'crew.c_mortar.2': 'crew/c_mortar_2.png',
+  'crew.c_mortar.3': 'crew/c_mortar_3.png',
+  // 🎯 헤드샷 — 처형인
+  'crew.s_head.0': 'crew/s_head_0.png',
+  'crew.s_head.1': 'crew/s_head_1.png',
+  'crew.s_head.2': 'crew/s_head_2.png',
+  'crew.s_head.3': 'crew/s_head_3.png',
+  // 🔫 연사 — 전령
+  'crew.s_auto.0': 'crew/s_auto_0.png',
+  'crew.s_auto.1': 'crew/s_auto_1.png',
+  'crew.s_auto.2': 'crew/s_auto_2.png',
+  'crew.s_auto.3': 'crew/s_auto_3.png',
+  // 💀 대물 — 정예 기사
+  'crew.s_anti.0': 'crew/s_anti_0.png',
+  'crew.s_anti.1': 'crew/s_anti_1.png',
+  'crew.s_anti.2': 'crew/s_anti_2.png',
+  'crew.s_anti.3': 'crew/s_anti_3.png',
+  // ⛓️ 연쇄 — 마법 상인
+  'crew.t_chain.0': 'crew/t_chain_0.png',
+  'crew.t_chain.1': 'crew/t_chain_1.png',
+  'crew.t_chain.2': 'crew/t_chain_2.png',
+  'crew.t_chain.3': 'crew/t_chain_3.png',
+  // 🔋 과충전 — 왕
+  'crew.t_over.0': 'crew/t_over_0.png',
+  'crew.t_over.1': 'crew/t_over_1.png',
+  'crew.t_over.2': 'crew/t_over_2.png',
+  'crew.t_over.3': 'crew/t_over_3.png',
+  // 🛩️ 대공 — 공주
+  'crew.t_aa.0': 'crew/t_aa_0.png',
+  'crew.t_aa.1': 'crew/t_aa_1.png',
+  'crew.t_aa.2': 'crew/t_aa_2.png',
+  'crew.t_aa.3': 'crew/t_aa_3.png',
+  // ☠️ 맹독 — 연금술사
+  'crew.p_virul.0': 'crew/p_virul_0.png',
+  'crew.p_virul.1': 'crew/p_virul_1.png',
+  'crew.p_virul.2': 'crew/p_virul_2.png',
+  'crew.p_virul.3': 'crew/p_virul_3.png',
+  // 🌫️ 확산 — 뚱뚱한 수녀
+  'crew.p_spread.0': 'crew/p_spread_0.png',
+  'crew.p_spread.1': 'crew/p_spread_1.png',
+  'crew.p_spread.2': 'crew/p_spread_2.png',
+  'crew.p_spread.3': 'crew/p_spread_3.png',
+  // 🧪 부식 — 상인
+  'crew.p_corrode.0': 'crew/p_corrode_0.png',
+  'crew.p_corrode.1': 'crew/p_corrode_1.png',
+  'crew.p_corrode.2': 'crew/p_corrode_2.png',
+  'crew.p_corrode.3': 'crew/p_corrode_3.png',
 
   // 🧱 석대 — 0x72 던전 팩의 진짜 석재 타일. 예전에는 캔버스 도형으로 그렸는데
   // 사람만 픽셀 아트고 받침만 도형이라 재질이 따로 놀았다.
@@ -191,6 +310,17 @@ self.SPRITE_FILES = {
   'mob.demon.run.1':  'mobs/demon/run_1.png',
   'mob.demon.run.2':  'mobs/demon/run_2.png',
   'mob.demon.run.3':  'mobs/demon/run_3.png',
+  // 🖼 UI — Cryo's Mini GUI에서 잘라낸 9슬라이스 판과 막대 채움.
+  // 패널은 8px 모서리 기준으로 늘린다(drawPanel9). 막대는 가로로 늘리면 된다.
+  'ui.panel.dark':  'ui/panel_dark.png',    // 검정 + 옅은 남색 테두리 — 기본
+  'ui.panel.gold':  'ui/panel_gold.png',    // 검정 + 주황 테두리 — 고른 것/중요한 것
+  'ui.panel.navy':  'ui/panel_navy.png',    // 짙은 남색 채움
+  'ui.panel.paper': 'ui/panel_paper.png',   // 양피지
+  'ui.panel.wood':  'ui/panel_wood.png',    // 나무
+  'ui.bar.red':     'ui/bar_red.png',
+  'ui.bar.blue':    'ui/bar_blue.png',
+  'ui.bar.green':   'ui/bar_green.png',
+  'ui.bar.orange':  'ui/bar_orange.png',
 };
 
 // ── 이어 붙인 프레임 ────────────────────────────────────────────────────────
