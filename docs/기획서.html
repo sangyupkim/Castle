@@ -219,7 +219,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <div class="wrap">
 <header class="cover">
-  <div class="eyebrow">Game Design Document · v4.13 · 도착하지 않던 배포</div>
+  <div class="eyebrow">Game Design Document · v4.14 · 되돌릴 수 있어야 선택이 된다</div>
   <h1>듀얼 프론티어</h1>
   <p class="tagline">한 화면에서 두 개의 전선을 동시에 굴리는 모바일 웹 로그라이트.
      끝은 없다 — 얼마나 깊이 내려갔는지가 기록이다.</p>
@@ -228,7 +228,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
     <div><dt>플랫폼</dt><dd>모바일 웹 (480×800 캔버스)</dd></div>
     <div><dt>1회 하강</dt><dd>10~30분 (도달 층에 비례)</dd></div>
     <div><dt>현재 볼륨</dt><dd>훈련 30웨이브 + ∞ 무한 (알고리즘 생성)</dd></div>
-    <div><dt>이번 개정</dt><dd>서비스 워커 캐시 키 · 버전 단일화 (v4.13)</dd></div>
+    <div><dt>이번 개정</dt><dd>⏭훈련 건너뛰기 · ♻️스킬 초기화 (v4.14)</dd></div>
   </dl>
 </header>
 
@@ -1041,6 +1041,45 @@ v1.0의 "그룹 순환 + 보상 체감" 구조를 이 압력 곡선이 대체한
 <p>셋 다 처음부터 열려 있으면 고르는 데 값이 없다. 심연에서 모은 보석이
 "다음 영웅"이라는 목표가 되게 했다. 한 번 열면 <strong>언제든 무료로 갈아 끼운다</strong> —
 층 조합에 맞춰 바꾸는 것이 각인의 목적이므로 교체까지 잠그면 그냥 안 쓰게 된다.</p>
+
+<h3>⏭ 훈련 건너뛰기 · ♻️ 스킬 초기화 <span class="rev">v4.14</span></h3>
+
+<p class="lede">플레이 보고: <strong>"훈련모드 건너뛰기를 만들어달라 했던 것 같은데 없어.
+초기화를 계속 하니까 훈련모드를 계속 해야 해서, 건너뛰기 하면 보석 3개 받고
+바로 심연으로 갈 수 있게 해줘."</strong></p>
+
+<p>맞는 지적이다. v4.11에서 만든 것은 <strong>안내(튜토리얼) 쪽지</strong> 건너뛰기였고,
+요청은 <strong>훈련 모드</strong>였다 — 같은 이름의 다른 것을 고쳤다.</p>
+
+<p>훈련은 6웨이브짜리 연습판이고 심연을 여는 조건이다. 완주하면 2보석,
+첫 클리어 정산까지 합쳐 최대 4를 번다. 초기화를 반복하면 그 6웨이브를 매번 다시 치러야
+심연에 들어갈 수 있다 — 아는 내용을 다시 치르게 하는 것은 값이 아니다.</p>
+
+<p>캠프 › 출격 탭의 "∞ 심연 — 아직 잠겨 있습니다" 칸에
+<strong>⏭ 훈련 건너뛰기 💎+3</strong>을 붙였다. 평균치에 가까운 3보석을 받고 심연이 바로 열린다.</p>
+
+<div class="tw"><table>
+<caption>무엇이 초기화에서 살아남는가</caption>
+<thead><tr><th>표시</th><th>성격</th><th>초기화</th></tr></thead>
+<tbody>
+<tr><td class="mono">df_tut_seen</td><td>안내 쪽지 — <strong>설명</strong></td><td>살아남는다 (또 볼 이유가 없다)</td></tr>
+<tr><td class="mono">trainSkipped</td><td>훈련 완료 — <strong>진행</strong></td><td>함께 지워진다 (초기화의 뜻을 흐리면 안 된다)</td></tr>
+</tbody></table></div>
+
+<p>대신 초기화 직후 캠프에 버튼이 그대로 있으니 한 번만 누르면 된다.</p>
+
+<h4>♻️ 스킬 초기화 — 무료 · 전액 반환</h4>
+
+<p>트리 전체가 <strong>4126보석</strong>짜리다. 그 규모에서 한 번 잘못 찍은 것이 판을
+통째로 묶어 두면 플레이어가 하는 일은 '고민'이 아니라 '검색'이 된다.
+<strong>되돌릴 수 있어야 실험이 선택이 된다.</strong></p>
+
+<p>🌳 스킬 탭 위에 <strong>♻️ 스킬 초기화 — 무료 · 💎N 전액 반환</strong> 줄을 뒀다.
+넣은 보석을 한 푼도 빼지 않고 돌려주고 트리를 비운다. 값은 받지 않는다.
+되돌릴 수 없는 조작이라 <strong>두 번 눌러야</strong> 실행된다 (타이틀 리셋과 같은 규칙, 5초 안에).</p>
+
+<p>실측: 30보석어치를 찍은 상태에서 초기화 → 레벨 0, 보석 30 전액 복귀,
+<code>towerDmgMult</code>가 1.0으로 재계산.</p>
 
 <h3>머지는 됐는데 화면이 안 바뀌던 이유 <span class="rev">v4.13 · 배포</span></h3>
 
@@ -1871,6 +1910,7 @@ Infinity가 되지 않게 하한을 두고, <span class="mono">dt</span>의 음�
 <tr><td class="mono">charms / charmSlots</td><td class="wrap">🎴 부적 보관함과 장착 두 칸</td><td><span class="chip lo">v4.9</span></td></tr>
 <tr><td class="mono">ascension</td><td class="wrap">♾️ 승천 단계</td><td><span class="chip lo">v4.9</span></td></tr>
 <tr><td class="mono">heroPlacePref</td><td class="wrap">👑 마지막으로 고른 영웅 배치 자리</td><td><span class="chip lo">v4.10</span></td></tr>
+<tr><td class="mono">trainSkipped</td><td class="wrap">⏭ 훈련을 건너뛰고 심연을 열었는가</td><td><span class="chip lo">v4.14</span></td></tr>
 <tr><td class="mono">clearedStages</td><td class="wrap">스테이지 클리어 여부 10칸</td><td><span class="chip lo">기존</span></td></tr>
 <tr><td class="mono">stats</td><td class="wrap">플레이 횟수 · 최고 웨이브 · 누적 처치 · 누적 골드</td><td><span class="chip lo">기존</span></td></tr>
 <tr><td class="mono">unlocked</td><td class="wrap"><span class="mono">{ towers:[...], units:[...] }</span></td><td><span class="chip md">신규</span></td></tr>

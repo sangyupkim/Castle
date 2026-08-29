@@ -374,6 +374,29 @@ function applySkillTree(gs) {
     }
   }
 }
+// 지금까지 트리에 넣은 보석 총액
+function skillSpentTotal(gs) {
+  let t = 0;
+  for (const treeId of SKILL_TREE_ORDER)
+    for (const sk of SKILL_TREES[treeId].skills) {
+      const lv = skillLevel(gs, sk.id);
+      for (let i = 1; i <= lv; i++) t += skillLevelCost(sk, i);
+    }
+  return t;
+}
+
+// 트리를 통째로 되돌리고 넣은 보석을 전액 돌려준다. 값은 받지 않는다 —
+// 4126보석짜리 나무에서 한 번 잘못 찍은 것이 판을 통째로 묶어 두면
+// 플레이어가 하는 일은 '고민'이 아니라 '검색'이 된다. 되돌릴 수 있어야 실험이 선택이 된다.
+function resetSkillTree(gs) {
+  const refund = skillSpentTotal(gs);
+  if (refund <= 0) return 0;
+  gs.skillLevels = {};
+  gs.soulStones += refund;
+  reapplyAllBonuses(gs);
+  return refund;
+}
+
 // 트리 전체를 다 올리는 데 드는 보석 (표시용)
 function skillTreeTotalCost() {
   let t = 0;

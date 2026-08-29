@@ -1820,7 +1820,7 @@ function renderLobbySortie(ctx, gs) {
   // ── 기록 배너 — 이 게임의 점수판 ────────────────────────────────────────
   const best = gs.stats.bestEndless || 0;
   const open = endlessUnlocked();
-  const rh = 64;
+  const rh = open ? 64 : 94;   // 잠겨 있을 때는 ⏭ 건너뛰기 버튼 자리가 더 필요하다
   roundRect(ctx,10,y,CW-20,rh,8);
   ctx.fillStyle = open ? '#1a1033' : '#0c1220'; ctx.fill();
   ctx.strokeStyle = open ? '#7c3aed' : '#1e293b'; ctx.lineWidth=1; ctx.stroke();
@@ -1855,6 +1855,19 @@ function renderLobbySortie(ctx, gs) {
     ctx.fillText('훈련을 한 판 치르면 열립니다 — 완주하지 않아도 됩니다.', 18, y+32);
     ctx.fillStyle='#334155'; ctx.font='9px sans-serif';
     ctx.fillText('심연이 본편입니다 — 훈련은 손에 익히는 곳입니다.', 18, y+48);
+
+    // ⏭ 훈련 건너뛰기 — 훈련을 아는 사람에게 같은 6웨이브를 다시 시키는 것은 값이 아니라 벌이다.
+    // 완주해서 벌었을 만큼(최대 4)에 가까운 3보석을 주고 심연을 바로 연다.
+    const skw = 150, skh = 30, skx = CW - 18 - skw, sky = y + rh - skh - 8;
+    roundRect(ctx, skx, sky, skw, skh, 6);
+    ctx.fillStyle='#2a1a05'; ctx.fill(); ctx.strokeStyle='#f59e0b'; ctx.lineWidth=1.5; ctx.stroke();
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle='#fbbf24'; ctx.font='bold 11px sans-serif';
+    ctx.fillText(`⏭ 훈련 건너뛰기 💎+${TRAIN_SKIP_GEMS}`, skx+skw/2, sky+skh/2-5);
+    ctx.fillStyle='#a16207'; ctx.font='8px sans-serif';
+    ctx.fillText('바로 심연으로', skx+skw/2, sky+skh/2+8);
+    gs.ui.trainSkipBtn = { x:skx, y:sky, w:skw, h:skh };
+    ctx.textAlign='left'; ctx.textBaseline='top';
   }
   y += rh + 10;
 
@@ -2002,6 +2015,7 @@ function renderLobbySortie(ctx, gs) {
 
 // ── 🌳 스킬 ─────────────────────────────────────────────────────────────────
 // v2 — 나무 다섯, 노드마다 10레벨, 아랫줄은 윗줄에 레벨을 쌓아야 열린다.
+// 초기화는 되돌릴 수 없는 조작이라 두 번 눌러야 실행된다 — 상태는 game.js가 들고 있다.
 function renderLobbySkill(ctx, gs) {
   const L = gs.lobby;
   if (!SKILL_TREES[L.skillTree]) L.skillTree = 'tower';   // v1 세이브의 'support' 탭
@@ -2022,8 +2036,28 @@ function renderLobbySkill(ctx, gs) {
     gs.ui.skillTreeTabs.push({x:tx,y:tabY,w:tabW,h:tabH,id:tab.id});
   });
 
+  // ♻️ 초기화 — 무료. 넣은 보석을 전액 돌려주고 트리를 비운다.
+  gs.ui.skillResetBtn = null;
+  const spent = skillSpentTotal(gs);
+  let headY = tabY + tabH + 8;
+  if (spent > 0) {
+    const armed = _skillResetArmed && (Date.now() - _skillResetArmedAt < 5000);
+    if (!armed) _skillResetArmed = false;
+    const rw = CW - 16, rh2 = 26;
+    roundRect(ctx, 8, headY, rw, rh2, 5);
+    ctx.fillStyle = armed ? '#3f1515' : '#0f172a'; ctx.fill();
+    ctx.strokeStyle = armed ? '#ef4444' : '#334155'; ctx.lineWidth = armed ? 2 : 1; ctx.stroke();
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle = armed ? '#fca5a5' : '#94a3b8'; ctx.font='bold 10px sans-serif';
+    ctx.fillText(armed ? `한 번 더 누르면 초기화 — 💎${spent} 전액 반환`
+                       : `♻️ 스킬 초기화 — 무료 · 💎${spent} 전액 반환`, CW/2, headY+rh2/2);
+    gs.ui.skillResetBtn = { x:8, y:headY, w:rw, h:rh2 };
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    headY += rh2 + 6;
+  }
+
   gs.ui.metaCards = [];
-  const treeTop = tabY + tabH + 12;
+  const treeTop = headY + 4;
   const bottom = _renderSkillTree(ctx, gs, L.skillTree, treeTop);
   // 각인은 영웅 탭 아래 빈 자리에 — 스킬 트리를 밀어내지 않는다
   gs.ui.sigilCards = [];

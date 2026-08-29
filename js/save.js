@@ -67,6 +67,7 @@ const SaveManager = {
       charmSlots:     gs.charmSlots ? gs.charmSlots.slice() : [null, null],
       ascension:      gs.ascension || 0,
       heroPlacePref:  gs.heroPlacePref || 'none',
+      trainSkipped:   !!gs.trainSkipped,
       unlocked:       gs.unlocked || [],
       pacts:          gs.pacts    || [],
       seenMobs:       gs.seenMobs || [],

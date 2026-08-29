@@ -957,6 +957,9 @@ const ELITE_GOLD_MULT = 2.5;
 // WAVE_DEFS의 나머지 항목은 남겨 둔다: 곡선의 참고이자, 늘리고 싶을 때의 여유다.
 const TRAINING_WAVES = 6;
 // 훈련에서 나오는 보석은 이것뿐이다. 스테이지별 지급은 없앴다.
+// 훈련을 건너뛰면 주는 보석. 완주(2) + 첫 클리어 정산까지 합쳐 4를 벌 수 있으므로
+// 평균치에 가까운 3을 주고 심연을 바로 연다 — 아는 내용을 다시 치르게 하는 것은 값이 아니다.
+const TRAIN_SKIP_GEMS     = 3;
 const TRAINING_CLEAR_GEMS = 2;   // 완주
 const TRAINING_QUIT_GEMS  = 1;   // 중간에 접음
 

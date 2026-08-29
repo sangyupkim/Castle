@@ -53,6 +53,8 @@ setTimeout(() => {
 let _titleScreen = true;  // 앱 시작 시 타이틀 화면 표시
 let _resetArmed  = false; // 리셋 버튼 1차 확인 상태
 let _resetArmedAt = 0;
+// 🌳 스킬 초기화도 되돌릴 수 없다 — 같은 두 번 누르기 규칙을 쓴다
+let _skillResetArmed = false, _skillResetArmedAt = 0;
 let _giveUpArmed = false;  // 포기 1차 확인
 let _titleAlpha  = 1;     // 페이드아웃용
 
@@ -78,6 +80,10 @@ let _ascension     = 0;    // ♾️ 승천 단계
 // 👑 영웅을 어디에 세웠는지 기억한다. 층마다 배치가 풀리는데 매번 같은 곳을
 // 다시 고르는 게 일이었다 — 마지막으로 고른 자리를 다음 층·다음 판에 자동으로 적용한다.
 let _heroPlacePref = 'none';
+// ⏭ 훈련을 건너뛰었는가. 초기화하면 함께 지워진다 —
+// 훈련은 '설명'이 아니라 '진행'이므로, 초기화의 뜻을 흐리지 않는다.
+// 대신 초기화 직후 캠프에 버튼이 그대로 있어서 한 번만 누르면 된다.
+let _trainSkipped  = false;
 let _unlocked       = [];   // 보석으로 연 타워/유닛
 let _pacts          = [];   // 걸어둔 서약
 let _seenMobs       = [];   // 도감
@@ -163,6 +169,8 @@ function newState() {
     set ascension(v) { _ascension = v; },
     get heroPlacePref()  { return _heroPlacePref; },
     set heroPlacePref(v) { _heroPlacePref = v; },
+    get trainSkipped()  { return _trainSkipped; },
+    set trainSkipped(v) { _trainSkipped = v; },
     get unlocked()  { return _unlocked; },
     set unlocked(v) { _unlocked = v; },
     get pacts()  { return _pacts; },
@@ -201,6 +209,7 @@ let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적�
   _charmSlots     = sv.charmSlots || [null, null];
   _ascension      = sv.ascension  || 0;
   _heroPlacePref  = sv.heroPlacePref || 'none';
+  _trainSkipped   = !!sv.trainSkipped;
   // 트리 v2 이전 세이브 — 노드 구성이 통째로 바뀌었으므로 습득분은 보석으로 환급한다
   if (!sv.skillLevels && Array.isArray(sv.skillTreeOwned) && sv.skillTreeOwned.length)
     _soulStones += sv.skillTreeOwned.length * SKILL_V1_REFUND;
@@ -685,7 +694,7 @@ const _PAGE_UI_KEYS = [
   'charmRollBtn','charmCards','charmSlotBtns',
   'specialCards','specialSlots','heroDefBtn','heroBatBtn','bountyBtn','eliteBtn','towerMiniGrid',
   'lobbyTabBtns','sortieBtn','trainBtn','metaCards','unlockBtns','pactBtns','sigilCards',
-  'skillTreeTabs','ascendBtn','backupExportBtn','backupImportBtn',
+  'skillTreeTabs','ascendBtn','trainSkipBtn','skillResetBtn','backupExportBtn','backupImportBtn',
   'tutReplayBtn','tutResetTipBtn','bgmToggleBtn','sfxToggleBtn',
   'resultBtn','waveBtn','battleWaveStartBtn','briefTownBtn','retreatBtn','modeBtn'
 ];
@@ -713,6 +722,14 @@ function handleLobbyTap(x, y) {
   if (L.tab === 'sortie') {
     // 출격 탭도 스크롤된 채 그려진다
     const ry = y + (gs.lobbyScroll || 0);
+    if (hitTest(x,ry,gs.ui.trainSkipBtn||{})) {
+      if (skipTraining()) {
+        spawnFloaty(`⏭ 훈련 건너뛰기 — 💎+${TRAIN_SKIP_GEMS}`, x, y, '#fbbf24');
+        spawnFloaty('∞ 심연이 열렸습니다', CW/2, CH/2, '#a78bfa');
+        SFX.levelUp();
+      } else SFX.denied();
+      return;
+    }
     if (hitTest(x,ry,gs.ui.charmRollBtn||{})) {
       const e = rollCharm(gs);
       if (e) {
@@ -777,6 +794,20 @@ function handleLobbyTap(x, y) {
         }
         return;
       }
+    }
+    if (hitTest(x,y,gs.ui.skillResetBtn||{})) {
+      // 되돌릴 수 없으므로 두 번 눌러야 실행된다. 5초 안에 다시 안 누르면 풀린다.
+      if (_skillResetArmed && Date.now() - _skillResetArmedAt < 5000) {
+        _skillResetArmed = false;
+        const back = resetSkillTree(gs);
+        SaveManager.save(gs);
+        spawnFloaty(`♻️ 스킬 초기화 — 💎+${back}`, x, y, '#a78bfa');
+        SFX.levelUp();
+      } else {
+        _skillResetArmed = true; _skillResetArmedAt = Date.now();
+        SFX.denied();
+      }
+      return;
     }
     for (const t of gs.ui.skillTreeTabs||[]) {
       if (hitTest(x,y,t)) { L.skillTree=t.id; gs.lobbyScroll=0; SFX.click(); return; }
@@ -896,6 +927,7 @@ function resetAllProgress() {
   _skillLevels = {};
   _forge = { cores:{}, best:5, mastery:0, plus:{} };
   _charms = []; _charmSlots = [null, null]; _ascension = 0; _heroPlacePref = 'none';
+  _trainSkipped = false;
   _unlocked = [];
   _heroSigil = DEFAULT_SIGIL;
   _unlockedSigils = [DEFAULT_SIGIL];
@@ -950,7 +982,18 @@ function startRun(mode) {
 // 그건 이번 개편이 없애려던 바로 그 낭비다.
 function endlessUnlocked() {
   const st = gs.stats || {};
-  return (st.runs || 0) > 0 || (st.clears || 0) > 0 || (st.bestEndless || 0) > 0;
+  return gs.trainSkipped ||
+         (st.runs || 0) > 0 || (st.clears || 0) > 0 || (st.bestEndless || 0) > 0;
+}
+
+// ⏭ 훈련 건너뛰기 — 한 번만 값을 준다. 이미 열려 있으면 아무 일도 하지 않는다.
+function skipTraining() {
+  if (endlessUnlocked()) return false;
+  gs.trainSkipped = true;
+  gs.soulStones += TRAIN_SKIP_GEMS;
+  gs.stats.totalGems = (gs.stats.totalGems || 0) + TRAIN_SKIP_GEMS;
+  SaveManager.save(gs);
+  return true;
 }
 
 function showResult() {
