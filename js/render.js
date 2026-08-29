@@ -445,65 +445,21 @@ function drawArrow(ctx,x1,y1,x2,y2,color) {
 // 원본이 16~18 × 23~35px이므로 2배면 32~36 × 46~70 — 칸(53×50) 위로 적당히 솟는다.
 const TOWER_ART_SCALE = 2.2;
 
-// ─── 🧱 타워 받침대 ──────────────────────────────────────────────────────────
-// "기본 타워 위에 사람을 올린다"를 코드로 옮긴 것이 이것이다.
-// 지금 있는 타워 그림(16~18×23~35px)은 이미 '건물 + 그 위의 사람'이 한 장에
-// 그려진 통짜다. 그래서 레벨이 올라도 그림이 하나뿐이라 ★1과 ★10이 똑같이 보였다
-// (매니페스트에 tower.*.2 / .3이 아예 없어 towerSpriteKey가 늘 .1로 떨어진다).
-//
-// 그림을 티어마다 새로 그리는 대신 **아래를 쌓는다**. 받침대는 그림이 아니라
-// 도형이라 공짜로 늘어나고, 나중에 사람 그림(NPC 팩)을 올리게 되면
-// 그 사람이 설 단이 이미 여기 있다 — 레이어를 미리 갈라 두는 것이 요점이다.
-//
-//   ★1~2  받침 없음        — 맨땅에 선 초소
-//   ★3~4  1단 석대          — 돌을 한 겹 깔았다
-//   ★5~   2단 석대 + 총안   — 성벽이 됐다. ★5 분기를 골랐으면 그 색으로 물든다.
-const PEDESTAL_TIER = lv => (lv >= 5 ? 2 : lv >= 3 ? 1 : 0);
-const PEDESTAL_COURSE_H = 5;      // 한 겹 높이(px)
-
-// 받침대를 그리고, 그 위에 얹을 발판 y를 돌려준다
-function drawTowerPedestal(ctx, x, groundY, w, tier, tintColor) {
-  if (tier <= 0) return groundY;
-  const courses = tier;                       // 1단 / 2단
-  const h  = courses * PEDESTAL_COURSE_H;
-  const bw = w;                               // 타워 그림 폭에 맞춘다
-  const top = groundY - h;
-
-  for (let i = 0; i < courses; i++) {
-    // 아래 단일수록 살짝 넓게 — 사다리꼴이 돼야 무게가 실린다
-    const cw = bw * (1 + (courses - 1 - i) * 0.10);
-    const cy = groundY - (i + 1) * PEDESTAL_COURSE_H;
-    ctx.fillStyle = i % 2 ? '#4a5568' : '#3c4553';
-    ctx.fillRect(x - cw/2, cy, cw, PEDESTAL_COURSE_H);
-    ctx.fillStyle = 'rgba(255,255,255,0.13)';     // 윗면 하이라이트
-    ctx.fillRect(x - cw/2, cy, cw, 1);
-    ctx.fillStyle = 'rgba(0,0,0,0.30)';           // 아랫면 그림자
-    ctx.fillRect(x - cw/2, cy + PEDESTAL_COURSE_H - 1, cw, 1);
-  }
-
-  // ★5 — 총안(crenellation). 여기서부터 초소가 아니라 성벽이다.
-  if (tier >= 2) {
-    const merlonW = 3, gap = 3, n = Math.max(2, Math.floor(bw / (merlonW + gap)));
-    const span = n * merlonW + (n - 1) * gap;
-    let mx = x - span / 2;
-    ctx.fillStyle = tintColor || '#5a6577';
-    for (let i = 0; i < n; i++) { ctx.fillRect(mx, top - 3, merlonW, 3); mx += merlonW + gap; }
-  }
-  return top;                                  // 사람은 여기 위에 선다
-}
-
 // ─── 👷 석대 + 점유자 ────────────────────────────────────────────────────────
-// "기본 타워 위에 사람을 올린다" — 타워를 **구조물**과 **사람** 두 겹으로 가른다.
+// 타워를 **구조물**과 **사람** 두 겹으로 가른다.
 // 통짜 그림 한 장이면 조합이 그림 수만큼이지만, 두 겹으로 가르면 곱셈이 된다:
 //   석대 3티어 × 점유자 26종 = 78가지를 그림 29장으로.
 // ★5 분기 18갈래에 각각 다른 얼굴을 주려면 통짜로는 18장을 새로 그려야 한다.
-const CREW_MODE_KEY = 'df_tower_art';         // 'crew' | 'sprite'
-function towerArtMode() {
-  try { return localStorage.getItem(CREW_MODE_KEY) || 'sprite'; } catch (e) { return 'sprite'; }
-}
+//
+// 예전에는 타워 그림 한 장(16~18×23~35px)이 '건물 + 그 위의 사람'을 통째로 담고 있었다.
+// 그래서 레벨이 올라도 그림이 하나뿐이라 ★1과 ★10이 똑같이 보였다
+// (매니페스트에 tower.*.2 / .3이 아예 없어 towerSpriteKey가 늘 .1로 떨어졌다).
+//
+//   ★1~2  1단 석대
+//   ★3~4  2단 석대 + 총안
+//   ★5~   3단 석대 + ★5 분기 깃발
+const PEDESTAL_TIER = lv => (lv >= 5 ? 2 : lv >= 3 ? 1 : 0);
 
-// 석대 본체 — 사다리꼴로 쌓은 돌탑. 티어가 오르면 높아지고 총안이 붙는다.
-// 사람이 설 자리(y)를 돌려준다.
 // 분기 색에 가장 가까운 깃발을 고른다 — 깃발은 넷뿐이고 분기는 열여덟이다
 function bannerKeyFor(hex) {
   if (!hex) return null;
@@ -576,7 +532,7 @@ function renderTower(ctx, t) {
   const ksz = key && Sprites.size(key);
   const br0 = towerBranchOf(t);
   const crewKey = Sprites.pick(`crew.${t.typeId}`);
-  if (crewKey && towerArtMode() === 'crew') {
+  if (crewKey) {
     // 👷 석대 + 사람
     const groundY = y + CELL_H/2 - 2;
     const tier = PEDESTAL_TIER(t.level || 1);
@@ -587,17 +543,13 @@ function renderTower(ctx, t) {
     const ck = 30 / cs.w;                        // 32px 프레임을 칸에 맞춘다
     Sprites.drawFoot(ctx, crewKey, x, standY + 1 + (kick ? -1 : 0), cs.w*ck, cs.h*ck);
   } else if (ksz) {
-    // 발밑을 칸 아래쪽에 맞춘다 — 바닥선이 맞아야 앞뒤가 읽힌다
+    // 점유자 그림이 아직 안 실렸을 때만 — 옛 통짜 타워 그림으로 물러난다
     const groundY = y + CELL_H/2 - 2;
     const k = TOWER_ART_SCALE * (1 + kick*0.03);   // 발사 반동
     const bw = ksz.w * k;
-    // 그림자를 깔아 칸에 붙어 있게 만든다
     ctx.beginPath(); ctx.ellipse(x, groundY-2, bw*0.42, 3.4, 0, 0, Math.PI*2);
     ctx.fillStyle='rgba(0,0,0,0.28)'; ctx.fill();
-    // 🧱 받침대를 먼저 쌓고, 그 위에 타워를 세운다
-    const footY = drawTowerPedestal(ctx, x, groundY, bw * 0.86,
-                                    PEDESTAL_TIER(t.level || 1), br0 && br0.color);
-    Sprites.drawFoot(ctx, key, x, footY, bw, ksz.h*k);
+    Sprites.drawFoot(ctx, key, x, groundY, bw, ksz.h*k);
   } else {
   ctx.fillStyle='#0f2540';
   roundRect(ctx,x-CELL_W/2+3,y-CELL_H/2+3,CELL_W-6,CELL_H-6,4); ctx.fill();
