@@ -1327,7 +1327,7 @@ function renderBriefing(ctx, gs, top) {
   ctx.fillText(`${heroTxt}  Lv.${gs.hero.level}`, CW-14, y+7);
   ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif';
   ctx.fillText(`🏹 타워 ${gs.towers.length}기`, CW-14, y+23);
-  ctx.fillText(`🗿 케이브 Lv.${gs.caveLevel}`, CW-14, y+36);
+  ctx.fillText(`🗿 케이브 Lv.${caveLevelOf(gs)}`, CW-14, y+36);
 
   ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillText('강화', 12, y+56);
@@ -1590,8 +1590,10 @@ function renderArenaStatusBar(ctx, gs) {
   // 아레나 몹 강화율 — 무한은 층 곡선, 훈련은 웨이브 선형. 둘 다 처치 누적을 얹는다.
   const aBase = endlessTier(a.waveIndex) > 0 ? endlessArenaMult(a.waveIndex)
                                              : (1 + (a.waveIndex||0) * WAVE_STAT_SCALE);
-  const scalePct = Math.round((aBase * (1 + (b.killCount||0) * KILL_SCALE) - 1) * 100);
-  ctx.fillStyle='#7c3aed'; ctx.fillText(`🗿${gs.caveLevel} 몹+${scalePct}%`, 116, cy);
+  // ⛏️갱도 심화로 산 몹 강화분도 같이 보여야 한다 — 내가 올린 값이 어디에 붙었는지
+  const scalePct = Math.round((aBase * (1 + (b.killCount||0) * KILL_SCALE)
+                               * (1 + (BONUSES.mobStatMult||0)) - 1) * 100);
+  ctx.fillStyle='#7c3aed'; ctx.fillText(`🗿${caveLevelOf(gs)} 몹+${scalePct}%`, 116, cy);
 
   const live = a.mobs.filter(m=>!m.dead).length;
   ctx.fillStyle = live >= ARENA_MAX_MOBS ? '#ef4444' : '#94a3b8';
@@ -1887,10 +1889,24 @@ function renderUpgradePick(ctx, gs) {
   const cards = gs.upgradePick.cards;
   const cardW=130, cardH=190, gap=12;
   const totalW = cards.length * cardW + (cards.length-1)*gap;
-  const startX = (CW-totalW)/2;
   const startY = 70;
 
+  // ── 카드가 화면보다 넓으면 옆으로 민다 ──────────────────────────────────
+  // 🎲풍요(5장)가 뜨면 414px 자리에 698px을 그리게 된다. 예전에는 그냥 가운데
+  // 정렬이라 양 끝 카드가 화면 밖으로 잘려 나갔다 — 무엇이 있는지도 모르고
+  // 고를 수 없는 카드가 생겼다. 넘치면 스크롤을 붙인다.
+  const PICK_PAD = 10;
+  const maxPickScroll = Math.max(0, totalW - (CW - PICK_PAD*2));
+  if (maxPickScroll <= 0) gs.pickScroll = 0;
+  else gs.pickScroll = Math.max(0, Math.min(maxPickScroll, gs.pickScroll || 0));
+  const startX = maxPickScroll > 0 ? (PICK_PAD - gs.pickScroll) : (CW-totalW)/2;
+  gs.ui.pickScroll = maxPickScroll > 0
+    ? { x:0, y:startY, w:CW, h:cardH, max:maxPickScroll, axis:'x' } : null;
+
   gs.ui.upgradeCards = [];
+
+  // 넘칠 때만 잘라낸다 — 안 넘치면 9슬라이스 틀의 그림자까지 잘릴 이유가 없다
+  if (maxPickScroll > 0) { ctx.save(); ctx.beginPath(); ctx.rect(0, startY-6, CW, cardH+12); ctx.clip(); }
 
   cards.forEach((card, i) => {
     const cx = startX + i*(cardW+gap);
@@ -1955,10 +1971,42 @@ function renderUpgradePick(ctx, gs) {
     gs.ui.upgradeCards.push({x:cx, y:cy, w:cardW, h:cardH, card});
   });
 
+  if (maxPickScroll > 0) {
+    ctx.restore();
+    // 양 끝 그늘 + 화살표 — "옆에 더 있다"를 막대 없이 알린다
+    const cy0 = startY, chh = cardH;
+    if (gs.pickScroll > 1) {
+      const g = ctx.createLinearGradient(0, 0, 34, 0);
+      g.addColorStop(0, 'rgba(5,8,16,0.98)'); g.addColorStop(1, 'rgba(5,8,16,0)');
+      ctx.fillStyle = g; ctx.fillRect(0, cy0, 34, chh);
+      ctx.fillStyle='#94a3b8'; ctx.font='bold 15px sans-serif';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('‹', 9, cy0 + chh/2);
+    }
+    if (gs.pickScroll < maxPickScroll - 1) {
+      const g = ctx.createLinearGradient(CW, 0, CW-34, 0);
+      g.addColorStop(0, 'rgba(5,8,16,0.98)'); g.addColorStop(1, 'rgba(5,8,16,0)');
+      ctx.fillStyle = g; ctx.fillRect(CW-34, cy0, 34, chh);
+      ctx.fillStyle='#94a3b8'; ctx.font='bold 15px sans-serif';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('›', CW-9, cy0 + chh/2);
+    }
+    // 어디쯤인지 — 가로 막대
+    const trackW = 120, tx0 = (CW-trackW)/2, ty0 = cy0 + chh + 5;
+    ctx.fillStyle='rgba(148,163,184,0.14)';
+    roundRect(ctx, tx0, ty0, trackW, 3, 1.5); ctx.fill();
+    const thumbW = Math.max(24, trackW * ((CW - PICK_PAD*2) / totalW));
+    ctx.fillStyle='rgba(148,163,184,0.55)';
+    roundRect(ctx, tx0 + (trackW-thumbW) * (gs.pickScroll/maxPickScroll), ty0, thumbW, 3, 1.5); ctx.fill();
+    ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.fillStyle='#475569'; ctx.font='9px sans-serif';
+    ctx.fillText(`← 밀어서 ${cards.length}장 모두 보기 →`, CW/2, ty0 + 7);
+  }
+
   // ── 리롤 — 원하는 빌드로 밀어붙이고 싶을 때 쓰는 골드 사용처 ──
   const rc   = rerollCost(gs.rerolls);
   const rAff = gs.gold >= rc;
-  const rw=170, rh=34, rx=(CW-rw)/2, ry=startY+cardH+18;
+  const rw=170, rh=34, rx=(CW-rw)/2, ry=startY+cardH+(maxPickScroll>0?32:18);
   uiPanel(ctx, rx, ry, rw, rh, 7, rAff ? '#1e293b' : '#12161f', rAff ? '#f59e0b' : '#2a3140', 1.5);
   ctx.fillStyle = rAff ? '#fbbf24' : '#475569'; ctx.font='bold 12px sans-serif';
   ctx.textAlign='center'; ctx.textBaseline='middle';
@@ -2057,7 +2105,7 @@ function renderUpgradePick(ctx, gs) {
     ['타워',   `${gs.towers.length}기`,                  '#22c55e'],
     ['병력',   `${gs.battle.ourTeam.filter(u=>!u.isHero).length}/${gs.battle.maxSlots}`, '#60a5fa'],
     ['영웅',   `Lv.${gs.hero.level}`,                    COLORS.hero],
-    ['케이브', `Lv.${gs.caveLevel}`,                     '#a78bfa'],
+    ['케이브', `Lv.${caveLevelOf(gs)}`,                  '#a78bfa'],
   ];
   const sw = (CW-44)/stats.length;
   stats.forEach((st,i) => {
@@ -2081,7 +2129,7 @@ function renderLobby(ctx, gs) {
 
   // 기록 탭은 내용이 화면을 넘는다 — 마을과 같은 드래그 스크롤을 붙인다.
   // 나머지 탭은 한 화면에 들어가므로 예전처럼 고정으로 둔다.
-  const scrollable = (L.tab === 'record' || L.tab === 'skill' || L.tab === 'sortie');
+  const scrollable = (L.tab === 'record' || L.tab === 'skill' || L.tab === 'sortie' || L.tab === 'camp');
   const sc = scrollable ? (gs.lobbyScroll || 0) : 0;
   _lobbyBottom = LOBBY_BODY_Y;
 
@@ -2090,6 +2138,7 @@ function renderLobby(ctx, gs) {
   ctx.translate(0, -sc);
   if      (L.tab === 'sortie') renderLobbySortie(ctx, gs);
   else if (L.tab === 'skill')  renderLobbySkill(ctx, gs);
+  else if (L.tab === 'camp')   renderLobbyCamp(ctx, gs);
   else if (L.tab === 'unlock') renderLobbyUnlock(ctx, gs);
   else if (L.tab === 'pact')   renderLobbyPact(ctx, gs);
   else                         renderLobbyRecord(ctx, gs);
@@ -2533,13 +2582,116 @@ function renderLobbySkill(ctx, gs) {
     headY += rh2 + 6;
   }
 
-  gs.ui.metaCards = [];
+  gs.ui.metaCards = []; gs.ui.metaBulkCards = [];
   const treeTop = headY + 4;
   const bottom = _renderSkillTree(ctx, gs, L.skillTree, treeTop);
   // 각인은 영웅 탭 아래 빈 자리에 — 스킬 트리를 밀어내지 않는다
   gs.ui.sigilCards = [];
   if (L.skillTree === 'hero') renderSigilPicker(ctx, gs, bottom + 8);
   _lobbyBottom = (L.skillTree === 'hero') ? bottom + 8 + 130 : bottom;
+}
+
+// ── 🔥 캠프 단련소 ──────────────────────────────────────────────────────────
+// 스킬 트리가 '확정으로 사는 곳'이라면 여기는 '걸고 굴리는 곳'이다.
+// 값·성공률·실패했을 때 무슨 일이 나는지를 **누르기 전에** 전부 적어 둔다 —
+// 파괴가 있는 판에서 확률을 숨기면 그건 도박이 아니라 사기다.
+function renderLobbyCamp(ctx, gs) {
+  gs.ui.campBtns = [];
+  let y = LOBBY_BODY_Y + 10;
+
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle='#fb923c'; ctx.font='bold 12px sans-serif';
+  ctx.fillText('🔥 단련 — 보석을 걸고 굴립니다', 14, y);
+  ctx.textAlign='right'; ctx.fillStyle=COLORS.gem; ctx.font='bold 11px sans-serif';
+  ctx.fillText(`💎 ${gs.soulStones||0}`, CW-14, y);
+  y += 17;
+  ctx.textAlign='left'; ctx.fillStyle='#64748b'; ctx.font='9px sans-serif';
+  ctx.fillText(`성공하면 +1 · 실패하면 그대로거나 내려갑니다 · ${CAMP_SAFE_STEP}단마다 안전지대`, 14, y);
+  y += 16;
+
+  const st = campState(gs);
+  if ((st.tries||0) > 0) {
+    ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif';
+    ctx.fillText(`지금까지 ${st.tries}번 굴려 ${st.breaks||0}번 무너졌습니다`, 14, y);
+    y += 14;
+  }
+  y += 2;
+
+  for (const tr of CAMP_TRACKS) {
+    const lv    = campLevel(gs, tr.id);
+    const maxed = lv >= CAMP_MAX_LV;
+    const cost  = campCost(gs, tr.id);
+    const odds  = campOdds(gs, tr.id);
+    const fail  = campFailOdds(gs, tr.id);
+    const floorLv = campSafeFloor(gs, tr.id);
+    const aff   = !maxed && cost != null && (gs.soulStones||0) >= cost;
+    const rowH  = 84;
+
+    uiPanel(ctx, 8, y, CW-16, rowH, 7, maxed?'#0f2a1a':'#0b1220', maxed?'#22c55e':tr.color, maxed?2:1.5);
+
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.font='16px sans-serif'; ctx.fillText(tr.icon, 16, y+9);
+    ctx.fillStyle=tr.color; ctx.font='bold 11px sans-serif';
+    ctx.fillText(tr.name, 38, y+11);
+    ctx.textAlign='right';
+    ctx.fillStyle = maxed?'#86efac':'#e2e8f0'; ctx.font='bold 13px sans-serif';
+    ctx.fillText(`+${lv}`, CW-18, y+9);
+    ctx.fillStyle='#475569'; ctx.font='bold 8px sans-serif';
+    ctx.fillText(`/ ${CAMP_MAX_LV}`, CW-18, y+24);
+
+    // 지금 효과 → 다음 효과
+    ctx.textAlign='left';
+    ctx.fillStyle='#94a3b8'; ctx.font='bold 9px sans-serif';
+    ctx.fillText(tr.desc(lv * tr.per), 38, y+26);
+    if (!maxed) {
+      ctx.fillStyle='#4ade80'; ctx.font='bold 8px sans-serif';
+      ctx.fillText(`▲ ${tr.desc((lv+1) * tr.per)}`, 38, y+38);
+    }
+
+    // 단계 눈금 — 안전지대는 밝게
+    const bx=16, bw=CW-32, seg=bw/CAMP_MAX_LV, by=y+52;
+    for (let i=0;i<CAMP_MAX_LV;i++) {
+      const safe = ((i+1) % CAMP_SAFE_STEP) === 0;
+      ctx.fillStyle = i < lv ? (safe?'#fbbf24':tr.color) : (safe?'#33405a':'#1a2333');
+      ctx.fillRect(bx + i*seg + 0.5, by, Math.max(1.5, seg-1.2), 4);
+    }
+
+    // 굴리기 버튼 + 확률
+    if (maxed) {
+      ctx.textAlign='center'; ctx.fillStyle='#22c55e'; ctx.font='bold 10px sans-serif';
+      ctx.fillText('★ 끝까지 단련했습니다', CW/2, y+64);
+    } else {
+      const bw2=104, bh2=22, bx2=CW-16-bw2, by2=y+60;
+      uiPanel(ctx, bx2, by2, bw2, bh2, 4, aff?'#2a1f08':'#12161f', aff?'#f59e0b':'#2a3140', 1);
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillStyle=aff?'#fbbf24':'#475569'; ctx.font='bold 10px sans-serif';
+      ctx.fillText(`🎲 단련 💎${cost}`, bx2+bw2/2, by2+bh2/2);
+      if (aff) gs.ui.campBtns.push({x:bx2,y:by2,w:bw2,h:bh2,id:tr.id});
+
+      ctx.textAlign='left'; ctx.textBaseline='middle';
+      ctx.fillStyle='#22c55e'; ctx.font='bold 9px sans-serif';
+      ctx.fillText(`성공 ${Math.round(odds*100)}%`, 16, by2+7);
+      // 실패했을 때 — 무슨 일이 나는지 그대로 적는다
+      const parts = [];
+      if (fail.keep > 0.001) parts.push(`유지 ${Math.round(fail.keep*100)}%`);
+      if (fail.down > 0.001) parts.push(`하락 ${Math.round(fail.down*100)}%`);
+      if (fail.brk  > 0.001) parts.push(`파괴 ${Math.round(fail.brk*100)}%`);
+      ctx.fillStyle = fail.brk > 0.001 ? '#f87171' : '#64748b';
+      ctx.font='bold 8px sans-serif';
+      ctx.fillText(`실패 시 ${parts.join(' · ')}`, 16, by2+19);
+      if (lv > 0) {
+        ctx.fillStyle='#475569'; ctx.font='bold 8px sans-serif';
+        ctx.textAlign='right';
+        ctx.fillText(`무너져도 +${floorLv}까지`, bx2-8, by2+19);
+      }
+    }
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    y += rowH + 8;
+  }
+
+  ctx.fillStyle='#334155'; ctx.font='9px sans-serif';
+  ctx.fillText('보석은 캠프에서만 씁니다 — 여기서 올린 것은 판이 끝나도 남습니다.', 14, y+2);
+  _lobbyBottom = y + 20;
 }
 
 // ── 👑 영웅 각인 ────────────────────────────────────────────────────────────
@@ -3207,11 +3359,32 @@ function _renderSkillTree(ctx, gs, treeId, startY) {
       ctx.fillStyle='#475569'; ctx.font='bold 8px sans-serif';
       ctx.fillText(`🔒 윗줄 ${sk.row*SKILL_ROW_GATE}Lv 필요`, x+nodeW/2, y+nodeH-12);
     } else {
+      // 카드 전체가 '한 단계' 버튼이고, 오른쪽 끝에 ×10 칩을 붙인다.
+      // 노드 하나가 10레벨이라 나무 하나를 채우려면 수십 번을 눌러야 했다.
       const cost = skillLevelCost(sk, lv+1);
+      let can10 = 0, sum10 = 0;
+      for (let k = 0; k < 10; k++) {
+        const nk = lv + k; if (nk >= max) break;
+        const ck = skillLevelCost(sk, nk + 1);
+        if (sum10 + ck > (gs.soulStones || 0)) break;
+        sum10 += ck; can10++;
+      }
+      const chipW = 30, chipH = 15, chipX = x+nodeW-chipW-5, chipY = y+nodeH-chipH-4;
       ctx.fillStyle = canBuy ? '#f59e0b' : '#64748b';
       ctx.font='bold 10px sans-serif';
-      ctx.fillText(`💎 ${cost}  →  Lv${lv+1}`, x+nodeW/2, y+nodeH-13);
-      gs.ui.metaCards.push({x,y,w:nodeW,h:nodeH,skillId:sk.id,icon:sk.icon});
+      ctx.fillText(`💎 ${cost} → Lv${lv+1}`, x+(nodeW-chipW)/2, y+nodeH-13);
+      gs.ui.metaCards.push({x,y,w:nodeW,h:nodeH,skillId:sk.id,icon:sk.icon,bulk:1});
+      if (can10 > 1 && !gated) {
+        roundRect(ctx, chipX, chipY, chipW, chipH, 3);
+        ctx.fillStyle='#2a1f08'; ctx.fill();
+        ctx.strokeStyle='#a16207'; ctx.lineWidth=1; ctx.stroke();
+        ctx.fillStyle='#fbbf24'; ctx.font='bold 8px sans-serif';
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(`×${can10}`, chipX+chipW/2, chipY+chipH/2);
+        ctx.textAlign='center'; ctx.textBaseline='top';
+        // 칩이 카드보다 먼저 판정돼야 한다 — 카드가 통째로 탭을 먹지 않도록
+        gs.ui.metaBulkCards.push({x:chipX,y:chipY,w:chipW,h:chipH,skillId:sk.id,icon:sk.icon,bulk:can10});
+      }
     }
     ctx.globalAlpha = 1;
   }
@@ -3236,7 +3409,8 @@ function _wrapSkillDesc(ctx, text, x, y, maxW, lh, maxLines) {
 
 
 // ─── ⚒️ 대장간 화면 ──────────────────────────────────────────────────────────
-// 다른 건물은 골드로 확정 강화를 판다. 대장간만 보석을 받고, 셋 중 둘은 확률이다.
+// 다른 건물은 골드로 확정 강화를 판다. 대장간도 골드를 받지만 셋 중 둘은 확률이다.
+// 보석을 걸고 굴리는 영구 강화는 캠프 🔥단련으로 옮겼다 — 화폐의 뜻을 하나로 세운다.
 function renderForgeScreen(ctx, gs) {
   const SCR_TOP = 92;
   ctx.fillStyle='#0c0f1a'; ctx.fillRect(0,SCR_TOP,CW,CH-SCR_TOP);
@@ -3247,8 +3421,9 @@ function renderForgeScreen(ctx, gs) {
   ctx.fillStyle='#94a3b8'; ctx.font='bold 11px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.fillText('← 뒤로',38,hY+12);
   gs.ui.townBackBtn={x:6,y:hY-3,w:64,h:30};
-  ctx.fillStyle='#a78bfa'; ctx.font='bold 11px sans-serif'; ctx.textAlign='right'; ctx.textBaseline='middle';
-  ctx.fillText(`💎 ${gs.soulStones}`, CW-8, hY+11);
+  // 대장간은 이제 골드로 돈다 — 이 판에서 번 것을 이 판에 쓴다
+  ctx.fillStyle=COLORS.gold; ctx.font='bold 11px sans-serif'; ctx.textAlign='right'; ctx.textBaseline='middle';
+  ctx.fillText(`💰 ${gs.gold}`, CW-8, hY+11);
 
   // 탭
   const tabs=[{id:'gear',label:'🔨 장비 연마'},{id:'fuse',label:'🔥 타워 합성'},
@@ -3290,13 +3465,13 @@ function renderForgeScreen(ctx, gs) {
 function _renderForgeGear(ctx, gs, y) {
   ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillStyle='#94a3b8'; ctx.font='9px sans-serif';
-  ctx.fillText('장비는 한 판짜리지만 연마는 칸에 남습니다 — 이번 판에 무엇을 끼든 그만큼 강해집니다', 10, y);
+  ctx.fillText('이번 판 동안 그 칸에 낀 장비가 그만큼 강해집니다 — 판이 끝나면 사라집니다', 10, y);
   y += 16;
   gs.ui.forgeGearBtns=[];
   const rowH=44, gap=5;
   for (const sl of EQUIP_SLOTS) {
     const p = slotPlus(gs, sl.id), cost = slotPlusCost(gs, sl.id);
-    const can = cost != null && gs.soulStones >= cost;
+    const can = cost != null && gs.gold >= cost;
     uiPanel(ctx, 8,y,CW-16,rowH,6, p>0?'#1a1206':'#0c1220', p>=FORGE_PLUS_MAX?'#fb923c':p>0?'#7c4a12':'#1e293b', 1);
     ctx.textAlign='left'; ctx.textBaseline='middle';
     ctx.font='17px sans-serif'; ctx.fillStyle='#e2e8f0';
@@ -3316,7 +3491,7 @@ function _renderForgeGear(ctx, gs, y) {
       ctx.fillStyle=can?'#2a1a05':'#12161f'; ctx.fill();
       ctx.strokeStyle=can?'#f59e0b':'#293040'; ctx.stroke();
       ctx.fillStyle=can?'#fbbf24':'#475569'; ctx.font='bold 10px sans-serif'; ctx.textAlign='center';
-      ctx.fillText(`💎 ${cost} → +${p+1}`, bx+bw/2, by+bh/2);
+      ctx.fillText(`💰 ${cost} → +${p+1}`, bx+bw/2, by+bh/2);
       gs.ui.forgeGearBtns.push({x:bx,y:by,w:bw,h:bh,slot:sl.id});
     }
     y += rowH+gap;
@@ -3339,12 +3514,12 @@ function _renderForgeFuse(ctx, gs, y) {
   y += 42;
 
   // ★5 심 구입
-  const canBuy = gs.soulStones >= FORGE_CORE_COST;
+  const canBuy = gs.gold >= FORGE_CORE_COST;
   uiPanel(ctx, 8,y,CW-16,36,6, canBuy?'#0d1929':'#0c1017', canBuy?'#4b6cb7':'#1e293b', 1);
   ctx.textAlign='left'; ctx.fillStyle='#cbd5e1'; ctx.font='bold 11px sans-serif';
   ctx.fillText(`★5 타워 심 구입`, 18, y+18);
   ctx.textAlign='right'; ctx.fillStyle=canBuy?'#fbbf24':'#475569'; ctx.font='bold 11px sans-serif';
-  ctx.fillText(`💎 ${FORGE_CORE_COST}`, CW-18, y+18);
+  ctx.fillText(`💰 ${FORGE_CORE_COST}`, CW-18, y+18);
   gs.ui.forgeCoreBtn={x:8,y,w:CW-16,h:36};
   y += 44;
 
@@ -3409,7 +3584,7 @@ function _renderForgeTemper(ctx, gs, y) {
 
   const bh=52, by=y;
   roundRect(ctx,12,by,CW-24,bh,9);
-  const can = !maxed && gs.soulStones >= cost;
+  const can = !maxed && gs.gold >= cost;
   ctx.fillStyle=can?'#2a1a05':'#12161f'; ctx.fill();
   ctx.strokeStyle=can?'#f59e0b':'#293040'; ctx.lineWidth=2; ctx.stroke();
   ctx.textAlign='center'; ctx.textBaseline='middle';
@@ -3418,7 +3593,7 @@ function _renderForgeTemper(ctx, gs, y) {
     ctx.fillText('★ 숙련도 최대', CW/2, by+bh/2);
   } else {
     ctx.fillStyle=can?'#fbbf24':'#475569'; ctx.font='bold 15px sans-serif';
-    ctx.fillText(`🎲 담금질 — 💎 ${cost}`, CW/2, by+bh/2-8);
+    ctx.fillText(`🎲 담금질 — 💰 ${cost}`, CW/2, by+bh/2-8);
     ctx.font='bold 10px sans-serif';
     ctx.fillText(`성공 확률 ${Math.round(odds*100)}%`, CW/2, by+bh/2+12);
     gs.ui.forgeTemperBtn={x:12,y:by,w:CW-24,h:bh};
@@ -3562,26 +3737,49 @@ function _renderTrackList(ctx, gs, def, bs, listTop) {
     ctx.textAlign='right';
     if (inf) {
       ctx.fillStyle='#a78bfa'; ctx.font='bold 10px sans-serif';
-      ctx.fillText(`×${n}`, CW-84, uy+rowH/2);
+      ctx.fillText(`×${n}`, CW-104, uy+rowH/2);
     } else {
       // 30레벨짜리를 점으로 찍으면 읽히지 않는다 — 막대로 바꾼다.
       // 채운 칸(초록) / 지금 레벨로 살 수 있는 칸(회색) / 승급해야 열리는 칸(어둡게).
-      const bw3 = 62, bx3 = CW-84-bw3, by3 = uy+rowH/2-4;
+      const bw3 = 54, bx3 = CW-104-bw3, by3 = uy+rowH/2-4;
       ctx.fillStyle='#1b2230'; ctx.fillRect(bx3, by3, bw3, 5);
       ctx.fillStyle='#334155'; ctx.fillRect(bx3, by3, bw3 * (mx/hardMax), 5);
       ctx.fillStyle= capped?'#a16207':'#22c55e'; ctx.fillRect(bx3, by3, bw3 * (n/hardMax), 5);
       ctx.fillStyle = capped?'#a16207':'#475569'; ctx.font='bold 7px sans-serif'; ctx.textAlign='right';
-      ctx.fillText(`${n}/${mx}` + (capped?` (최대 ${hardMax})`:''), CW-84, uy+rowH/2+12);
+      ctx.fillText(`${n}/${mx}` + (capped?` (최대 ${hardMax})`:''), CW-104, uy+rowH/2+12);
     }
 
     if (!maxed) {
-      const bw2=82,bh2=30,bx2=CW-8-bw2,by2=uy+(rowH-bh2)/2;
+      // ── 한 칸 / 열 칸 ────────────────────────────────────────────────────
+      // 트랙이 24~30단인데 한 칸씩만 살 수 있으면 후반에는 같은 버튼을 서른 번
+      // 눌러야 한다. ×10을 옆에 두고, 지금 지갑으로 실제 몇 칸 살 수 있는지와
+      // 그 총액을 미리 적어 둔다 — 눌러 보고 알게 되는 값이 아니어야 한다.
+      const bw2=58,bh2=30,bx2=CW-8-bw2,by2=uy+(rowH-bh2)/2;
       roundRect(ctx,bx2,by2,bw2,bh2,4);
       ctx.fillStyle=canAff?(inf?'#6d28d9':def.color):'#1e293b'; ctx.fill();
       ctx.fillStyle=canAff?'#fff':'#475569'; ctx.font='bold 11px sans-serif';
       ctx.textAlign='center'; ctx.textBaseline='middle';
       ctx.fillText(`${cost}💰`,bx2+bw2/2,by2+bh2/2);
-      gs.ui.upgradeBtns.push({x:bx2,y:by2,w:bw2,h:bh2,id:tr.id});
+      gs.ui.upgradeBtns.push({x:bx2,y:by2,w:bw2,h:bh2,id:tr.id,bulk:1});
+
+      // 지금 지갑과 상한으로 실제 몇 칸이 사지는지 세어 본다
+      let can10 = 0, sum10 = 0;
+      for (let k = 0; k < 10; k++) {
+        const nk = n + k;
+        if (!inf && nk >= mx) break;
+        const ck = trackCost(tr, nk);
+        if (sum10 + ck > gs.gold) break;
+        sum10 += ck; can10++;
+      }
+      const bw4=34, bx4=bx2-bw4-4;
+      roundRect(ctx,bx4,by2,bw4,bh2,4);
+      ctx.fillStyle = can10>0 ? (inf?'#3b2470':'#14304d') : '#141824'; ctx.fill();
+      ctx.strokeStyle = can10>0 ? (inf?'#a78bfa':def.color) : '#252b38'; ctx.lineWidth=1; ctx.stroke();
+      ctx.fillStyle = can10>0 ? '#e2e8f0' : '#3f4a5c'; ctx.font='bold 10px sans-serif';
+      ctx.fillText(`×${can10>0?can10:10}`, bx4+bw4/2, by2+bh2/2-5);
+      ctx.fillStyle = can10>0 ? '#94a3b8' : '#333b4a'; ctx.font='bold 7px sans-serif';
+      ctx.fillText(can10>0 ? compactNum(sum10) : '—', bx4+bw4/2, by2+bh2/2+8);
+      if (can10 > 0) gs.ui.upgradeBtns.push({x:bx4,y:by2,w:bw4,h:bh2,id:tr.id,bulk:10});
     } else if (capped) {
       // 레벨에 막힌 것과 트랙을 다 찍은 것은 다른 상태다 — 다르게 보여야 승급이 목표가 된다
       ctx.fillStyle='#a16207'; ctx.font='bold 8px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
@@ -3940,18 +4138,15 @@ function renderTownPageBuildingGrid(ctx, gs, startY) {
     ctx.font='32px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.fillText(def.icon,bx+10,by+10);
     ctx.fillStyle=built?def.color:'#64748b'; ctx.font='bold 12px sans-serif'; ctx.fillText(def.name,bx+50,by+10);
 
-    if (built&&def.id!=='cave') {
+    if (built) {
       const curLv=bs.level||0;
       ctx.fillStyle='#60a5fa'; ctx.font='bold 9px sans-serif';
       ctx.fillText(`Lv.${curLv+1}/${BUILDING_MAX_LEVEL}`,bx+50,by+26);
-    } else if (def.id==='cave') {
-      ctx.fillStyle=def.color; ctx.font='bold 9px sans-serif'; ctx.textBaseline='top';
-      ctx.fillText(`Lv.${gs.caveLevel}/5`,bx+50,by+26);
     }
 
     ctx.fillStyle='#94a3b8'; ctx.font='bold 10px sans-serif'; ctx.textBaseline='top'; ctx.fillText(def.desc,bx+10,by+52);
 
-    if (built&&def.id!=='cave') {
+    if (built) {
       const curLv=bs.level||0;
       const open=buildingTracks(def,curLv);
       // 유한 트랙만 진행도로 센다 — 무한 트랙은 끝이 없으므로 분모가 될 수 없다
@@ -3967,24 +4162,7 @@ function renderTownPageBuildingGrid(ctx, gs, startY) {
 
     const btnY=by+bh-28,btnH=22,btnW=bw-20;
     roundRect(ctx,bx+10,btnY,btnW,btnH,5);
-    if (def.id==='cave') {
-      const nextCv=CAVE_LEVELS[gs.caveLevel+1];
-      if (nextCv) {
-        const canAff=gs.gold>=nextCv.upgradeCost;
-        ctx.fillStyle=canAff?'#1e3a5f':'#1a1a2e'; ctx.fill();
-        ctx.strokeStyle=canAff?'#60a5fa':'#334155'; ctx.lineWidth=1; ctx.stroke();
-        ctx.fillStyle=canAff?'#60a5fa':'#64748b'; ctx.font='bold 10px sans-serif';
-        ctx.textAlign='center'; ctx.textBaseline='middle';
-        ctx.fillText(`케이브 업그레이드 ${nextCv.upgradeCost}💰`,bx+10+btnW/2,btnY+btnH/2);
-        gs.ui.caveBtn={x:bx+10,y:btnY,w:btnW,h:btnH};
-      } else {
-        ctx.fillStyle='#0f2040'; ctx.fill(); ctx.strokeStyle='#f59e0b'; ctx.lineWidth=1; ctx.stroke();
-        ctx.fillStyle='#f59e0b'; ctx.font='bold 10px sans-serif';
-        ctx.textAlign='center'; ctx.textBaseline='middle';
-        ctx.fillText('★ 케이브 최고 레벨',bx+10+btnW/2,btnY+btnH/2);
-        gs.ui.caveBtn=null;
-      }
-    } else if (!built) {
+    if (!built) {
       const canAff=gs.gold>=def.buildCost;
       ctx.fillStyle=canAff?'#1e3a5f':'#1a1a2e'; ctx.fill();
       ctx.strokeStyle=canAff?'#22c55e':'#334155'; ctx.lineWidth=1; ctx.stroke();

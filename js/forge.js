@@ -4,6 +4,15 @@
 // 다른 건물은 전부 "골드를 내면 정해진 만큼 오른다". 대장간만 값이 흔들린다.
 // 세 가지를 하는데, 셋 다 다른 건물과 겹치지 않는다.
 //
+// ── v12.8 화폐 정리 ──
+// 예전에는 대장간만 **보석**을 썼고 결과가 판을 넘어 남았다. 그래서 화폐의 뜻이
+// 흐렸다 — 판 안에서 버는 골드는 판 안에서만 쓰이는데, 판 안의 건물 하나가
+// 영구 화폐를 요구했다. 이제 규칙을 하나로 세운다.
+//   💰 골드  — 판 안에서 벌고 판 안에서만 쓴다. 판이 끝나면 사라진다.
+//   💎 보석  — 캠프에서만 쓴다. 무엇을 사든 영구히 남는다.
+// 그래서 마을 대장간은 전부 골드로 돌고, 상태도 gs.town에 산다(판마다 초기화).
+// 보석을 걸고 굴리는 확률 강화는 캠프로 옮겼다 — js/camp.js.
+//
 //  1. 🔨 장비 연마 — 보관함의 영웅 장비를 +N까지 올린다. 확정이고, 값은 보석이다.
 //  2. 🔥 타워 합성 — ★5 심(core) 둘을 녹여 ★6을 만든다. 확률이고, 실패하면 하나가 탄다.
 //                    가진 최고 별이 그 판의 타워 최고 레벨이 된다 — ★10까지.
@@ -16,6 +25,8 @@
 // 이번 판에 어떤 검을 사든 그 검이 +5로 붙는다. 보석은 영구히 남는 데 쓰여야 한다.
 const FORGE_PLUS_MAX  = 10;          // 칸마다 +10이 끝
 const FORGE_PLUS_STEP = 0.08;        // 한 단계마다 그 칸 장비 스탯 +8%
+// 보석에서 골드로 옮기며 값의 자릿수를 골드 경제에 맞췄다 (보석 1 ≒ 골드 9쯤)
+const FORGE_GOLD_SCALE = 9;
 
 function slotPlus(gs, slotId) { return (forgeState(gs).plus || {})[slotId] || 0; }
 function slotPlusCost(gs, slotId) {
@@ -23,13 +34,13 @@ function slotPlusCost(gs, slotId) {
   if (p >= FORGE_PLUS_MAX) return null;
   // 악세 칸은 둘이라 반값 — 두 칸을 다 올려야 하니 총액은 비슷해진다
   const base = (slotId === 'acc1' || slotId === 'acc2') ? 2 : 3;
-  return Math.max(1, Math.round(base * (p + 1) * 1.15));
+  return Math.max(1, Math.round(base * (p + 1) * 1.15) * FORGE_GOLD_SCALE);
 }
 function upgradeSlotPlus(gs, slotId) {
   const cost = slotPlusCost(gs, slotId);
-  if (cost == null || (gs.soulStones || 0) < cost) return false;
+  if (cost == null || (gs.gold || 0) < cost) return false;
   const f = forgeState(gs);
-  gs.soulStones -= cost;
+  gs.gold -= cost;
   f.plus[slotId] = slotPlus(gs, slotId) + 1;
   reapplyAllBonuses(gs);
   return true;
@@ -42,15 +53,17 @@ function slotPlusMult(gs, slotId) {
 // ── 2. 타워 합성 ─────────────────────────────────────────────────────────────
 const FORGE_STAR_MIN  = 5;           // ★5부터 시작 (지금까지의 최고 레벨)
 const FORGE_STAR_MAX  = 10;
-const FORGE_CORE_COST = 14;          // ★5 심 하나를 사는 값 (보석)
+const FORGE_CORE_COST = 14 * 9;      // ★5 심 하나를 사는 값 (골드)
 // ★N 둘 → ★(N+1) 하나. 별이 높을수록 확률이 낮다.
 const FORGE_ODDS = { 5:0.62, 6:0.48, 7:0.36, 8:0.26, 9:0.18 };
 
-// 대장간은 보석으로 돌아간다 — 판이 끝나도 남아야 하므로 gs.town이 아니라
-// 영구 저장 슬롯(gs.forge)에 산다. gs.town은 출격할 때마다 새로 만들어진다.
+// 마을 대장간은 골드로 돌아가고 **그 판에서만** 유효하다.
+// 그래서 영구 슬롯(gs.forge)이 아니라 판 상태(gs.town.forge)에 산다 —
+// gs.town은 출격할 때마다 새로 만들어지므로 판이 끝나면 자동으로 사라진다.
 function forgeState(gs) {
-  if (!gs.forge) gs.forge = { cores:{}, best:FORGE_STAR_MIN, mastery:0, plus:{} };
-  const f = gs.forge;
+  const home = (gs && gs.town) ? gs.town : gs;
+  if (!home.forge) home.forge = { cores:{}, best:FORGE_STAR_MIN, mastery:0, plus:{} };
+  const f = home.forge;
   if (!f.cores) f.cores = {};
   if (!f.plus)  f.plus  = {};
   if (!f.best)  f.best  = FORGE_STAR_MIN;
@@ -61,9 +74,9 @@ function forgeCores(gs, star) { return forgeState(gs).cores[star] || 0; }
 function forgeBestStar(gs)    { return forgeState(gs).best; }
 
 function buyForgeCore(gs) {
-  if ((gs.soulStones || 0) < FORGE_CORE_COST) return false;
+  if ((gs.gold || 0) < FORGE_CORE_COST) return false;
   const f = forgeState(gs);
-  gs.soulStones -= FORGE_CORE_COST;
+  gs.gold -= FORGE_CORE_COST;
   f.cores[FORGE_STAR_MIN] = forgeCores(gs, FORGE_STAR_MIN) + 1;
   return true;
 }
@@ -94,7 +107,7 @@ const TEMPER_GAIN       = 0.02;      // 숙련도 1당 타워·병력 공격력 
 
 function temperCost(gs) {
   const m = forgeState(gs).mastery;
-  return Math.max(3, Math.round(4 + m * 1.6));
+  return Math.max(3, Math.round(4 + m * 1.6)) * FORGE_GOLD_SCALE;
 }
 function temperOdds(gs) {
   const m = forgeState(gs).mastery;
@@ -109,8 +122,8 @@ function temperForge(gs) {
   const f = forgeState(gs);
   if (f.mastery >= TEMPER_MAX) return null;
   const cost = temperCost(gs);
-  if ((gs.soulStones || 0) < cost) return null;
-  gs.soulStones -= cost;
+  if ((gs.gold || 0) < cost) return null;
+  gs.gold -= cost;
   const win = Math.random() < temperOdds(gs);
   const before = f.mastery;
   if (win) f.mastery += 1;

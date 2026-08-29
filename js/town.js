@@ -235,7 +235,7 @@ const TOWN_BUILDINGS = [
     id:'forge', name:'대장간', icon:'⚒️', buildCost:98, color:'#fb923c',
     desc:'장비를 연마하고 타워 심을 벼리는 곳',
     lvCost:84, lvMult:1.85,
-    // 대장간의 본체는 보석을 쓰는 세 갈래(연마·합성·담금질)이고 아래 트랙은 곁가지다.
+    // 대장간의 본체는 골드를 쓰는 세 갈래(연마·합성·담금질)이고 아래 트랙은 곁가지다.
     tracks:[
       { id:'f_gearcost', name:'풀무 개량', icon:'🔥', unlockLv:0, cost:30, costMult:1.192, step:0.024, growth:0.0267, maxLv:24,
         desc:v=>`장비 연마 효과 +${pct(v)}`,                 apply:(b,v)=>{ b.gearPlusBonus += v; } },
@@ -292,9 +292,45 @@ const TOWN_BUILDINGS = [
     ]
   },
   {
-    id:'cave', name:'몬스터 케이브', icon:'🗿', buildCost:0, color:'#6b7280',
-    desc:'몬스터 던전을 관리합니다', alwaysBuilt:true,
-    lvCost:0, lvMult:1, tracks:[]
+    // 🗿 몬스터 케이브 — 아레나에 무엇이 나올지를 정하는 곳.
+    // v12.8까지는 건물이 아니라 마을 카드에 붙은 버튼 하나였다(CAVE_LEVELS 1~5).
+    // 다섯 칸짜리 사다리라 3층쯤 올리고 나면 더 볼 것이 없었고, "몹을 세게 만들어
+    // 더 번다"는 판단 하나뿐이라 들어가 볼 화면도 없었다.
+    // 이제 다른 건물과 같은 규칙을 따른다 — 짓고, 들어가고, 트랙을 고른다.
+    //
+    // 이 건물만의 성격: **위험을 사서 보상을 얻는다.** ⛏️갱도 심화는 몹을 강하게
+    // 만들면서 보상을 더 크게 올리고, 🪢길들이기는 그 위험만 도로 깎는다.
+    // 둘 다 사면 제자리인 것 같지만 갱도가 보상 1.6배율이라 남는 장사다 —
+    // 대신 골드 두 배를 태워야 한다.
+    id:'cave', name:'몬스터 케이브', icon:'🗿', buildCost:40, color:'#a78bfa',
+    desc:'아레나에 나올 몬스터를 관리합니다',
+    lvCost:56, lvMult:1.80,
+    tracks:[
+      { id:'v_haul',  name:'전리품 회수', icon:'💰', unlockLv:0, cost:26, costMult:1.185, step:0.05, growth:0.04,
+        desc:v=>`아레나 처치 골드 +${pct(v)}`,
+        apply:(b,v)=>{ b.mobGoldMult += v; } },
+      { id:'v_depth', name:'갱도 심화',   icon:'⛏️', unlockLv:0, cost:34, costMult:1.205, step:0.11, growth:0.028, maxLv:24,
+        desc:v=>`몬스터 스탯 +${pct(v)} · 처치 보상 +${pct(v*1.6)}`,
+        apply:(b,v)=>{ b.mobStatMult += v; b.mobGoldMult += v*1.6; } },
+      { id:'v_elite', name:'정예 소굴',   icon:'⚔️', unlockLv:1, cost:44, costMult:1.21, step:0.022, growth:0.018, maxLv:24,
+        desc:v=>`정예 등장 확률 +${pct(Math.min(ELITE_CHANCE_CAP,v))}${v>ELITE_CHANCE_CAP?' (상한)':''}`,
+        apply:(b,v)=>{ b.eliteChance += v; } },
+      { id:'v_trophy',name:'정예 전리품', icon:'💎', unlockLv:2, cost:52, costMult:1.212, step:0.055, growth:0.03,
+        desc:v=>`소환 정예 보석 보상 +${pct(v)}`,
+        apply:(b,v)=>{ b.summonRewardMult *= 1 + v; } },
+      { id:'v_scrap', name:'부산물 회수', icon:'🎁', unlockLv:3, cost:58, costMult:1.212, step:0.013, growth:0.014, maxLv:24,
+        desc:v=>`특수 드랍 확률 +${pct(v)}`,
+        apply:(b,v)=>{ b.dropChance += v; } },
+      { id:'v_tame',  name:'길들이기',    icon:'🪢', unlockLv:4, cost:62, costMult:1.215, step:0.022, growth:0.016, maxLv:24,
+        desc:v=>`몬스터 공격력 -${pct(Math.min(0.55,v))}${v>0.55?' (상한)':''}`,
+        apply:(b,v)=>{ b.mobAtkMult *= 1 - Math.min(0.55, v); } },
+      { id:'v_hunt',  name:'사냥 허가증', icon:'🏹', unlockLv:5, cost:96, costMult:1.30, step:1, growth:0, maxLv:4,
+        desc:v=>`정예 소환 기회 +${Math.round(v)}회`,
+        apply:(b,v)=>{ b.eliteChargeBonus += Math.round(v); } },
+      { id:'v_lair',  name:'심연의 소굴', icon:'🌑', unlockLv:BUILDING_MAX_LEVEL-1, cost:300, costMult:1.26, step:0.03, growth:0.035, maxLv:Infinity,
+        desc:v=>`아레나 처치 골드 +${pct(v)} · 정예 확률 +${pct(v*0.25)}`,
+        apply:(b,v)=>{ b.mobGoldMult += v; b.eliteChance += v*0.25; } },
+    ]
   }
 ];
 
@@ -332,7 +368,7 @@ function createTown() {
       inn:      { built:false, level:0, upgrades:{} },
       forge:    { built:false, level:0, upgrades:{} },
       castle:   { built:true,  level:0, upgrades:{} },
-      cave:     { built:true,  level:0, upgrades:{} },
+      cave:     { built:false, level:0, upgrades:{} },
     },
     gear:createHeroGear(),
     forgeTab:'gear',   // 대장간 — 'gear' | 'fuse' | 'temper'
@@ -380,6 +416,18 @@ function levelUpBuilding(id, gs) {
   }
   reapplyAllBonuses(gs);
   return true;
+}
+
+// ─── 한 번에 여러 단계 ───────────────────────────────────────────────────────
+// 트랙 하나가 24~30단이라 한 칸씩 누르면 서른 번을 눌러야 한다. 후반 강화는
+// 늘 "다 지를 것인가"라서, 그 판단을 서른 번의 탭으로 받을 이유가 없다.
+// 값은 매 단계 다시 계산한다 — 계단식 비용이라 한 번에 사도 같은 값을 낸다.
+// 살 수 있는 만큼만 사고 몇 번 샀는지 돌려준다 (0이면 한 번도 못 샀다).
+function buyTownUpgradeBulk(buildingId, trackId, gs, count) {
+  let n = 0;
+  const want = Math.max(1, count || 1);
+  while (n < want && buyTownUpgrade(buildingId, trackId, gs)) n++;
+  return n;
 }
 
 function buyTownUpgrade(buildingId, trackId, gs) {
@@ -445,6 +493,7 @@ function applyTownUpgrades(gs) {
 function reapplyAllBonuses(gs) {
   resetBonuses();
   applySkillTree(gs);
+  applyCamp(gs);         // 🔥 캠프 단련 — 스킬 트리와 같은 영구 층
   applyPacts();          // 서약은 스킬 트리 뒤, 마을 강화 앞에 적용한다
   applyTownUpgrades(gs);
   applyRunUpgrades(gs);   // 이번 판에 집은 강화 카드

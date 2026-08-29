@@ -55,10 +55,15 @@ function spawnAllyIntoArena(arena, u, i, n) {
 }
 
 // ─── 몬스터 생성 ─────────────────────────────────────────────────────────────
-function makeArenaMob(typeId, waveIndex, killCount, caveLevel, eliteBonus) {
+function makeArenaMob(typeId, waveIndex, killCount, _unusedCaveLevel, eliteBonus) {
   const t  = BATTLE_MOB_TYPES[typeId] || BATTLE_MOB_TYPES.goblin;
-  const cv = CAVE_LEVELS[caveLevel] || CAVE_LEVELS[1];
-  const isElite = Math.random() < ((BONUSES.eliteChance || 0) + (eliteBonus || 0));
+  // 🗿 케이브가 건물이 되면서 CAVE_LEVELS 다섯 칸 사다리가 트랙으로 바뀌었다.
+  // ⛏️갱도 심화가 몹을 세게 만들고(statMult) 그만큼 보상을 더 준다(goldMult).
+  const cv = { statMult: 1 + (BONUSES.mobStatMult || 0),
+               goldMult: 1 + (BONUSES.mobGoldMult || 0) };
+  // 정예 확률은 아무리 쌓아도 상한을 넘지 않는다 — 전부 정예면 정예가 아니다
+  const eChance = Math.min(ELITE_CHANCE_CAP, (BONUSES.eliteChance || 0) + (eliteBonus || 0));
+  const isElite = Math.random() < eChance;
   // 훈련은 웨이브 선형, 무한은 층 곡선. 처치 누적분은 두 모드 모두 적용된다.
   const endless = endlessTier(waveIndex) > 0;
   const base = endless ? endlessArenaMult(waveIndex)
@@ -83,7 +88,8 @@ function makeArenaMob(typeId, waveIndex, killCount, caveLevel, eliteBonus) {
     icon: t.icon, color: isElite ? '#f43f5e' : t.color,
     behavior: t.behavior, ranged: !!t.ranged,
     hp, maxHp: hp,
-    atk: Math.max(1, Math.round(t.atk * atkSm)),
+    // 🪢길들이기 — 케이브에서 산 안전판. 위험만 도로 깎는다.
+    atk: Math.max(1, Math.round(t.atk * atkSm * (BONUSES.mobAtkMult || 1))),
     def: Math.max(0, Math.round(t.def * defSm)),
     atkPeriod: t.atkPeriod, atkCd: Math.random() * t.atkPeriod,
     range: t.range, moveSpd: t.moveSpd * (isElite ? 1.1 : 1),
@@ -187,7 +193,7 @@ function fireSurge(gs) {
   let made = 0;
   for (let i = 0; i < n; i++) {
     const p = pickSpawnPoint(a, allies);
-    const mob = makeArenaMob(rollArenaMob(a.pool), a.waveIndex, b.killCount, gs.caveLevel, a.eliteBonus);
+    const mob = makeArenaMob(rollArenaMob(a.pool), a.waveIndex, b.killCount, 0, a.eliteBonus);
     mob.x = p.x; mob.y = p.y;
     clampToArena(mob, mob.radius);
     a.mobs.push(mob);
@@ -215,7 +221,7 @@ function updateArenaSpawn(gs, dt) {
 
   const allies = b.ourTeam.filter(u => !u.dead);
   const p = pickSpawnPoint(a, allies);
-  const mob = makeArenaMob(rollArenaMob(a.pool), a.waveIndex, b.killCount, gs.caveLevel, a.eliteBonus);
+  const mob = makeArenaMob(rollArenaMob(a.pool), a.waveIndex, b.killCount, 0, a.eliteBonus);
   mob.x = p.x; mob.y = p.y;
   clampToArena(mob, mob.radius);
   a.mobs.push(mob);
@@ -727,7 +733,7 @@ function spawnSummonedElite(gs, n) {
   const typeId = pool.map(([t]) => t)
     .sort((x, y) => (BATTLE_MOB_TYPES[y]?.hp || 0) - (BATTLE_MOB_TYPES[x]?.hp || 0))[0] || 'orc';
 
-  const m = makeArenaMob(typeId, a.waveIndex, gs.battle.killCount, gs.caveLevel, 0);
+  const m = makeArenaMob(typeId, a.waveIndex, gs.battle.killCount, 0, 0);
   const scale = ELITE_STAT_BONUS * (1 + n * ELITE_HP_ESCALATION);
   m.isElite = true;
   m.isSummonedElite = true;
@@ -881,7 +887,7 @@ function applyDeathAffixes(gs, m) {
     const live = a.mobs.filter(x => !x.dead).length;
     const n = Math.max(0, Math.min(a.split, ARENA_MAX_MOBS - live));
     for (let i = 0; i < n; i++) {
-      const c = makeArenaMob('goblin', a.waveIndex, gs.battle.killCount, gs.caveLevel, 0);
+      const c = makeArenaMob('goblin', a.waveIndex, gs.battle.killCount, 0, 0);
       c.hp = c.maxHp = Math.max(1, Math.round(m.maxHp * 0.22));
       c.atk = Math.max(1, Math.round((m.atk || 4) * 0.5));
       c.name = `${m.name} 조각`;

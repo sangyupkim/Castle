@@ -162,8 +162,12 @@ function createWaveManager() {
         if (q.remaining <= 0) continue;
         q.nextSpawn -= dt;
         if (q.nextSpawn <= 0) {
-          gs.defenseEnemies.push(makeDefenseEnemy(q.type, this.waveIndex, { rewardMult: q.rewardMult }));
-          q.remaining--;
+          // 깊은 층은 한 번에 여러 마리씩 나온다 — 일정을 늘리는 대신 뭉쳐서 낸다
+          const n = Math.min(q.remaining, Math.max(1, q.batch || 1));
+          for (let i = 0; i < n; i++) {
+            gs.defenseEnemies.push(makeDefenseEnemy(q.type, this.waveIndex, { rewardMult: q.rewardMult }));
+          }
+          q.remaining -= n;
           q.nextSpawn = q.interval;
         }
       }
@@ -348,6 +352,7 @@ function createWaveManager() {
       if (!atCampaignEnd) {
         this.phase = 'upgradePick';
         gs.upgradePick = { active: true, cards: rollUpgradeCards(gs.activeUpgrades, fev('cards', 3)) };
+        gs.pickScroll = 0;   // 새 패는 언제나 왼쪽 끝에서 본다
       } else {
         this.phase = 'intermission';
         this.intermissionTimer = 0;

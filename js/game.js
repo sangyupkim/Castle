@@ -73,7 +73,8 @@ let _soulStones    = 0;
 let _metaUpgrades  = {};
 let _clearedStages = new Array(10).fill(false);
 let _skillLevels   = {};   // 스킬 노드 id → 레벨(0~10)
-let _forge         = { cores:{}, best:5, mastery:0, plus:{} };  // ⚒️ 대장간 (보석)
+let _forge         = { cores:{}, best:5, mastery:0, plus:{} };  // (옛 세이브 호환)
+let _camp          = { levels:{}, tries:0, breaks:0 };          // 🔥 캠프 단련 (보석·영구)
 let _charms        = [];   // 🎴 보관 중인 일회용 부적
 let _charmSlots    = [null, null];
 let _ascension     = 0;    // ♾️ 승천 단계
@@ -102,7 +103,6 @@ function newState() {
     page:'lobby',        // 'lobby' | 'battle' | 'town' | 'result'
     inRun:false,         // 로비 밖(런 안)에 있는가
     gold:10, baseHP:BASE_HP_MAX,
-    caveLevel:1,
     towers:[], defenseEnemies:[], projectiles:[], chargers:[], poisonPools:[],
     castleCd:0, baseWardUntil:0,
     battle: null,
@@ -154,10 +154,10 @@ function newState() {
          metaCards:[], skillTreeTabs:[], towerMove:null,
          lobbyTabBtns:[], unlockBtns:[], pactBtns:[], sortieBtn:{}, trainBtn:null, resultBtn:{},
          unboundedBtn:null, nightmareBtns:[],
-         buildingScroll:null, pageScroll:null, briefScroll:null, lobbyScroll:null,
+         buildingScroll:null, pageScroll:null, briefScroll:null, lobbyScroll:null, pickScroll:null,
          pauseResumeBtn:null, pauseGiveUpBtn:null,
          backupExportBtn:null, backupImportBtn:null, backupMsg:null,
-         tutReplayBtn:null, tutResetTipBtn:null, guideReplayBtn:null, bgmToggleBtn:null, sfxToggleBtn:null,
+         tutReplayBtn:null, tutResetTipBtn:null, guideReplayBtn:null, campBtns:[], bgmToggleBtn:null, sfxToggleBtn:null,
          tutSkipBtn:null, tutBackBtn:null, sigilCards:[] },
     // 영구 데이터 참조
     get soulStones()    { return _soulStones; },
@@ -170,6 +170,8 @@ function newState() {
     set skillLevels(v) { _skillLevels = v; },
     get forge()  { return _forge; },
     set forge(v) { _forge = v; },
+    get camp()   { return _camp; },
+    set camp(v)  { _camp = v; },
     get charms()  { return _charms; },
     set charms(v) { _charms = v; },
     get charmSlots()  { return _charmSlots; },
@@ -218,6 +220,8 @@ let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적�
   _clearedStages  = sv.clearedStages || new Array(10).fill(false);
   _skillLevels    = sv.skillLevels || {};
   _forge          = sv.forge      || { cores:{}, best:5, mastery:0, plus:{} };
+  _camp           = sv.camp       || { levels:{}, tries:0, breaks:0 };
+  if (!_camp.levels) _camp.levels = {};
   _charms         = sv.charms     || [];
   _charmSlots     = sv.charmSlots || [null, null];
   _ascension      = sv.ascension  || 0;
@@ -248,7 +252,6 @@ let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적�
   gs.hero.exp   = sv.heroExp || 0;
   gs.hero.hp    = heroMaxHp();
   gs.battle.totalGoldEarned = sv.totalGoldEarned || 0;
-  gs.caveLevel  = Math.max(1, Math.min(5, sv.caveLevel||1));
   gs.wallRepairs = sv.wallRepairs || 0;
   gs.bountyUsed  = sv.bountyUsed  || 0;
   gs.eliteUsed   = sv.eliteUsed   || 0;
@@ -272,6 +275,8 @@ let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적�
   }
   // 보관함 — 옛 세이브(townEquipped: 장착 아이디 배열)도 받아들인다
   gs.town.gear = normalizeHeroGear(sv.townGear, sv.townEquipped);
+  // ⚒️ 대장간은 판 안의 것이 됐다 — 출격 중이던 판을 이어받을 때만 복원한다
+  if (sv.inRun && sv.townForge) gs.town.forge = sv.townForge;
 
   gs.innOffers = sv.innOffers || [];
 
@@ -358,8 +363,9 @@ let _drag = null;      // { y0, scroll0, region }
 let _didDrag = false;
 
 function scrollRegionAt(p) {
-  // 건물 상세 · 마을 탭 본문 · 전투 준비 화면이 각각 스크롤된다
-  for (const r of [gs.ui.buildingScroll, gs.ui.pageScroll, gs.ui.briefScroll, gs.ui.lobbyScroll]) {
+  // 건물 상세 · 마을 탭 본문 · 전투 준비 화면이 각각 스크롤된다.
+  // 강화 카드 띠(pickScroll)만 가로로 민다 — axis:'x'로 구분한다.
+  for (const r of [gs.ui.pickScroll, gs.ui.buildingScroll, gs.ui.pageScroll, gs.ui.briefScroll, gs.ui.lobbyScroll]) {
     if (!r) continue;
     if (p.x < r.x || p.x > r.x + r.w || p.y < r.y || p.y > r.y + r.h) continue;
     return r;
@@ -375,9 +381,12 @@ function beginDrag(p) {
   _didDrag = false;
   _pressAt = { x: p.x, y: p.y };
   const r = scrollRegionAt(p);
-  _drag = r ? { y0: p.y, max: r.max,
-                kind: r === gs.ui.briefScroll ? 'brief' : r === gs.ui.lobbyScroll ? 'lobby' : 'town',
-                scroll0: r === gs.ui.briefScroll ? (gs.briefScroll||0)
+  _drag = r ? { y0: p.y, x0: p.x, max: r.max, axis: r.axis === 'x' ? 'x' : 'y',
+                kind: r === gs.ui.pickScroll  ? 'pick'
+                    : r === gs.ui.briefScroll ? 'brief'
+                    : r === gs.ui.lobbyScroll ? 'lobby' : 'town',
+                scroll0: r === gs.ui.pickScroll  ? (gs.pickScroll||0)
+                       : r === gs.ui.briefScroll ? (gs.briefScroll||0)
                        : r === gs.ui.lobbyScroll ? (gs.lobbyScroll||0)
                        : (gs.town.scroll||0) } : null;
 }
@@ -388,10 +397,11 @@ function moveDrag(p) {
     if (d >= DRAG_THRESHOLD) _didDrag = true;
   }
   if (!_drag) return;
-  const dy = p.y - _drag.y0;
+  const d = _drag.axis === 'x' ? (p.x - _drag.x0) : (p.y - _drag.y0);
   if (!_didDrag) return;
-  const v = Math.max(0, Math.min(_drag.max, _drag.scroll0 - dy));
-  if      (_drag.kind === 'brief') gs.briefScroll = v;
+  const v = Math.max(0, Math.min(_drag.max, _drag.scroll0 - d));
+  if      (_drag.kind === 'pick')  gs.pickScroll  = v;
+  else if (_drag.kind === 'brief') gs.briefScroll = v;
   else if (_drag.kind === 'lobby') gs.lobbyScroll = v;
   else                             gs.town.scroll = v;
 }
@@ -420,18 +430,50 @@ canvas.addEventListener('touchend',   e=>{
   }
 },{passive:false});
 
-canvas.addEventListener('wheel', e=>{
-  const r = scrollRegionAt(pt(e));
+// 휠은 캔버스가 아니라 **창 전체**에서 받는다.
+// PC에서는 480×800 캔버스가 넓은 화면 한가운데 좁은 기둥으로 놓인다. 리스너를
+// 캔버스에만 걸면 커서가 그 기둥 밖(양옆 여백)에 있을 때 휠이 아무 데도 닿지 않는다 —
+// "PC에서 스크롤이 안 된다"는 보고가 이것이었다. 여백에서 굴려도 통하게,
+// 캔버스 밖 좌표는 기둥 안으로 끌어당겨 읽는다.
+window.addEventListener('wheel', e=>{
+  const p0 = pt(e);
+  const p  = { x: Math.max(0, Math.min(CW, p0.x)), y: Math.max(0, Math.min(CH, p0.y)) };
+  const r = scrollRegionAt(p);
   if (!r) return;
   e.preventDefault();
-  if      (r === gs.ui.briefScroll) gs.briefScroll = Math.max(0, Math.min(r.max, (gs.briefScroll||0) + e.deltaY));
+  // 가로 띠는 세로 휠로도 밀리게 한다 — 마우스에 가로 휠이 없는 쪽이 흔하다
+  if      (r === gs.ui.pickScroll)  gs.pickScroll  = Math.max(0, Math.min(r.max, (gs.pickScroll||0) + (e.deltaX || e.deltaY)));
+  else if (r === gs.ui.briefScroll) gs.briefScroll = Math.max(0, Math.min(r.max, (gs.briefScroll||0) + e.deltaY));
   else if (r === gs.ui.lobbyScroll) gs.lobbyScroll = Math.max(0, Math.min(r.max, (gs.lobbyScroll||0) + e.deltaY));
   else                              gs.town.scroll = Math.max(0, Math.min(r.max, (gs.town.scroll||0) + e.deltaY));
 },{passive:false});
 
+// 지금 화면에서 스크롤되는 세로 영역 하나 (키보드용)
+function activeScrollRegion() {
+  for (const r of [gs.ui.buildingScroll, gs.ui.pageScroll, gs.ui.briefScroll, gs.ui.lobbyScroll])
+    if (r && r.max > 0) return r;
+  return null;
+}
+function nudgeScroll(dy) {
+  const r = activeScrollRegion(); if (!r) return false;
+  const v = x => Math.max(0, Math.min(r.max, x + dy));
+  if      (r === gs.ui.briefScroll) gs.briefScroll = v(gs.briefScroll||0);
+  else if (r === gs.ui.lobbyScroll) gs.lobbyScroll = v(gs.lobbyScroll||0);
+  else                              gs.town.scroll = v(gs.town.scroll||0);
+  return true;
+}
+
 window.addEventListener('keydown', e => {
   if (_titleScreen) { _startFadeOut(); return; }
   if (tut.active)   { tut.next(); return; }
+
+  // PageUp/Down · Home/End — 휠도 트랙패드도 없는 자리를 위해
+  if (e.key === 'PageDown' || e.key === 'PageUp') {
+    if (nudgeScroll(e.key === 'PageDown' ? 420 : -420)) { e.preventDefault(); return; }
+  }
+  if (e.key === 'Home' || e.key === 'End') {
+    if (nudgeScroll(e.key === 'End' ? 99999 : -99999)) { e.preventDefault(); return; }
+  }
 
   // 로비 — 탭 이동과 출격만
   if (gs.page === 'lobby') {
@@ -594,7 +636,10 @@ function tap({x,y}) {
       if (gs.gold < cost) { spawnFloaty('골드 부족!',x,y,'#ef4444'); SFX.denied(); return; }
       gs.gold -= cost;
       gs.rerolls++;
-      gs.upgradePick.cards = rollUpgradeCards(gs.activeUpgrades);
+      // 장수는 그대로 다시 뽑는다 — 🎲풍요(5장) 층에서 리롤했더니 3장으로
+      // 줄어드는 버그가 있었다. 돈을 내고 이벤트 혜택을 잃는 셈이었다.
+      gs.upgradePick.cards = rollUpgradeCards(gs.activeUpgrades, fev('cards', 3));
+      gs.pickScroll = 0;
       SFX.click();
       return;
     }
@@ -736,15 +781,15 @@ function tap({x,y}) {
 // 페이지가 바뀌면 지난 화면의 버튼 좌표를 지운다.
 // gs.ui는 그리면서 채워지므로, 다른 페이지의 낡은 사각형이 남아 엉뚱한 탭을 먹는다.
 const _PAGE_UI_KEYS = [
-  'buildingCards','wallRepairBtn','caveBtn','tabTownBtn','townBackBtn',
-  'buildingLvUpBtn','upgradeBtns','towerMoveBtn','buildingScroll','pageScroll','briefScroll','lobbyScroll','hireCards','hiredSlots',
+  'buildingCards','wallRepairBtn','tabTownBtn','townBackBtn',
+  'buildingLvUpBtn','upgradeBtns','towerMoveBtn','buildingScroll','pageScroll','briefScroll','lobbyScroll','pickScroll','hireCards','hiredSlots',
   'heroInfoBtn','heroBackBtn','equipSlotBtns','invCards','skillSlotBtns','skillCards','heroPickBtn',
   'shopItemBtns','skillBuyBtns','activeBuyBtns','activeSlotBtns','shopTabBuy','shopTabUp',
   'towerBranchBtns','towerPlan','planConfirmBtn','planCancelBtn',
   'forgeTabs','forgeGearBtns','forgeFuseBtns','forgeTemperBtn','forgeCoreBtn',
   'charmRollBtn','charmCards','charmSlotBtns',
   'specialCards','specialSlots','heroDefBtn','heroBatBtn','bountyBtn','eliteBtn','towerMiniGrid',
-  'lobbyTabBtns','sortieBtn','trainBtn','unboundedBtn','nightmareBtns','metaCards','unlockBtns','pactBtns','sigilCards',
+  'lobbyTabBtns','sortieBtn','trainBtn','unboundedBtn','nightmareBtns','metaCards','metaBulkCards','unlockBtns','pactBtns','sigilCards','campBtns',
   'skillTreeTabs','ascendBtn','trainSkipBtn','skillResetBtn','heroActiveBtns','heroAutoBtn',
   'backupExportBtn','backupImportBtn',
   'tutReplayBtn','tutResetTipBtn','guideReplayBtn','bgmToggleBtn','sfxToggleBtn','guideSkipBtn',
@@ -879,17 +924,45 @@ function handleLobbyTap(x, y) {
     for (const t of gs.ui.skillTreeTabs||[]) {
       if (hitTest(x,y,t)) { L.skillTree=t.id; gs.lobbyScroll=0; SFX.click(); return; }
     }
-    for (const card of gs.ui.metaCards||[]) {
+    // ×10 칩이 카드보다 먼저다 — 칩이 카드 위에 얹혀 있으므로
+    for (const card of (gs.ui.metaBulkCards||[]).concat(gs.ui.metaCards||[])) {
       if (hitTest(x,y,card)) {
-        const lv = skillLevel(gs, card.skillId) + 1;
-        if (buySkillNode(card.skillId, gs)) {
+        let got = 0;
+        const want = Math.max(1, card.bulk || 1);
+        while (got < want && buySkillNode(card.skillId, gs)) got++;
+        if (got) {
           SaveManager.save(gs);
-          spawnFloaty(`${card.icon} Lv${lv}!`,x,y,'#a78bfa'); SFX.upgrade();
+          const lv = skillLevel(gs, card.skillId);
+          spawnFloaty(`${card.icon} Lv${lv}!${got>1?` (+${got})`:''}`,x,y,'#a78bfa'); SFX.upgrade();
         } else {
           spawnFloaty('보석 부족 또는 잠김!',x,y,'#ef4444'); SFX.denied();
         }
         return;
       }
+    }
+    return;
+  }
+
+  // 🔥 단련 — 보석을 걸고 굴린다
+  if (L.tab === 'camp') {
+    const ry = y + (gs.lobbyScroll || 0);
+    for (const b of gs.ui.campBtns||[]) {
+      if (!hitTest(x,ry,b)) continue;
+      const r = campTemper(gs, b.id);
+      if (!r) { spawnFloaty('보석 부족!',x,y,'#ef4444'); SFX.denied(); return; }
+      SaveManager.save(gs);
+      const tr = campTrack(b.id);
+      if (r.kind === 'up') {
+        spawnFloaty(`${tr.icon} +${r.after} 성공!`, CW/2, 300, '#22c55e'); SFX.levelUp();
+      } else if (r.kind === 'break') {
+        spawnFloaty(`💥 무너졌습니다 — +${r.before} → +${r.after}`, CW/2, 300, '#ef4444');
+        FX.shake(7, 0.4); SFX.denied();
+      } else if (r.kind === 'down') {
+        spawnFloaty(`▼ 하락 — +${r.before} → +${r.after}`, CW/2, 300, '#f97316'); SFX.denied();
+      } else {
+        spawnFloaty(`실패 — +${r.after} 그대로`, CW/2, 300, '#94a3b8'); SFX.denied();
+      }
+      return;
     }
     return;
   }
@@ -994,6 +1067,7 @@ function resetAllProgress() {
   _clearedStages = new Array(10).fill(false);
   _skillLevels = {};
   _forge = { cores:{}, best:5, mastery:0, plus:{} };
+  _camp  = { levels:{}, tries:0, breaks:0 };
   _charms = []; _charmSlots = [null, null]; _ascension = 0; _heroPlacePref = 'none';
   _trainSkipped = false;
   _unlocked = [];
@@ -1298,8 +1372,10 @@ function handleTownTap(x,y) {
     }
     for (const btn of gs.ui.upgradeBtns||[]) {
       if (hitTest(x,y,btn)) {
-        if (!buyTownUpgrade(t.screen,btn.id,gs)) spawnFloaty('골드 부족!',x,y,'#ef4444');
-        else spawnFloaty('강화 완료!',x,y,'#22c55e');
+        const got = buyTownUpgradeBulk(t.screen, btn.id, gs, btn.bulk || 1);
+        if (!got) spawnFloaty('골드 부족!',x,y,'#ef4444');
+        else spawnFloaty(got>1?`강화 ×${got}!`:'강화 완료!',x,y,'#22c55e');
+        if (got) SFX.upgrade();
         return;
       }
     }
@@ -1358,23 +1434,12 @@ function handleTownTap(x,y) {
   }
 
   if (t.tab==='town') {
-    // 케이브 업그레이드 버튼은 케이브 카드 안에 그려진다.
-    // 카드 루프보다 먼저 봐야 카드가 탭을 먹어버리지 않는다.
-    if (hitTest(x,y,gs.ui.caveBtn||{})) {
-      const nextLv=gs.caveLevel+1;
-      if (nextLv<=CAVE_MAX_LEVEL) {
-        const cost=CAVE_LEVELS[nextLv].upgradeCost;
-        if (gs.gold>=cost) { gs.gold-=cost; gs.caveLevel=nextLv; spawnFloaty(`🗿 케이브 Lv.${nextLv}!`,CW/2,300,'#a78bfa'); SFX.upgrade(); }
-        else { spawnFloaty('골드 부족!',x,y,'#ef4444'); SFX.denied(); }
-      }
-      return;
-    }
     for (const card of gs.ui.buildingCards||[]) {
       if (hitTest(x,y,card)) {
         if (!card.built) {
           if (!buildBuilding(card.id,gs)) spawnFloaty('골드 부족!',x,y,'#ef4444');
           else spawnFloaty('건설 완료!',x,y,'#22c55e');
-        } else if (card.id!=='cave') {
+        } else {
           t.screen=card.id; t.scroll=0;
         }
         return;
