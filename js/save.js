@@ -27,7 +27,6 @@ const SaveManager = {
       baseHP:     gs.baseHP,
       heroLevel:  gs.hero.level,
       heroExp:    gs.hero.exp,
-      caveLevel:  gs.caveLevel,
       wallRepairs: gs.wallRepairs || 0,
       bountyUsed:  gs.bountyUsed || 0,
       eliteUsed:   gs.eliteUsed  || 0,
@@ -68,7 +67,10 @@ const SaveManager = {
       metaUpgrades:   gs.metaUpgrades || {},
       clearedStages:  gs.clearedStages || new Array(10).fill(false),
       skillLevels:    gs.skillLevels || {},
-      forge:          gs.forge ? JSON.parse(JSON.stringify(gs.forge)) : null,
+      // ⚒️ 대장간은 이제 판 안의 것이라 townGear 옆(townForge)으로 옮겼다.
+      // 여기 남는 forge는 옛 세이브를 읽을 때만 쓰인다.
+      townForge:      gs.town?.forge ? JSON.parse(JSON.stringify(gs.town.forge)) : null,
+      camp:           gs.camp ? JSON.parse(JSON.stringify(gs.camp)) : null,
       charms:         gs.charms ? JSON.parse(JSON.stringify(gs.charms)) : [],
       charmSlots:     gs.charmSlots ? gs.charmSlots.slice() : [null, null],
       ascension:      gs.ascension || 0,

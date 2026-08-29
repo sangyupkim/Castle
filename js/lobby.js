@@ -15,6 +15,7 @@ const LOBBY_BODY_H   = CH - LOBBY_BODY_Y - LOBBY_SORTIE_H;
 const LOBBY_TABS = [
   { id:'sortie', label:'출격', icon:'⚔️', color:'#22c55e' },
   { id:'skill',  label:'스킬', icon:'🌳', color:'#a78bfa' },
+  { id:'camp',   label:'단련', icon:'🔥', color:'#fb923c' },
   { id:'unlock', label:'해금', icon:'🔓', color:'#f59e0b' },
   { id:'pact',   label:'서약', icon:'📜', color:'#f43f5e' },
   { id:'record', label:'기록', icon:'📊', color:'#60a5fa' },

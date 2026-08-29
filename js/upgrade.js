@@ -17,6 +17,9 @@ function createDefaultBonuses() {
     // 케이브/전투
     battleGoldMult: 1.0, mobHpMult: 1.0, spawnSpeedMult: 1.0,
     eliteChance: 0, dropChance: 0,
+    // 🗿 몬스터 케이브 — 아레나 몹을 직접 만지는 값들.
+    // mobStatMult/mobGoldMult는 '1 + 합'으로 쓴다 (0이 기본).
+    mobStatMult: 0, mobGoldMult: 0, mobAtkMult: 1.0, eliteChargeBonus: 0,
     // 영웅
     heroAtk: 0, heroRegen: 0, heroAura: 0,
     // 장비·스킬이 얹는 영웅 전용 값 (각인 배율과 곱해서 쓴다)
@@ -194,8 +197,17 @@ function skpct(x) { return Math.round(x * 1000) / 10 + '%'; }
 const SKILL_MAX_LV   = 10;   // 노드 하나가 오를 수 있는 최대 레벨
 const SKILL_ROW_GATE = 5;    // 아랫줄을 열려면 윗줄들에 쌓아야 하는 레벨 수
 
-// 레벨 L을 찍는 값 = 기본값 × L. 10레벨까지 다 올리면 기본값 × 55.
-function skillLevelCost(sk, level) { return Math.max(1, (sk.cost || 1) * Math.max(1, level)); }
+// 레벨 L을 찍는 값 = 기본값 × L × (1 + 0.35(L-1)).
+// 예전에는 그냥 기본값 × L이라 한 노드를 끝까지 올리는 데 기본값 × 55,
+// 트리 전체가 4,236보석이었다. 100층을 한 번 돌파하면 9,000보석이 들어오니
+// 첫 돌파에서 트리가 통째로 끝났다 — 영구 성장이 두 번째 판 전에 사라진 셈이다.
+// 뒷 레벨을 가파르게 만들어 한 노드를 '끝까지' 올리는 것 자체가 판단이 되게 한다
+// (노드 총액 × 55 → × 170.5, 트리 전체 ≈ 13,100).
+const SKILL_LEVEL_STEEPNESS = 0.35;
+function skillLevelCost(sk, level) {
+  const L = Math.max(1, level);
+  return Math.max(1, Math.round((sk.cost || 1) * L * (1 + SKILL_LEVEL_STEEPNESS * (L - 1))));
+}
 function skillNodeTotal(sk) {
   let t = 0; for (let i = 1; i <= SKILL_MAX_LV; i++) t += skillLevelCost(sk, i); return t;
 }
@@ -505,8 +517,14 @@ function applyRunUpgrades(gs) {
 //   훈련 — 도달 웨이브 위주. 손에 익히는 곳이므로 수입이 크지 않다.
 //   무한 — 층당 적립이 본체고, 깊이 갈수록 층당 몫이 커진다.
 function calcSoulStones(gs) {
-  const caveTerm = gs.caveLevel;
-  const killTerm = Math.floor((gs.battle.runKills || 0) / 60);
+  // 케이브가 건물이 되면서 레벨 폭이 1~5에서 0~11로 늘었다.
+  // 정산의 무게는 그대로 두려고 절반으로 읽는다.
+  const caveTerm = caveLevelOf(gs) * 0.5;
+  // 처치 60마리당 1보석이던 것을 100마리당 1로 낮춘다.
+  // v12.8에서 상단 물량을 절반 넘게 늘렸는데(스폰 뭉치기), 그러면 이 항이
+  // 난이도를 올린 만큼 보석도 같이 불어난다 — 어렵게 만든 값이 보상으로 되돌아오면
+  // 바꾼 것이 없다. 마릿수가 늘어난 비율만큼 분모를 키워 제자리에 둔다.
+  const killTerm = Math.floor((gs.battle.runKills || 0) / GEM_KILLS_PER);
   const mult     = pactGemMult() * (gs.gaveUp ? GIVE_UP_GEM_MULT : 1);
 
   if (gs.mode === 'endless') {
@@ -565,11 +583,12 @@ function soulStoneBreakdown(gs) {
     // 케이브·처치는 깊이와 무관한 항이라 '새로 판 깊이의 비중'만큼만 받는다.
     // 그러지 않으면 되짚기 감액 옆에 정액 보석이 남아 얕은 반복이 다시 이득이 된다.
     const sideMult = repeatSideMult(cleared, start);
-    const caveRaw  = gs.caveLevel;
-    const killRaw  = Math.floor((gs.battle.runKills||0)/60);
+    const caveLv   = caveLevelOf(gs);
+    const caveRaw  = caveLv * 0.5;
+    const killRaw  = Math.floor((gs.battle.runKills||0)/GEM_KILLS_PER);
     const sideNote = sideMult < 1 ? ` · 되짚기 ×${sideMult.toFixed(2)}` : '';
-    rows.push({ label:'케이브 레벨', value:+(caveRaw*sideMult).toFixed(1), note:`Lv.${caveRaw}${sideNote}` });
-    rows.push({ label:'처치',        value:+(killRaw*sideMult).toFixed(1), note:`${gs.battle.runKills||0}마리 ÷ 60${sideNote}` });
+    rows.push({ label:'케이브 레벨', value:+(caveRaw*sideMult).toFixed(1), note:`Lv.${caveLv}${sideNote}` });
+    rows.push({ label:'처치',        value:+(killRaw*sideMult).toFixed(1), note:`${gs.battle.runKills||0}마리 ÷ ${GEM_KILLS_PER}${sideNote}` });
     if (cleared > start) {
       rows.push({ label:'새로 돌파한 층', value:newDepthGems(cleared, start),
                   note:`${start}층 → ${cleared}층 · ${cleared-start}개 층` });
