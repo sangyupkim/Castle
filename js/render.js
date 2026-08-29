@@ -24,6 +24,40 @@ function drawPanel9(ctx, key, x, y, w, h) {
       Sprites.blitRect(ctx, k, sx[q], sy[r], ssw[q], ssh[r], px[q], py[r], pw[q], ph[r]);
   return true;
 }
+// ─── ◎ 사거리 미리보기 ───────────────────────────────────────────────────────
+// 미니 그리드는 실제 격자를 mg.cellW/CELL_W 만큼 줄여 그린 것이다.
+// 사거리도 같은 비율로 줄여야 "이 칸에서 저기까지 닿는다"가 눈으로 맞는다.
+function drawMiniRange(ctx, mg, col, row, rangePx, color, planned) {
+  if (!mg) return;
+  const k  = mg.cellW / CELL_W;
+  const cx = mg.x + col*mg.cellW + mg.cellW/2;
+  const cy = mg.y + row*mg.cellH + mg.cellH/2;
+  const rr = rangePx * k;
+  ctx.save();
+  // 격자 밖으로 새어 나가지 않게 자른다 — 저격탑(5칸)은 원이 팔레트까지 덮는다
+  ctx.beginPath();
+  ctx.rect(mg.x - 1, mg.y - 1, GRID_COLS*mg.cellW + 2, GRID_ROWS*mg.cellH + 2);
+  ctx.clip();
+  ctx.beginPath(); ctx.arc(cx, cy, rr, 0, Math.PI*2);
+  ctx.fillStyle = planned ? 'rgba(125,211,252,0.13)' : 'rgba(99,102,241,0.10)';
+  ctx.fill();
+  ctx.strokeStyle = color; ctx.globalAlpha = 0.85; ctx.lineWidth = 1.5;
+  if (planned) ctx.setLineDash([4,3]);
+  ctx.stroke(); ctx.setLineDash([]);
+  // 놓을 자리를 십자로 집어 준다 — 원만 있으면 중심이 어디인지 헷갈린다
+  ctx.globalAlpha = 1; ctx.strokeStyle = color; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx-5, cy); ctx.lineTo(cx+5, cy);
+  ctx.moveTo(cx, cy-5); ctx.lineTo(cx, cy+5);
+  ctx.stroke();
+  ctx.restore();
+}
+// 아직 안 세운 타워의 사거리 — 지금 강화까지 반영해서 미리 보여준다
+function plannedTowerRange(typeId) {
+  const t = makeTower(0, 0, typeId);
+  return towerStats(t).range;
+}
+
 // ─── 🖼 패널 ────────────────────────────────────────────────────────────────
 // 이 게임의 패널은 전부 roundRect + 채움 + 테두리 한 덩어리였다(121곳).
 // 그걸 이 함수 하나로 모아, 큰 것만 팩의 9슬라이스 틀을 두르게 한다.
@@ -4657,7 +4691,7 @@ function renderTownPageArmy(ctx, gs, startY) {
 function renderTownPageTowers(ctx, gs, startY) {
   // ── 타워 종류 팔레트 ─────────────────────────────────────────────────────
   ctx.fillStyle='#60a5fa'; ctx.font='bold 11px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
-  ctx.fillText('타워를 고른 뒤 빈 셀을 탭 (1~5) · S/M/L/A = 등급별 피해 배율', CW/2, startY);
+  ctx.fillText('타워를 고르고 → 빈 셀을 탭하면 ◎사거리를 보여줍니다 → 확인 후 배치', CW/2, startY);
 
   // 타워 5종 — 한 줄에 안 들어가므로 3열 그리드로. 등급 상성을 카드에 같이 띄운다.
   const pcols = 3, pgap = 5;
@@ -4700,6 +4734,9 @@ function renderTownPageTowers(ctx, gs, startY) {
     ctx.textAlign='left';
     ctx.fillStyle='#64748b'; ctx.font='8px sans-serif';
     ctx.fillText(tpl.desc.slice(0,12), bx+6, by+42);
+    // ◎ 사거리 — 몇 칸까지 닿는지. 고르기 전에 견줄 수 있어야 한다.
+    ctx.fillStyle='#7dd3fc'; ctx.font='bold 8px sans-serif';
+    ctx.fillText(`◎${(tpl.range / CELL_W).toFixed(1)}칸`, bx+6, by+52);
     ctx.globalAlpha=1;
 
     if (unlocked) {
@@ -4777,9 +4814,63 @@ function renderTownPageTowers(ctx, gs, startY) {
   }
   gs.ui.towerMiniGrid={x:offX,y:offY,cellW:mCW,cellH:mCH,scale};
 
-  // ── 선택 타워 패널 ───────────────────────────────────────────────────────
+  // ── ◎ 사거리 ─────────────────────────────────────────────────────────────
+  // 예전에는 빈 칸을 누르면 그 자리에서 바로 세워졌다. 어디까지 닿는지는
+  // 세워 본 뒤에야 알 수 있었고, 잘못 놓으면 이설비를 물거나 60% 손해를 보고 팔아야 했다.
+  // 이제 한 단계를 끼워 넣는다 — 고르고, 놓아 보고(사거리를 보고), 확정한다.
+  const _mg = gs.ui.towerMiniGrid;
+  const _plan = gs.ui.towerPlan;
+  if (_plan) drawMiniRange(ctx, _mg, _plan.col, _plan.row,
+                           plannedTowerRange(_plan.typeId), TOWER_TYPES[_plan.typeId].color, true);
+  else if (gs.ui.towerAction) {
+    const _sel = gs.towers.find(tw=>tw.col===gs.ui.towerAction.col&&tw.row===gs.ui.towerAction.row);
+    if (_sel) drawMiniRange(ctx, _mg, _sel.col, _sel.row,
+                            towerStats(_sel).range, TOWER_TYPES[_sel.typeId].color, false);
+  }
+
+  // ── 배치 확인 패널 ───────────────────────────────────────────────────────
+  // 놓을 자리를 집었으면, 세우기 전에 무엇이 어떻게 서는지 한 번 보여준다.
   const panelY=offY+gridH+8;
   gs.ui.towerBranchBtns=[];
+  gs.ui.planConfirmBtn=null; gs.ui.planCancelBtn=null;
+  if (_plan) {
+    const tpl2 = TOWER_TYPES[_plan.typeId];
+    const cost2 = towerBuildCost(_plan.typeId, gs.towers);
+    const can2  = gs.gold >= cost2;
+    const tmp   = makeTower(_plan.col, _plan.row, _plan.typeId);
+    const st2   = towerStats(tmp);
+    const ph2 = 74;
+    uiPanel(ctx, 6, panelY, CW-12, ph2, 7, '#0d1929', tpl2.color, 1.5);
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.fillStyle='#e2e8f0'; ctx.font='20px sans-serif';
+    ctx.fillText(tpl2.icon, 14, panelY+20);
+    ctx.fillStyle='#f1f5f9'; ctx.font='bold 12px sans-serif';
+    ctx.fillText(`${tpl2.name}  →  ${_plan.col+1}열 ${_plan.row+1}행`, 42, panelY+13);
+    ctx.fillStyle='#7dd3fc'; ctx.font='bold 10px sans-serif';
+    ctx.fillText(`ATK ${st2.dmg}   ${st2.spd.toFixed(2)}/s   ◎ ${(st2.range/CELL_W).toFixed(1)}칸`, 42, panelY+29);
+    // 이 자리에서 경로를 몇 칸이나 덮는지 — 사거리 원보다 이 숫자가 더 정직하다
+    const covered = pathCellsInRange(_plan.col, _plan.row, st2.range);
+    ctx.textAlign='right';
+    ctx.fillStyle = covered > 0 ? '#4ade80' : '#ef4444'; ctx.font='bold 10px sans-serif';
+    ctx.fillText(covered > 0 ? `경로 ${covered}칸 사정권` : '경로에 닿지 않습니다', CW-14, panelY+13);
+    ctx.fillStyle = can2 ? COLORS.gold : '#ef4444'; ctx.font='bold 11px sans-serif';
+    ctx.fillText(`${cost2}💰`, CW-14, panelY+29);
+    ctx.textAlign='left';
+    const cbw=150, cbh=26;
+    drawBtn(ctx, 10, panelY+42, cbw, cbh,
+            can2 ? `✔ 여기에 세운다  ${cost2}💰` : '골드 부족',
+            can2?'#14532d':'#1f2937', can2?'#4ade80':'#6b7280', can2);
+    if (can2) gs.ui.planConfirmBtn={x:10,y:panelY+42,w:cbw,h:cbh};
+    const xbw=92, xbx=CW-10-xbw;
+    drawBtn(ctx, xbx, panelY+42, xbw, cbh, '✕ 취소', '#3f1515', '#f87171');
+    gs.ui.planCancelBtn={x:xbx,y:panelY+42,w:xbw,h:cbh};
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.fillStyle='#475569'; ctx.font='8px sans-serif';
+    ctx.fillText('다른 칸을 탭하면 그리로 옮겨집니다', 168, panelY+55);
+    _townBottom = panelY + ph2 + 10;
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    return;
+  }
   // ★5 분기 칸이 붙으면 패널이 그만큼 길어진다
   let panelH = 72;
   const _selTower = gs.ui.towerAction
