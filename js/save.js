@@ -56,6 +56,8 @@ const SaveManager = {
       heroHp:        Math.max(0, Math.round(gs.hero?.hp || 0)),
       heroDead:      !!gs.hero?.dead,
       heroDownFor:   gs.hero?.downFor || 0,
+      heroMp:        Math.round(gs.hero?.mp || 0),
+      heroSkillAuto: gs.hero?.skillAuto !== false,
       innOffers:     gs.innOffers || [],
       // ── 영구 (런과 무관) ──
       soulStones:     gs.soulStones  || 0,

@@ -1,3 +1,5 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>듀얼 프론티어 기획서</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -219,7 +221,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <div class="wrap">
 <header class="cover">
-  <div class="eyebrow">Game Design Document · v4.16 · 강화 하나가 30레벨</div>
+  <div class="eyebrow">Game Design Document · v4.17 · 영웅 액티브 스킬</div>
   <h1>듀얼 프론티어</h1>
   <p class="tagline">한 화면에서 두 개의 전선을 동시에 굴리는 모바일 웹 로그라이트.
      끝은 없다 — 얼마나 깊이 내려갔는지가 기록이다.</p>
@@ -228,7 +230,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
     <div><dt>플랫폼</dt><dd>모바일 웹 (480×800 캔버스)</dd></div>
     <div><dt>1회 하강</dt><dd>10~30분 (도달 층에 비례)</dd></div>
     <div><dt>현재 볼륨</dt><dd>훈련 30웨이브 + ∞ 무한 (알고리즘 생성)</dd></div>
-    <div><dt>이번 개정</dt><dd>강화 30레벨 · 곡선 재조정 · 마을 사용처 162만 (v4.16)</dd></div>
+    <div><dt>이번 개정</dt><dd>영웅 액티브 8종 · 자동/수동 시전 · MP 자원화 (v4.17)</dd></div>
   </dl>
 </header>
 
@@ -1012,6 +1014,107 @@ v1.0의 "그룹 순환 + 보상 체감" 구조를 이 압력 곡선이 대체한
 
 <p>같은 '광폭'이라도 0.72짜리와 1.34짜리는 다른 물건이다. 좋은 굴림을 뽑는 것 자체가
 매 웨이브 상점을 들여다볼 이유가 된다. ★~★★★로 굴림을 먼저 읽히게 했다.</p>
+
+<h3>⚡ 액티브 스킬 — 처음으로 누를 것이 생긴다 <span class="rev">v4.17 · 신규</span></h3>
+
+<p class="lede">플레이 보고: <strong>"영웅의 스킬이 몇 번 봤을 땐 거의 패시브 스킬만 있는 것 같은데
+액티브 스킬도 있으면 좋겠어. 자동으로 사용 or 수동으로 사용 모드가 있어서 사용할 수 있게.
+(지금 상점에 마나 포션이 있는데 액티브 스킬이 없어서 무용지물인 것 같아)
+영웅 스킬 중에 타워 과부하를 모든 타워에 부여하는 스킬이 있어도 재밌을 것 같아
+— 하단에 있으면서도 상단에 영향을 주는. 그런 스킬이 더 있어도 될 것 같아."</strong></p>
+
+<p>지금까지 영웅 스킬은 <strong>전부 패시브 스탯 블록</strong>이었다. 끼우면 숫자가 오르고,
+그걸로 끝. 전투 중 플레이어가 누를 것이 하나도 없었고, 상점의 💧MP 포션은
+쓸 MP가 없어서 <strong>정의만 있고 값어치가 없는 물건</strong>이었다.</p>
+
+<div class="tw"><table>
+<caption>⚡ 액티브 8종 — 절반이 두 전선을 가로지른다</caption>
+<thead><tr><th>스킬</th><th>등급</th><th class="num">값</th><th class="num">MP</th><th class="num">재사용</th><th>작용</th><th>효과</th></tr></thead>
+<tbody>
+<tr><td>⚡ 과부하 명령</td><td>영웅</td><td class="num">120</td><td class="num">30</td><td class="num">24초</td><td>🏰 상단</td><td>모든 타워를 한꺼번에 과부하</td></tr>
+<tr><td>☄️ 유성 낙하</td><td>영웅</td><td class="num">130</td><td class="num">35</td><td class="num">20초</td><td>🏰 상단</td><td>상단 적 전체에 영웅 공격력 ×2.2</td></tr>
+<tr><td>🧱 성벽 결계</td><td>희귀</td><td class="num">88</td><td class="num">25</td><td class="num">26초</td><td>🏰 상단</td><td>6초간 기지 피해를 전부 막는다</td></tr>
+<tr><td>🕐 시간 정지</td><td>영웅</td><td class="num">126</td><td class="num">30</td><td class="num">22초</td><td>↕️ 양쪽</td><td>상·하단 전체 3.5초 크게 둔화</td></tr>
+<tr><td>💥 심판</td><td>희귀</td><td class="num">80</td><td class="num">20</td><td class="num">12초</td><td>⚔️ 하단</td><td>가장 강한 몹에게 ×4.5</td></tr>
+<tr><td>💚 재정비</td><td>희귀</td><td class="num">84</td><td class="num">25</td><td class="num">18초</td><td>⚔️ 하단</td><td>부대 전체 최대 HP의 30% 회복</td></tr>
+<tr><td>🌪 소집</td><td>일반</td><td class="num">64</td><td class="num">22</td><td class="num">16초</td><td>⚔️ 하단</td><td>몹을 영웅 쪽으로 끌고 ×1.6</td></tr>
+<tr><td>💰 약탈 명령</td><td>일반</td><td class="num">60</td><td class="num">18</td><td class="num">20초</td><td>↕️ 양쪽</td><td>층에 비례한 즉시 골드</td></tr>
+</tbody></table></div>
+
+<p><strong>여덟 중 넷(⚡☄️🧱🕐)이 하단에 선 채로 상단을 바꾼다.</strong>
+두 전선이 서로를 못 본 채 각자 돌아가던 것을, 영웅 한 명이 잇는다.
+아레나에서 몹을 썰다가 상단이 밀리면 ☄️로 끊고, 관문 러시는 🧱로 한 번 넘긴다.</p>
+
+<h4>자동 / 수동</h4>
+
+<div class="grid g2">
+  <div class="card">
+    <h4>🤖 자동</h4>
+    <p><span class="mono">updateHeroActives</span>가 쿨과 MP가 차는 대로 알아서 쓴다.
+       두 전선을 동시에 보는 게임이므로, 기본값은 자동이다.</p>
+  </div>
+  <div class="card">
+    <h4>👆 수동</h4>
+    <p>버튼을 눌러야 나간다. 못 쓰면 이유를 띄운다 —
+       <span class="mono">재사용까지 N초</span> / <span class="mono">💧MP N 필요</span>.
+       아껴 뒀다 결정적일 때 쓰는 플레이를 연다.</p>
+  </div>
+</div>
+
+<p>전투 하단 바에 <strong>💧MP 막대 · 자동/수동 토글 · 칸 수만큼의 스킬 버튼</strong>이 붙는다.
+버튼은 쿨다운이 차오르는 막대로 그려지고, 쓸 수 있게 되면 이름이 뜬다. 토글은 저장된다.</p>
+
+<h4>MP를 실제 자원으로</h4>
+
+<div class="tw"><table>
+<caption>MP — 웨이브 안에서만 회복한다</caption>
+<thead><tr><th>요소</th><th>값</th></tr></thead>
+<tbody>
+<tr><td>기본 최대</td><td><span class="mono">40 + (레벨−1) × 6</span></td></tr>
+<tr><td>기본 회복</td><td>3.2/s — <strong>웨이브 중에만</strong></td></tr>
+<tr><td>웨이브 시작</td><td>최대치의 <strong>50%</strong>까지 채워 준다</td></tr>
+<tr><td>💧 MP 포션 (10골드)</td><td>즉시 만충 — <strong>웨이브 밖에서는 이것뿐</strong></td></tr>
+<tr><td>칸 개방</td><td>영웅 <strong>Lv.1 · Lv.5</strong> — 최대 2칸</td></tr>
+</tbody></table></div>
+
+<p>웨이브 사이에는 회복이 없다. 그래서 포션이 살 이유가 생겼다 —
+"무용지물"이라는 보고를 아이템을 고쳐서가 아니라 <strong>쓸 자원을 만들어서</strong> 풀었다.</p>
+
+<div class="tw"><table>
+<caption>MP를 키우는 곳 — 새 강화 4종</caption>
+<thead><tr><th>어디</th><th>이름</th><th>효과</th></tr></thead>
+<tbody>
+<tr><td>🏪 상점 Lv.1</td><td>💧 마력의 그릇</td><td>최대 MP +5% / 레벨</td></tr>
+<tr><td>🏪 상점 Lv.3</td><td>🧘 명상</td><td>MP 회복 +4.5% / 레벨</td></tr>
+<tr><td>🏪 상점 Lv.7</td><td>⏱️ 신속한 시전</td><td>액티브 재사용 −1%p / 레벨 (최대 20 · 하한 ×0.45)</td></tr>
+<tr><td>👑 스킬트리</td><td>💧 마력 순환</td><td>최대 MP +6% · 회복 +5% / 레벨</td></tr>
+<tr class="total"><td colspan="2">상점 만렙 실측</td><td>최대 MP 40 → <strong>264</strong> · 회복 3.2 → <strong>9.19/s</strong> · 재사용 ×1.0 → <strong>×0.8</strong></td></tr>
+</tbody></table></div>
+
+<p>👑영웅 상세 화면에 <strong>⚡액티브 칸</strong>과 <strong>배운 액티브</strong> 목록이 생겼다.
+목록을 탭하면 빈 칸에 끼우고, 같은 것을 다시 탭하면 뺀다. 상점에서 사면 빈 칸에 바로 들어간다.</p>
+
+<h3>⚡ 과부하 쿨다운이 보인다 <span class="rev">v4.17</span></h3>
+
+<p class="lede">플레이 보고: <strong>"타워 과부하 쿨타임이 어딘가 보였으면 좋겠어."</strong></p>
+
+<p>예전에는 <strong>타워를 눌러 봐야</strong> "재사용까지 N초"를 알았다.
+쓸 수 있는 줄 모르면 없는 기능이다. 상단 기지 HP 막대 오른쪽에 74×15 게이지를 붙였다 —
+준비되면 <span class="mono">⚡ 과부하 준비</span>(금색 테두리), 쿨 중이면
+<span class="mono">⚡ Ns</span>와 차오르는 막대. 🧱성벽 결계가 걸려 있으면 기지 둘레에 고리가 돈다.</p>
+
+<h3>곁다리로 고친 두 가지 <span class="rev">v4.17 · 버그</span></h3>
+
+<ul>
+  <li><strong>기지 HP가 <span class="mono">200.36476000000158/100</span>으로 나왔다</strong> —
+      소수점을 그대로 찍은 데다, 최대치로 강화를 반영하지 않는 상수
+      <span class="mono">BASE_HP_MAX</span>를 썼다. 강화로 늘어난 HP가 "100 중 200"이 되던 것을
+      <span class="mono">Math.ceil</span> + <span class="mono">baseHpMax()</span>로 고쳤다.</li>
+  <li><strong>새로고침하면 배운 액티브가 전부 날아갔다</strong> —
+      <span class="mono">normalizeHeroGear</span>가 저장된
+      <span class="mono">actives</span> / <span class="mono">activeSlots</span>를
+      복원하지 않고 <span class="mono">createHeroGear()</span>의 빈 값을 그대로 뒀다.</li>
+</ul>
 
 <h3>영웅 상점의 강화 트랙이 다시 잡힌다 <span class="rev">v4.4 · 버그</span></h3>
 

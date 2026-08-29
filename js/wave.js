@@ -39,6 +39,9 @@ function createWaveManager() {
     startWave(gs) {
       if (this.phase !== 'idle') return;
 
+      // ⚡ 액티브 — 층이 시작될 때 MP를 절반 얹어 준다.
+      // 0에서 시작하면 매 층 첫 30초가 늘 빈손이고, 가득 주면 시작하자마자 다 쏟는다.
+      if (gs.hero) gs.hero.mp = Math.max(gs.hero.mp || 0, Math.round(heroMaxMp() * 0.5));
       this.phase   = 'active';
       this.elapsed = 0;
       this.timer   = waveDuration();

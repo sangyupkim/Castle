@@ -190,6 +190,14 @@ const TOWN_BUILDINGS = [
         desc:v=>`영웅 재생 +${v.toFixed(1)}/s`,              apply:(b,v)=>{ b.heroRegen += v; } },
       { id:'h_skill',name:'각인 연구',  icon:'🔮', unlockLv:6, cost:72, costMult:1.212, step:0.03, growth:0.0267, maxLv:24,
         desc:v=>`영웅 스킬 피해 +${pct(v)}`,                 apply:(b,v)=>{ b.heroSkillMult += v; } },
+      // ── ⚡ 액티브 스킬을 굴리는 세 가지 — 그릇 · 회복 · 재사용 ──
+      { id:'h_mp',   name:'마력의 그릇', icon:'💧', unlockLv:1, cost:34, costMult:1.185, step:0.05, growth:0.0333,
+        desc:v=>`영웅 최대 MP +${pct(v)}`,                  apply:(b,v)=>{ b.heroMpMax += v; } },
+      { id:'h_med',  name:'명상',       icon:'🧘', unlockLv:3, cost:48, costMult:1.2, step:0.045, growth:0.0267,
+        desc:v=>`영웅 MP 회복 +${pct(v)}`,                  apply:(b,v)=>{ b.mpRegenBonus += v; } },
+      { id:'h_cd',   name:'신속한 시전', icon:'⏱️', unlockLv:7, cost:88, costMult:1.226, step:0.01, growth:0, maxLv:20,
+        desc:v=>`액티브 재사용 대기 −${pct(v)}`,
+        apply:(b,v)=>{ b.heroSkillCdMult = Math.max(0.45, b.heroSkillCdMult - v); } },
       { id:'h_inf',  name:'전설의 무구', icon:'♾️', unlockLv:BUILDING_MAX_LEVEL-1, cost:285, costMult:1.27, step:0.04, growth:0.05, maxLv:Infinity,
         desc:v=>`영웅 전체 능력치 +${pct(v)}`,               apply:(b,v)=>{ b.heroStatMult += v; } },
     ]
@@ -302,7 +310,7 @@ function tracksUnlockedAt(def, level) {
 // 영웅 상점 고정 매대 — 소모품과 두루마리. 트랙 개편 때 실수로 같이 지워졌던 것을 되살린다.
 const HERO_SHOP_FIXED = [
   { id:'potion_hp',  name:'회복 포션',    icon:'🧪', cost:12, type:'consumable', grade:'common', desc:'영웅 HP 완전 회복',             apply:gs=>{ gs.hero.hp = heroMaxHp(); } },
-  { id:'potion_mp',  name:'MP 포션',      icon:'💧', cost: 8, type:'consumable', grade:'common', desc:'이번 웨이브 MP 충전',           apply:gs=>{ gs.town.waveBuffs.push('mp_full'); } },
+  { id:'potion_mp',  name:'MP 포션',      icon:'💧', cost:10, type:'consumable', grade:'common', desc:'영웅 MP 즉시 충전',             apply:gs=>{ gs.hero.mp = heroMaxMp(); } },
   { id:'scroll_atk', name:'공격 두루마리',icon:'📜', cost:15, type:'scroll',     grade:'rare',   desc:'이번 웨이브 영웅 스탯 +30%',    apply:gs=>{ gs.town.waveBuffs.push('hero_atk'); } },
   { id:'scroll_def', name:'방어 두루마리',icon:'📜', cost:15, type:'scroll',     grade:'rare',   desc:'이번 웨이브 아군 방어 +5',      apply:gs=>{ gs.town.waveBuffs.push('unit_def'); } },
 ];

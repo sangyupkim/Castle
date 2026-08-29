@@ -891,6 +891,8 @@ const BASE_DEF_PCT_CAP = 0.55;
 const CARRYOVER_MAX = 40;
 
 function baseDamageMult() {
+  // 🧱 성벽 결계가 걸려 있는 동안은 기지가 아무 피해도 받지 않는다
+  if (typeof gs !== 'undefined' && gs && (gs.baseWardUntil || 0) > 0) return 0;
   return (1 - Math.min(BASE_DEF_PCT_CAP, BONUSES.baseDefPct || 0))
        * (1 - Math.min(0.6, BONUSES.breachReduce || 0));
 }
