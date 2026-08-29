@@ -221,7 +221,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <div class="wrap">
 <header class="cover">
-  <div class="eyebrow">Game Design Document · v4.18 · ★5 분기 특화</div>
+  <div class="eyebrow">Game Design Document · v4.19 · ★5 분기 특화</div>
   <h1>듀얼 프론티어</h1>
   <p class="tagline">한 화면에서 두 개의 전선을 동시에 굴리는 모바일 웹 로그라이트.
      끝은 없다 — 얼마나 깊이 내려갔는지가 기록이다.</p>
@@ -230,7 +230,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
     <div><dt>플랫폼</dt><dd>모바일 웹 (480×800 캔버스)</dd></div>
     <div><dt>1회 하강</dt><dd>10~30분 (도달 층에 비례)</dd></div>
     <div><dt>현재 볼륨</dt><dd>훈련 30웨이브 + ∞ 무한 (알고리즘 생성)</dd></div>
-    <div><dt>이번 개정</dt><dd>타워 ★5 분기 18종 · 재분기 · 교차 합성 반려 (v4.18)</dd></div>
+    <div><dt>이번 개정</dt><dd>타워 ★5 분기 18종 · 재분기 · 👥증원 슬롯 버그 (v4.19)</dd></div>
   </dl>
 </header>
 
@@ -1014,6 +1014,58 @@ v1.0의 "그룹 순환 + 보상 체감" 구조를 이 압력 곡선이 대체한
 
 <p>같은 '광폭'이라도 0.72짜리와 1.34짜리는 다른 물건이다. 좋은 굴림을 뽑는 것 자체가
 매 웨이브 상점을 들여다볼 이유가 된다. ★~★★★로 굴림을 먼저 읽히게 했다.</p>
+
+<h3>👥증원이 영구 강화가 되고 있었다 <span class="rev">v4.19 · 버그</span></h3>
+
+<p class="lede">플레이 보고: <strong>"무기공방을 업그레이드했는데 갑자기 용병칸이
+4칸에서 6칸으로 늘어났어."</strong></p>
+
+<p>무기공방은 죄가 없었다. <span class="mono">gs.battle.maxSlots</span>는
+<strong>계산해서 넣어두는 값</strong>인데, 그 입력 중 하나가 👥증원 층 이벤트
+(<span class="mono">fev('slotBonus')</span> = +2)다. 그런데 재계산 순서가 어긋나 있었다 —
+재계산은 웨이브가 <strong>끝날 때</strong> 돌고, 층 이벤트는 그 <strong>뒤에</strong>
+<span class="mono">wm.init()</span>에서 바뀌었다. 즉 준비 화면 내내 슬롯 수가
+<strong>'지난 층'의 이벤트</strong>를 들고 있었다.</p>
+
+<p>강화가 슬롯을 늘린 것이 아니라, <strong>재계산을 부르는 아무 행동이나</strong>
+밀린 값을 드러낸 것이다. 마을에서 무엇을 샀어도 똑같이 튀었다.</p>
+
+<div class="tw"><table>
+<caption>같은 원인으로 반대 방향이 더 나빴다</caption>
+<thead><tr><th>상황</th><th>이전</th><th>이후</th></tr></thead>
+<tbody>
+<tr><td>증원 층 진입 → 마을 강화</td><td>4칸 → <strong>6칸으로 튐</strong></td><td>진입 시점부터 6칸 · 안 튐</td></tr>
+<tr><td>증원 층을 지나 다음 층</td><td><strong>6칸 그대로 남음</strong></td><td>4칸으로 복귀</td></tr>
+<tr><td>증원 층에서 6명 뽑고 다음 층</td><td><strong>6명 전부 따라감</strong></td><td>2명 해산 + 고용비 전액 환불</td></tr>
+</tbody></table></div>
+
+<p>세 번째가 실질적인 문제였다 — 👥증원은 <strong>"한 층짜리"</strong> 이벤트인데,
+그 층에서 6명을 뽑으면 <strong>영구 +2 강화</strong>가 되고 있었다.</p>
+
+<h4>고친 것</h4>
+
+<div class="grid g2">
+  <div class="card">
+    <h4>① 세는 자리를 옮겼다</h4>
+    <p><span class="mono">wm.init()</span>에서 층 이벤트를 정한 <strong>바로 그 자리</strong>에서
+       슬롯을 다시 센다. 이벤트가 슬롯의 입력이면, 이벤트가 정해지는 곳에서 같이 세야 한다.
+       전체 <span class="mono">reapplyAllBonuses</span>가 아니라
+       <span class="mono">recalcMaxSlots</span>만 부른다 — 직전 웨이브 종료 때 BONUSES는
+       이미 최신이고, 부수효과를 다시 돌릴 이유가 없다.</p>
+  </div>
+  <div class="card">
+    <h4>② 넘치면 돌려보낸다</h4>
+    <p><span class="mono">releaseOverCapUnits()</span> — 슬롯이 줄었는데 이미 더 데리고 있으면
+       넘치는 만큼 해산하고 <strong>고용비를 전액 환불</strong>한다. 내가 자른 것이 아니라
+       층이 끝나서 자리가 사라진 것이므로 반값이 아니라 전액이다.
+       나중에 뽑은 쪽부터 보낸다.</p>
+  </div>
+</div>
+
+<p>검증 — 신고 시나리오 그대로 증원 층 준비화면 6칸에서 무기공방 강화 3회를 해도 6칸 유지.
+40개 층을 훑어 증원 층은 전부 6칸, 나머지는 전부 4칸(<span class="mono">quake+levy</span>
+복합 층 포함). 🎴모병 영장 부적(+2)과 🕯️고독한 지휘 서약(슬롯 절반, 한도 2) 모두
+오작동 해산 0건.</p>
 
 <h3>★5 분기 특화 — 레벨이 성격을 바꾼다 <span class="rev">v4.18 · 신규</span></h3>
 
