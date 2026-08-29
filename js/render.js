@@ -267,11 +267,47 @@ function renderDefense(ctx, gs) {
 
   // 기지 HP
   const bx=8, by=DEFENSE_Y+DEFENSE_H-14;
+  // 최대치는 강화로 늘어난다 — 상수 100을 그대로 쓰면 200/100 같은 표시가 나온다
+  const bMax = baseHpMax();
   ctx.fillStyle='#0f172a'; ctx.fillRect(bx-1,by-1,181,10);
-  drawHPBar(ctx,bx,by,180,8,gs.baseHP/BASE_HP_MAX);
+  drawHPBar(ctx,bx,by,180,8,gs.baseHP/bMax);
   ctx.fillStyle=COLORS.text; ctx.font='10px sans-serif';
   ctx.textAlign='left'; ctx.textBaseline='middle';
-  ctx.fillText(`기지 HP ${gs.baseHP}/${BASE_HP_MAX}`, bx+184, by+4);
+  ctx.fillText(`기지 HP ${Math.ceil(gs.baseHP)}/${bMax}`, bx+184, by+4);
+
+  // ⚡ 과부하 — 쓸 수 있는지 어딘가에는 보여야 한다.
+  // 예전에는 타워를 눌러 봐야 "재사용까지 N초"를 알았다 — 쓸 수 있는 줄 모르면 없는 기능이다.
+  if (wm && wm.phase === 'active' && !BONUSES.pactNoOverload) {
+    const ow = 74, oh = 15, ox = CW - ow - 8, oy = by - 3;
+    const cd = gs.overloadReady || 0;
+    const full = OVERLOAD_COOLDOWN * fev('overloadCdMult', 1) * (BONUSES.overloadCdMult || 1);
+    const ready = cd <= 0;
+    roundRect(ctx, ox, oy, ow, oh, 4);
+    ctx.fillStyle = '#0b1220'; ctx.fill();
+    if (!ready && full > 0) {   // 남은 쿨다운을 채워 가는 막대로
+      ctx.save(); ctx.beginPath();
+      roundRect(ctx, ox, oy, ow * (1 - cd / full), oh, 4); ctx.clip();
+      ctx.fillStyle = '#3b1d6e'; ctx.fillRect(ox, oy, ow, oh); ctx.restore();
+    }
+    ctx.strokeStyle = ready ? '#fbbf24' : '#334155'; ctx.lineWidth = ready ? 1.5 : 1; ctx.stroke();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.fillStyle = ready ? '#fbbf24' : '#94a3b8';
+    ctx.fillText(ready ? '⚡ 과부하 준비' : `⚡ ${Math.ceil(cd)}s`, ox + ow/2, oy + oh/2);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  }
+
+  // 🧱 성벽 결계 — 걸려 있는 동안은 기지가 무적이다. 그 사실이 보여야 한다.
+  if ((gs.baseWardUntil || 0) > 0) {
+    const bc = cellCenter(4, 6);
+    ctx.beginPath(); ctx.arc(bc.x, bc.y, CELL_W * 0.85, 0, Math.PI*2);
+    ctx.strokeStyle = 'rgba(56,189,248,0.75)'; ctx.lineWidth = 2.5; ctx.stroke();
+    ctx.fillStyle = 'rgba(56,189,248,0.12)'; ctx.fill();
+    ctx.fillStyle = '#7dd3fc'; ctx.font='bold 9px sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(`🧱 ${gs.baseWardUntil.toFixed(1)}s`, bc.x, bc.y - CELL_W*0.85 - 7);
+    ctx.textAlign='left';
+  }
 
   // 타워 개별 강화 액션
   if (gs.ui.towerAction && wm && wm.phase==='idle') {
@@ -694,6 +730,75 @@ function renderBattleControls(ctx, gs) {
     gs.ui.modeBtn=null;
     gs.ui.retreatBtn=null;
   }
+
+  if (fighting) renderHeroActiveBar(ctx, gs, by, bh);
+  else { gs.ui.heroActiveBtns=null; gs.ui.heroAutoBtn=null; }
+}
+
+// ─── ⚡ 영웅 액티브 바 ────────────────────────────────────────────────────────
+// MP 막대 + 자동/수동 토글 + 스킬 버튼. 컨트롤 줄 바로 위에 얹는다.
+// 자동이면 버튼은 상태 표시로만 남고(눌러도 그만), 수동이면 눌러서 쓴다.
+function renderHeroActiveBar(ctx, gs, ctrlY, ctrlH) {
+  gs.ui.heroActiveBtns = []; gs.ui.heroAutoBtn = null;
+  const acts = equippedActives(gs);
+  const h = gs.hero;
+  if (!h || h.placement === 'none') return;
+  const slots = activeSlotCount(gs);
+  if (!slots) return;                       // 아직 칸이 안 열렸다
+
+  const y = ctrlY - 30, bh = 26;
+  // MP 막대 — 액티브의 연료다. 액티브가 없으면 그릴 이유도 없다.
+  const mw = 84, mx = 6;
+  const mp = Math.floor(h.mp || 0), mmax = heroMaxMp();
+  roundRect(ctx, mx, y, mw, bh, 5);
+  ctx.fillStyle='#0b1220'; ctx.fill();
+  ctx.save(); ctx.beginPath(); roundRect(ctx, mx, y, mw * Math.min(1, mp/Math.max(1,mmax)), bh, 5); ctx.clip();
+  ctx.fillStyle='#1e3a8a'; ctx.fillRect(mx, y, mw, bh); ctx.restore();
+  ctx.strokeStyle='#3b82f6'; ctx.lineWidth=1; ctx.stroke();
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillStyle='#93c5fd'; ctx.font='bold 10px sans-serif';
+  ctx.fillText(`💧 ${mp}/${mmax}`, mx+mw/2, y+bh/2);
+
+  // 자동 / 수동
+  const aw = 62, ax = mx + mw + 6, auto = h.skillAuto !== false;
+  roundRect(ctx, ax, y, aw, bh, 5);
+  ctx.fillStyle = auto ? '#14342a' : '#3a1d0a'; ctx.fill();
+  ctx.strokeStyle = auto ? '#22c55e' : '#f59e0b'; ctx.lineWidth=1.5; ctx.stroke();
+  ctx.fillStyle = auto ? '#86efac' : '#fbbf24'; ctx.font='bold 10px sans-serif';
+  ctx.fillText(auto ? '🤖 자동' : '👆 수동', ax+aw/2, y+bh/2);
+  gs.ui.heroAutoBtn = { x:ax, y, w:aw, h:bh };
+
+  // 스킬 버튼 — 칸 수만큼. 빈 칸도 그려서 "여기에 낄 수 있다"를 남긴다.
+  const sw = 62, gap = 6;
+  let sx = ax + aw + 8;
+  for (let i = 0; i < slots; i++) {
+    const a = acts.find(x => x.idx === i);
+    roundRect(ctx, sx, y, sw, bh, 5);
+    if (!a) {
+      ctx.fillStyle='#0b1220'; ctx.fill(); ctx.strokeStyle='#233046'; ctx.lineWidth=1; ctx.stroke();
+      ctx.fillStyle='#334155'; ctx.font='bold 9px sans-serif';
+      ctx.fillText('빈 칸', sx+sw/2, y+bh/2);
+    } else {
+      const d = a.def, cd = activeCdLeft(gs, d.id), ready = activeReady(gs, d.id);
+      const lackMp = (h.mp || 0) < d.mp;
+      ctx.fillStyle = ready ? '#2d1b69' : '#0b1220'; ctx.fill();
+      if (cd > 0) {   // 쿨다운이 차오르는 것을 막대로
+        ctx.save(); ctx.beginPath();
+        const fullCd = Math.max(0.001, d.cd * (BONUSES.heroSkillCdMult || 1));
+        roundRect(ctx, sx, y, sw * (1 - cd / fullCd), bh, 5); ctx.clip();
+        ctx.fillStyle='#1e1b4b'; ctx.fillRect(sx, y, sw, bh); ctx.restore();
+      }
+      ctx.strokeStyle = ready ? '#a78bfa' : '#233046'; ctx.lineWidth = ready ? 1.5 : 1; ctx.stroke();
+      ctx.fillStyle = ready ? '#ddd6fe' : '#64748b'; ctx.font='13px sans-serif';
+      ctx.fillText(d.icon, sx+sw/2, y+bh/2-4);
+      ctx.font='bold 8px sans-serif';
+      ctx.fillStyle = cd > 0 ? '#818cf8' : lackMp ? '#3b82f6' : ready ? '#c4b5fd' : '#475569';
+      ctx.fillText(cd > 0 ? `${Math.ceil(cd)}s` : lackMp ? `💧${d.mp}` : d.name, sx+sw/2, y+bh/2+8);
+      gs.ui.heroActiveBtns.push({ x:sx, y, w:sw, h:bh, id:d.id });
+    }
+    sx += sw + gap;
+  }
+  ctx.textAlign='left'; ctx.textBaseline='top';
 }
 
 // ─── 출전 브리핑 (웨이브 대기 화면) ──────────────────────────────────────────
@@ -3006,7 +3111,7 @@ function renderBuildingScreen(ctx, gs, buildingId) {
     drawShopTabs(ctx, gs, hY+40);
     // 매대를 안 그리는 동안에는 매대 버튼 좌표를 지운다.
     // 남겨두면 강화 목록을 누를 때 그 자리에 있던 포션이 팔린다.
-    gs.ui.shopItemBtns = null; gs.ui.skillBuyBtns = null;
+    gs.ui.shopItemBtns = null; gs.ui.skillBuyBtns = null; gs.ui.activeBuyBtns = null;
   }
 
   _renderTrackList(ctx, gs, def, bs, SCR_TOP+(isShop?72:50));
@@ -3185,7 +3290,7 @@ function renderHeroShopScreen(ctx, gs) {
   drawShopTabs(ctx, gs, hY+22);
 
   gs.ui.shopItemBtns=[];
-  gs.ui.skillBuyBtns=[];
+  gs.ui.skillBuyBtns=[]; gs.ui.activeBuyBtns=[];
 
   // 매대는 길다 — 잘라 그리고 드래그로 훑는다
   const listTop = SCR_TOP+52, listBot = CH-8, listH = listBot-listTop;
@@ -3287,6 +3392,44 @@ function renderHeroShopScreen(ctx, gs) {
       ctx.fillStyle=canAff?gc:'#475569'; ctx.font='bold 10px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
       ctx.fillText(`${cost}💰`,bx+bw/2,by2+bh/2);
       gs.ui.skillBuyBtns.push({x:bx,y:by2,w:bw,h:bh,uid:off.uid});
+      sy+=ih+4;
+    }
+
+    // ── ⚡ 액티브 스킬 매대 ────────────────────────────────────────────────
+    // 위의 🔮스킬은 전부 패시브다. 액티브는 MP를 쓰고 쿨다운을 돌며,
+    // 절반은 하단에 서서 상단을 건드린다 — 그래서 따로 판다.
+    const aOffers = (heroGear(gs).activeOffers || []).map(activeDef).filter(Boolean);
+    sy += 4;
+    ctx.fillStyle='#c4b5fd'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillText('⚡ 액티브 스킬', 8, sy);
+    ctx.textAlign='right'; ctx.fillStyle='#475569'; ctx.font='bold 8px sans-serif';
+    const _an = activeSlotCount(gs), _anx = nextActiveSlotLevel(gs);
+    ctx.fillText(_an ? `칸 ${_an}개${_anx?` · Lv.${_anx}에 +1`:''}` : `영웅 Lv.${ACTIVE_SLOT_LEVELS[0]}에 칸이 열립니다`, CW-8, sy+1);
+    ctx.textAlign='left'; sy += 14;
+    if (!aOffers.length) {
+      roundRect(ctx,6,sy,CW-12,30,5); ctx.fillStyle='#0b0f1a'; ctx.fill(); ctx.strokeStyle='#1f2937'; ctx.lineWidth=1; ctx.stroke();
+      ctx.fillStyle='#4b5563'; ctx.font='9px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('이번 웨이브 매물 없음 — 이미 다 배웠거나 팔렸습니다', CW/2, sy+15);
+      ctx.textAlign='left'; sy += 34;
+    }
+    for (const d of aOffers) {
+      const ih=48, gc=GRADE_COLOR[d.grade]||'#94a3b8';
+      roundRect(ctx,6,sy,CW-12,ih,5); ctx.fillStyle='#0f0d1e'; ctx.fill(); ctx.strokeStyle=gc; ctx.lineWidth=1; ctx.stroke();
+      ctx.font='18px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.fillStyle='#e2e8f0';
+      ctx.fillText(d.icon,12,sy+ih/2);
+      ctx.fillStyle=gc; ctx.font='bold 10px sans-serif';
+      ctx.fillText(`${d.name}   ${activeLaneTag(d.lane)} · 💧${d.mp} · ${d.cd}s`, 32, sy+ih/2-11);
+      ctx.fillStyle='#cbd5e1'; ctx.font='bold 9px sans-serif';
+      ctx.fillText(d.desc, 32, sy+ih/2+2);
+      ctx.fillStyle='#475569'; ctx.font='8px sans-serif';
+      ctx.fillText(d.note, 32, sy+ih/2+14);
+      const canAff = gs.gold>=d.cost;
+      const bw=74,bh=30,bx=CW-8-bw,by2=sy+(ih-bh)/2;
+      roundRect(ctx,bx,by2,bw,bh,4); ctx.fillStyle=canAff?'#3b1d5e':'#1e293b'; ctx.fill();
+      ctx.fillStyle=canAff?gc:'#475569'; ctx.font='bold 10px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(`${d.cost}💰`,bx+bw/2,by2+bh/2);
+      gs.ui.activeBuyBtns.push({x:bx,y:by2,w:bw,h:bh,id:d.id});
+      ctx.textAlign='left';
       sy+=ih+4;
     }
   }
@@ -3594,6 +3737,7 @@ function renderHeroDetail(ctx, gs, startY) {
 
   gs.ui.heroBackBtn = null; gs.ui.equipSlotBtns = []; gs.ui.invCards = [];
   gs.ui.skillSlotBtns = []; gs.ui.skillCards = []; gs.ui.heroPickBtn = null;
+  gs.ui.activeSlotBtns = [];
 
   // ── 머리글 ──────────────────────────────────────────────────────────────
   roundRect(ctx,6,y,CW-12,30,6); ctx.fillStyle='#151f2e'; ctx.fill();
@@ -3751,6 +3895,77 @@ function renderHeroDetail(ctx, gs, startY) {
   }
   ctx.textAlign='left';
   y += skH + 10;
+
+  // ── ⚡ 액티브 칸 ────────────────────────────────────────────────────────
+  gs.ui.activeSlotBtns = [];
+  const nAct = activeSlotCount(gs), nextAct = nextActiveSlotLevel(gs);
+  const aSl = activeSlots(gs), owned = (g.actives || []);
+  ctx.fillStyle='#38bdf8'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText(`\u26a1 \uc561\ud2f0\ube0c \uce78 ${nAct}/${ACTIVE_SLOT_LEVELS.length}`,6,y);
+  ctx.textAlign='right'; ctx.fillStyle='#475569'; ctx.font='bold 8px sans-serif';
+  ctx.fillText(nextAct ? `\ub2e4\uc74c \uce78 \u2014 \uc601\uc6c5 Lv.${nextAct}` : '\ubaa8\ub4e0 \uce78 \uac1c\ubc29', CW-6, y+1);
+  ctx.textAlign='left'; y += 14;
+  const acW = (CW-12-6)/2, acH = 50;
+  for (let i=0;i<ACTIVE_SLOT_LEVELS.length;i++) {
+    const sx = 6 + i*(acW+6);
+    const open = i < nAct;
+    const def = open && aSl[i] ? activeDef(aSl[i]) : null;
+    const gc = def ? (GRADE_COLOR[def.grade]||'#94a3b8') : '#243044';
+    roundRect(ctx,sx,y,acW,acH,5);
+    ctx.fillStyle = open ? (def?'#0b1a24':'#0a0f1a') : '#080b12'; ctx.fill();
+    ctx.strokeStyle = open ? gc : '#1a2130'; ctx.lineWidth = def?1.5:1; ctx.stroke();
+    ctx.textAlign='center'; ctx.textBaseline='top';
+    if (!open) {
+      ctx.fillStyle='#334155'; ctx.font='13px sans-serif'; ctx.fillText('\ud83d\udd12',sx+acW/2,y+8);
+      ctx.fillStyle='#334155'; ctx.font='bold 8px sans-serif';
+      ctx.fillText(`Lv.${ACTIVE_SLOT_LEVELS[i]}`,sx+acW/2,y+28);
+    } else if (def) {
+      ctx.fillStyle='#e2e8f0'; ctx.font='15px sans-serif'; ctx.fillText(def.icon,sx+acW/2,y+4);
+      ctx.fillStyle=gc; ctx.font='bold 9px sans-serif'; ctx.fillText(def.name,sx+acW/2,y+23);
+      ctx.fillStyle='#5b6b80'; ctx.font='bold 7px sans-serif';
+      ctx.fillText(`\ud83d\udca7${def.mp} \u00b7 ${def.cd}\ucd08 \u00b7 ${activeLaneTag(def.lane)}`,sx+acW/2,y+35);
+      gs.ui.activeSlotBtns.push({x:sx,y,w:acW,h:acH,idx:i,id:def.id});
+    } else {
+      ctx.fillStyle='#334155'; ctx.font='14px sans-serif'; ctx.fillText('\uff0b',sx+acW/2,y+9);
+      ctx.fillStyle='#334155'; ctx.font='bold 8px sans-serif'; ctx.fillText('\ube44\uc5b4 \uc788\uc74c',sx+acW/2,y+28);
+      gs.ui.activeSlotBtns.push({x:sx,y,w:acW,h:acH,idx:i,id:null});
+    }
+  }
+  ctx.textAlign='left'; y += acH + 8;
+
+  // ── 배운 액티브 ─────────────────────────────────────────────────────────
+  ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText(`\ubc30\uc6b4 \uc561\ud2f0\ube0c ${owned.length}\uac1c`,6,y);
+  ctx.textAlign='right'; ctx.fillStyle='#475569'; ctx.font='bold 8px sans-serif';
+  ctx.fillText('\ud0ed\ud558\uba74 \uce78\uc5d0 \ub07c\uc6b0\uace0 / \ub2e4\uc2dc \ud0ed\ud558\uba74 \ube80\ub2e4', CW-6, y+1);
+  ctx.textAlign='left'; y += 13;
+  if (!owned.length) {
+    roundRect(ctx,6,y,CW-12,26,4); ctx.fillStyle='#0a0f1a'; ctx.fill(); ctx.strokeStyle='#1a2130'; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle='#334155'; ctx.font='9px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('\ud83c\udfea \uc601\uc6c5 \uc0c1\uc810\uc758 \u26a1 \uce78\uc5d0\uc11c \uc561\ud2f0\ube0c \uc2a4\ud0ac\uc744 \uc0b4 \uc218 \uc788\uc2b5\ub2c8\ub2e4',CW/2,y+13);
+    ctx.textAlign='left'; y += 32;
+  } else {
+    const rH = 34;
+    owned.forEach((id,i)=>{
+      const def = activeDef(id); if (!def) return;
+      const ry = y + i*(rH+4);
+      const on = isActiveEquipped(gs, id);
+      const gc = GRADE_COLOR[def.grade]||'#94a3b8';
+      roundRect(ctx,6,ry,CW-12,rH,4);
+      ctx.fillStyle = on?'#0b1a24':'#0a0f1a'; ctx.fill();
+      ctx.strokeStyle = on?'#38bdf8':gc; ctx.lineWidth = on?1.6:1; ctx.stroke();
+      ctx.textAlign='left'; ctx.textBaseline='middle';
+      ctx.fillStyle='#e2e8f0'; ctx.font='13px sans-serif'; ctx.fillText(def.icon,12,ry+rH/2);
+      ctx.fillStyle=gc; ctx.font='bold 9px sans-serif';
+      ctx.fillText(`${def.name}  ${activeLaneTag(def.lane)}`,30,ry+rH/2-6);
+      ctx.fillStyle='#7c8ba1'; ctx.font='bold 8px sans-serif';
+      ctx.fillText(`\ud83d\udca7${def.mp} \u00b7 \uc7ac\uc0ac\uc6a9 ${def.cd}\ucd08 \u00b7 ${def.desc}`,30,ry+rH/2+6);
+      if (on) { ctx.textAlign='right'; ctx.fillStyle='#38bdf8'; ctx.font='bold 8px sans-serif';
+                ctx.fillText('\uc7a5\ucc29 \uc911',CW-12,ry+rH/2); ctx.textAlign='left'; }
+      gs.ui.activeSlotBtns.push({x:6,y:ry,w:CW-12,h:rH,idx:-1,id});
+    });
+    y += owned.length*(rH+4) + 6;
+  }
 
   // ── 보유 스킬 ───────────────────────────────────────────────────────────
   ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif'; ctx.textBaseline='top';

@@ -10,7 +10,7 @@ function createDefaultBonuses() {
     unitAtk: 0, unitHp: 0, unitDef: 0, unitAtkMult: 1.0, unitHpMult: 1.0,
     hireCostDiscount: 0, hireCostPct: 0, maxSlotBonus: 0,
     killHeal: 0, comboChance: 0, critChance: 0,
-    healBonus: 0, shieldBonus: 0, mpRegenBonus: 0, restHealBonus: 0,
+    healBonus: 0, shieldBonus: 0, mpRegenBonus: 0, heroMpMax: 0, restHealBonus: 0,
     regenBonus: 0, heroFullRest: false,
     specialChance: 0, specialSlotBonus: 0, specialUnitMult: 1.0,
     undying: false,
@@ -21,6 +21,7 @@ function createDefaultBonuses() {
     heroAtk: 0, heroRegen: 0, heroAura: 0,
     // 장비·스킬이 얹는 영웅 전용 값 (각인 배율과 곱해서 쓴다)
     heroHpFlat: 0, heroSpdMult: 1.0, heroRangeMult: 1.0, heroSkillMult: 1.0,
+    heroSkillCdMult: 1.0,
     heroExpMult: 1.0, heroInstantRevive: false,
     heroStartExp: 0, heroReviveReduction: 0, heroStatMult: 1.0,
     // 각인 — 영웅에게만 걸리는 배율. heroStatMult와 곱해서 쓴다.
@@ -274,6 +275,9 @@ const SKILL_TREES = {
         apply:(b,v)=>{ b.heroReviveReduction += v; if (v>=5) b.heroInstantRevive = true; } },
       { id:'hr_s9', name:'영웅 전설', icon:'🌟', cost:3, row:3, col:1,
         desc:v=>`영웅 전체 능력 +${skpct(v*0.04)}`,      apply:(b,v)=>{ b.heroStatMult *= 1 + v*0.04; } },
+      { id:'hr_s10', name:'마력 순환', icon:'💧', cost:2, row:3, col:2,
+        desc:v=>`최대 MP +${skpct(v*0.06)} · MP 회복 +${skpct(v*0.05)}`,
+        apply:(b,v)=>{ b.heroMpMax += v*0.06; b.mpRegenBonus += v*0.05; } },
     ]
   },
 

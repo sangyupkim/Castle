@@ -101,7 +101,7 @@ function newState() {
     gold:10, baseHP:BASE_HP_MAX,
     caveLevel:1,
     towers:[], defenseEnemies:[], projectiles:[], chargers:[], poisonPools:[],
-    castleCd:0,
+    castleCd:0, baseWardUntil:0,
     battle: null,
     arena: createArena(),
     lobby: createLobby(),
@@ -110,6 +110,7 @@ function newState() {
       level:1, exp:0,
       hp: HERO_LEVELS[1].hp,
       placement:'none',
+      mp:0, activeCd:{}, skillAuto:true,   // ⚡ 액티브 스킬
       dead:false, downFor:0,   // downFor: 전사 후 결장이 남은 층 수
       defX: GRID_OX + 4*CELL_W + CELL_W/2,
       defY: GRID_OY + 3*CELL_H + CELL_H/2,
@@ -281,6 +282,7 @@ let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적�
   }
   // 영웅은 _applyStartBonuses()가 만피로 채우므로, 그 뒤에 되돌린다
   _restoredHero = { hp:sv.heroHp || 0, placement:sv.heroPlacement || 'none',
+                    mp:sv.heroMp || 0, skillAuto:sv.heroSkillAuto !== false,
                     dead:!!sv.heroDead, downFor:sv.heroDownFor || 0 };
 
   refreshHeroShop(gs);
@@ -297,6 +299,8 @@ if (_restoredHero) {
   gs.hero.dead    = rh.dead;
   gs.hero.downFor = rh.downFor;
   gs.hero.hp      = rh.dead ? 0 : Math.max(1, Math.min(heroMaxHp(), rh.hp || heroMaxHp()));
+  gs.hero.mp        = Math.min(heroMaxMp(), rh.mp || 0);
+  gs.hero.skillAuto = rh.skillAuto !== false;
   if (!rh.dead && (rh.placement === 'battle' || rh.placement === 'defense')) {
     gs.hero.placement = rh.placement;
     if (rh.placement === 'battle' && !gs.battle.ourTeam.some(u => u.isHero)) {
@@ -592,6 +596,27 @@ function tap({x,y}) {
       return;
     }
     if (hitTest(x,y,gs.ui.retreatBtn||{})) { wm.retreat(gs); return; }
+    // ⚡ 자동/수동 토글
+    if (hitTest(x,y,gs.ui.heroAutoBtn||{})) {
+      gs.hero.skillAuto = !(gs.hero.skillAuto !== false);
+      spawnFloaty(gs.hero.skillAuto ? '🤖 스킬 자동 시전' : '👆 스킬 수동 — 직접 누르세요',
+                  CW/2, ARENA_Y+18, '#a5b4fc');
+      SFX.click(); SaveManager.save(gs); return;
+    }
+    for (const btn of gs.ui.heroActiveBtns||[]) {
+      if (hitTest(x,y,btn)) {
+        if (castHeroActive(gs, btn.id)) { /* 시전 성공 — 연출은 castHeroActive가 낸다 */ }
+        else {
+          const d = activeDef(btn.id);
+          const cd = activeCdLeft(gs, btn.id);
+          spawnFloaty(cd > 0 ? `재사용까지 ${Math.ceil(cd)}초`
+                             : (gs.hero.mp||0) < d.mp ? `💧 MP ${d.mp} 필요` : '지금은 쓸 수 없습니다',
+                      x, y, '#ef4444');
+          SFX.denied();
+        }
+        return;
+      }
+    }
     if (hitTest(x,y,gs.ui.briefTownBtn||{})) { gs.page='town'; SFX.click(); return; }
   }
 
@@ -691,12 +716,13 @@ const _PAGE_UI_KEYS = [
   'buildingCards','wallRepairBtn','caveBtn','tabTownBtn','townBackBtn',
   'buildingLvUpBtn','upgradeBtns','towerMoveBtn','buildingScroll','pageScroll','briefScroll','lobbyScroll','hireCards','hiredSlots',
   'heroInfoBtn','heroBackBtn','equipSlotBtns','invCards','skillSlotBtns','skillCards','heroPickBtn',
-  'shopItemBtns','skillBuyBtns','shopTabBuy','shopTabUp',
+  'shopItemBtns','skillBuyBtns','activeBuyBtns','activeSlotBtns','shopTabBuy','shopTabUp',
   'forgeTabs','forgeGearBtns','forgeFuseBtns','forgeTemperBtn','forgeCoreBtn',
   'charmRollBtn','charmCards','charmSlotBtns',
   'specialCards','specialSlots','heroDefBtn','heroBatBtn','bountyBtn','eliteBtn','towerMiniGrid',
   'lobbyTabBtns','sortieBtn','trainBtn','metaCards','unlockBtns','pactBtns','sigilCards',
-  'skillTreeTabs','ascendBtn','trainSkipBtn','skillResetBtn','backupExportBtn','backupImportBtn',
+  'skillTreeTabs','ascendBtn','trainSkipBtn','skillResetBtn','heroActiveBtns','heroAutoBtn',
+  'backupExportBtn','backupImportBtn',
   'tutReplayBtn','tutResetTipBtn','bgmToggleBtn','sfxToggleBtn',
   'resultBtn','waveBtn','battleWaveStartBtn','briefTownBtn','retreatBtn','modeBtn'
 ];
@@ -1041,6 +1067,15 @@ function handleHeroDetailTap(x,y) {
     if (unequipSkill(gs, b.idx)) { spawnFloaty('해제',x,y,'#f87171'); SFX.click(); SaveManager.save(gs); }
     return;
   }
+  // ⚡ 액티브 칸 / 배운 액티브 — 탭하면 끼우고, 다시 탭하면 뺀다
+  for (const b of gs.ui.activeSlotBtns||[]) {
+    if (!hitTest(x,y,b)) continue;
+    if (!b.id) { spawnFloaty('배운 액티브를 탭하세요',x,y,'#64748b'); return; }
+    const r = toggleActiveSlot(gs, b.id);
+    spawnFloaty(r==='on'?'장착':'해제',x,y,r==='on'?'#38bdf8':'#f87171');
+    SFX.click(); SaveManager.save(gs);
+    return;
+  }
   // 보관함 · 보유 스킬 — 탭하면 고른다 (같은 것을 다시 탭하면 취소)
   for (const c of gs.ui.invCards||[]) {
     if (!hitTest(x,y,c)) continue;
@@ -1168,6 +1203,16 @@ function handleTownTap(x,y) {
         if (hitTest(x,y,btn)) {
           if (!buySkillOffer(gs, btn.uid)) { spawnFloaty('골드 부족!',x,y,'#ef4444'); SFX.denied(); }
           else { spawnFloaty('🔮 스킬 습득!',x,y,'#f0abfc'); SFX.upgrade(); SaveManager.save(gs); }
+          return;
+        }
+      }
+      for (const btn of (onBuyTab ? gs.ui.activeBuyBtns : null)||[]) {
+        if (hitTest(x,y,btn)) {
+          if (!buyActiveOffer(gs, btn.id)) { spawnFloaty('골드 부족!',x,y,'#ef4444'); SFX.denied(); }
+          else {
+            const d = activeDef(btn.id);
+            spawnFloaty(`${d.icon} ${d.name} 습득!`,x,y,'#c4b5fd'); SFX.levelUp(); SaveManager.save(gs);
+          }
           return;
         }
       }
@@ -1761,6 +1806,7 @@ function update(dt) {
   updateProjectiles(gs.projectiles, e => onDefenseKill(e, false), dt);
   updatePoisonPools(gs.defenseEnemies, e => onDefenseKill(e, false), dt);
   updateCastleGuns(dt);
+  updateHeroActives(gs, dt);
   gs.defenseEnemies=gs.defenseEnemies.filter(e=>!e.dead&&!e.reached);
 
   updateHeroDefense(dt);
