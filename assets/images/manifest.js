@@ -42,6 +42,9 @@ self.SPRITE_FILES = {
   'tower.cannon.1': 'towers/cannon.png',
   'tower.sniper.1': 'towers/sniper.png',
   'tower.tesla.1':  'towers/tesla.png',
+  // 독탑 그림은 처음부터 팩에 들어 있었는데(spr_tower_poison_wizard) 배선이 빠져
+  // 여섯 타워 중 독탑만 이모지로 그려지고 있었다.
+  'tower.poison.1': 'towers/poison.png',
 
   // 투사체
   'proj.arrow':  'proj/arrow.png',
@@ -49,6 +52,28 @@ self.SPRITE_FILES = {
   'proj.cannon': 'proj/cannon.png',
   'proj.sniper': 'proj/sniper.png',
   'proj.tesla':  'proj/tesla.png',
+  'proj.poison': 'proj/poison.png',
+
+  // 👷 타워 점유자 — Fantasy RPG NPC 팩(32×32, 발끝이 프레임 바닥에 맞춰져 있다).
+  // 타워 그림을 종류·티어·분기마다 새로 그리는 대신 '석대 + 사람'으로 나눈다.
+  // 사람만 갈아 끼우면 조합이 곱셈으로 늘어난다.
+  'crew.arrow':  'crew/arrow.png',      // 궁수
+  'crew.frost':  'crew/frost.png',      // 마법사
+  'crew.cannon': 'crew/cannon.png',     // 대장장이
+  'crew.sniper': 'crew/sniper.png',     // 처형인
+  'crew.tesla':  'crew/tesla.png',      // 마법 상인
+  'crew.poison': 'crew/poison.png',     // 연금술사
+
+  // 👹 마왕 — 0x72 던전 팩의 big_demon(32×36). 100층에 한 마리만 나오므로
+  // 배우(SPRITE_ACTORS)로 등록하지 않고 낱장 8프레임을 시간으로 돌린다.
+  'mob.demon.idle.0': 'mobs/demon/idle_0.png',
+  'mob.demon.idle.1': 'mobs/demon/idle_1.png',
+  'mob.demon.idle.2': 'mobs/demon/idle_2.png',
+  'mob.demon.idle.3': 'mobs/demon/idle_3.png',
+  'mob.demon.run.0':  'mobs/demon/run_0.png',
+  'mob.demon.run.1':  'mobs/demon/run_1.png',
+  'mob.demon.run.2':  'mobs/demon/run_2.png',
+  'mob.demon.run.3':  'mobs/demon/run_3.png',
 };
 
 // ── 이어 붙인 프레임 ────────────────────────────────────────────────────────
