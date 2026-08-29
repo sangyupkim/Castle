@@ -22,6 +22,29 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.arcTo(x,y+h,x,y+h-r,r); ctx.lineTo(x,y+r);
   ctx.arcTo(x,y,x+r,y,r); ctx.closePath();
 }
+// 폭에 맞춰 줄을 나눈다. 한국어는 띄어쓰기가 드물어 띄어쓰기로만 자르면
+// 한 줄이 통째로 넘치므로, 어절이 칸보다 길면 글자 단위로 다시 자른다.
+// ctx.font을 먼저 정해두고 부를 것 — 폭 계산이 그 글꼴로 이뤄진다.
+function wrapLines(ctx, text, maxW) {
+  const out = [];
+  let line = '';
+  for (const word of String(text).split(/\s+/)) {
+    if (!word) continue;
+    const cand = line ? line + ' ' + word : word;
+    if (ctx.measureText(cand).width <= maxW) { line = cand; continue; }
+    if (line) { out.push(line); line = ''; }
+    if (ctx.measureText(word).width <= maxW) { line = word; continue; }
+    let chunk = '';
+    for (const ch of word) {
+      if (ctx.measureText(chunk + ch).width > maxW && chunk) { out.push(chunk); chunk = ''; }
+      chunk += ch;
+    }
+    line = chunk;
+  }
+  if (line) out.push(line);
+  return out;
+}
+
 function drawBtn(ctx, x, y, w, h, label, bg, fg, on) {
   roundRect(ctx, x, y, w, h, 5);
   ctx.fillStyle = on!==false ? bg : '#374151'; ctx.fill();
@@ -323,11 +346,14 @@ function renderDefense(ctx, gs) {
         roundRect(ctx,ax,ay2,aw,ah,4); ctx.fillStyle='#0f172a'; ctx.fill();
         ctx.strokeStyle='#475569'; ctx.lineWidth=1.5; ctx.stroke();
         ctx.textAlign='center'; ctx.textBaseline='middle';
+        const rbr = towerBranchOf(tower);
         ctx.fillStyle= st.sealed ? '#ef4444' : '#cbd5e1'; ctx.font='bold 8px sans-serif';
         ctx.fillText(st.sealed ? `Lv.${lv} · 🔒침묵` : `Lv.${lv} · ⚔${st.dmg} · ◎${Math.round(st.range)}`,
                      ax+aw/2, ay2+ah/2-4);
-        ctx.fillStyle='#475569'; ctx.font='bold 7px sans-serif';
-        ctx.fillText('강화·철거는 🏰마을에서', ax+aw/2, ay2+ah/2+7);
+        if (rbr) { ctx.fillStyle=rbr.color; ctx.font='bold 7px sans-serif';
+                   ctx.fillText(`${rbr.icon} ${rbr.name}`, ax+aw/2, ay2+ah/2+7); }
+        else { ctx.fillStyle='#475569'; ctx.font='bold 7px sans-serif';
+               ctx.fillText('강화·철거는 🏰마을에서', ax+aw/2, ay2+ah/2+7); }
         gs.ui.towerUpgradeBtn=null; gs.ui.towerRemoveBtn=null;
         return;
       }
@@ -415,6 +441,17 @@ function renderTower(ctx, t) {
     ctx.fillStyle='#fbbf24'; ctx.font='bold 7px sans-serif';
     ctx.textAlign='center'; ctx.textBaseline= key ? 'bottom' : 'top';
     ctx.fillText(tlv <= 3 ? '★'.repeat(tlv-1) : `Lv${tlv}`, x, key ? y+CELL_H/2-1 : y+9);
+  }
+  // ★5 분기 — 어느 갈래로 갔는지 칸에서 바로 보여야 한다.
+  // 배치를 짤 때 "여기 대공이 있었나"를 패널을 열어 봐야 안다면 표시가 아니다.
+  const br = towerBranchOf(t);
+  if (br) {
+    const bx = x + CELL_W/2 - 8, by = y - CELL_H/2 + 7;
+    ctx.beginPath(); ctx.arc(bx, by, 6.5, 0, Math.PI*2);
+    ctx.fillStyle='rgba(8,12,20,0.85)'; ctx.fill();
+    ctx.strokeStyle=br.color; ctx.lineWidth=1.2; ctx.stroke();
+    ctx.font='8px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(br.icon, bx, by+0.5);
   }
 }
 
@@ -4499,6 +4536,13 @@ function renderTownPageTowers(ctx, gs, startY) {
           ctx.fillStyle='#fbbf24'; ctx.font='bold 7px sans-serif'; ctx.textBaseline='bottom';
           ctx.fillText('★'.repeat((tower.level||1)-1), x+mCW/2, y+mCH-1);
         }
+        // ★5 분기를 골랐으면 무엇으로 갔는지 칸 위에서 바로 읽혀야 한다
+        const _mb = towerBranchOf(tower);
+        if (_mb) {
+          ctx.font='8px sans-serif'; ctx.textAlign='right'; ctx.textBaseline='top';
+          ctx.fillText(_mb.icon, x+mCW-1, y+1);
+          ctx.textAlign='center';
+        }
         if (selected) { ctx.strokeStyle='#6366f1'; ctx.lineWidth=2; ctx.strokeRect(x+1,y+1,mCW-2,mCH-2); }
       }
       if (isBase) {
@@ -4511,20 +4555,36 @@ function renderTownPageTowers(ctx, gs, startY) {
 
   // ── 선택 타워 패널 ───────────────────────────────────────────────────────
   const panelY=offY+gridH+8;
+  gs.ui.towerBranchBtns=[];
+  // ★5 분기 칸이 붙으면 패널이 그만큼 길어진다
+  let panelH = 72;
+  const _selTower = gs.ui.towerAction
+      ? gs.towers.find(tw=>tw.col===gs.ui.towerAction.col&&tw.row===gs.ui.towerAction.row) : null;
+  const _showBranch = !!_selTower && (_selTower.level||1) >= TOWER_BRANCH_LEVEL
+                      && towerBranches(_selTower.typeId).length > 0;
+  if (_showBranch) panelH += 92;
   if (gs.ui.towerAction) {
     const ta=gs.ui.towerAction;
-    const tower=gs.towers.find(tw=>tw.col===ta.col&&tw.row===ta.row);
+    const tower=_selTower;
     if (tower) {
       const lv=tower.level||1;
       const tpl=TOWER_TYPES[tower.typeId];
       const st=towerStats(tower);
-      roundRect(ctx,6,panelY,CW-12,72,7);
-      ctx.fillStyle='#0d1929'; ctx.fill(); ctx.strokeStyle=tpl.color; ctx.lineWidth=1.5; ctx.stroke();
+      const br=towerBranchOf(tower);
+      roundRect(ctx,6,panelY,CW-12,panelH,7);
+      ctx.fillStyle='#0d1929'; ctx.fill();
+      ctx.strokeStyle=br?br.color:tpl.color; ctx.lineWidth=1.5; ctx.stroke();
       ctx.fillStyle='#e2e8f0';
       ctx.font='20px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
       ctx.fillText(tpl.icon,14,panelY+20);
       ctx.fillStyle='#f1f5f9'; ctx.font='bold 12px sans-serif';
-      ctx.fillText(`${tpl.name}  Lv.${lv}/${towerLevelCap()}`,42,panelY+13);
+      const nameTxt=`${tpl.name}  Lv.${lv}/${towerLevelCap()}`;
+      ctx.fillText(nameTxt,42,panelY+13);
+      if (br) {   // 고른 분기를 이름 옆에 붙인다 — 이 타워가 무엇이 됐는지
+        const nw=ctx.measureText(nameTxt).width;
+        ctx.fillStyle=br.color; ctx.font='bold 10px sans-serif';
+        ctx.fillText(`${br.icon} ${br.name}`, 42+nw+8, panelY+13);
+      }
       ctx.fillStyle='#94a3b8'; ctx.font='bold 10px sans-serif';
       if (gs.ui.towerMove && gs.ui.towerMove.col===tower.col && gs.ui.towerMove.row===tower.row) {
         ctx.fillStyle='#a5b4fc';
@@ -4533,8 +4593,8 @@ function renderTownPageTowers(ctx, gs, startY) {
         ctx.fillText(`ATK ${st.dmg}   ${st.spd.toFixed(2)}/s   사거리 ${Math.round(st.range)}px   처치 ${tower.kills}`,42,panelY+29);
       }
 
-      // 등급별 실효 피해 — 이 타워가 무엇을 잘 잡는지
-      const aff = TOWER_AFFINITY[tower.typeId] || {};
+      // 등급별 실효 피해 — 이 타워가 무엇을 잘 잡는지. 분기를 고르면 이 줄이 다시 쓰인다.
+      const aff = towerAffinityRow(tower.typeId, tower.branch);
       let ax2 = CW - 14;
       for (let i = MOB_CLASS_ORDER.length - 1; i >= 0; i--) {
         const ck = MOB_CLASS_ORDER[i], cls = MOB_CLASSES[ck];
@@ -4573,6 +4633,46 @@ function renderTownPageTowers(ctx, gs, startY) {
       const rbw=92,rbh=26,rbx=CW-10-rbw;
       drawBtn(ctx,rbx,panelY+42,rbw,rbh,`🗑 +${towerSellValue(tower)}💰`,'#3f1515','#ef4444');
       gs.ui.towerRemoveBtn={x:rbx,y:panelY+42,w:rbw,h:rbh};
+
+      // ── ★5 분기 ────────────────────────────────────────────────────────
+      // 세 갈래를 나란히 놓고, 고른 것에 테두리를 준다. 값은 처음이 싸고 갈아타면 비싸다.
+      if (_showBranch) {
+        const brs = towerBranches(tower.typeId);
+        const bY = panelY + 74;
+        const cost = br ? towerRebranchCost(tower) : towerBranchCost(tower);
+        ctx.textAlign='left'; ctx.textBaseline='middle';
+        ctx.fillStyle=br?'#64748b':'#fbbf24'; ctx.font='bold 9px sans-serif';
+        ctx.fillText(br ? `★${TOWER_BRANCH_LEVEL} 분기 — 갈아타기 ${cost}💰 (한 번에 하나만)`
+                        : `★${TOWER_BRANCH_LEVEL} 분기 — 하나를 고르세요 ${cost}💰`, 12, bY+5);
+        const bw3=(CW-20-2*5)/3, bh3=68, byy=bY+12;
+        brs.forEach((d,i)=>{
+          const bx3 = 10 + i*(bw3+5);
+          const on  = tower.branch === d.id;
+          const can = gs.gold >= cost && !on;
+          roundRect(ctx,bx3,byy,bw3,bh3,5);
+          ctx.fillStyle = on ? '#111f2e' : can ? '#0a1422' : '#080c14'; ctx.fill();
+          ctx.strokeStyle = on ? d.color : can ? '#2b3a52' : '#1a2130';
+          ctx.lineWidth = on ? 2 : 1; ctx.stroke();
+          ctx.textAlign='center'; ctx.textBaseline='top';
+          ctx.globalAlpha = (on || can) ? 1 : 0.45;
+          ctx.fillStyle='#e2e8f0'; ctx.font='14px sans-serif';
+          ctx.fillText(d.icon, bx3+bw3/2, byy+4);
+          ctx.fillStyle=d.color; ctx.font='bold 10px sans-serif';
+          ctx.fillText(d.name, bx3+bw3/2, byy+22);
+          ctx.fillStyle='#7c8ba1'; ctx.font='bold 7px sans-serif';
+          // 세 줄까지 — 두 줄로 자르면 "받는 피해 +30%" 같은 핵심이 잘려 나간다
+          wrapLines(ctx, d.desc, bw3-8).slice(0,3).forEach((ln,k)=>{
+            ctx.fillText(ln, bx3+bw3/2, byy+34+k*9);
+          });
+          ctx.globalAlpha = 1;
+          if (on) {
+            ctx.fillStyle=d.color; ctx.font='bold 7px sans-serif';
+            ctx.fillText('◆ 선택됨', bx3+bw3/2, byy+bh3-10);
+          }
+          gs.ui.towerBranchBtns.push({x:bx3,y:byy,w:bw3,h:bh3,branchId:d.id});
+        });
+        ctx.textAlign='left'; ctx.textBaseline='middle';
+      }
     }
   } else {
     const tpl=TOWER_TYPES[gs.selectedTowerType]||TOWER_TYPES.arrow;
@@ -4589,7 +4689,7 @@ function renderTownPageTowers(ctx, gs, startY) {
 
   // ── 배치 요약 ────────────────────────────────────────────────────────────
   // 높이를 화면 잔여분(CH-infoY)이 아니라 내용에 맞춰 잡는다 — 페이지가 스크롤되므로
-  const infoY=panelY+80;
+  const infoY=panelY+panelH+8;
   const infoH=Math.max(150, 60 + Object.keys(
     gs.towers.reduce((m,t)=>{ m[t.typeId]=1; return m; }, {})).length*20 + 70);
   roundRect(ctx,6,infoY,CW-12,infoH,7);
@@ -4621,6 +4721,21 @@ function renderTownPageTowers(ctx, gs, startY) {
   ctx.fillStyle='#64748b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left';
   ctx.fillText(`총 ${gs.towers.length}기 · 누적 처치 ${totalKills} · 투자 ${totalInvest}💰`,18,ry);
   ry+=18;
+  // ★5 분기를 고른 타워가 있으면 어느 갈래에 몇 기인지 한 줄로 접어 보여준다
+  const brCount = {};
+  for (const t of gs.towers) if (t.branch) brCount[t.branch] = (brCount[t.branch] || 0) + 1;
+  const brKeys = Object.keys(brCount);
+  if (brKeys.length) {
+    ctx.fillStyle='#7c8ba1'; ctx.font='bold 9px sans-serif';
+    const parts = brKeys.map(k => {
+      const d = TOWER_ORDER.map(tt => branchDef(tt, k)).find(Boolean);
+      return d ? `${d.icon}${d.name} ${brCount[k]}` : null;
+    }).filter(Boolean);
+    for (const ln of wrapLines(ctx, '★5 분기 — ' + parts.join('  ·  '), CW-36)) {
+      ctx.fillText(ln, 18, ry); ry += 12;
+    }
+    ry += 4;
+  }
   ctx.fillStyle='#475569'; ctx.font='9px sans-serif';
   ctx.fillText('같은 종류를 많이 지을수록 건설비가 오릅니다.',18,ry);
   ry+=13;

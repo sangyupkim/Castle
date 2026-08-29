@@ -304,11 +304,29 @@ const TOWER_AFFINITY = {
 };
 const HERO_AFFINITY = { small:1.00, medium:1.00, large:0.85, air:0.55 };
 
-function affinityOf(towerTypeId, enemy) {
+// branchId를 주면 ★5 분기가 상성 행을 다시 쓴다 (곱한다)
+function affinityOf(towerTypeId, enemy, branchId) {
   const row = TOWER_AFFINITY[towerTypeId];
   if (!row) return 1;
   const cls = (ENEMY_TYPES[enemy.typeId] || {}).cls || 'medium';
-  return row[cls] !== undefined ? row[cls] : 1;
+  let m = row[cls] !== undefined ? row[cls] : 1;
+  if (branchId) {
+    const b = branchDef(towerTypeId, branchId);
+    if (b && b.aff && b.aff[cls] !== undefined) m *= b.aff[cls];
+  }
+  return m;
+}
+// 이 타워가 그 등급에 실제로 내는 배율 (패널 표시용)
+function towerAffinityRow(typeId, branchId) {
+  const row = TOWER_AFFINITY[typeId] || {};
+  const b = branchDef(typeId, branchId);
+  const out = {};
+  for (const k of MOB_CLASS_ORDER) {
+    let m = row[k] !== undefined ? row[k] : 1;
+    if (b && b.aff && b.aff[k] !== undefined) m *= b.aff[k];
+    out[k] = m;
+  }
+  return out;
 }
 // 상성 표시용 — 1.2 이상이면 강함, 0.8 이하면 약함
 function affinityLabel(mult) {
@@ -376,6 +394,160 @@ const TOWER_TYPES = {
   }
 };
 const TOWER_ORDER = ['arrow', 'frost', 'cannon', 'sniper', 'tesla', 'poison'];
+
+// ─── ★5 분기 특화 ────────────────────────────────────────────────────────────
+// 지금까지 타워를 키우는 일은 "같은 것이 커진다"뿐이었다. Lv.1도 Lv.5도 화살탑은
+// 소형에 강하고 대형에 약했다 — 레벨은 숫자만 올리고 성격은 하나도 안 바꿨다.
+//
+// ★5에 도달하면 세 갈래 중 하나를 골라 골드로 특화한다. 고르면 그 타워는
+// 다른 물건이 된다 — 배율이 바뀌고, 상성 행이 통째로 다시 쓰이고, 고유 특성이 붙는다.
+//
+// 설계 규칙 셋:
+//   1. 모든 분기는 **주고받는다**. 얻는 것이 있으면 잃는 것이 있다.
+//   2. 세 분기의 총 DPS는 비슷하게 두고, **어디에 쓰이는지**를 갈라 놓는다.
+//      그래야 "무조건 이거"가 없고 층 편성을 보고 고르게 된다.
+//   3. 상성은 **곱한다**(`aff`). 원래 잘 잡던 것을 더 잘 잡거나,
+//      원래 못 잡던 것을 잡을 수 있게 되거나 — 둘 중 하나지 둘 다는 아니다.
+//
+// ⚠️ 분기를 섞지 않는 이유 (다른 분기끼리 합쳐 두 특성을 갖게 하지 않는 이유):
+//   분기가 전부 트레이드오프라서 둘을 겹치면 서로를 지운다. 속사(공속×1.70·공격력×0.72)와
+//   공성(공속×0.42·공격력×2.80)을 합치면 공속×0.71·공격력×2.02 — 그냥 못한 공성이 된다.
+//   게다가 6종 × 3분기 = 18개를 4등급에 맞춰 잡는 것도 벅찬데, 교차 조합까지 열면
+//   18쌍이 더 붙어 36개를 잡아야 한다. 무엇보다 셋 중 하나를 고르는 것이 이 시스템의
+//   전부인데, 결국 다 가질 수 있으면 그 선택이 사라진다.
+//   대신 **재분기**를 뒀다 — 값을 더 내고 갈아탈 수는 있되, 두 개를 동시에 갖지는 못한다.
+const TOWER_BRANCH_LEVEL = 5;      // 여기 도달하면 분기가 열린다
+const TOWER_BRANCH_COST_MULT   = 12;   // 분기 값 = 타워 기본가 × 12
+const TOWER_REBRANCH_COST_MULT = 26;   // 갈아타는 값 = 기본가 × 26
+
+const TOWER_BRANCHES = {
+  arrow: [
+    { id:'a_rapid', name:'속사', icon:'💨', color:'#4ade80',
+      mult:{ dmg:0.72, spd:1.70, range:0.92 },
+      aff:{ small:1.15 },
+      desc:'공격력↓ 공속↑↑ · 소형에 더 강하게',
+      note:'물량을 끊임없이 깎는다' },
+    { id:'a_pierce', name:'관통', icon:'🎯', color:'#60a5fa',
+      mult:{ dmg:1.30, spd:0.95, range:1.10 },
+      aff:{ medium:1.40 },
+      special:{ pierce:3 },
+      desc:'방어 관통 +3 · 중형에 강하게',
+      note:'갑옷 두른 주력을 맡는다' },
+    { id:'a_siege', name:'공성', icon:'🏹', color:'#f59e0b',
+      mult:{ dmg:2.80, spd:0.42, range:1.30 },
+      aff:{ small:0.55, large:2.10 },
+      desc:'공속↓↓ 한 발이 무겁게 · 대형에 강하게',
+      note:'못 잡던 대형을 잡는다 — 소형은 포기한다' },
+  ],
+  frost: [
+    { id:'f_deep', name:'혹한', icon:'🧊', color:'#38bdf8',
+      mult:{ dmg:0.85, spd:1.10 },
+      special:{ slow:0.70, slowDurMult:1.70 },
+      desc:'감속 70% · 지속 1.7배',
+      note:'피해를 포기하고 시간을 산다' },
+    { id:'f_shatter', name:'서릿발', icon:'💎', color:'#a5b4fc',
+      mult:{ dmg:1.65, spd:0.90 },
+      special:{ slow:0.30, vsSlowed:1.70 },
+      desc:'감속 30%로 약화 · 이미 느려진 적에게 ×1.7',
+      note:'혹한을 옆에 두면 둘이 맞물린다' },
+    { id:'f_blizzard', name:'눈보라', icon:'🌨️', color:'#e0f2fe',
+      mult:{ dmg:0.95, spd:0.92, range:1.20 },
+      aff:{ air:2.00 },
+      special:{ splash:46 },
+      desc:'착탄 범위 감속 · 비행에 강하게',
+      note:'못 맞히던 비행을 맡을 수 있다' },
+  ],
+  cannon: [
+    { id:'c_carpet', name:'융단', icon:'💥', color:'#fb923c',
+      mult:{ dmg:0.72, spd:1.35 },
+      aff:{ small:1.60 },
+      special:{ splash:72 },
+      desc:'범위 1.8배 · 소형에 강하게',
+      note:'약점이던 소형 물량을 통째로 쓸어 담는다' },
+    { id:'c_ap', name:'철갑탄', icon:'🛡️', color:'#94a3b8',
+      mult:{ dmg:1.32, spd:0.85 },
+      aff:{ large:1.30 },
+      special:{ splash:22, pierceArmor:true },
+      desc:'방어 무시 · 범위↓ · 대형에 더 강하게',
+      note:'심층의 두꺼운 갑옷을 무시한다' },
+    { id:'c_mortar', name:'박격', icon:'🚀', color:'#c084fc',
+      mult:{ dmg:1.25, spd:0.65, range:1.75 },
+      aff:{ air:3.83 },
+      desc:'사거리 1.75배 · 비행을 잡을 수 있게',
+      note:'대공 0.30 → 1.15. 화력이 아니라 사각을 산다' },
+  ],
+  sniper: [
+    { id:'s_head', name:'헤드샷', icon:'🎯', color:'#f0abfc',
+      mult:{ dmg:1.20 },
+      special:{ critChance:0.32, critMult:2.6 },
+      desc:'32% 확률로 ×2.6 치명타',
+      note:'평균은 ×1.8 — 대신 굴림이 흔들린다' },
+    { id:'s_auto', name:'연사 저격', icon:'🔫', color:'#fbbf24',
+      mult:{ dmg:0.50, spd:2.40, range:0.60 },
+      desc:'사거리↓ 공격력↓ 공속↑↑',
+      note:'저격탑을 주력 딜러로 바꾼다' },
+    { id:'s_anti', name:'대물 저격', icon:'💀', color:'#ef4444',
+      mult:{ dmg:2.10, spd:0.52, range:1.20 },
+      aff:{ large:1.35 },
+      special:{ execute:0.14 },
+      desc:'대형에 더 강하게 · HP 14% 이하 즉시 처형',
+      note:'보스를 반토막에서 끝낸다' },
+  ],
+  tesla: [
+    { id:'t_chain', name:'연쇄 증폭', icon:'⛓️', color:'#67e8f9',
+      mult:{ dmg:0.78 },
+      special:{ chain:5, chainRangeMult:1.35 },
+      desc:'연쇄 2 → 5회 · 연쇄 사거리 1.35배',
+      note:'뭉쳐 오면 한 발이 다섯 발이 된다' },
+    { id:'t_over', name:'과충전', icon:'🔋', color:'#facc15',
+      mult:{ dmg:1.75, spd:0.68 },
+      special:{ chain:0, stunChance:0.18, stunDur:0.5 },
+      desc:'연쇄 없음 · 한 발이 무겁게 · 18% 감전(0.5초 정지)',
+      note:'연쇄를 버리고 단일 화력을 산다' },
+    { id:'t_aa', name:'대공 관제', icon:'🛩️', color:'#818cf8',
+      mult:{ dmg:1.15, spd:0.90, range:1.45 },
+      aff:{ small:0.60, medium:0.75, large:0.75, air:1.40 },
+      desc:'사거리 1.45배 · 비행 특화 · 지상은 약해진다',
+      note:'대공 1.60 → 2.24. 하늘만 본다' },
+  ],
+  poison: [
+    { id:'p_virul', name:'맹독', icon:'☠️', color:'#84cc16',
+      mult:{ dmg:1.10 },
+      special:{ poolDpsMult:2.00, poolDurMult:0.65 },
+      desc:'장판 피해 2배 · 지속 0.65배',
+      note:'짧고 진하게 — 스쳐 가도 아프다' },
+    { id:'p_spread', name:'확산', icon:'🌫️', color:'#a3e635',
+      mult:{ spd:1.15 },
+      special:{ poolRadiusMult:1.55, poolDurMult:1.45, poolDpsMult:0.65 },
+      desc:'장판 반경 1.55배 · 지속 1.45배 · 피해 0.65배',
+      note:'길목을 통째로 덮는다' },
+    { id:'p_corrode', name:'부식', icon:'🧪', color:'#22d3ee',
+      mult:{ dmg:1.05 },
+      aff:{ medium:1.15 },
+      special:{ poolDpsMult:0.85, corrode:0.30 },
+      desc:'장판 위의 적은 방어력을 잃고 받는 피해 +30%',
+      note:'혼자서는 약하다 — 다른 타워를 전부 세게 만든다' },
+  ],
+};
+
+function towerBranches(typeId) { return TOWER_BRANCHES[typeId] || []; }
+function branchDef(typeId, branchId) {
+  if (!branchId) return null;
+  return towerBranches(typeId).find(b => b.id === branchId) || null;
+}
+function towerBranchOf(t) { return t ? branchDef(t.typeId, t.branch) : null; }
+// ★5에 닿았고 아직 안 고른 타워만 분기를 연다
+function towerCanBranch(t) {
+  return !!t && (t.level || 1) >= TOWER_BRANCH_LEVEL && !t.branch && towerBranches(t.typeId).length > 0;
+}
+function towerBranchCost(t) {
+  return Math.max(1, Math.round(TOWER_TYPES[t.typeId].cost * TOWER_BRANCH_COST_MULT)
+                     - (BONUSES.towerCostDiscount || 0));
+}
+function towerRebranchCost(t) {
+  return Math.max(1, Math.round(TOWER_TYPES[t.typeId].cost * TOWER_REBRANCH_COST_MULT));
+}
+
 
 // ─── 해금 (로비에서 보석으로 영구 개방) ──────────────────────────────────────
 // 처음부터 열려 있는 것은 화살탑 · 궁수 · 검사뿐이다.
