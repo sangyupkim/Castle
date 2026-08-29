@@ -24,13 +24,19 @@ const BUILDING_MAX_LEVEL = 10;
 //
 //  1. 값 자체를 올린다 — 건설비 ~1.9배, 레벨업비 ~1.9배에 배수도 1.7→1.85.
 //  2. 한 번에 다 못 찍게 한다 — 트랙마다 살 수 있는 횟수를 건물 레벨이 정한다.
-//     Lv.1이면 2번, 레벨이 오를 때마다 +1. 10레벨이 돼야 10번까지 간다.
+//     강화 하나는 **30레벨**까지 오른다. Lv.1이면 3번, 레벨마다 +3, Lv.10에서 30번.
 //  3. 레벨업에 조건을 건다 — 🏰성채 레벨(전역)과 그 건물에서 산 강화 수(지역).
 //     골드만 있으면 다 되는 구조에서는 "무엇을 먼저 올릴까"가 선택이 아니다.
-const TRACK_CAP_BASE   = 2;    // Lv.1에서 트랙 하나를 살 수 있는 횟수
-const TRACK_CAP_PER_LV = 1;    // 건물 레벨마다 +1
-// 건물 레벨업에 필요한, 그 건물에서 산 강화 총 횟수 (다음 레벨 × 이 값)
-const LEVELUP_UPGRADES_PER_LV = 3;
+const TRACK_CAP_BASE   = 3;    // Lv.1에서 트랙 하나를 살 수 있는 횟수
+const TRACK_CAP_PER_LV = 3;    // 건물 레벨마다 +3 → Lv.10에서 30
+// 건물 레벨업에 필요한 강화 구매량 — "지금 레벨에서 살 수 있는 것의 이 비율만큼".
+//
+// 처음에는 '다음 레벨 × 정수'로 뒀는데 그건 도달 불가능한 조건이었다.
+// Lv.1에서 열려 있는 트랙은 건물당 1~2개뿐이고 트랙당 3번까지만 살 수 있으니
+// 살 수 있는 최대가 3~6번인데 8번을 요구했다 — 대장간은 영영 Lv.2가 못 된다.
+// 지금 살 수 있는 양에 비례시키면 구조상 항상 닿을 수 있고, 뜻도 그대로다:
+// "이 레벨에서 할 수 있는 걸 절반은 하고 올라가라."
+const LEVELUP_UPGRADE_RATIO = 0.5;
 // 🏰 성채가 다른 건물보다 이만큼까지는 앞서 올릴 수 있다.
 // 0이면 성채와 나란히만 가고, 1이면 성채보다 한 단계 위까지 허용한다.
 const CASTLE_LEAD = 1;
@@ -47,6 +53,19 @@ function buildingUpgradeCount(bs) {
   for (const k in (bs.upgrades || {})) n += bs.upgrades[k] || 0;
   return n;
 }
+// 이 레벨에서 살 수 있는 강화 총 횟수 (유한 트랙만) — 승급 조건의 분모
+function buildingBuyableAt(def, level) {
+  let n = 0;
+  for (const tr of buildingTracks(def, level || 0)) {
+    if (trackIsInfinite(tr)) continue;
+    n += trackCapAt(tr, level || 0);
+  }
+  return n;
+}
+function levelUpUpgradeReq(def, level) {
+  return Math.ceil(buildingBuyableAt(def, level) * LEVELUP_UPGRADE_RATIO);
+}
+
 // 🏰 성채 레벨이 정하는 다른 건물의 레벨 상한
 function castleLevel(gs) {
   const c = gs.town && gs.town.buildings && gs.town.buildings.castle;
@@ -65,7 +84,7 @@ function canLevelUpBuilding(gs, id) {
   if (next > BUILDING_MAX_LEVEL - 1) return { ok:false, why:'max' };
   if (next > buildingLevelCap(gs, id))
     return { ok:false, why:'castle', need: next - CASTLE_LEAD, have: castleLevel(gs) };
-  const needUp = next * LEVELUP_UPGRADES_PER_LV;
+  const needUp = levelUpUpgradeReq(def, bs.level || 0);
   const haveUp = buildingUpgradeCount(bs);
   if (haveUp < needUp) return { ok:false, why:'upgrades', need:needUp, have:haveUp };
   const cost = buildingLevelCost(def, next);
@@ -89,7 +108,8 @@ function trackTotal(tr, n) {
 function trackCost(tr, n) {
   return Math.round(tr.cost * Math.pow(tr.costMult, Math.max(0, n || 0)));
 }
-function trackMax(tr) { return tr.maxLv === undefined ? 10 : tr.maxLv; }
+const TRACK_MAX_DEFAULT = 30;   // 강화 하나가 오를 수 있는 기본 최대 레벨
+function trackMax(tr) { return tr.maxLv === undefined ? TRACK_MAX_DEFAULT : tr.maxLv; }
 function trackIsInfinite(tr) { return trackMax(tr) === Infinity; }
 
 const pct = v => `${Math.round(v * 100)}%`;
@@ -102,22 +122,22 @@ const TOWN_BUILDINGS = [
     tracks:[
       // 정액이 아니라 배율이다. v1은 +38을 통째로 얹었는데 화살탑 기본 공격력이 2라
       // 10층에서 산 강화가 26층까지 그대로 통했다 — 적 체력 곡선이 아무 의미가 없었다.
-      { id:'t_dmg',  name:'날붙이 연마', icon:'⚔️', unlockLv:0, cost:18, costMult:1.42, step:0.06, growth:0.06,
+      { id:'t_dmg',  name:'날붙이 연마', icon:'⚔️', unlockLv:0, cost:18, costMult:1.162, step:0.036, growth:0.02,
         desc:v=>`모든 타워 공격력 +${pct(v)}`,               apply:(b,v)=>{ b.towerDmgMult *= 1 + v; } },
-      { id:'t_rng',  name:'조준경',     icon:'🔭', unlockLv:0, cost:22, costMult:1.45, step:0.03, growth:0.14,
+      { id:'t_rng',  name:'조준경',     icon:'🔭', unlockLv:0, cost:22, costMult:1.173, step:0.018, growth:0.0467,
         desc:v=>`타워 사거리 +${pct(v)}`,                    apply:(b,v)=>{ b.towerRangeMult += v; } },
-      { id:'t_spd',  name:'속사 장치',   icon:'⚡', unlockLv:1, cost:33, costMult:1.48, step:0.04, growth:0.12,
+      { id:'t_spd',  name:'속사 장치',   icon:'⚡', unlockLv:1, cost:33, costMult:1.185, step:0.024, growth:0.04,
         desc:v=>`타워 공격속도 +${pct(v)}`,                  apply:(b,v)=>{ b.towerSpdMult += v; } },
-      { id:'t_cost', name:'대량 생산',   icon:'🏭', unlockLv:2, cost:39, costMult:1.55, step:1,    growth:0.10,
+      { id:'t_cost', name:'대량 생산',   icon:'🏭', unlockLv:2, cost:39, costMult:1.212, step:1,    growth:0.0333,
         desc:v=>`타워 건설비 -${Math.round(v)}`,             apply:(b,v)=>{ b.towerCostDiscount += Math.round(v); } },
-      { id:'t_heavy',name:'강화 탄두',  icon:'💥', unlockLv:4, cost:90, costMult:1.55, step:0.09, growth:0.07, maxLv:8,
+      { id:'t_heavy',name:'강화 탄두',  icon:'💥', unlockLv:4, cost:90, costMult:1.212, step:0.054, growth:0.0233, maxLv:24,
         desc:v=>`모든 타워 공격력 +${pct(v)}`,               apply:(b,v)=>{ b.towerDmgMult *= 1 + v; } },
-      { id:'t_crit', name:'예광탄',     icon:'✨', unlockLv:3, cost:44, costMult:1.52, step:0.03, growth:0.08, maxLv:8,
+      { id:'t_crit', name:'예광탄',     icon:'✨', unlockLv:3, cost:44, costMult:1.2, step:0.018, growth:0.0267, maxLv:24,
         desc:v=>`타워 사거리 +${pct(v)} · 공격속도 +${pct(v*0.6)}`,
         apply:(b,v)=>{ b.towerRangeMult += v; b.towerSpdMult += v*0.6; } },
-      { id:'t_pierce',name:'철갑 촉',    icon:'🔩', unlockLv:5, cost:72, costMult:1.55, step:1, growth:0.10, maxLv:8,
+      { id:'t_pierce',name:'철갑 촉',    icon:'🔩', unlockLv:5, cost:72, costMult:1.212, step:1, growth:0.0333, maxLv:24,
         desc:v=>`타워가 적 방어 ${Math.round(v)} 무시`,      apply:(b,v)=>{ b.towerPierce += Math.round(v); } },
-      { id:'t_slow',  name:'냉각 코팅',  icon:'❄️', unlockLv:6, cost:80, costMult:1.56, step:0.02, growth:0.05, maxLv:8,
+      { id:'t_slow',  name:'냉각 코팅',  icon:'❄️', unlockLv:6, cost:80, costMult:1.215, step:0.012, growth:0.0167, maxLv:24,
         desc:v=>`모든 타워에 감속 ${pct(v)}`,                apply:(b,v)=>{ b.towerSlow += v; } },
       { id:'t_inf',  name:'정밀 세공',   icon:'♾️', unlockLv:BUILDING_MAX_LEVEL-1, cost:270, costMult:1.26, step:0.03, growth:0.004, maxLv:Infinity,
         desc:v=>`모든 타워 공격력 +${pct(v)}`,               apply:(b,v)=>{ b.towerDmgMult *= 1 + v; } },
@@ -128,23 +148,23 @@ const TOWN_BUILDINGS = [
     desc:'용병을 훈련하는 시설',
     lvCost:56, lvMult:1.85,
     tracks:[
-      { id:'u_atk',  name:'전투 훈련',  icon:'⚔️', unlockLv:0, cost:16, costMult:1.42, step:3,    growth:0.20,
+      { id:'u_atk',  name:'전투 훈련',  icon:'⚔️', unlockLv:0, cost:16, costMult:1.162, step:3,    growth:0.0667,
         desc:v=>`아군 공격력 +${Math.round(v)}`,             apply:(b,v)=>{ b.unitAtk += v; } },
-      { id:'u_hp',   name:'체력 단련',  icon:'💪', unlockLv:0, cost:16, costMult:1.42, step:14,   growth:0.20,
+      { id:'u_hp',   name:'체력 단련',  icon:'💪', unlockLv:0, cost:16, costMult:1.162, step:14,   growth:0.0667,
         desc:v=>`아군 최대 HP +${Math.round(v)}`,            apply:(b,v)=>{ b.unitHp += v; } },
-      { id:'u_def',  name:'철갑 훈련',  icon:'🛡️', unlockLv:1, cost:21, costMult:1.45, step:2,    growth:0.18,
+      { id:'u_def',  name:'철갑 훈련',  icon:'🛡️', unlockLv:1, cost:21, costMult:1.173, step:2,    growth:0.06,
         desc:v=>`아군 방어력 +${Math.round(v)}`,             apply:(b,v)=>{ b.unitDef += v; } },
-      { id:'u_aspd', name:'속공 훈련',  icon:'🌀', unlockLv:2, cost:36, costMult:1.50, step:0.035,growth:0.10,
+      { id:'u_aspd', name:'속공 훈련',  icon:'🌀', unlockLv:2, cost:36, costMult:1.192, step:0.021,growth:0.0333,
         desc:v=>`아군 공격속도 +${pct(v)}`,                  apply:(b,v)=>{ b.unitAtkSpdMult += v; } },
-      { id:'u_disc', name:'고용 할인',  icon:'💰', unlockLv:3, cost:30, costMult:1.55, step:1,    growth:0.08,
+      { id:'u_disc', name:'고용 할인',  icon:'💰', unlockLv:3, cost:30, costMult:1.212, step:1,    growth:0.0267,
         desc:v=>`용병 고용비 -${Math.round(v)}`,             apply:(b,v)=>{ b.hireCostDiscount += Math.round(v); } },
-      { id:'u_crit', name:'급소 교본',  icon:'🎯', unlockLv:4, cost:51, costMult:1.52, step:0.03, growth:0.08, maxLv:8,
+      { id:'u_crit', name:'급소 교본',  icon:'🎯', unlockLv:4, cost:51, costMult:1.2, step:0.018, growth:0.0267, maxLv:24,
         desc:v=>`치명타 확률 +${pct(v)}`,                    apply:(b,v)=>{ b.critChance += v; } },
-      { id:'u_slot', name:'병력 증원',  icon:'➕', unlockLv:5, cost:90, costMult:2.10, step:1,    growth:0,    maxLv:4,
+      { id:'u_slot', name:'병력 증원',  icon:'➕', unlockLv:5, cost:90, costMult:1.423, step:1,    growth:0,    maxLv:4,
         desc:v=>`편성 슬롯 +${Math.round(v)}`,               apply:(b,v)=>{ b.maxSlotBonus += Math.round(v); } },
-      { id:'u_regen',name:'야전 의무',  icon:'🩹', unlockLv:3, cost:46, costMult:1.52, step:0.003, growth:0.06, maxLv:8,
+      { id:'u_regen',name:'야전 의무',  icon:'🩹', unlockLv:3, cost:46, costMult:1.2, step:0.0018, growth:0.02, maxLv:24,
         desc:v=>`전투 이탈 회복 +${pct(v)}/s`,               apply:(b,v)=>{ b.regenBonus += v; } },
-      { id:'u_combo',name:'연계 훈련',  icon:'🔗', unlockLv:6, cost:76, costMult:1.55, step:0.025, growth:0.06, maxLv:8,
+      { id:'u_combo',name:'연계 훈련',  icon:'🔗', unlockLv:6, cost:76, costMult:1.212, step:0.015, growth:0.02, maxLv:24,
         desc:v=>`추가 타격 확률 +${pct(v)}`,                 apply:(b,v)=>{ b.comboChance += v; } },
       { id:'u_inf',  name:'불굴의 대열', icon:'♾️', unlockLv:BUILDING_MAX_LEVEL-1, cost:255, costMult:1.26, step:5, growth:0.06, maxLv:Infinity,
         desc:v=>`아군 공격력 +${Math.round(v)} · HP +${Math.round(v*4)}`,
@@ -156,19 +176,19 @@ const TOWN_BUILDINGS = [
     desc:'영웅 아이템을 구매하는 시설',
     lvCost:60, lvMult:1.85,
     tracks:[
-      { id:'h_atk',  name:'영웅 단련',  icon:'👑', unlockLv:0, cost:20, costMult:1.44, step:4,    growth:0.20,
+      { id:'h_atk',  name:'영웅 단련',  icon:'👑', unlockLv:0, cost:20, costMult:1.169, step:4,    growth:0.0667,
         desc:v=>`영웅 공격력 +${Math.round(v)}`,             apply:(b,v)=>{ b.heroAtk += v; } },
-      { id:'h_exp',  name:'전투 교본',  icon:'📖', unlockLv:0, cost:24, costMult:1.46, step:0.10, growth:0.10,
+      { id:'h_exp',  name:'전투 교본',  icon:'📖', unlockLv:0, cost:24, costMult:1.177, step:0.06, growth:0.0333,
         desc:v=>`영웅 경험치 +${pct(v)}`,                    apply:(b,v)=>{ b.heroExpMult += v; } },
-      { id:'h_stat', name:'영웅 각성',  icon:'✨', unlockLv:2, cost:45, costMult:1.52, step:0.05, growth:0.10,
+      { id:'h_stat', name:'영웅 각성',  icon:'✨', unlockLv:2, cost:45, costMult:1.2, step:0.03, growth:0.0333,
         desc:v=>`영웅 전체 능력치 +${pct(v)}`,               apply:(b,v)=>{ b.heroStatMult += v; } },
-      { id:'h_aura', name:'지휘 오라',  icon:'🎖️', unlockLv:3, cost:42, costMult:1.50, step:2,    growth:0.15,
+      { id:'h_aura', name:'지휘 오라',  icon:'🎖️', unlockLv:3, cost:42, costMult:1.192, step:2,    growth:0.05,
         desc:v=>`영웅 방어력 +${Math.round(v)}`,             apply:(b,v)=>{ b.heroAura += v; } },
-      { id:'h_rev',  name:'구원의 손',  icon:'🕊️', unlockLv:4, cost:57, costMult:1.55, step:1,  growth:0, maxLv:8,
+      { id:'h_rev',  name:'구원의 손',  icon:'🕊️', unlockLv:4, cost:57, costMult:1.212, step:1,  growth:0, maxLv:24,
         desc:v=>`전사 후 복귀 HP +${Math.round(v*HERO_RETURN_HP_PER*100)}%p`, apply:(b,v)=>{ b.heroReviveReduction += v; } },
-      { id:'h_regen',name:'성수 배급',  icon:'💚', unlockLv:5, cost:56, costMult:1.54, step:0.4, growth:0.10, maxLv:8,
+      { id:'h_regen',name:'성수 배급',  icon:'💚', unlockLv:5, cost:56, costMult:1.208, step:0.24, growth:0.0333, maxLv:24,
         desc:v=>`영웅 재생 +${v.toFixed(1)}/s`,              apply:(b,v)=>{ b.heroRegen += v; } },
-      { id:'h_skill',name:'각인 연구',  icon:'🔮', unlockLv:6, cost:72, costMult:1.55, step:0.05, growth:0.08, maxLv:8,
+      { id:'h_skill',name:'각인 연구',  icon:'🔮', unlockLv:6, cost:72, costMult:1.212, step:0.03, growth:0.0267, maxLv:24,
         desc:v=>`영웅 스킬 피해 +${pct(v)}`,                 apply:(b,v)=>{ b.heroSkillMult += v; } },
       { id:'h_inf',  name:'전설의 무구', icon:'♾️', unlockLv:BUILDING_MAX_LEVEL-1, cost:285, costMult:1.27, step:0.04, growth:0.05, maxLv:Infinity,
         desc:v=>`영웅 전체 능력치 +${pct(v)}`,               apply:(b,v)=>{ b.heroStatMult += v; } },
@@ -183,20 +203,20 @@ const TOWN_BUILDINGS = [
     // 두 건물이 같은 일을 하고 있었다. 겹치면 어느 쪽을 올릴지가 선택이 아니라 계산이 된다.
     tracks:[
       // ── 회복 ──
-      { id:'i_rest', name:'따뜻한 잠자리', icon:'🛏️', unlockLv:0, cost:18, costMult:1.44, step:0.03, growth:0.10,
+      { id:'i_rest', name:'따뜻한 잠자리', icon:'🛏️', unlockLv:0, cost:18, costMult:1.169, step:0.018, growth:0.0333,
         desc:v=>`웨이브 후 회복 +${pct(v)}`,                 apply:(b,v)=>{ b.restHealBonus += v; } },
-      { id:'i_hero', name:'영웅 대접',     icon:'🍷', unlockLv:4, cost:105, costMult:2.0,  step:1,    growth:0,    maxLv:1,
+      { id:'i_hero', name:'영웅 대접',     icon:'🍷', unlockLv:4, cost:105, costMult:1.385,  step:1,    growth:0,    maxLv:1,
         desc:()=>'웨이브 후 영웅 완전 회복',                  apply:(b)=>{ b.heroFullRest = true; } },
       // ── 특수 용병 ──
-      { id:'i_luck', name:'소문난 주점',   icon:'🍺', unlockLv:0, cost:42, costMult:1.52, step:0.06, growth:0.08, maxLv:8,
+      { id:'i_luck', name:'소문난 주점',   icon:'🍺', unlockLv:0, cost:42, costMult:1.2, step:0.036, growth:0.0267, maxLv:24,
         desc:v=>`특수 용병 등장 확률 +${pct(v)}`,            apply:(b,v)=>{ b.specialChance += v; } },
-      { id:'i_fame', name:'명성',          icon:'📜', unlockLv:1, cost:45, costMult:1.50, step:0.08, growth:0.10,
+      { id:'i_fame', name:'명성',          icon:'📜', unlockLv:1, cost:45, costMult:1.192, step:0.048, growth:0.0333,
         desc:v=>`특수 용병 능력치 +${pct(v)}`,               apply:(b,v)=>{ b.specialUnitMult += v; } },
-      { id:'i_slot', name:'별관 증축',     icon:'🚪', unlockLv:2, cost:82, costMult:2.05, step:1,    growth:0,    maxLv:4,
+      { id:'i_slot', name:'별관 증축',     icon:'🚪', unlockLv:2, cost:82, costMult:1.404, step:1,    growth:0,    maxLv:4,
         desc:v=>`특수 용병 슬롯 +${Math.round(v)}`,          apply:(b,v)=>{ b.specialSlotBonus += Math.round(v); } },
-      { id:'i_stock',name:'보급 계약',   icon:'📦', unlockLv:3, cost:44, costMult:1.52, step:8, growth:0.12,
+      { id:'i_stock',name:'보급 계약',   icon:'📦', unlockLv:3, cost:44, costMult:1.2, step:8, growth:0.04,
         desc:v=>`매 층 시작 골드 +${Math.round(v)}`,          apply:(b,v)=>{ b.startGoldBonus += Math.round(v); } },
-      { id:'i_gold', name:'단골 손님',   icon:'💰', unlockLv:5, cost:66, costMult:1.55, step:0.04, growth:0.08, maxLv:8,
+      { id:'i_gold', name:'단골 손님',   icon:'💰', unlockLv:5, cost:66, costMult:1.212, step:0.024, growth:0.0267, maxLv:24,
         desc:v=>`전투 골드 +${pct(v)}`,                       apply:(b,v)=>{ b.battleGoldMult += v; } },
       { id:'i_inf',  name:'끝없는 환대',   icon:'♾️', unlockLv:BUILDING_MAX_LEVEL-1, cost:240, costMult:1.25, step:0.03, growth:0.05, maxLv:Infinity,
         desc:v=>`웨이브 후 회복 +${pct(v)} · 특수 용병 +${pct(v*2)}`,
@@ -209,17 +229,17 @@ const TOWN_BUILDINGS = [
     lvCost:84, lvMult:1.85,
     // 대장간의 본체는 보석을 쓰는 세 갈래(연마·합성·담금질)이고 아래 트랙은 곁가지다.
     tracks:[
-      { id:'f_gearcost', name:'풀무 개량', icon:'🔥', unlockLv:0, cost:30, costMult:1.50, step:0.04, growth:0.08, maxLv:8,
+      { id:'f_gearcost', name:'풀무 개량', icon:'🔥', unlockLv:0, cost:30, costMult:1.192, step:0.024, growth:0.0267, maxLv:24,
         desc:v=>`장비 연마 효과 +${pct(v)}`,                 apply:(b,v)=>{ b.gearPlusBonus += v; } },
-      { id:'f_sell',     name:'고철 회수', icon:'♻️', unlockLv:1, cost:36, costMult:1.50, step:0.05, growth:0.08,
+      { id:'f_sell',     name:'고철 회수', icon:'♻️', unlockLv:1, cost:36, costMult:1.192, step:0.03, growth:0.0267,
         desc:v=>`타워 매각가 +${pct(v)}`,                    apply:(b,v)=>{ b.towerSellBonus += v; } },
-      { id:'f_repair',   name:'성벽 담금질', icon:'🧱', unlockLv:2, cost:45, costMult:1.52, step:0.04, growth:0.10,
+      { id:'f_repair',   name:'성벽 담금질', icon:'🧱', unlockLv:2, cost:45, costMult:1.2, step:0.024, growth:0.0333,
         desc:v=>`기지 피해 감소 +${pct(v)}`,                 apply:(b,v)=>{ b.baseDefPct += v; } },
-      { id:'f_luck',     name:'장인의 눈', icon:'👁️', unlockLv:4, cost:72, costMult:1.58, step:0.02, growth:0.06, maxLv:8,
+      { id:'f_luck',     name:'장인의 눈', icon:'👁️', unlockLv:4, cost:72, costMult:1.223, step:0.012, growth:0.02, maxLv:24,
         desc:v=>`합성 성공 확률 +${pct(v)}`,                 apply:(b,v)=>{ b.fuseLuck += v; } },
-      { id:'f_gem',      name:'감정사',   icon:'💎', unlockLv:5, cost:80, costMult:1.58, step:0.03, growth:0.06, maxLv:8,
+      { id:'f_gem',      name:'감정사',   icon:'💎', unlockLv:5, cost:80, costMult:1.223, step:0.018, growth:0.02, maxLv:24,
         desc:v=>`층당 보석 +${pct(v)}`,                       apply:(b,v)=>{ b.gemMult *= 1 + v; } },
-      { id:'f_drop',     name:'선별 수거', icon:'🔎', unlockLv:6, cost:72, costMult:1.55, step:0.015, growth:0.06, maxLv:8,
+      { id:'f_drop',     name:'선별 수거', icon:'🔎', unlockLv:6, cost:72, costMult:1.212, step:0.009, growth:0.02, maxLv:24,
         desc:v=>`특수 드랍 확률 +${pct(v)}`,                  apply:(b,v)=>{ b.dropChance += v; } },
       { id:'f_inf',      name:'끝없는 망치', icon:'♾️', unlockLv:BUILDING_MAX_LEVEL-1, cost:262, costMult:1.26, step:0.025, growth:0.05, maxLv:Infinity,
         desc:v=>`타워 공격력 +${pct(v)} · 아군 공격력 +${pct(v)}`,
@@ -234,26 +254,29 @@ const TOWN_BUILDINGS = [
     desc:'기지를 키우는 곳 · 다른 건물의 레벨 상한', alwaysBuilt:true,
     lvCost:80, lvMult:1.92,
     tracks:[
-      { id:'c_wall',  name:'성벽 증축',   icon:'🧱', unlockLv:0, cost:24, costMult:1.46, step:14, growth:0.16,
+      { id:'c_wall',  name:'성벽 증축',   icon:'🧱', unlockLv:0, cost:24, costMult:1.177, step:14, growth:0.0533,
         desc:v=>`기지 최대 HP +${Math.round(v)}`,           apply:(b,v)=>{ b.baseHpMax += v; } },
-      { id:'c_steel', name:'강철 성체',   icon:'🛡️', unlockLv:0, cost:30, costMult:1.50, step:0.025, growth:0.08, maxLv:8,
-        desc:v=>`기지 피해 감소 ${pct(v)}`,                  apply:(b,v)=>{ b.baseDefPct += v; } },
-      { id:'c_heal',  name:'자가 회복',   icon:'❤️', unlockLv:1, cost:34, costMult:1.50, step:0.25, growth:0.12,
+      { id:'c_steel', name:'강철 성체',   icon:'🛡️', unlockLv:0, cost:30, costMult:1.192, step:0.015, growth:0.0267, maxLv:24,
+        desc:v=>`기지 피해 감소 ${pct(Math.min(BASE_DEF_PCT_CAP,v))}${v>BASE_DEF_PCT_CAP?' (상한)':''}`,
+        apply:(b,v)=>{ b.baseDefPct += v; } },
+      { id:'c_heal',  name:'자가 회복',   icon:'❤️', unlockLv:1, cost:34, costMult:1.192, step:0.15, growth:0.04,
         desc:v=>`웨이브 중 기지 재생 +${v.toFixed(1)}/s`,     apply:(b,v)=>{ b.baseRegen += v; } },
       // 🏹 최후 저지선 — 성채가 직접 쏜다. 사지 않으면 공격력이 0이라 아무 일도 없다.
-      { id:'c_last',  name:'최후 저지선', icon:'🏹', unlockLv:2, cost:52, costMult:1.54, step:6, growth:0.20,
+      { id:'c_last',  name:'최후 저지선', icon:'🏹', unlockLv:2, cost:52, costMult:1.208, step:6, growth:0.0667,
         desc:v=>`성채가 직접 공격 — 공격력 ${Math.round(v)}`, apply:(b,v)=>{ b.castleAtk += v; } },
-      { id:'c_thorn', name:'가시 방벽',   icon:'🌵', unlockLv:3, cost:60, costMult:1.56, step:0.05, growth:0.06, maxLv:8,
-        desc:v=>`돌진해 오는 적을 ${pct(v)} 확률로 막아낸다`, apply:(b,v)=>{ b.chargeBlock += v; } },
-      { id:'c_gate',  name:'철문 보강',   icon:'🚪', unlockLv:4, cost:56, costMult:1.55, step:0.03, growth:0.07, maxLv:8,
-        desc:v=>`기지에 닿은 적의 피해 ${pct(v)} 감소`,        apply:(b,v)=>{ b.breachReduce += v; } },
-      { id:'c_range', name:'망루 증축',   icon:'🔭', unlockLv:5, cost:64, costMult:1.55, step:0.10, growth:0.08, maxLv:8,
+      { id:'c_thorn', name:'가시 방벽',   icon:'🌵', unlockLv:3, cost:60, costMult:1.215, step:0.03, growth:0.02, maxLv:24,
+        desc:v=>`돌진해 오는 적을 ${pct(Math.min(0.75,v))} 확률로 막아낸다${v>0.75?' (상한)':''}`,
+        apply:(b,v)=>{ b.chargeBlock += v; } },
+      { id:'c_gate',  name:'철문 보강',   icon:'🚪', unlockLv:4, cost:56, costMult:1.212, step:0.018, growth:0.0233, maxLv:24,
+        desc:v=>`기지에 닿은 적의 피해 ${pct(Math.min(0.6,v))} 감소${v>0.6?' (상한)':''}`,
+        apply:(b,v)=>{ b.breachReduce += v; } },
+      { id:'c_range', name:'망루 증축',   icon:'🔭', unlockLv:5, cost:64, costMult:1.212, step:0.06, growth:0.0267, maxLv:24,
         desc:v=>`성채 사거리 +${pct(v)} · 공격속도 +${pct(v*0.5)}`,
         apply:(b,v)=>{ b.castleRange += v; b.castleSpd *= 1 + v*0.5; } },
-      { id:'c_winch', name:'권양기',      icon:'⚙️', unlockLv:6, cost:78, costMult:1.58, step:0.035, growth:0.05, maxLv:8,
-        desc:v=>`과부하 쿨다운 -${pct(v)}`,
+      { id:'c_winch', name:'권양기',      icon:'⚙️', unlockLv:6, cost:78, costMult:1.223, step:0.021, growth:0.0167, maxLv:24,
+        desc:v=>`과부하 쿨다운 -${pct(Math.min(0.6,v))}${v>0.6?' (상한)':''}`,
         apply:(b,v)=>{ b.overloadCdMult *= 1 - Math.min(0.6, v); } },
-      { id:'c_store', name:'비축 창고',   icon:'📦', unlockLv:7, cost:70, costMult:1.56, step:12, growth:0.14,
+      { id:'c_store', name:'비축 창고',   icon:'📦', unlockLv:7, cost:70, costMult:1.215, step:12, growth:0.0467,
         desc:v=>`매 층 시작 골드 +${Math.round(v)}`,          apply:(b,v)=>{ b.startGoldBonus += Math.round(v); } },
       { id:'c_inf',   name:'불멸의 성',   icon:'♾️', unlockLv:BUILDING_MAX_LEVEL-1, cost:300, costMult:1.26, step:0.02, growth:0.04, maxLv:Infinity,
         desc:v=>`기지 최대 HP +${pct(v)} · 피해 감소 +${pct(v*0.4)}`,

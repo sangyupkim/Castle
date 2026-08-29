@@ -3088,12 +3088,12 @@ function _renderTrackList(ctx, gs, def, bs, listTop) {
       ctx.fillStyle='#a78bfa'; ctx.font='bold 10px sans-serif';
       ctx.fillText(`×${n}`, CW-84, uy+rowH/2);
     } else {
-      // 점은 트랙의 진짜 상한만큼 찍되, 지금 레벨로 못 사는 칸은 흐리게 둔다
-      const dots = Math.min(hardMax, 10), dw = 7;
-      for (let d=0; d<dots; d++) {
-        ctx.beginPath(); ctx.arc(CW-84-(dots-1-d)*dw, uy+rowH/2, 2.6, 0, Math.PI*2);
-        ctx.fillStyle = d<n ? '#22c55e' : d<mx ? '#334155' : '#1b2230'; ctx.fill();
-      }
+      // 30레벨짜리를 점으로 찍으면 읽히지 않는다 — 막대로 바꾼다.
+      // 채운 칸(초록) / 지금 레벨로 살 수 있는 칸(회색) / 승급해야 열리는 칸(어둡게).
+      const bw3 = 62, bx3 = CW-84-bw3, by3 = uy+rowH/2-4;
+      ctx.fillStyle='#1b2230'; ctx.fillRect(bx3, by3, bw3, 5);
+      ctx.fillStyle='#334155'; ctx.fillRect(bx3, by3, bw3 * (mx/hardMax), 5);
+      ctx.fillStyle= capped?'#a16207':'#22c55e'; ctx.fillRect(bx3, by3, bw3 * (n/hardMax), 5);
       ctx.fillStyle = capped?'#a16207':'#475569'; ctx.font='bold 7px sans-serif'; ctx.textAlign='right';
       ctx.fillText(`${n}/${mx}` + (capped?` (최대 ${hardMax})`:''), CW-84, uy+rowH/2+12);
     }
