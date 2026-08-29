@@ -752,6 +752,19 @@ function towerUpgradeCost(t) {
                        : 0.9 * lv * Math.pow(TOWER_HIGH_LEVEL_ESCALATION, lv - 2);
   return Math.max(1, Math.round(base * mult));
 }
+// 이 자리에 세우면 경로를 몇 칸이나 사정권에 넣는가.
+// 사거리 원만 보여주면 "커 보이는데 정작 길을 안 덮는" 자리를 못 거른다.
+function pathCellsInRange(col, row, rangePx) {
+  const c0 = cellCenter(col, row);
+  let n = 0;
+  for (const key of PATH_CELLS) {
+    const [pc, pr] = key.split(',').map(Number);
+    const p = cellCenter(pc, pr);
+    if (Math.hypot(p.x - c0.x, p.y - c0.y) <= rangePx) n++;
+  }
+  return n;
+}
+
 function towerSellValue(t) {
   return Math.max(1, Math.floor((t.invested || TOWER_TYPES[t.typeId].cost)
                                 * (0.6 + (BONUSES.towerSellBonus || 0))));

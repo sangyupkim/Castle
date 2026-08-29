@@ -732,7 +732,7 @@ const _PAGE_UI_KEYS = [
   'buildingLvUpBtn','upgradeBtns','towerMoveBtn','buildingScroll','pageScroll','briefScroll','lobbyScroll','hireCards','hiredSlots',
   'heroInfoBtn','heroBackBtn','equipSlotBtns','invCards','skillSlotBtns','skillCards','heroPickBtn',
   'shopItemBtns','skillBuyBtns','activeBuyBtns','activeSlotBtns','shopTabBuy','shopTabUp',
-  'towerBranchBtns',
+  'towerBranchBtns','towerPlan','planConfirmBtn','planCancelBtn',
   'forgeTabs','forgeGearBtns','forgeFuseBtns','forgeTemperBtn','forgeCoreBtn',
   'charmRollBtn','charmCards','charmSlotBtns',
   'specialCards','specialSlots','heroDefBtn','heroBatBtn','bountyBtn','eliteBtn','towerMiniGrid',
@@ -1311,8 +1311,16 @@ function handleTownTap(x,y) {
     for (const b of gs.ui.towerBranchBtns||[]) {
       if (hitTest(x,y,b)) { chooseTowerBranch(b.branchId, x, y); return; }
     }
+    // ◎ 배치 확인 — 놓을 자리를 집은 상태에서만 뜨는 두 버튼
+    if (hitTest(x,y,gs.ui.planCancelBtn||{}))  { gs.ui.towerPlan=null; SFX.click(); return; }
+    if (hitTest(x,y,gs.ui.planConfirmBtn||{})) { commitTowerPlan(x,y); return; }
     for (const b of gs.ui.towerTypeBtns||[]) {
-      if (hitTest(x,y,b)) { gs.selectedTowerType=b.typeId; gs.ui.towerAction=null; SFX.click(); return; }
+      if (hitTest(x,y,b)) {
+        gs.selectedTowerType=b.typeId; gs.ui.towerAction=null;
+        // 종류를 바꾸면 집어둔 자리도 그 종류로 다시 본다 — 사거리가 종류마다 다르다
+        if (gs.ui.towerPlan) gs.ui.towerPlan.typeId = b.typeId;
+        SFX.click(); return;
+      }
     }
     if (gs.ui.towerMiniGrid) {
       const mg=gs.ui.towerMiniGrid;
@@ -1323,10 +1331,16 @@ function handleTownTap(x,y) {
         if (tryTowerMoveTo(c, r, x, y)) return;
         const existing=gs.towers.find(tw=>tw.col===c&&tw.row===r);
         if (existing) {
+          gs.ui.towerPlan=null;
           gs.ui.towerAction=(gs.ui.towerAction?.col===c&&gs.ui.towerAction?.row===r)?null:{col:c,row:r,tower:existing};
         } else {
           if (isBlockedCell(c, r)) return;
-          buildTowerAt(c, r, x, y);
+          const pl = gs.ui.towerPlan;
+          // 같은 칸을 다시 누르면 그대로 확정 — 두 번 탭이 곧 '놓고 확인'이다
+          if (pl && pl.col===c && pl.row===r) { commitTowerPlan(x,y); return; }
+          gs.ui.towerPlan = { col:c, row:r, typeId:gs.selectedTowerType||'arrow' };
+          gs.ui.towerAction = null;
+          SFX.click();
         }
         return;
       }
@@ -1524,6 +1538,18 @@ function chooseTowerBranch(branchId, x, y) {
   FX.burst(ctr.x, ctr.y, def.color, 14, 18);
   SFX.upgrade();
   SaveManager.save(gs);
+}
+
+// 집어둔 자리에 실제로 세운다. 세우고 나면 미리보기는 지운다.
+function commitTowerPlan(fx, fy) {
+  const pl = gs.ui.towerPlan; if (!pl) return;
+  if (isBlockedCell(pl.col, pl.row)) { gs.ui.towerPlan = null; return; }
+  if (gs.towers.some(t => t.col===pl.col && t.row===pl.row)) { gs.ui.towerPlan = null; return; }
+  const prev = gs.selectedTowerType;
+  gs.selectedTowerType = pl.typeId;          // buildTowerAt이 고른 종류를 본다
+  const ok = buildTowerAt(pl.col, pl.row, fx, fy);
+  gs.selectedTowerType = prev;
+  if (ok) gs.ui.towerPlan = null;             // 실패(골드 부족)면 자리를 붙들어 둔다
 }
 
 // ─── 🔀 타워 이설 ────────────────────────────────────────────────────────────
