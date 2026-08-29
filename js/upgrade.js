@@ -34,6 +34,9 @@ function createDefaultBonuses() {
     gemMult: 1.0, summonRewardMult: 1.0, eventSoften: 0, overloadCdMult: 1.0,
     // ⚒️ 대장간
     gearPlusBonus: 0, towerSellBonus: 0, fuseLuck: 0,
+    // 🏰 성채 — 기지 자체가 싸우고 버티는 값
+    castleAtk: 0, castleRange: 0, castleSpd: 1.0,
+    chargeBlock: 0, breachReduce: 0,
     // 유닛 공속 (실시간 전투)
     unitAtkSpdMult: 1.0,
     // 서약 — 로비에서 스스로 거는 난이도 (전부 배율형)

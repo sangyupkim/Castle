@@ -219,7 +219,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <div class="wrap">
 <header class="cover">
-  <div class="eyebrow">Game Design Document · v4.14 · 되돌릴 수 있어야 선택이 된다</div>
+  <div class="eyebrow">Game Design Document · v4.15 · 🏰성채와 마을 경제</div>
   <h1>듀얼 프론티어</h1>
   <p class="tagline">한 화면에서 두 개의 전선을 동시에 굴리는 모바일 웹 로그라이트.
      끝은 없다 — 얼마나 깊이 내려갔는지가 기록이다.</p>
@@ -228,7 +228,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
     <div><dt>플랫폼</dt><dd>모바일 웹 (480×800 캔버스)</dd></div>
     <div><dt>1회 하강</dt><dd>10~30분 (도달 층에 비례)</dd></div>
     <div><dt>현재 볼륨</dt><dd>훈련 30웨이브 + ∞ 무한 (알고리즘 생성)</dd></div>
-    <div><dt>이번 개정</dt><dd>⏭훈련 건너뛰기 · ♻️스킬 초기화 (v4.14)</dd></div>
+    <div><dt>이번 개정</dt><dd>🏰성채 · 승급 조건 · 마을 사용처 12만→39만 (v4.15)</dd></div>
   </dl>
 </header>
 
@@ -1041,6 +1041,84 @@ v1.0의 "그룹 순환 + 보상 체감" 구조를 이 압력 곡선이 대체한
 <p>셋 다 처음부터 열려 있으면 고르는 데 값이 없다. 심연에서 모은 보석이
 "다음 영웅"이라는 목표가 되게 했다. 한 번 열면 <strong>언제든 무료로 갈아 끼운다</strong> —
 층 조합에 맞춰 바꾸는 것이 각인의 목적이므로 교체까지 잠그면 그냥 안 쓰게 된다.</p>
+
+<h3>🏰 성채와 마을 경제 재설계 <span class="rev">v4.15</span></h3>
+
+<p class="lede">플레이 보고: <strong>"전반적으로 마을 건물의 비용을 상승시켜줘.
+건물 레벨업 비용도 올리고, 레벨을 올리는 조건을 만들어줘.
+성채 업그레이드를 하나 만들어서 성채 레벨을 올리면 다른 건물들의 레벨도 상승하게 하자.
+건물 레벨업을 하면 업그레이드 갯수도 증가시켜줘."</strong></p>
+
+<p><strong>진단.</strong> 15층 자동 주행에서 골드가 <strong>129,190</strong> 남았다.
+살 것이 바닥나면 후반의 모든 판단이 "어차피 남으니까 아무거나"가 된다.</p>
+
+<div class="tw"><table>
+<caption>조인 곳</caption>
+<thead><tr><th></th><th>이전</th><th>이후</th></tr></thead>
+<tbody>
+<tr><td>건설비 (합)</td><td>185</td><td><strong>351</strong> (약 1.9배)</td></tr>
+<tr><td>레벨업비 배수</td><td>1.70~1.72</td><td><strong>1.85</strong> (성채 1.92)</td></tr>
+<tr><td>트랙 기본 비용</td><td>—</td><td><strong>1.5배</strong></td></tr>
+<tr><td>트랙 수</td><td>31</td><td><strong>52</strong></td></tr>
+<tr><td>마을 총 사용처</td><td>약 12만</td><td><strong>약 39만</strong></td></tr>
+</tbody></table></div>
+
+<h4>🏰 성채 — 마을의 축</h4>
+
+<p>늘 지어져 있는 새 건물이다. <strong>성채 레벨이 다른 모든 건물의 레벨 상한</strong>을 정한다.
+"무엇을 먼저 올릴까"가 아니라 <strong>"성채를 언제 올릴까"</strong>가 첫 판단이 된다.</p>
+
+<p class="note">제안은 "성채를 올리면 다른 건물 레벨도 같이 오른다"였는데, 그러면 건물별 레벨업
+비용이 의미를 잃는다 — 같은 요청의 "레벨업 비용을 올려달라"와 충돌한다.
+<strong>상한</strong>으로 바꾸면 성채가 필수가 되면서도 어느 건물을 먼저 올릴지는 선택으로 남는다.</p>
+
+<div class="tw"><table>
+<caption>성채 강화 10종 — 여기만 기지 자체를 만진다</caption>
+<thead><tr><th>강화</th><th>여는 레벨</th><th>효과</th></tr></thead>
+<tbody>
+<tr><td>🧱 성벽 증축</td><td>1</td><td>기지 최대 HP</td></tr>
+<tr><td>🛡️ 강철 성체</td><td>1</td><td>기지 피해 감소</td></tr>
+<tr><td>❤️ 자가 회복</td><td>2</td><td>웨이브 중 기지 재생</td></tr>
+<tr><td>🏹 <strong>최후 저지선</strong></td><td>3</td><td><strong>성채가 직접 공격</strong> (사거리 1.6칸 · 0.7발/s)</td></tr>
+<tr><td>🌵 <strong>가시 방벽</strong></td><td>4</td><td>돌진해 오는 적을 확률로 튕겨낸다</td></tr>
+<tr><td>🚪 철문 보강</td><td>5</td><td>기지에 닿은 적의 피해 감소</td></tr>
+<tr><td>🔭 망루 증축</td><td>6</td><td>성채 사거리 · 공격속도</td></tr>
+<tr><td>⚙️ 권양기</td><td>7</td><td>과부하 쿨다운</td></tr>
+<tr><td>📦 비축 창고</td><td>8</td><td>매 층 시작 골드</td></tr>
+<tr><td>♾️ 불멸의 성</td><td>10</td><td>최대 HP % · 피해 감소 (무한)</td></tr>
+</tbody></table></div>
+
+<p>실측(Lv.10 · 전부 최대): 공격력 97 · 사거리 146px · 차단 48% · 기지 HP 345 ·
+피해 감소 27% · 관문 피해 감소 25% · 재생 3.85/s.
+18초 웨이브에서 성채가 7발을 쏴 679 피해. 차단 48%는 돌진 피해를 <strong>49% 줄인다</strong>.</p>
+
+<h4>승급에 조건을 건다</h4>
+
+<p>골드만 있으면 다 되는 구조에서는 "무엇을 먼저 올릴까"가 선택이 아니다. 두 겹으로 건다 —
+<strong>전역</strong>은 🏰성채 레벨 + 1, <strong>지역</strong>은 그 건물에서 산 강화가
+<code>다음 레벨 × 3</code>회 이상. 버튼에 무엇이 모자란지 그대로 적는다
+(<code>🏰 성채 Lv.3 필요</code> / <code>강화 4/6 더 필요</code>) — 눌러 보고 알게 하면 안 된다.</p>
+
+<h4>한 번에 다 못 찍게 한다</h4>
+
+<p>트랙 하나를 살 수 있는 횟수를 <strong>건물 레벨이 정한다</strong>: <code>2 + 레벨 × 1</code>.
+Lv.1이면 2번, Lv.10이 돼야 10번까지 간다. 목록의 점은 트랙의 진짜 상한만큼 찍되 지금 못 사는
+칸은 흐리게 두고, 레벨에 막힌 것은 <code>MAX</code>가 아니라 <strong><code>승급 필요</code></strong>로
+적는다 — 끝난 것과 막힌 것은 다른 상태이고, 다르게 보여야 승급이 목표가 된다.</p>
+
+<h4>검토 — 심연 → 트리 → 재도전 루프</h4>
+
+<div class="tw"><table>
+<caption>마을을 그 레벨까지 키우는 누적 골드</caption>
+<thead><tr><th>건물 Lv</th><th>1</th><th>3</th><th>5</th><th>7</th><th>8</th><th>10</th></tr></thead>
+<tbody><tr><td>누적 골드</td><td>994</td><td>8,063</td><td>33,995</td><td><strong>131,523</strong></td><td>172,705</td><td>296,164</td></tr></tbody>
+</table></div>
+
+<p>예전에 남아돌던 12만이 이제 <strong>딱 Lv.7 언저리</strong>다. 즉 한 판에 마을을 다 못 키운다.
+골드는 판마다 리셋되므로 "이번 판에 어디까지 키울까"가 매번 새로 결정되고,
+그 상한을 밀어 올리는 것은 보석(스킬 트리·대장간·승천)뿐이다 —
+<strong>심연에서 골드로 마을을 키워 깊이를 벌고, 그 깊이가 보석이 되어 영구 상한을 올리고,
+다시 내려간다</strong>는 고리가 이제 실제로 닫힌다.</p>
 
 <h3>⏭ 훈련 건너뛰기 · ♻️ 스킬 초기화 <span class="rev">v4.14</span></h3>
 

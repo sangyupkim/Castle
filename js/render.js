@@ -188,6 +188,14 @@ function renderDefense(ctx, gs) {
     }
   }
 
+  // 🏰 최후 저지선 — 성채가 쏠 수 있으면 그 사거리를 옅게 보여준다
+  if (castleAtk() > 0) {
+    const bc = cellCenter(4, 6);
+    ctx.beginPath(); ctx.arc(bc.x, bc.y, castleRange(), 0, Math.PI*2);
+    ctx.strokeStyle = 'rgba(250,204,21,0.20)'; ctx.lineWidth = 1;
+    ctx.setLineDash([4,4]); ctx.stroke(); ctx.setLineDash([]);
+  }
+
   // ☠️ 독 장판 — 타워 아래에 깔린다. 남은 시간만큼 옅어진다.
   for (const q of (gs.poisonPools || [])) {
     const fade = Math.min(1, q.life / Math.max(0.001, q.maxLife));
@@ -2939,18 +2947,8 @@ function _renderForgeTracks(ctx, gs, top) {
   const def = TOWN_BUILDINGS.find(b=>b.id==='forge');
   const bs  = gs.town.buildings.forge;
   const curLv = bs.level||0, maxLv = BUILDING_MAX_LEVEL-1;
-  if (curLv < maxLv) {
-    const cost = buildingLevelCost(def, curLv+1);
-    const canAff = gs.gold>=cost;
-    const bw=170,bh=26,bx=(CW-bw)/2;
-    roundRect(ctx,bx,top,bw,bh,4);
-    ctx.fillStyle=canAff?'#1e3a5f':'#1a1a2e'; ctx.fill();
-    ctx.strokeStyle=canAff?'#f59e0b':'#374151'; ctx.lineWidth=1; ctx.stroke();
-    ctx.fillStyle=canAff?'#fbbf24':'#6b7280'; ctx.font='bold 10px sans-serif';
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(`Lv.${curLv+2} 승급 ${cost}💰`,bx+bw/2,top+bh/2);
-    gs.ui.buildingLvUpBtn={x:bx,y:top,w:bw,h:bh};
-  } else gs.ui.buildingLvUpBtn=null;
+  if (curLv < maxLv) drawLevelUpBtn(ctx, gs, def, bs, (CW-170)/2, top, 170, 26);
+  else gs.ui.buildingLvUpBtn=null;
   _renderTrackList(ctx, gs, def, bs, top+32);
 }
 
@@ -2985,16 +2983,8 @@ function renderBuildingScreen(ctx, gs, buildingId) {
   // ── 건물 레벨 ────────────────────────────────────────────────────────────
   const curLv = bs.level||0, maxLv = BUILDING_MAX_LEVEL-1;
   if (curLv < maxLv) {
-    const cost = buildingLevelCost(def, curLv+1);
-    const canAff = gs.gold>=cost;
     const bw=152,bh=28,bx=CW-6-bw,by2=hY-3;
-    roundRect(ctx,bx,by2,bw,bh,4);
-    ctx.fillStyle=canAff?'#1e3a5f':'#1a1a2e'; ctx.fill();
-    ctx.strokeStyle=canAff?'#f59e0b':'#374151'; ctx.lineWidth=1; ctx.stroke();
-    ctx.fillStyle=canAff?'#fbbf24':'#6b7280'; ctx.font='bold 10px sans-serif';
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(`Lv.${curLv+2} 승급 ${cost}💰`,bx+bw/2,by2+bh/2);
-    gs.ui.buildingLvUpBtn={x:bx,y:by2,w:bw,h:bh};
+    drawLevelUpBtn(ctx, gs, def, bs, bx, by2, bw, bh);
   } else {
     const bw=152,bh=28,bx=CW-6-bw;
     roundRect(ctx,bx,hY-3,bw,bh,4);
@@ -3022,6 +3012,26 @@ function renderBuildingScreen(ctx, gs, buildingId) {
   _renderTrackList(ctx, gs, def, bs, SCR_TOP+(isShop?72:50));
 }
 
+// 승급 버튼 — 골드만이 아니라 🏰성채 레벨과 그 건물에서 산 강화 수도 본다.
+// 잠겨 있으면 무엇이 모자란지 버튼에 그대로 적는다 — 눌러 보고 알게 하면 안 된다.
+function drawLevelUpBtn(ctx, gs, def, bs, bx, by, bw, bh) {
+  const chk = canLevelUpBuilding(gs, def.id);
+  const cost = buildingLevelCost(def, (bs.level||0)+1);
+  let label, ok = false;
+  if (chk.ok)                       { label = `Lv.${(bs.level||0)+2} 승급 ${cost}💰`; ok = true; }
+  else if (chk.why === 'castle')    label = `🏰 성채 Lv.${chk.need+1} 필요`;
+  else if (chk.why === 'upgrades')  label = `강화 ${chk.have}/${chk.need} 더 필요`;
+  else                              label = `Lv.${(bs.level||0)+2} 승급 ${cost}💰`;
+  roundRect(ctx,bx,by,bw,bh,4);
+  ctx.fillStyle = ok?'#1e3a5f':'#1a1a2e'; ctx.fill();
+  ctx.strokeStyle = ok?'#f59e0b':'#374151'; ctx.lineWidth=1; ctx.stroke();
+  ctx.fillStyle = ok?'#fbbf24':'#6b7280'; ctx.font='bold 10px sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(label, bx+bw/2, by+bh/2);
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  gs.ui.buildingLvUpBtn={x:bx,y:by,w:bw,h:bh};
+}
+
 // 건물 강화 트랙 목록 — 일반 건물과 대장간 '시설' 탭이 같이 쓴다
 function _renderTrackList(ctx, gs, def, bs, listTop) {
   const curLv = bs.level||0;
@@ -3045,8 +3055,12 @@ function _renderTrackList(ctx, gs, def, bs, listTop) {
   for (const tr of open) {
     if (uy > listBot || uy + rowH < listTop) { uy += rowH+gapH; continue; }
     const n = bs.upgrades[tr.id]||0;
-    const mx = trackMax(tr), inf = trackIsInfinite(tr);
+    const hardMax = trackMax(tr), inf = trackIsInfinite(tr);
+    // 건물 레벨이 "이 트랙을 몇 번까지 살 수 있는지"를 정한다.
+    // 한 번에 다 찍지 못하게 해서 승급이 실제 선택이 되게 하는 장치다.
+    const mx = trackCapAt(tr, curLv);
     const maxed = !inf && n>=mx;
+    const capped = maxed && n < hardMax;      // 트랙이 끝난 게 아니라 레벨에 막힌 것
     const cost = trackCost(tr, n);
     const canAff = !maxed && gs.gold>=cost;
 
@@ -3074,13 +3088,14 @@ function _renderTrackList(ctx, gs, def, bs, listTop) {
       ctx.fillStyle='#a78bfa'; ctx.font='bold 10px sans-serif';
       ctx.fillText(`×${n}`, CW-84, uy+rowH/2);
     } else {
-      const dots = Math.min(mx, 10), dw = 7;
+      // 점은 트랙의 진짜 상한만큼 찍되, 지금 레벨로 못 사는 칸은 흐리게 둔다
+      const dots = Math.min(hardMax, 10), dw = 7;
       for (let d=0; d<dots; d++) {
         ctx.beginPath(); ctx.arc(CW-84-(dots-1-d)*dw, uy+rowH/2, 2.6, 0, Math.PI*2);
-        ctx.fillStyle = d<n?'#22c55e':'#334155'; ctx.fill();
+        ctx.fillStyle = d<n ? '#22c55e' : d<mx ? '#334155' : '#1b2230'; ctx.fill();
       }
-      ctx.fillStyle='#475569'; ctx.font='bold 7px sans-serif'; ctx.textAlign='right';
-      ctx.fillText(`${n}/${mx}`, CW-84, uy+rowH/2+12);
+      ctx.fillStyle = capped?'#a16207':'#475569'; ctx.font='bold 7px sans-serif'; ctx.textAlign='right';
+      ctx.fillText(`${n}/${mx}` + (capped?` (최대 ${hardMax})`:''), CW-84, uy+rowH/2+12);
     }
 
     if (!maxed) {
@@ -3091,6 +3106,10 @@ function _renderTrackList(ctx, gs, def, bs, listTop) {
       ctx.textAlign='center'; ctx.textBaseline='middle';
       ctx.fillText(`${cost}💰`,bx2+bw2/2,by2+bh2/2);
       gs.ui.upgradeBtns.push({x:bx2,y:by2,w:bw2,h:bh2,id:tr.id});
+    } else if (capped) {
+      // 레벨에 막힌 것과 트랙을 다 찍은 것은 다른 상태다 — 다르게 보여야 승급이 목표가 된다
+      ctx.fillStyle='#a16207'; ctx.font='bold 8px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('승급 필요',CW-46,uy+rowH/2);
     } else {
       ctx.fillStyle='#22c55e'; ctx.font='bold 8px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
       ctx.fillText('MAX',CW-42,uy+rowH/2);
@@ -3433,7 +3452,9 @@ function renderTownPageBuildingGrid(ctx, gs, startY) {
       const open=buildingTracks(def,curLv);
       // 유한 트랙만 진행도로 센다 — 무한 트랙은 끝이 없으므로 분모가 될 수 없다
       const fin=open.filter(t=>!trackIsInfinite(t));
-      const cap=fin.reduce((a,t)=>a+trackMax(t),0);
+      // 분모는 지금 레벨에서 실제로 살 수 있는 횟수다.
+      // 하드 상한을 적으면 승급 전에는 절대 못 채우는 숫자가 카드에 박힌다.
+      const cap=fin.reduce((a,t)=>a+trackCapAt(t,curLv),0);
       const got=fin.reduce((a,t)=>a+(bs.upgrades[t.id]||0),0);
       const inf=open.filter(t=>trackIsInfinite(t)).reduce((a,t)=>a+(bs.upgrades[t.id]||0),0);
       ctx.fillStyle=(cap>0&&got>=cap)?'#22c55e':'#94a3b8'; ctx.font='bold 9px sans-serif';

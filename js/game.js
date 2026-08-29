@@ -101,6 +101,7 @@ function newState() {
     gold:10, baseHP:BASE_HP_MAX,
     caveLevel:1,
     towers:[], defenseEnemies:[], projectiles:[], chargers:[], poisonPools:[],
+    castleCd:0,
     battle: null,
     arena: createArena(),
     lobby: createLobby(),
@@ -248,6 +249,7 @@ let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적�
                     ? sv.runBestAtStart : ((sv.stats && sv.stats.bestEndless) || 0);
   gs.rerolls     = sv.rerolls     || 0;
   if (sv.townBuildings) {
+    // v0.9.6에서 🏰성채가 생겼다. 옛 세이브에는 없으므로 기본값이 그대로 남게 둔다.
     for (const [k, v] of Object.entries(sv.townBuildings)) {
       if (gs.town.buildings[k]) gs.town.buildings[k] = v;
     }
@@ -1539,6 +1541,26 @@ function grantHeroExp(baseReward, side, direct, fx, fy) {
   }
 }
 
+// ─── 🏰 최후 저지선 ──────────────────────────────────────────────────────────
+// 성채가 직접 쏜다. 강화를 사지 않으면 castleAtk가 0이라 여기서 바로 빠진다.
+// 사거리가 짧아 마지막 한두 칸에서만 닿는다 — 방어선이 아니라 최후의 보루다.
+function updateCastleGuns(dt) {
+  const atk = castleAtk();
+  if (atk <= 0) return;
+  gs.castleCd = Math.max(0, (gs.castleCd || 0) - dt);
+  if (gs.castleCd > 0) return;
+  const base = cellCenter(4, 6);
+  const best = pickTarget(gs.defenseEnemies, base, castleRange(), 'nearest');
+  if (!best) return;
+  gs.castleCd = 1 / Math.max(0.05, castleSpd());
+  hurtDefenseEnemy(best, atk, false, e => onDefenseKill(e, false), 1, BONUSES.towerPierce || 0);
+  gs.projectiles.push({
+    x: base.x, y: base.y, tx: best.x, ty: best.y,
+    target: best, dmg: 0, color: '#facc15', spd: 480, visual: true
+  });
+  if (typeof SFX !== 'undefined') SFX.shoot();
+}
+
 // ─── 영웅 방어 구역 전투 ─────────────────────────────────────────────────────
 function updateHeroDefense(dt) {
   const hero = gs.hero;
@@ -1738,6 +1760,7 @@ function update(dt) {
   updateTowers(gs.towers,gs.defenseEnemies,gs.projectiles,dt);
   updateProjectiles(gs.projectiles, e => onDefenseKill(e, false), dt);
   updatePoisonPools(gs.defenseEnemies, e => onDefenseKill(e, false), dt);
+  updateCastleGuns(dt);
   gs.defenseEnemies=gs.defenseEnemies.filter(e=>!e.dead&&!e.reached);
 
   updateHeroDefense(dt);
@@ -1763,6 +1786,13 @@ function updateChargers(dt) {
     const d  = Math.hypot(dx, dy);
     if (d < 10) {
       c.dead = true;
+      // 🌵 가시 방벽 — 성벽에 닿는 순간 확률로 통째로 튕겨낸다
+      if ((BONUSES.chargeBlock || 0) > 0 && Math.random() < Math.min(0.75, BONUSES.chargeBlock)) {
+        spawnFloaty('🌵 막아냈다!', base.x, base.y - 16, '#84cc16');
+        FX.burst(base.x, base.y, '#84cc16', 7, 11);
+        if (typeof SFX !== 'undefined') SFX.denied();
+        continue;
+      }
       const dmg = Math.max(0, Math.round(c.dmg * baseDamageMult()));
       if (dmg > 0) {
         gs.baseHP = Math.max(0, gs.baseHP - dmg);

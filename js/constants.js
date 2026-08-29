@@ -891,8 +891,16 @@ const BASE_DEF_PCT_CAP = 0.55;
 const CARRYOVER_MAX = 40;
 
 function baseDamageMult() {
-  return 1 - Math.min(BASE_DEF_PCT_CAP, BONUSES.baseDefPct || 0);
+  return (1 - Math.min(BASE_DEF_PCT_CAP, BONUSES.baseDefPct || 0))
+       * (1 - Math.min(0.6, BONUSES.breachReduce || 0));
 }
+
+// 🏰 최후 저지선 — 성채가 직접 쏜다. 강화를 사지 않으면 공격력이 0이라 아무 일도 없다.
+const CASTLE_BASE_RANGE = CELL_W * 1.6;
+const CASTLE_BASE_SPD   = 0.7;
+function castleAtk()   { return Math.round(BONUSES.castleAtk || 0); }
+function castleRange() { return CASTLE_BASE_RANGE * (1 + (BONUSES.castleRange || 0)); }
+function castleSpd()   { return CASTLE_BASE_SPD * (BONUSES.castleSpd || 1); }
 
 function retreatCost(remainSec) {
   // 무한 구간에서는 후퇴 단가도 같이 오른다. 상수로 두면 깊은 층에서
