@@ -143,8 +143,12 @@ function makeDefenseEnemy(typeId, waveIndex, opts) {
     wpIdx: 0,
     x: start.x, y: start.y,
     hp, maxHp: hp,
+    // 👹 마왕은 층 이동속도 곡선을 타지 않는다.
+    // 100층 곡선을 그대로 먹이면 '느리고 거대한 것'이 35초 만에 기지에 닿아,
+    // 보스전의 제한 시간이 층마다 흔들린다. 보스가 걸어오는 시간은 고정이어야
+    // "언제까지 잡아야 하나"가 읽힌다. 서약·층 이벤트는 그대로 받는다.
     spd: tpl.spd * ENEMY_CELL_SPD * (BONUSES.pactEnemySpdMult || 1)
-         * endlessSpdMult(w) * (mods ? (mods.spdBonus || 1) : 1)
+         * (tpl.isBoss ? 1 : endlessSpdMult(w) * (mods ? (mods.spdBonus || 1) : 1))
          * fev('enemySpdMult', 1),
     dmg: Math.round(tpl.dmg * (mods ? endlessDmgMult(w) : (1 + w * 0.04))),
     // rewardMult — 스폰 편성이 마릿수를 부풀린 만큼 마리당 보상을 낮춘다
@@ -163,6 +167,21 @@ function makeDefenseEnemy(typeId, waveIndex, opts) {
     dead: false,
     reached: false
   };
+}
+
+// 👹 마왕 — 100층에 한 마리만. 체력을 직접 정해 준다.
+function spawnDemonLord(gsp, waveIndex) {
+  const hp = demonLordHp(gsp.nightmare || 0);
+  const e = makeDefenseEnemy('demonlord', waveIndex, { hp, reward: ENEMY_TYPES.demonlord.reward });
+  e.isBoss = true;
+  gsp.defenseEnemies.push(e);
+  if (typeof spawnFloaty === 'function')
+    spawnFloaty('👹 마왕이 나타났다', CW/2, DEFENSE_H/2, '#dc2626');
+  if (typeof addLog === 'function')
+    addLog(gsp.battle, `👹 마왕 — HP ${hp.toLocaleString()} · 기지에 닿으면 그대로 끝납니다`, '#dc2626');
+  if (typeof FX  !== 'undefined') FX.shake(9, 0.8);
+  if (typeof SFX !== 'undefined') SFX.lose();
+  return e;
 }
 
 // ─── Projectile ───────────────────────────────────────────────────────────────

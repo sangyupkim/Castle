@@ -6,7 +6,7 @@
 const SAVE_KEY = 'dualfrontier_v8';
 
 function createStats() {
-  return { runs:0, bestWave:0, bestStage:0, bestEndless:0, clears:0,
+  return { runs:0, bestWave:0, bestStage:0, bestEndless:0, clears:0, bestNightmare:0,
            totalKills:0, totalGold:0, totalGems:0, wavesCleared:0 };
 }
 
@@ -32,6 +32,9 @@ const SaveManager = {
       bountyUsed:  gs.bountyUsed || 0,
       eliteUsed:   gs.eliteUsed  || 0,
       mode:       gs.mode || 'campaign',
+      nightmare:  gs.nightmare || 0,
+      unbounded:  !!gs.unbounded,
+      bossDefeated: !!gs.bossDefeated,
       runSeed:    gs.runSeed || 0,
       endlessGems:    gs.endlessGems || 0,
       endlessGemsNew: gs.endlessGemsNew || 0,
@@ -73,6 +76,7 @@ const SaveManager = {
       trainSkipped:   !!gs.trainSkipped,
       unlocked:       gs.unlocked || [],
       pacts:          gs.pacts    || [],
+      nightmareOpen:  gs.nightmareOpen || 0,
       seenMobs:       gs.seenMobs || [],
       clearedGates:   gs.clearedGates || [],
       heroSigil:      gs.heroSigil || DEFAULT_SIGIL,

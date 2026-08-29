@@ -610,6 +610,104 @@ const PACT_DEFS = [
 ];
 const PACT_TIERS = { 1:'적을 강하게', 2:'나를 약하게', 3:'경제를 조이기' };
 
+// ─── 🌑 악몽 — 목표선을 세운다 ────────────────────────────────────────────────
+// 지금까지 심연은 "죽어야 끝나는" 무한이었다. 끝이 없다는 건 목표도 없다는 뜻이라,
+// 스무 층쯤에서 "이걸 언제까지 하지"가 된다. 그래서 결승선을 그었다.
+//
+//   ⚔️ 훈련 30웨이브 → ∞ 심연 1~100층(마왕) → 🌑 악몽 1~10단계 → ♾️ 무한
+//
+// 악몽 N단계는 심연 100층을 그대로 다시 내려가되, **서약 N개가 강제로 붙는다**.
+// 서약은 이미 열 개를 만들어 뒀으니 그것을 사다리로 쓴다 — 한 단계에 하나씩 쌓인다.
+// 100층 × 11갈래(심연 + 악몽 10) = 1,100층. 같은 층이라도 서약 조합이 다르면
+// 다른 판이 된다.
+//
+// 순서는 '약한 것부터'가 아니라 '성격이 번갈아 오도록' 짰다. 적을 세게 하는 서약만
+// 연달아 붙으면 3단계쯤에서 화력만 올리면 되는 문제가 되고, 나를 약하게 하는 것만
+// 붙으면 무엇을 해도 안 되는 벽이 된다. 셋을 섞어 매 단계 다른 곳이 아프게 한다.
+const NIGHTMARE_MAX = 10;
+const NIGHTMARE_LADDER = [
+  'pc_swift',   // 1 — 적 이속 +35%           (적)
+  'pc_rest',    // 2 — 웨이브 후 회복 없음     (경제)
+  'pc_armor',   // 3 — 적 방어 +6 · 타워 −15%  (적)
+  'pc_static',  // 4 — 과부하 사용 불가        (나)
+  'pc_hp',      // 5 — 적 HP ×1.8             (적)
+  'pc_purse',   // 6 — 골드 −40%              (경제)
+  'pc_solo',    // 7 — 슬롯 절반 · 아군 HP −25% (나)
+  'pc_swarm',   // 8 — 스폰 −30% · 몹 HP ×1.5  (적)
+  'pc_cap',     // 9 — 타워 레벨 3 제한        (나)
+  'pc_wall',    // 10 — 기지 HP 절반 · 수리 없음 (나)
+];
+// N단계에 강제로 붙는 서약 목록 (누적)
+function nightmarePacts(level) {
+  const n = Math.max(0, Math.min(NIGHTMARE_MAX, level || 0));
+  return NIGHTMARE_LADDER.slice(0, n);
+}
+// 악몽 단계 이름과 색
+function nightmareName(level) {
+  return level > 0 ? `🌑 악몽 ${level}단계` : '∞ 심연';
+}
+function nightmareColor(level) {
+  if (level <= 0) return '#a78bfa';
+  if (level <= 3) return '#f472b6';
+  if (level <= 6) return '#f43f5e';
+  if (level <= 9) return '#dc2626';
+  return '#fbbf24';                       // 10단계는 금색 — 마지막 문
+}
+// 단계가 오를수록 보석이 더 나온다. 서약 자체의 배율(pactGemMult)과 곱해진다.
+// 한 갈래를 처음 깼을 때 주는 보석 — 단계가 오를수록 크다
+const NIGHTMARE_CLEAR_GEMS      = 40;
+const NIGHTMARE_CLEAR_GEMS_STEP = 25;
+function nightmareGemMult(level) {
+  return 1 + Math.max(0, Math.min(NIGHTMARE_MAX, level || 0)) * 0.35;
+}
+
+// ─── 👹 마왕 — 100층의 끝 ────────────────────────────────────────────────────
+// 100층은 그냥 '조금 더 센 층'이 아니라 **끝**이어야 한다. 그래서 마왕 하나만 온다.
+// 체력이 셋으로 나뉘고, 한 토막이 깎일 때마다 성격이 바뀐다 —
+// 한 번 세운 배치로 끝까지 가지 못하게 하려는 것이다.
+const ABYSS_FINAL_FLOOR = 100;            // 여기서 심연이 끝난다
+const BOSS_PHASES       = 3;
+const BOSS_ESCORT_EVERY = 12;             // 페이즈마다 부르는 호위 수
+function isFinalFloor(tier) { return tier === ABYSS_FINAL_FLOOR; }
+// 이 층이 마왕 층인가 — ♾️ 무한에는 결승선이 없으므로 마왕도 없다
+function isBossFloor(gsp, waveIndex) {
+  if (!gsp || gsp.mode !== 'endless' || gsp.unbounded) return false;
+  return isFinalFloor(endlessTier(waveIndex));
+}
+// 심연·악몽이 여기서 끝나는가
+function runHasFinish(gsp) {
+  return !!gsp && gsp.mode === 'endless' && !gsp.unbounded;
+}
+// 그 층에 원래 나왔을 적 전체의 총 체력. makeDefenseEnemy·buildSpawnPlan과 같은 식으로 센다.
+// 마왕 체력을 여기에 걸어 두면 곡선을 나중에 다시 잡아도 보스가 같이 따라온다 —
+// 상수로 박아 두면 곡선을 건드릴 때마다 보스만 혼자 뒤처진다.
+function floorTotalHp(tier) {
+  const idx = Math.max(0, (tier || 1) - 1);
+  const def = waveDefFor(idx);
+  if (!def || !def.defenseEnemies) return 0;
+  const countMult = 1 + idx * DEF_WAVE_COUNT_SCALE;
+  const scale = endlessStatMult(idx);
+  let total = 0;
+  for (const d of def.defenseEnemies) {
+    const tpl = ENEMY_TYPES[d.type]; if (!tpl) continue;
+    total += tpl.hp * scale * Math.round((d.count || 0) * countMult);
+  }
+  return total;
+}
+// 마왕 체력 — 그 층 적 전체와 맞먹는 양을 한 마리에 몰아 준다.
+// 예전에는 900 × 곡선으로 잡았는데 100층 총량의 1.1%밖에 안 됐다 —
+// 만렙 화력이면 0.1초에 끝나는 '최종 보스'였다.
+const BOSS_HP_SHARE = 0.85;
+// 악몽 단계당 마왕 체력 증가. 0.22였을 때 악몽 10이 ×3.2가 되어
+// 만렙 화력으로도 마왕이 걸어오는 시간 안에 못 잡았다 — 벽이 아니라 막다른 길이었다.
+const NIGHTMARE_BOSS_HP_STEP = 0.16;
+function demonLordHp(nightmare) {
+  const base = floorTotalHp(ABYSS_FINAL_FLOOR) * BOSS_HP_SHARE;
+  return Math.max(1000, Math.round(base * (1 + (nightmare || 0) * NIGHTMARE_BOSS_HP_STEP)
+                                        * (BONUSES.pactDefHpMult || 1)));
+}
+
+
 // 타워 레벨 1~5.
 // Lv.4~5는 후반 골드 사용처다. 격자 40칸이 다 차고 마을 강화가 바닥나면
 // 갈 곳 없는 골드가 수천 단위로 쌓이는데, 비용이 급격히 오르는 상위 레벨이
@@ -674,7 +772,13 @@ const ENEMY_TYPES = {
   wyvern: { id:'wyvern', name:'비룡',     cls:'air',    hp:150, spd:0.90, dmg:16, reward:30, armor:2, color:'#7c3aed', radius:15, flying:true },
 
   // ── 현상수배 (플레이어가 직접 소환) ──
-  bounty: { id:'bounty', name:'현상수배', cls:'large',  hp:340, spd:0.55, dmg:26, reward:40, armor:4, color:'#fbbf24', radius:18, isBounty:true }
+  bounty: { id:'bounty', name:'현상수배', cls:'large',  hp:340, spd:0.55, dmg:26, reward:40, armor:4, color:'#fbbf24', radius:18, isBounty:true },
+
+  // 👹 마왕 — 100층에만 나온다. 느리고 거대하고, 기지에 닿으면 그 자리에서 판이 끝난다.
+  // dmg가 크다 — 마왕이 기지에 닿으면 그 자리에서 판이 끝난다.
+  // 이동 시간이 곧 제한 시간이어야 보스전이 '언제까지'가 있는 싸움이 된다.
+  demonlord: { id:'demonlord', name:'마왕', cls:'large', hp:900, spd:0.45, dmg:99999, reward:900,
+               armor:8, color:'#dc2626', radius:26, isBoss:true }
 };
 const ENEMY_CELL_SPD = CELL_W;
 // 웨이브가 오를수록 상단 적도 강해진다

@@ -25,6 +25,14 @@ function roundRect(ctx, x, y, w, h, r) {
 // 폭에 맞춰 줄을 나눈다. 한국어는 띄어쓰기가 드물어 띄어쓰기로만 자르면
 // 한 줄이 통째로 넘치므로, 어절이 칸보다 길면 글자 단위로 다시 자른다.
 // ctx.font을 먼저 정해두고 부를 것 — 폭 계산이 그 글꼴로 이뤄진다.
+// 큰 수를 한 줄에 넣는다 — 마왕 체력은 9자리라 콤마 표기로는 막대를 넘친다
+function compactNum(n) {
+  const v = Math.max(0, Math.ceil(n || 0));
+  if (v >= 1e8) return `${(v/1e8).toFixed(v >= 1e9 ? 0 : 1)}억`;
+  if (v >= 1e4) return `${(v/1e4).toFixed(v >= 1e5 ? 0 : 1)}만`;
+  return `${v}`;
+}
+
 function wrapLines(ctx, text, maxW) {
   const out = [];
   let line = '';
@@ -298,6 +306,33 @@ function renderDefense(ctx, gs) {
   ctx.textAlign='left'; ctx.textBaseline='middle';
   ctx.fillText(`기지 HP ${Math.ceil(gs.baseHP)}/${bMax}`, bx+184, by+4);
 
+  // 👹 마왕 — 한 마리가 곧 이 층이므로 체력이 크게 보여야 한다.
+  // 일반 적의 머리 위 막대로는 "얼마나 남았나"가 안 읽힌다.
+  const _boss = (gs.defenseEnemies || []).find(e => e.isBoss && !e.dead && !e.reached);
+  if (_boss) {
+    const bw3 = CW - 40, bx3 = 20, by3 = DEFENSE_Y + 8, bh3 = 14;
+    roundRect(ctx, bx3, by3, bw3, bh3, 4);
+    ctx.fillStyle='rgba(8,4,6,0.86)'; ctx.fill();
+    const fr = Math.max(0, _boss.hp / Math.max(1, _boss.maxHp));
+    ctx.save(); ctx.beginPath(); roundRect(ctx, bx3, by3, bw3*fr, bh3, 4); ctx.clip();
+    const gr = ctx.createLinearGradient(bx3, 0, bx3+bw3, 0);
+    gr.addColorStop(0, '#7f1d1d'); gr.addColorStop(1, '#ef4444');
+    ctx.fillStyle = gr; ctx.fillRect(bx3, by3, bw3, bh3); ctx.restore();
+    // 페이즈 경계 — 여기를 넘길 때마다 호위가 온다
+    ctx.strokeStyle='rgba(251,191,36,0.55)'; ctx.lineWidth=1;
+    for (let i = 1; i < BOSS_PHASES; i++) {
+      const px = bx3 + bw3 * (i / BOSS_PHASES);
+      ctx.beginPath(); ctx.moveTo(px, by3); ctx.lineTo(px, by3+bh3); ctx.stroke();
+    }
+    ctx.strokeStyle='#dc2626'; ctx.lineWidth=1.5;
+    roundRect(ctx, bx3, by3, bw3, bh3, 4); ctx.stroke();
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle='#fff'; ctx.font='bold 9px sans-serif';
+    ctx.fillText(`👹 마왕   ${compactNum(_boss.hp)} / ${compactNum(_boss.maxHp)}   ${Math.ceil(fr*100)}%`,
+                 bx3+bw3/2, by3+bh3/2);
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+  }
+
   // ⚡ 과부하 — 쓸 수 있는지 어딘가에는 보여야 한다.
   // 예전에는 타워를 눌러 봐야 "재사용까지 N초"를 알았다 — 쓸 수 있는 줄 모르면 없는 기능이다.
   if (wm && wm.phase === 'active' && !BONUSES.pactNoOverload) {
@@ -470,6 +505,18 @@ function renderDefEnemy(ctx, e) {
     ctx.beginPath(); ctx.arc(e.x,ey,e.radius+3,0,Math.PI*2);
     ctx.fillStyle='rgba(56,189,248,0.30)'; ctx.fill();
   }
+  // 👹 마왕 — 붉은 파문 두 겹. 100층의 유일한 적이니 한눈에 달라 보여야 한다.
+  if (e.isBoss) {
+    const t0 = (Date.now()%1400)/1400;
+    for (let k=0;k<2;k++) {
+      const t = (t0 + k*0.5) % 1;
+      ctx.beginPath(); ctx.arc(e.x, ey, e.radius + 4 + t*22, 0, Math.PI*2);
+      ctx.strokeStyle = `rgba(220,38,38,${0.7*(1-t)})`; ctx.lineWidth = 3; ctx.stroke();
+    }
+    ctx.beginPath(); ctx.arc(e.x, ey, e.radius + 3, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(127,29,29,0.45)'; ctx.fill();
+  }
+
   // 현상수배는 금색 링으로 즉시 눈에 띄게
   if (e.isBounty) {
     const t = (Date.now()%900)/900;
@@ -683,6 +730,13 @@ let _briefBottom = 0;   // 브리핑이 그린 마지막 y — 스크롤 범위 
 
 function renderBattle(ctx, gs) {
   ctx.fillStyle='#0a1520'; ctx.fillRect(0,BATTLE_Y,CW,BATTLE_H);
+
+  // 준비 화면의 버튼 좌표는 준비 화면에서만 살아 있어야 한다.
+  // gs.ui는 그리면서 채워지고 페이지가 바뀔 때만 비워지는데, 준비 화면 → 전투는
+  // 페이지가 그대로 'battle'이라 아무도 지우지 않았다. 그래서 전투 중에
+  // 예전 [🏰마을] 자리(아레나 위)를 누르면 마을로 튕겨 나갔다.
+  // 매 프레임 비우고, 준비 화면일 때만 renderBriefing이 다시 등록한다.
+  gs.ui.briefTownBtn = null; gs.ui.battleWaveStartBtn = null;
 
   if (wm.phase==='idle') {
     // 준비 화면은 층 정보가 늘면 아래가 잘린다 (층 이벤트 · 변형 · 이월 · 경로 변경…).
@@ -1963,6 +2017,85 @@ function _renderCharmBar(ctx, gs, y) {
   return y + h + 10;
 }
 
+// 🌑 악몽 사다리 — 심연(0) + 악몽 1~10 + ♾️ 무한
+function _renderNightmareLadder(ctx, gs, y) {
+  gs.ui.nightmareBtns = [];
+  const openLv  = nightmareOpenLevel();
+  const sel     = gs.lobby.nightmare || 0;
+  const rows    = 2, cols = 6;          // 심연 + 1~10 = 11칸을 6×2에 담는다
+  const cellW   = (CW - 20 - (cols - 1) * 5) / cols;
+  const cellH   = 40;
+  const h       = 30 + rows * (cellH + 5) + 30;
+
+  roundRect(ctx, 10, y, CW-20, h, 8);
+  ctx.fillStyle='#12091c'; ctx.fill();
+  ctx.strokeStyle = nightmareColor(sel); ctx.lineWidth=1.5; ctx.stroke();
+
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle='#e879f9'; ctx.font='bold 10px sans-serif';
+  ctx.fillText(`🌑 난이도 — ${ABYSS_FINAL_FLOOR}층의 마왕을 잡으면 다음 단계가 열립니다`, 18, y+9);
+  ctx.textAlign='right';
+  ctx.fillStyle='#7c8ba1'; ctx.font='bold 9px sans-serif';
+  ctx.fillText(openLv > NIGHTMARE_MAX ? '전부 돌파 — ♾️ 무한 개방'
+             : `${openLv}/${NIGHTMARE_MAX} 단계 개방`, CW-18, y+10);
+  ctx.textAlign='left';
+
+  for (let i = 0; i <= NIGHTMARE_MAX; i++) {
+    const r = Math.floor(i / cols), c = i % cols;
+    const cx = 10 + c * (cellW + 5), cy = y + 26 + r * (cellH + 5);
+    const can = nightmareAvailable(i);
+    const on  = sel === i;
+    const col = nightmareColor(i);
+    roundRect(ctx, cx, cy, cellW, cellH, 5);
+    ctx.fillStyle = on ? '#2a1035' : can ? '#0e0a16' : '#08060c'; ctx.fill();
+    ctx.strokeStyle = on ? col : can ? '#3b2a4d' : '#1a1424';
+    ctx.lineWidth = on ? 2 : 1; ctx.stroke();
+    ctx.textAlign='center'; ctx.textBaseline='top';
+    if (!can) {
+      ctx.fillStyle='#3a2f4a'; ctx.font='12px sans-serif';
+      ctx.fillText('🔒', cx+cellW/2, cy+7);
+      ctx.fillStyle='#3a2f4a'; ctx.font='bold 8px sans-serif';
+      ctx.fillText(`악몽 ${i}`, cx+cellW/2, cy+25);
+    } else {
+      ctx.globalAlpha = on ? 1 : 0.75;
+      ctx.fillStyle = col; ctx.font='bold 11px sans-serif';
+      ctx.fillText(i === 0 ? '∞ 심연' : `악몽 ${i}`, cx+cellW/2, cy+7);
+      ctx.fillStyle = on ? '#cbd5e1' : '#5b6b80'; ctx.font='bold 8px sans-serif';
+      ctx.fillText(i === 0 ? '서약 없음' : `서약 ${i}개`, cx+cellW/2, cy+22);
+      // 이미 깬 갈래는 체크
+      if (i < openLv) {
+        ctx.fillStyle='#22c55e'; ctx.font='bold 8px sans-serif';
+        ctx.fillText('✓', cx+cellW-8, cy+3);
+      }
+      ctx.globalAlpha = 1;
+    }
+    gs.ui.nightmareBtns.push({ x:cx, y:cy, w:cellW, h:cellH, level:i, can });
+  }
+
+  // 고른 단계가 무엇을 거는지 한 줄로
+  const ny = y + 26 + rows * (cellH + 5) + 2;
+  const pacts = nightmarePacts(sel);
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  if (!pacts.length) {
+    ctx.fillStyle='#5b6b80'; ctx.font='9px sans-serif';
+    ctx.fillText(`강제 서약 없음 · 보석 ×${nightmareGemMult(0).toFixed(2)}`, 18, ny+4);
+  } else {
+    ctx.fillStyle='#f9a8d4'; ctx.font='bold 9px sans-serif';
+    const names = pacts.map(id => { const d = PACT_DEFS.find(x=>x.id===id); return d ? `${d.icon}${d.name}` : id; });
+    const line = `${names.join(' · ')}`;
+    for (const ln of wrapLines(ctx, line, CW-140).slice(0,2)) { ctx.fillText(ln, 18, ny+4); break; }
+    ctx.textAlign='right'; ctx.fillStyle='#fbbf24'; ctx.font='bold 9px sans-serif';
+    ctx.fillText(`보석 ×${nightmareGemMult(sel).toFixed(2)}`, CW-18, ny+4);
+    ctx.textAlign='left';
+  }
+  if (pacts.length > 3) {
+    ctx.fillStyle='#5b6b80'; ctx.font='8px sans-serif';
+    ctx.fillText(`서약 ${pacts.length}개가 한꺼번에 걸립니다 — 캠프에서 뺄 수 없습니다`, 18, ny+16);
+  }
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  return y + h + 10;
+}
+
 function renderLobbySortie(ctx, gs) {
   let y = LOBBY_BODY_Y + 12;
   ctx.textAlign='left'; ctx.textBaseline='top';
@@ -1977,27 +2110,30 @@ function renderLobbySortie(ctx, gs) {
 
   if (open) {
     ctx.fillStyle='#8b7bb8'; ctx.font='bold 9px sans-serif';
-    ctx.fillText('∞ 최고 도달 층', 18, y+10);
+    ctx.fillText(`최고 도달 층  /  ${ABYSS_FINAL_FLOOR}`, 18, y+10);
     ctx.fillStyle='#c4b5fd'; ctx.font='bold 30px sans-serif';
     ctx.fillText(`${best}`, 18, y+24);
     const wBest = ctx.measureText(`${best}`).width;
     ctx.fillStyle='#6d5b9e'; ctx.font='bold 12px sans-serif';
     ctx.fillText('층', 20+wBest, y+42);
 
-    // 다음 관문까지
-    const nextGate = (Math.floor(best/10)+1)*10;
+    // 다음 관문까지 — 100층에 결승선이 있으므로 그 너머를 가리키지 않는다
+    const nextGate = Math.min(ABYSS_FINAL_FLOOR, (Math.floor(best/10)+1)*10);
+    const atEnd = best >= ABYSS_FINAL_FLOOR;
     ctx.textAlign='right';
     ctx.fillStyle='#fbbf24'; ctx.font='bold 10px sans-serif';
-    ctx.fillText(`다음 관문 ${nextGate}층`, CW-18, y+12);
+    ctx.fillText(atEnd ? '👹 마왕층 도달' : `다음 관문 ${nextGate}층`, CW-18, y+12);
     ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif';
-    ctx.fillText(`돌파 시 💎+${ENDLESS_GATE_BONUS + Math.floor(nextGate/10)*ENDLESS_GATE_BONUS_STEP}`, CW-18, y+28);
+    ctx.fillText(atEnd ? `🌑 악몽 ${nightmareOpenLevel()}단계까지 개방`
+                       : `돌파 시 💎+${ENDLESS_GATE_BONUS + Math.floor(nextGate/10)*ENDLESS_GATE_BONUS_STEP}`,
+                 CW-18, y+28);
     ctx.fillStyle='#334155'; ctx.font='9px sans-serif';
     ctx.fillText(`관문 ${(gs.clearedGates||[]).length}개 돌파`, CW-18, y+44);
     ctx.textAlign='left';
-    // 진행 바 — 다음 관문까지
-    const pw = CW-36, prog = (best % 10) / 10;
+    // 진행 바 — 100층 결승선까지
+    const pw = CW-36, prog = Math.min(1, best / ABYSS_FINAL_FLOOR);
     ctx.fillStyle='#1e293b'; ctx.fillRect(18, y+rh-9, pw, 4);
-    ctx.fillStyle='#a78bfa'; ctx.fillRect(18, y+rh-9, pw*prog, 4);
+    ctx.fillStyle= atEnd ? '#fbbf24' : '#a78bfa'; ctx.fillRect(18, y+rh-9, pw*prog, 4);
   } else {
     ctx.fillStyle='#64748b'; ctx.font='bold 11px sans-serif';
     ctx.fillText('∞ 심연 — 아직 잠겨 있습니다', 18, y+13);
@@ -2020,6 +2156,11 @@ function renderLobbySortie(ctx, gs) {
     ctx.textAlign='left'; ctx.textBaseline='top';
   }
   y += rh + 10;
+
+  // ── 🌑 악몽 사다리 ──────────────────────────────────────────────────────
+  // 심연이 끝이 없던 시절에는 목표가 없었다. 100층에 결승선을 긋고, 그 뒤로
+  // 서약을 하나씩 얹은 열 개의 갈래를 놓는다. 여기가 이 게임의 진행 표다.
+  if (open) y = _renderNightmareLadder(ctx, gs, y);
 
   // 해금된 편성
   const th = 84;
@@ -2593,30 +2734,50 @@ function renderSortieBar(ctx, gs) {
     return;
   }
 
-  const trainW = 132, gap = 8;
-  const endW = CW - 24 - trainW - gap;
+  const unb    = unboundedUnlocked();
+  const trainW = unb ? 84 : 132, gap = 8;
+  const unbW   = unb ? 92 : 0;
+  const endW   = CW - 24 - trainW - gap - (unb ? unbW + gap : 0);
 
-  // ∞ 무한 — 본편
+  // 🌑 심연 · 악몽 — 고른 단계로 내려간다
+  const lv  = gs.lobby.nightmare || 0;
+  const col = nightmareColor(lv);
   roundRect(ctx,12,byy,endW,bh,8);
-  ctx.fillStyle='#2e1065'; ctx.fill();
-  ctx.strokeStyle='#a78bfa'; ctx.lineWidth=2; ctx.stroke();
+  ctx.fillStyle = lv > 0 ? '#2a0a1e' : '#2e1065'; ctx.fill();
+  ctx.strokeStyle = col; ctx.lineWidth=2; ctx.stroke();
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillStyle='#fff'; ctx.font='bold 16px sans-serif';
-  ctx.fillText('∞  심연 하강', 12+endW/2, byy+bh/2-6);
+  ctx.fillStyle='#fff'; ctx.font='bold 15px sans-serif';
+  ctx.fillText(lv > 0 ? `\ud83c\udf11 \uc545\ubabd ${lv}\ub2e8\uacc4` : '\u221e  \uc2ec\uc5f0 \ud558\uac15', 12+endW/2, byy+bh/2-6);
   const best = gs.stats.bestEndless || 0;
-  ctx.fillStyle='#c4b5fd'; ctx.font='bold 9px sans-serif';
-  ctx.fillText(best > 0 ? `최고 ${best}층 — 더 내려가기` : '첫 하강', 12+endW/2, byy+bh/2+11);
+  ctx.fillStyle = lv > 0 ? '#f9a8d4' : '#c4b5fd'; ctx.font='bold 9px sans-serif';
+  ctx.fillText(lv > 0 ? `\uc11c\uc57d ${lv}\uac1c \u00b7 ${ABYSS_FINAL_FLOOR}\uce35 \ub9c8\uc655\uae4c\uc9c0`
+                      : (best > 0 ? `\ucd5c\uace0 ${best}\uce35 \u2014 ${ABYSS_FINAL_FLOOR}\uce35 \ub9c8\uc655\uae4c\uc9c0` : '\uccab \ud558\uac15'),
+               12+endW/2, byy+bh/2+11);
   gs.ui.sortieBtn = {x:12,y:byy,w:endW,h:bh};
 
-  // 훈련 — 연습
-  const tx = 12 + endW + gap;
+  // \u267e\ufe0f \ubb34\ud55c \u2014 \uc545\ubabd 10\ub2e8\uacc4\ub97c \uae68\uc57c \uc5f4\ub9b0\ub2e4
+  let nx = 12 + endW + gap;
+  if (unb) {
+    roundRect(ctx,nx,byy,unbW,bh,8);
+    ctx.fillStyle='#2a1a05'; ctx.fill(); ctx.strokeStyle='#fbbf24'; ctx.lineWidth=1.5; ctx.stroke();
+    ctx.fillStyle='#fbbf24'; ctx.font='bold 14px sans-serif';
+    ctx.fillText('\u267e\ufe0f \ubb34\ud55c', nx+unbW/2, byy+bh/2-6);
+    ctx.fillStyle='#a16207'; ctx.font='bold 8px sans-serif';
+    ctx.fillText('\ub05d\uc774 \uc5c6\ub2e4', nx+unbW/2, byy+bh/2+10);
+    gs.ui.unboundedBtn = {x:nx,y:byy,w:unbW,h:bh};
+    nx += unbW + gap;
+  } else {
+    gs.ui.unboundedBtn = null;
+  }
+
+  // \ud6c8\ub828 \u2014 \uc5f0\uc2b5
+  const tx = nx;
   roundRect(ctx,tx,byy,trainW,bh,8);
-  ctx.fillStyle='#0f1e17'; ctx.fill();
-  ctx.strokeStyle='#22c55e'; ctx.lineWidth=1; ctx.stroke();
+  ctx.fillStyle='#0f1e17'; ctx.fill(); ctx.strokeStyle='#22c55e'; ctx.lineWidth=1; ctx.stroke();
   ctx.fillStyle='#4ade80'; ctx.font='bold 12px sans-serif';
-  ctx.fillText('⚔️ 훈련', tx+trainW/2, byy+bh/2-6);
+  ctx.fillText('\u2694\ufe0f \ud6c8\ub828', tx+trainW/2, byy+bh/2-6);
   ctx.fillStyle='#166534'; ctx.font='bold 8px sans-serif';
-  ctx.fillText(`${TRAINING_WAVES}웨이브 · 연습`, tx+trainW/2, byy+bh/2+10);
+  ctx.fillText(unb ? '\uc5f0\uc2b5' : `${TRAINING_WAVES}\uc6e8\uc774\ube0c \u00b7 \uc5f0\uc2b5`, tx+trainW/2, byy+bh/2+10);
   gs.ui.trainBtn = {x:tx,y:byy,w:trainW,h:bh};
 }
 
@@ -2630,14 +2791,35 @@ function renderResult(ctx, gs) {
 
   ctx.textAlign='center'; ctx.textBaseline='top';
   let y = 46;
-  if (r.endless) {
+  if (r.endless && r.bossDown) {
+    // 👹 마왕을 잡았다 — 처음으로 '끝냈다'가 있는 결과 화면
+    const col = r.unbounded ? '#fbbf24' : nightmareColor(r.nightmare);
+    ctx.fillStyle=col; ctx.font='bold 13px sans-serif';
+    ctx.fillText(r.nightmare > 0 ? `${nightmareName(r.nightmare)} 돌파` : '∞ 심연 돌파', CW/2, y); y += 20;
+    ctx.fillStyle='#fbbf24'; ctx.font='bold 34px sans-serif';
+    ctx.fillText('👹 마왕 처치', CW/2, y); y += 42;
+    ctx.fillStyle='#94a3b8'; ctx.font='11px sans-serif';
+    ctx.fillText(`${ABYSS_FINAL_FLOOR}층까지 내려가 끝을 봤습니다`, CW/2, y); y += 20;
+    if (r.nextOpen) {
+      roundRect(ctx,(CW-230)/2,y,230,26,13);
+      ctx.fillStyle='#2a1035'; ctx.fill(); ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.stroke();
+      ctx.fillStyle=col; ctx.font='bold 11px sans-serif'; ctx.textBaseline='middle';
+      ctx.fillText(`🔓 ${r.nextOpen} 개방${r.clearGems ? `  ·  💎+${r.clearGems}` : ''}`, CW/2, y+13);
+      ctx.textBaseline='top'; y += 32;
+    }
+    y += 6;
+  } else if (r.endless) {
     // 무한은 도달 층이 곧 성적표다 — 제목 자리를 층수에 내준다
-    ctx.fillStyle='#c4b5fd'; ctx.font='bold 13px sans-serif';
-    ctx.fillText('∞ 하강 종료', CW/2, y); y += 20;
+    const col = r.unbounded ? '#fbbf24' : nightmareColor(r.nightmare);
+    ctx.fillStyle=col; ctx.font='bold 13px sans-serif';
+    ctx.fillText(r.unbounded ? '♾️ 무한 종료'
+               : r.nightmare > 0 ? `${nightmareName(r.nightmare)} 종료` : '∞ 하강 종료', CW/2, y); y += 20;
     ctx.fillStyle='#a78bfa'; ctx.font='bold 46px sans-serif';
     ctx.fillText(`${r.endlessTier}층`, CW/2, y); y += 52;
     ctx.fillStyle='#475569'; ctx.font='11px sans-serif';
-    ctx.fillText(`이전 최고 ${gs.stats.bestEndless||0}층 · 여기까지 버텼습니다`, CW/2, y);
+    ctx.fillText(r.unbounded ? `이전 최고 ${gs.stats.bestEndless||0}층 · 여기까지 버텼습니다`
+               : `${ABYSS_FINAL_FLOOR}층 마왕까지 ${Math.max(0, ABYSS_FINAL_FLOOR - r.endlessTier)}층 남았습니다`,
+               CW/2, y);
     y += 28;
   } else {
     ctx.fillStyle = r.cleared ? '#22c55e' : '#ef4444';

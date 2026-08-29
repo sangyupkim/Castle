@@ -221,7 +221,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <div class="wrap">
 <header class="cover">
-  <div class="eyebrow">Game Design Document · v4.19 · ★5 분기 특화</div>
+  <div class="eyebrow">Game Design Document · v5.0 · 결승선과 악몽</div>
   <h1>듀얼 프론티어</h1>
   <p class="tagline">한 화면에서 두 개의 전선을 동시에 굴리는 모바일 웹 로그라이트.
      끝은 없다 — 얼마나 깊이 내려갔는지가 기록이다.</p>
@@ -229,8 +229,8 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
     <div><dt>장르</dt><dd>타워디펜스 + 실시간 액션 로그라이트</dd></div>
     <div><dt>플랫폼</dt><dd>모바일 웹 (480×800 캔버스)</dd></div>
     <div><dt>1회 하강</dt><dd>10~30분 (도달 층에 비례)</dd></div>
-    <div><dt>현재 볼륨</dt><dd>훈련 30웨이브 + ∞ 무한 (알고리즘 생성)</dd></div>
-    <div><dt>이번 개정</dt><dd>타워 ★5 분기 18종 · 재분기 · 👥증원 슬롯 버그 (v4.19)</dd></div>
+    <div><dt>현재 볼륨</dt><dd>훈련 30웨이브 + 100층 × 11갈래 = 1,100층 + ♾️ 무한</dd></div>
+    <div><dt>이번 개정</dt><dd>100층 결승선 · 👹마왕 · 🌑악몽 1~10단계 (v5.0)</dd></div>
   </dl>
 </header>
 
@@ -1014,6 +1014,108 @@ v1.0의 "그룹 순환 + 보상 체감" 구조를 이 압력 곡선이 대체한
 
 <p>같은 '광폭'이라도 0.72짜리와 1.34짜리는 다른 물건이다. 좋은 굴림을 뽑는 것 자체가
 매 웨이브 상점을 들여다볼 이유가 된다. ★~★★★로 굴림을 먼저 읽히게 했다.</p>
+
+<h3>결승선을 그었다 — 🌑 악몽 1~10단계 <span class="rev">v5.0 · 구조</span></h3>
+
+<p class="lede">플레이 보고: <strong>"게임에 목표가 없으면 지루해지기 마련이잖아.
+지금 마련된 스테이지를 100스테이지까지가 목표로 하고, 거기서 서약 이벤트들을 하나씩 붙인
+난이도를 악몽 1단계 뭐 이런 식으로 이름을 붙여서 목표점을 만드는 건 어떨까.
+그리고 그렇게 악몽 단계들을 깨 나가면 최종적으로 무한 모드를 하는 거지."</strong></p>
+
+<p>맞는 지적이었다. 심연은 <strong>"죽어야 끝나는"</strong> 무한이었고,
+끝이 없다는 건 <strong>목표도 없다</strong>는 뜻이다.
+최고 21층을 찍은 사람에게 다음 목표가 "22층"이면 그건 목표가 아니라 눈금이다.</p>
+
+<div class="tw"><table>
+<caption>새 진행 구조 — 100층 × 11갈래 = 1,100층</caption>
+<thead><tr><th>단계</th><th>내용</th><th>여는 조건</th></tr></thead>
+<tbody>
+<tr><td>⚔️ 훈련</td><td>30웨이브 · 연습</td><td>처음부터</td></tr>
+<tr><td>∞ 심연</td><td>1~100층 → 👹 마왕</td><td>훈련 한 판</td></tr>
+<tr><td>🌑 악몽 1~10</td><td>같은 100층 · <strong>서약이 단계 수만큼 강제로 붙는다</strong></td><td>직전 단계의 마왕 처치</td></tr>
+<tr class="total"><td>♾️ 무한</td><td>결승선 없음</td><td>악몽 10단계 돌파</td></tr>
+</tbody></table></div>
+
+<h4>사다리에 서약을 쓴 이유</h4>
+
+<p>서약은 이미 열 개를 만들어 뒀다. 악몽 단계마다 하나씩 쌓으면
+<strong>새 콘텐츠를 만들지 않고 난이도 열 단계</strong>가 생긴다.
+순서는 '약한 것부터'가 아니라 <strong>성격이 번갈아 오도록</strong> 짰다 —
+적을 세게 하는 서약만 연달아 붙으면 3단계쯤에서 화력만 올리면 되는 문제가 되고,
+나를 약하게 하는 것만 붙으면 무엇을 해도 안 되는 벽이 된다.</p>
+
+<div class="tw"><table>
+<caption>악몽 사다리 — 누적이다. 악몽 10은 열 개가 한꺼번에 걸린다</caption>
+<thead><tr><th class="num">단계</th><th>추가되는 서약</th><th>갈래</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td>💨 질주 본능 — 적 이속 +35%</td><td>적</td></tr>
+<tr><td class="num">2</td><td>😴 짧은 휴식 — 웨이브 후 회복 없음</td><td>경제</td></tr>
+<tr><td class="num">3</td><td>🛡️ 무쇠 가죽 — 적 방어 +6 · 타워 −15%</td><td>적</td></tr>
+<tr><td class="num">4</td><td>⏸️ 멈춘 시간 — 과부하 사용 불가</td><td>나</td></tr>
+<tr><td class="num">5</td><td>💢 거친 침입자 — 적 HP ×1.8</td><td>적</td></tr>
+<tr><td class="num">6</td><td>👛 빈 주머니 — 골드 −40%</td><td>경제</td></tr>
+<tr><td class="num">7</td><td>🕯️ 고독한 지휘 — 슬롯 절반 · 아군 HP −25%</td><td>나</td></tr>
+<tr><td class="num">8</td><td>🌑 굶주린 무리 — 스폰 −30% · 몹 HP ×1.5</td><td>적</td></tr>
+<tr><td class="num">9</td><td>📐 봉인된 설계도 — 타워 레벨 3 제한</td><td>나</td></tr>
+<tr><td class="num">10</td><td>🧱 얇은 성벽 — 기지 HP 절반 · 수리 없음</td><td>나</td></tr>
+</tbody></table></div>
+
+<p>캠프에서 뺄 수 없고, 그 위에 더 걸 수는 있다. 보석은 단계당 +35%
+(악몽 10 = <strong>×4.5</strong>), 클리어 시 일회성으로 <span class="mono">40 + 단계×25</span>개.</p>
+
+<h3>👹 마왕 — 100층의 끝 <span class="rev">v5.0 · 신규</span></h3>
+
+<p class="lede">플레이 보고: <strong>"만드는 김에 100스테이지는 최종 보스가 나오는 기믹을 넣어서
+최종 보스를 처치하는 느낌도 좋을 것 같아."</strong></p>
+
+<p>100층은 '조금 더 센 층'이 아니라 <strong>끝</strong>이어야 한다.
+그래서 잡몹이 하나도 없고 마왕만 온다.</p>
+
+<div class="tw"><table>
+<caption>마왕</caption>
+<thead><tr><th>요소</th><th>값</th></tr></thead>
+<tbody>
+<tr><td>체력</td><td><strong>그 층 적 전체 총량의 85%</strong> (심연 기준 실측 약 6.7억)</td></tr>
+<tr><td>악몽 배수</td><td>단계당 ×1.16 (악몽 10 = ×2.6)</td></tr>
+<tr><td>이동</td><td>층 이동속도 곡선을 <strong>타지 않는다</strong> — 기지까지 약 66초</td></tr>
+<tr><td>페이즈</td><td>체력 1/3마다 이속 ×1.10 + 호위 12기 소환 (총 2회)</td></tr>
+<tr><td>기지 도달</td><td><strong>그 자리에서 판이 끝난다</strong> (dmg 99999)</td></tr>
+</tbody></table></div>
+
+<p>체력을 상수가 아니라 <strong>그 층의 총량에 걸어 뒀다</strong>
+(<span class="mono">floorTotalHp</span>). 상수로 박으면 곡선을 다시 잡을 때마다
+보스만 혼자 뒤처진다. 처음에 <span class="mono">900 × 곡선</span>으로 잡았더니
+100층 총량의 <strong>1.1%</strong>였고, 만렙 화력으로 <strong>0.1초</strong>에 끝났다.</p>
+
+<div class="tw"><table>
+<caption>실측 — 만렙(스킬트리 만렙 · 마을 만렙 · ★10 타워 40기) 기준</caption>
+<thead><tr><th>갈래</th><th class="num">처치 시간</th><th class="num">마왕 도달</th><th>판정</th></tr></thead>
+<tbody>
+<tr><td>∞ 심연</td><td class="num">14.5초</td><td class="num">65.9초</td><td>만렙에게는 마무리 한 판</td></tr>
+<tr class="total"><td>🌑 악몽 10</td><td class="num">37.8초</td><td class="num">47.3초</td><td><strong>20% 남기고 잡는 진짜 벽</strong></td></tr>
+</tbody></table></div>
+
+<p>보스만 보고 짠 편성(💀대물 저격의 처형 · ☄️유성 낙하 · 🧪부식)이 아니면 넘기 어렵다.
+처음 잡았을 때 이동속도가 층 곡선을 타서 35초 만에 기지에 닿았다 —
+'느리고 거대한 것'이 아니라 돌진하는 것이 됐다.
+보스가 걸어오는 시간은 고정이어야 "언제까지 잡아야 하나"가 읽힌다.</p>
+
+<h3>전투 중에 마을로 튕기던 버그 <span class="rev">v5.0 · 버그</span></h3>
+
+<p class="lede">플레이 보고: <strong>"하단 아레나 전투 중에 기존에 마을 버튼
+(웨이브 시작 오른쪽 버튼) 있는 쪽을 누르면 마을 창으로 넘어가는 문제가 있어."</strong></p>
+
+<p><span class="mono">gs.ui</span>는 그리면서 채워지고 <strong>페이지가 바뀔 때만</strong>
+비워지는데, 준비 화면 → 전투는 페이지가 그대로 <span class="mono">battle</span>이라
+아무도 지우지 않았다. 준비 화면의 [🏰마을] 버튼 좌표가 <strong>아레나 위에 그대로 살아 있었던</strong> 것이다.
+<span class="mono">renderBattle</span> 첫머리에서 매 프레임 비우고,
+준비 화면일 때만 다시 등록하게 했다.</p>
+
+<p>같은 판에서 하나 더 나왔다 — <strong>악몽 서약이 켜진 것으로 보이는데 BONUSES에는 안 붙었다.</strong>
+<span class="mono">startRun</span>이 <span class="mono">reapplyAllBonuses</span>를 부른
+<strong>뒤에</strong> <span class="mono">gs.inRun = true</span>를 켰는데, 강제 서약 판정이
+<span class="mono">gs.inRun</span>을 보고 있었다. 👥증원 슬롯 버그(v4.19)와 정확히 같은 종류다 —
+<strong>계산이 입력보다 먼저 도는 순서 문제</strong>.</p>
 
 <h3>👥증원이 영구 강화가 되고 있었다 <span class="rev">v4.19 · 버그</span></h3>
 
