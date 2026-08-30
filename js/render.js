@@ -2711,6 +2711,8 @@ function renderLobbyCamp(ctx, gs) {
     const floorLv = campSafeFloor(gs, tr.id);
     const aff   = !maxed && cost != null && (gs.soulStones||0) >= cost;
     const rowH  = 74;
+    // 분기 행은 부모 타워의 단련 단수를 함께 읽는다 — 그 값이 이 갈래에 곱해지고 있다
+    const parentLv = tr.parentType ? campLevel(gs, 'tw_' + tr.parentType) : 0;
 
     uiPanel(ctx, 8, y, CW-16, rowH, 7, maxed?'#0f2a1a':'#0b1220', maxed?'#22c55e':tr.color, maxed?2:1.5);
 
@@ -2718,9 +2720,11 @@ function renderLobbyCamp(ctx, gs) {
     ctx.font='15px sans-serif'; ctx.fillText(tr.icon, 15, y+8);
     ctx.fillStyle=tr.color; ctx.font='bold 11px sans-serif';
     ctx.fillText(tr.name, 36, y+9);
-    if (tr.parent) {   // 분기는 어느 타워의 갈래인지
-      ctx.fillStyle='#475569'; ctx.font='bold 8px sans-serif';
-      ctx.fillText(tr.parent, 36 + ctx.measureText(tr.name).width + 26, y+11);
+    if (tr.parent) {   // 분기는 어느 타워의 갈래인지 — 그리고 그 타워의 단련이 얼마인지
+      const px = 36 + ctx.measureText(tr.name).width + 26;
+      ctx.font='bold 8px sans-serif';
+      ctx.fillStyle = parentLv > 0 ? '#22c55e' : '#475569';
+      ctx.fillText(parentLv > 0 ? `${tr.parent} +${parentLv}` : tr.parent, px, y+11);
     }
     ctx.textAlign='right';
     ctx.fillStyle = maxed?'#86efac':'#e2e8f0'; ctx.font='bold 12px sans-serif';
@@ -2734,6 +2738,15 @@ function renderLobbyCamp(ctx, gs) {
     if (!maxed) {
       ctx.fillStyle='#4ade80'; ctx.font='bold 8px sans-serif';
       ctx.fillText(`▲ ${tr.desc((lv+1) * tr.per)}`, 36, y+35);
+    }
+    // 🌟 분기는 종류별 단련 **위에** 곱해진다. 그 합계를 적어야
+    // "분기를 타면 앞의 강화가 날아간다"는 오해가 생기지 않는다.
+    if (tr.group === 'branch' && (lv > 0 || parentLv > 0)) {
+      const bd = campTowerBreakdown(gs, tr.parentType, tr.branchId);
+      ctx.fillStyle = '#fb923c'; ctx.font='bold 8px sans-serif';
+      ctx.textAlign='right';
+      ctx.fillText(`합계 공격력 +${Math.round((bd.dmg-1)*1000)/10}%`, CW-18, y+35);
+      ctx.textAlign='left';
     }
 
     // 단계 막대 — 안전지대에 눈금
@@ -2774,7 +2787,11 @@ function renderLobbyCamp(ctx, gs) {
   }
 
   ctx.fillStyle='#334155'; ctx.font='9px sans-serif';
-  ctx.fillText('보석은 캠프에서만 씁니다 — 여기서 올린 것은 판이 끝나도 남습니다.', 14, y+2);
+  ctx.fillText(L.campGroup === 'tower'
+      ? '🏹 종류별 단련은 ★5 분기를 탄 뒤에도 그대로 남고, 분기 단련과 곱해집니다.'
+    : L.campGroup === 'branch'
+      ? '🌟 분기 단련은 그 타워 종류의 단련 위에 곱해집니다 — 둘 다 올릴수록 세집니다.'
+      : '보석은 캠프에서만 씁니다 — 여기서 올린 것은 판이 끝나도 남습니다.', 14, y+2);
   _lobbyBottom = y + 20;
 }
 
@@ -5405,6 +5422,11 @@ function renderTownPageTowers(ctx, gs, startY) {
       ? gs.towers.find(tw=>tw.col===gs.ui.towerAction.col&&tw.row===gs.ui.towerAction.row) : null;
   const _showBranch = !!_selTower && (_selTower.level||1) >= TOWER_BRANCH_LEVEL
                       && towerBranches(_selTower.typeId).length > 0;
+  // 🔥 이 타워에 붙은 캠프 단련 한 줄. 있으면 패널이 그만큼 길어지고 버튼이 내려간다.
+  const _campLine = _selTower
+      ? campTowerSummary(gs, _selTower.typeId, _selTower.branch) : null;
+  const _cShift = _campLine ? 13 : 0;
+  panelH += _cShift;
   if (_showBranch) panelH += 92;
   if (gs.ui.towerAction) {
     const ta=gs.ui.towerAction;
@@ -5433,6 +5455,12 @@ function renderTownPageTowers(ctx, gs, startY) {
       } else {
         ctx.fillText(`ATK ${st.dmg}   ${st.spd.toFixed(2)}/s   사거리 ${Math.round(st.range)}px   처치 ${tower.kills}`,42,panelY+29);
       }
+      // 분기를 타도 종류별 단련은 그대로 살아 있다 — 그것을 눈으로 확인하는 자리
+      if (_campLine) {
+        ctx.fillStyle='#fb923c'; ctx.font='bold 8px sans-serif';
+        ctx.textAlign='left'; ctx.textBaseline='middle';
+        ctx.fillText(_campLine, 42, panelY+42);
+      }
 
       // 등급별 실효 피해 — 이 타워가 무엇을 잘 잡는지. 분기를 고르면 이 줄이 다시 쓰인다.
       const aff = towerAffinityRow(tower.typeId, tower.branch);
@@ -5453,33 +5481,33 @@ function renderTownPageTowers(ctx, gs, startY) {
       const upgCost=towerUpgradeCost(tower);
       if (upgCost!==null) {
         const canAff=gs.gold>=upgCost,bw2=150,bh2=26;
-        drawBtn(ctx,10,panelY+42,bw2,bh2,`강화 Lv.${lv+1}  ${upgCost}💰`,canAff?'#1e3a5f':'#1e293b',canAff?'#60a5fa':'#64748b',canAff);
-        gs.ui.towerUpgradeBtn={x:10,y:panelY+42,w:bw2,h:bh2};
+        drawBtn(ctx,10,panelY+42+_cShift,bw2,bh2,`강화 Lv.${lv+1}  ${upgCost}💰`,canAff?'#1e3a5f':'#1e293b',canAff?'#60a5fa':'#64748b',canAff);
+        gs.ui.towerUpgradeBtn={x:10,y:panelY+42+_cShift,w:bw2,h:bh2};
       } else {
         gs.ui.towerUpgradeBtn=null;
         ctx.fillStyle='#f59e0b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
-        ctx.fillText('★ 최고 레벨',12,panelY+55);
+        ctx.fillText('★ 최고 레벨',12,panelY+55+_cShift);
       }
       // 🔀 이설 — 경로가 바뀌었을 때 배치를 통째로 다시 하지 않아도 되게
       const mvOn  = !!(gs.ui.towerMove && gs.ui.towerMove.col===tower.col && gs.ui.towerMove.row===tower.row);
       const mvCost= towerMoveCost(tower);
       const mvAff = gs.gold >= mvCost;
       const mbw=88, mbx=166;
-      drawBtn(ctx,mbx,panelY+42,mbw,26,
+      drawBtn(ctx,mbx,panelY+42+_cShift,mbw,26,
               mvOn ? '✕ 취소' : `🔀 이동 ${mvCost}💰`,
               mvOn ? '#312e81' : (mvAff?'#1e2a4f':'#1e293b'),
               mvOn ? '#a5b4fc' : (mvAff?'#818cf8':'#64748b'), mvAff || mvOn);
-      gs.ui.towerMoveBtn={x:mbx,y:panelY+42,w:mbw,h:26};
+      gs.ui.towerMoveBtn={x:mbx,y:panelY+42+_cShift,w:mbw,h:26};
 
       const rbw=92,rbh=26,rbx=CW-10-rbw;
-      drawBtn(ctx,rbx,panelY+42,rbw,rbh,`🗑 +${towerSellValue(tower)}💰`,'#3f1515','#ef4444');
-      gs.ui.towerRemoveBtn={x:rbx,y:panelY+42,w:rbw,h:rbh};
+      drawBtn(ctx,rbx,panelY+42+_cShift,rbw,rbh,`🗑 +${towerSellValue(tower)}💰`,'#3f1515','#ef4444');
+      gs.ui.towerRemoveBtn={x:rbx,y:panelY+42+_cShift,w:rbw,h:rbh};
 
       // ── ★5 분기 ────────────────────────────────────────────────────────
       // 세 갈래를 나란히 놓고, 고른 것에 테두리를 준다. 값은 처음이 싸고 갈아타면 비싸다.
       if (_showBranch) {
         const brs = towerBranches(tower.typeId);
-        const bY = panelY + 74;
+        const bY = panelY + 74 + _cShift;
         const cost = br ? towerRebranchCost(tower) : towerBranchCost(tower);
         ctx.textAlign='left'; ctx.textBaseline='middle';
         ctx.fillStyle=br?'#64748b':'#fbbf24'; ctx.font='bold 9px sans-serif';

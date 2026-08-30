@@ -222,14 +222,14 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 <div class="wrap">
 
 <header class="cover">
-  <div class="eyebrow">Game Design Document · v6.1 · 현행 사양 정리</div>
+  <div class="eyebrow">Game Design Document · v6.2 · 현행 사양 정리</div>
   <h1>듀얼 프론티어</h1>
   <p class="tagline">한 화면에서 두 개의 전쟁을 동시에 치른다.
   위는 손이 짓는 타워 디펜스, 아래는 손을 떠난 부대의 실시간 난투.
   60초마다 두 전선이 함께 굴러가고, 죽으면 보석만 남기고 처음부터 다시 내려간다.</p>
   <div class="meta">
-    <div><dt>게임 버전</dt><dd>v0.14.0</dd></div>
-    <div><dt>문서 개정</dt><dd>v6.1 — 강화 카드 · 하늘길</dd></div>
+    <div><dt>게임 버전</dt><dd>v0.14.1</dd></div>
+    <div><dt>문서 개정</dt><dd>v6.2 — 단련 계승 명시</dd></div>
     <div><dt>플랫폼</dt><dd>HTML5 Canvas · 480×800 · PWA</dd></div>
     <div><dt>코드 규모</dt><dd>21개 파일 · 16,732줄</dd></div>
     <div><dt>기준일</dt><dd>2026-08-30</dd></div>
@@ -545,6 +545,25 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 <p>대상마다 따로 오르므로 <strong>"저격탑을 주력으로 쓰겠다"가 캠프에서부터 시작되는 결정</strong>이 된다.
 항목 목록은 게임 데이터에서 만들어진다 — 타워가 하나 늘면 단련 항목도 저절로 하나 는다.</p>
 
+<div class="note">
+<p><strong>종류 단련과 분기 단련은 겹쳐서 곱해진다.</strong> ★5에서 갈래를 골라도
+그 타워 <em>종류</em>에 쌓은 단련은 사라지지 않는다 — <code>towerStats</code>가
+<code>campTowerMult</code>(종류)와 <code>campBranchMult</code>(분기)를 둘 다 곱한다.</p>
+<div class="tw"><table>
+<thead><tr><th>저격탑 Lv.5</th><th class="num">분기 없음</th><th class="num">🎯 헤드샷</th></tr></thead>
+<tbody>
+<tr><td>단련 없음</td><td class="num">162</td><td class="num">194</td></tr>
+<tr><td>종류 20단만</td><td class="num">233</td><td class="num">280</td></tr>
+<tr><td>분기 20단만</td><td class="num">162</td><td class="num">311</td></tr>
+<tr><td><strong>종류 20 + 분기 20</strong></td><td class="num">233</td><td class="num"><strong>448</strong></td></tr>
+</tbody></table></div>
+<p>194 × 1.44 × 1.60 = 447 — 곱셈이 그대로 맞는다. 사거리는 종류 단련만 준다(분기는 공격력·공속뿐).</p>
+<p>규칙은 처음부터 이랬지만 <strong>어디에도 적혀 있지 않아서</strong> "분기를 타면 앞의 강화가
+날아간다"로 읽혔다. 규칙이 맞아도 보이지 않으면 없는 것과 같다. 그래서 세 곳에 적었다 —
+분기 행에 부모 타워의 단수와 합계 배율, 무리별 안내 문구, 그리고 타워 패널의
+<code>🔥 단련 종류 +18 × 분기 +12 → 공격력 +89.9%</code> 한 줄.</p>
+</div>
+
 <h3>④ 🎴 부적 · 👑 각인</h3>
 <p>부적은 보석으로 굴려 <strong>그 판에만</strong> 붙이는 한 장짜리 효과다.
 각인은 영웅의 아레나 스킬을 정하며 값 없이 바꿀 수 있다.</p>
@@ -785,7 +804,7 @@ footer{border-top:1px solid var(--hair);margin-top:72px;padding:26px 0 60px;
 
 <hr style="margin:56px 0 28px;border:0;border-top:1px solid var(--hair)">
 <p class="mono" style="color:var(--ink-3);font-size:12px">
-듀얼 프론티어 · 게임 v0.14.0 · 기획서 v6.1 · 2026-08-30<br>
+듀얼 프론티어 · 게임 v0.14.1 · 기획서 v6.2 · 2026-08-30<br>
 개정 이력과 각 변경의 배경은 <code>GAME_DESIGN.md</code>(v12.10)에 있습니다.
 </p>
 

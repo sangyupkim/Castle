@@ -60,6 +60,8 @@ function _campBuildTracks() {
       out.push({
         id:'br_'+br.id, group:'branch', name:br.name, icon:br.icon, color:br.color,
         parent:(TOWER_TYPES[id]||{}).name || id,
+        // 이 갈래가 어느 타워의 것인지 — 화면이 '종류 단련 × 분기 단련'을 합쳐 보여줄 때 쓴다
+        parentType:id, branchId:br.id,
         per:CAMP_BRANCH_PER,
         desc:v=>`공격력 +${Math.round(v*1000)/10}% · 공속 +${Math.round(v*500)/10}%`,
         apply:(b,v)=>{ _campBranchAdd(b, br.id, v); }
@@ -217,6 +219,40 @@ function applyCamp(gs) {
     const lv = campLevel(gs, tr.id);
     if (lv > 0) tr.apply(BONUSES, lv * tr.per);
   }
+}
+
+// 🔥 이 타워가 지금 받고 있는 단련 — 기본탑 몫과 분기 몫을 나눠서 돌려준다.
+//
+// 분기를 타면 기본탑 단련이 사라진다고 오해하기 쉽다. 실제로는 towerStats가
+// campTowerMult(종류)와 campBranchMult(분기)를 **둘 다** 곱한다 — 계승되고, 이중이다.
+// 그런데 그걸 어디에도 적어 두지 않아서 "분기 전 강화는 헛돈"으로 보였다.
+// 규칙이 맞아도 보이지 않으면 없는 것과 같으므로, 화면이 읽을 수 있게 여기서 낸다.
+function campTowerBreakdown(gs, typeId, branchId) {
+  const baseLv = campLevel(gs, 'tw_' + typeId);
+  const brLv   = branchId ? campLevel(gs, 'br_' + branchId) : 0;
+  const baseV  = baseLv * CAMP_TOWER_PER;
+  const brV    = brLv   * CAMP_BRANCH_PER;
+  return {
+    baseLv, brLv,
+    baseDmg: 1 + baseV,          // 종류별 단련이 주는 공격력 배율
+    brDmg:   1 + brV,            // 분기 단련이 주는 공격력 배율
+    baseSpd: 1 + baseV * 0.5,
+    brSpd:   1 + brV   * 0.5,
+    range:   1 + baseV / 3,      // 사거리는 종류별 단련만 준다 (분기는 없다)
+    dmg:     (1 + baseV) * (1 + brV),
+    spd:     (1 + baseV * 0.5) * (1 + brV * 0.5),
+    any:     baseLv > 0 || brLv > 0
+  };
+}
+// 한 줄 요약 — 타워 패널과 캠프 양쪽이 같은 문장을 쓴다
+function campTowerSummary(gs, typeId, branchId) {
+  const b = campTowerBreakdown(gs, typeId, branchId);
+  if (!b.any) return null;
+  const pct = m => `${Math.round((m - 1) * 1000) / 10}%`;
+  if (b.brLv > 0 && b.baseLv > 0)
+    return `🔥 단련 종류 +${b.baseLv} × 분기 +${b.brLv} → 공격력 +${pct(b.dmg)}`;
+  if (b.brLv > 0) return `🔥 단련 분기 +${b.brLv} → 공격력 +${pct(b.dmg)}`;
+  return `🔥 단련 종류 +${b.baseLv} → 공격력 +${pct(b.dmg)}`;
 }
 
 // 지금까지 이 항목에 넣은 보석 총액 (기록용)
