@@ -780,28 +780,55 @@ function tap({x,y}) {
 
 // 페이지가 바뀌면 지난 화면의 버튼 좌표를 지운다.
 // gs.ui는 그리면서 채워지므로, 다른 페이지의 낡은 사각형이 남아 엉뚱한 탭을 먹는다.
-const _PAGE_UI_KEYS = [
-  'buildingCards','wallRepairBtn','tabTownBtn','townBackBtn',
-  'buildingLvUpBtn','upgradeBtns','towerMoveBtn','buildingScroll','pageScroll','briefScroll','lobbyScroll','pickScroll','hireCards','hiredSlots',
-  'heroInfoBtn','heroBackBtn','equipSlotBtns','invCards','skillSlotBtns','skillCards','heroPickBtn',
-  'shopItemBtns','skillBuyBtns','activeBuyBtns','activeSlotBtns','shopTabBuy','shopTabUp',
-  'towerBranchBtns','towerPlan','planConfirmBtn','planCancelBtn',
-  'forgeTabs','forgeGearBtns','forgeFuseBtns','forgeTemperBtn','forgeCoreBtn',
-  'charmRollBtn','charmCards','charmSlotBtns',
-  'specialCards','specialSlots','heroDefBtn','heroBatBtn','bountyBtn','eliteBtn','towerMiniGrid',
-  'lobbyTabBtns','sortieBtn','trainBtn','unboundedBtn','nightmareBtns','metaCards','metaBulkCards','unlockBtns','pactBtns','sigilCards','campBtns','campGroupBtns',
-  'skillTreeTabs','ascendBtn','trainSkipBtn','skillResetBtn','heroActiveBtns','heroAutoBtn',
-  'backupExportBtn','backupImportBtn',
-  'tutReplayBtn','tutResetTipBtn','guideReplayBtn','bgmToggleBtn','sfxToggleBtn','guideSkipBtn',
-  'resultBtn','waveBtn','battleWaveStartBtn','briefTownBtn','retreatBtn','modeBtn'
-];
-let _lastUiPage = null;
+// ─── 화면이 바뀌면 옛 버튼 자리를 지운다 ─────────────────────────────────────
+// gs.ui.*의 사각형은 **그려질 때** 등록된다. 그리지 않은 화면의 사각형은 지난 값이
+// 그대로 남아 있는데, 탭 판정은 그 값을 그대로 믿는다. 그래서 화면을 옮기면
+// **보이지도 않는 버튼이 눌린다.**
+//
+// 실제로 그렇게 터졌다: 🌳스킬 탭에서 노드를 누르면 "🔒 심연의 마왕을 먼저
+// 잡으세요"가 떴다. ⚔️출격 탭의 악몽 사다리 버튼이 같은 좌표에 남아 있었기 때문이다.
+//
+// 고칠 곳이 둘이었다.
+//  ① 열쇠 — 예전에는 gs.page만 봤다. 로비 안에서 탭을 옮기는 것은 page가 그대로라
+//     아무것도 지워지지 않았다. 이제 **실제로 보이는 화면을 특정하는 모든 것**을
+//     넣는다 (로비 탭·스킬 나무·단련 무리·마을 탭·건물 화면·영웅 상세·대장간 탭·상점 탭).
+//  ② 목록 — 예전에는 지울 키를 손으로 적어 두었다. 그러니 새 버튼을 만들 때마다
+//     여기 적는 것을 잊었고, 실제로 deployBtn·towerTypeBtns 둘이 빠져 있었다.
+//     이제 **gs.ui에 있는 것을 전부 지우고**, 화면이 바뀌어도 남아야 하는 몇 개만
+//     따로 적는다. 빠뜨렸을 때의 결과가 '엉뚱한 버튼이 눌린다'에서
+//     '한 프레임 늦게 눌린다'로 뒤집힌다 — 안전한 쪽으로 실패한다.
+//
+// 지운 자리는 그 다음 렌더가 곧바로 다시 채운다. 화면 전환 자체가 탭 처리 안에서
+// 일어나고 그 뒤에 렌더가 돌므로, 잘못된 사각형이 살아 있는 순간이 없다.
+
+// 화면이 바뀌어도 지우면 안 되는 것 — 사각형이 아니라 상태다
+const _UI_KEEP = new Set([
+  'towerAction',   // 고른 타워 (타워 탭 안에서만 쓰지만 렌더가 만들지 않는다)
+  'towerMove',     // 이설 중인 타워
+  'towerPlan',     // ◎ 배치 미리보기 — 같은 화면 안에서 이어져야 한다
+  'backupMsg',     // 몇 초간 떠 있는 안내문
+]);
+let _lastUiScope = null;
+function uiScopeKey() {
+  const L = gs.lobby || {}, t = gs.town || {};
+  if (gs.page === 'lobby') {
+    return `lobby|${L.tab}|${L.tab === 'skill' ? (L.skillTree||'') : ''}|${L.tab === 'camp' ? (L.campGroup||'') : ''}`;
+  }
+  if (gs.page === 'town') {
+    return `town|${t.screen||'main'}|${t.tab||''}|${t.heroView?'hero':''}|${t.forgeTab||''}|${t.shopTab||''}`;
+  }
+  return gs.page;
+}
 function clearStalePageUI() {
-  if (gs.page === _lastUiPage) return;
-  _lastUiPage = gs.page;
-  for (const k of _PAGE_UI_KEYS) {
-    if (Array.isArray(gs.ui[k])) gs.ui[k] = [];
-    else if (gs.ui[k]) gs.ui[k] = null;
+  const key = uiScopeKey();
+  if (key === _lastUiScope) return;
+  _lastUiScope = key;
+  for (const k of Object.keys(gs.ui)) {
+    if (_UI_KEEP.has(k)) continue;
+    const v = gs.ui[k];
+    if (Array.isArray(v)) gs.ui[k] = [];
+    else if (v && typeof v === 'object') gs.ui[k] = null;
+    else if (v) gs.ui[k] = null;
   }
 }
 
@@ -810,20 +837,12 @@ function handleLobbyTap(x, y) {
   const L = gs.lobby;
 
   for (const b of gs.ui.lobbyTabBtns || []) {
-    if (hitTest(x,y,b)) { L.tab = b.id; SFX.click(); return; }
+    if (hitTest(x,y,b)) { L.tab = b.id; gs.lobbyScroll = 0; SFX.click(); return; }
   }
-  // 🌑 악몽 사다리 — 내려갈 단계를 고른다
-  for (const b of gs.ui.nightmareBtns||[]) {
-    if (!hitTest(x,y,b)) continue;
-    if (!b.can) {
-      const prev = b.level - 1;
-      spawnFloaty(`🔒 ${prev <= 0 ? '∞ 심연' : `악몽 ${prev}단계`}의 마왕을 먼저 잡으세요`, x, y, '#f43f5e');
-      SFX.denied(); return;
-    }
-    gs.lobby.nightmare = b.level;
-    SFX.click(); return;
-  }
-  // 출격은 갈래가 여럿 — 해금 전에는 sortieBtn 하나가 훈련이다
+
+  // ── 출격 바 — 로비 어느 탭에서도 아래에 고정으로 그려진다 ──
+  // 여기 있는 것만 탭과 무관하게 검사해도 된다. 실제로 매 프레임 그려지므로
+  // 사각형이 '지난 화면의 잔재'가 될 수 없기 때문이다.
   if (hitTest(x,y,gs.ui.trainBtn||{}))  { startRun('campaign'); return; }
   if (hitTest(x,y,gs.ui.unboundedBtn||{})) { startRun('unbounded'); return; }
   if (hitTest(x,y,gs.ui.sortieBtn||{})) {
@@ -832,6 +851,20 @@ function handleLobbyTap(x, y) {
   }
 
   if (L.tab === 'sortie') {
+    // 🌑 악몽 사다리 — 내려갈 단계를 고른다.
+    // ⚔️출격 탭에서만 그려지므로 여기서만 검사한다. 예전에는 탭 밖에서 검사해
+    // 🌳스킬 탭의 노드를 누를 때 같은 좌표의 악몽 칸이 함께 눌렸다.
+    for (const b of gs.ui.nightmareBtns||[]) {
+      if (!hitTest(x,y,b)) continue;
+      if (!b.can) {
+        const prev = b.level - 1;
+        spawnFloaty(`🔒 ${prev <= 0 ? '∞ 심연' : `악몽 ${prev}단계`}의 마왕을 먼저 잡으세요`, x, y, '#f43f5e');
+        SFX.denied(); return;
+      }
+      gs.lobby.nightmare = b.level;
+      SFX.click(); return;
+    }
+
     // 출격 탭도 스크롤된 채 그려진다
     const ry = y + (gs.lobbyScroll || 0);
     if (hitTest(x,ry,gs.ui.trainSkipBtn||{})) {
