@@ -43,7 +43,9 @@ function applyUnitStats(u, hpRatio) {
   u.maxHp     = Math.max(1, Math.round((t.hp + BONUSES.unitHp) * (BONUSES.unitHpMult || 1)
                                        * (BONUSES.pactUnitHpMult || 1) * sp * cHp));
   u.atk       = Math.round((t.atk + BONUSES.unitAtk) * (BONUSES.unitAtkMult || 1) * sp * cAtk);
-  u.def       = Math.round((t.def + BONUSES.unitDef + BONUSES.heroAura) * sp * cDef);
+  // 방어력은 0 아래로 내려가지 않는다 — ★영웅 카드의 대가(방어 -5 등)가 겹치면
+  // 음수가 되어 '맞을수록 튼튼해지는' 식으로 뒤집힐 수 있다.
+  u.def       = Math.max(0, Math.round((t.def + BONUSES.unitDef + BONUSES.heroAura) * sp * cDef));
   u.skillAtk  = t.skillAtk  ? Math.round((t.skillAtk + BONUSES.unitAtk) * sp * cAtk) : 0;
   u.healAmt   = t.healAmt   ? t.healAmt   + BONUSES.healBonus   : 0;
   u.shieldAmt = t.shieldAmt ? t.shieldAmt + BONUSES.shieldBonus : 0;
@@ -83,7 +85,7 @@ function makeHeroUnit(hero) {
   const sm  = BONUSES.heroStatMult;
   const atk = Math.round((lv.atk + BONUSES.heroAtk) * sm * BONUSES.sigilHeroAtkMult);
   const hp  = Math.round((lv.hp + BONUSES.heroHpFlat) * sm * BONUSES.sigilHeroHpMult);
-  const def = Math.round((lv.def + BONUSES.heroAura) * sm);
+  const def = Math.max(0, Math.round((lv.def + BONUSES.heroAura) * sm));
   const A   = HERO_ARENA;
   // 각인이 아레나 스킬을 통째로 갈아치운다 — 이름·종류·쿨다운·범위 전부
   const sg  = activeSigil();

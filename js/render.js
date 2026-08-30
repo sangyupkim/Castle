@@ -241,20 +241,32 @@ function renderDefense(ctx, gs) {
   const waveHasAir = (waveDefFor(gs.wave)?.defenseEnemies || [])
                       .some(d => (ENEMY_TYPES[d.type] || {}).flying);
   if (waveHasAir || gs.defenseEnemies.some(e => e.flying)) {
+    // 30% 점선 한 줄로는 "여기로 온다"가 읽히지 않았다. 아래에 넓은 띠를 깔아
+    // 어느 칸이 항로 위인지 눈으로 잡히게 하고, 그 위에 점선을 얹는다.
     for (const lane of [AIR_PATH_L, AIR_PATH_R]) {
-      ctx.strokeStyle = 'rgba(192,132,252,0.30)';
+      const trace = () => {
+        ctx.beginPath();
+        lane.forEach(([c, r], i) => {
+          const p = cellCenter(c, r);
+          if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+        });
+      };
+      ctx.strokeStyle = 'rgba(192,132,252,0.13)';
+      ctx.lineWidth = 22; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      trace(); ctx.stroke();
+      ctx.strokeStyle = 'rgba(192,132,252,0.55)';
       ctx.lineWidth = 2; ctx.setLineDash([7, 6]);
-      ctx.beginPath();
-      lane.forEach(([c, r], i) => {
-        const p = cellCenter(c, r);
-        if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
-      });
-      ctx.stroke(); ctx.setLineDash([]);
+      trace(); ctx.stroke(); ctx.setLineDash([]);
+      ctx.lineWidth = 1; ctx.lineJoin = 'miter'; ctx.lineCap = 'butt';
       const s0 = cellCenter(lane[0][0], lane[0][1]);
-      ctx.fillStyle = 'rgba(192,132,252,0.75)'; ctx.font = 'bold 11px sans-serif';
+      ctx.fillStyle = 'rgba(192,132,252,0.85)'; ctx.font = 'bold 11px sans-serif';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText('🔺', s0.x, s0.y);
     }
+    // 항로는 ∞ 경로와 겹치지 않는다 — 경로에만 붙여 지으면 하늘은 못 잡는다
+    ctx.fillStyle = 'rgba(192,132,252,0.62)'; ctx.font = 'bold 9px sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText('🔺 하늘길 — 저격·번개가 잘 듣습니다', 5, DEFENSE_H - 13);
   }
 
   drawPathFlow(ctx, THE_PATH, 'rgba(120,40,30,0.22)');
@@ -1887,7 +1899,7 @@ function renderUpgradePick(ctx, gs) {
   ctx.fillText(`웨이브 ${gs.wave+1} 완료`, CW/2, 45);
 
   const cards = gs.upgradePick.cards;
-  const cardW=130, cardH=190, gap=12;
+  const cardW=130, cardH=212, gap=12;
   const totalW = cards.length * cardW + (cards.length-1)*gap;
   const startY = 70;
 
@@ -1912,13 +1924,12 @@ function renderUpgradePick(ctx, gs) {
     const cx = startX + i*(cardW+gap);
     const cy = startY;
 
-    const gradeColor = card.grade==='epic' ? '#a78bfa'
-                     : card.grade==='rare' ? '#60a5fa' : '#94a3b8';
-    const gradeBg    = card.grade==='epic' ? '#1e0a3c'
-                     : card.grade==='rare' ? '#0a1e3c' : '#0f172a';
+    // 등급 색·바탕은 upgrade.js의 표 하나에서만 온다. 여기에 한 벌 더 적어 두면
+    // 등급을 늘릴 때마다 이 화면만 옛 값을 들고 남는다 — 실제로 그렇게 됐었다.
+    const gradeColor = CARD_GRADE_COLOR[card.grade] || '#94a3b8';
+    const gradeBg    = CARD_GRADE_BG[card.grade]    || '#0f172a';
 
     // 강화 카드는 매 층 멈춰 서서 고르는 화면이다 — 여기만큼은 진짜 틀을 두른다.
-    // 등급 색은 틀 위에 얹어 남긴다 (영웅=보라 / 희귀=파랑).
     if (drawPanel9(ctx, card.grade==='common' ? 'ui.panel.dark' : 'ui.panel.gold', cx, cy, cardW, cardH)) {
       ctx.save(); roundRect(ctx, cx+3, cy+3, cardW-6, cardH-6, 6); ctx.clip();
       ctx.globalAlpha = 0.55; ctx.fillStyle = gradeBg;
@@ -1929,8 +1940,14 @@ function renderUpgradePick(ctx, gs) {
       uiPanel(ctx, cx, cy, cardW, cardH, 8, gradeBg, gradeColor, 2);
     }
 
+    // ✦ 전설은 테두리를 한 겹 더 — 나오면 바로 알아봐야 하는 등급이다
+    if (card.grade === 'legend') {
+      roundRect(ctx, cx-1.5, cy-1.5, cardW+3, cardH+3, 9);
+      ctx.strokeStyle='rgba(251,191,36,0.45)'; ctx.lineWidth=2; ctx.stroke();
+    }
+
     // 등급 배지
-    const gradeLabel = card.grade==='epic'?'★ EPIC':card.grade==='rare'?'◆ RARE':'● COMMON';
+    const gradeLabel = CARD_GRADE_LABEL[card.grade] || '● 일반';
     ctx.fillStyle=gradeColor; ctx.font='bold 8px sans-serif';
     ctx.textAlign='center'; ctx.textBaseline='top';
     ctx.fillText(gradeLabel, cx+cardW/2, cy+8);
@@ -1961,6 +1978,21 @@ function renderUpgradePick(ctx, gs) {
       } else { line=test; }
     }
     if (line) ctx.fillText(line, cx+cardW/2, lineY);
+
+    // ★영웅 카드의 대가 — 좋은 것만 적으면 고민이 없다. 붉은 줄로 따로 세운다.
+    if (card.bane) {
+      const byy = cy + cardH - 66;
+      ctx.strokeStyle='rgba(248,113,113,0.35)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(cx+12, byy-5); ctx.lineTo(cx+cardW-12, byy-5); ctx.stroke();
+      ctx.fillStyle='#f87171'; ctx.font='9px sans-serif';
+      let bl='', bly=byy+1;
+      for (const w of ('▼ ' + card.bane).split(' ')) {
+        const t2 = bl ? bl+' '+w : w;
+        if (ctx.measureText(t2).width > cardW-14) { ctx.fillText(bl, cx+cardW/2, bly); bl=w; bly+=12; }
+        else bl = t2;
+      }
+      if (bl) ctx.fillText(bl, cx+cardW/2, bly);
+    }
 
     // 선택 버튼
     roundRect(ctx, cx+8, cy+cardH-30, cardW-16, 22, 5);
@@ -2004,13 +2036,16 @@ function renderUpgradePick(ctx, gs) {
   }
 
   // ── 리롤 — 원하는 빌드로 밀어붙이고 싶을 때 쓰는 골드 사용처 ──
+  // 🎴패에서 산 공짜 리롤이 남아 있으면 골드보다 그쪽을 먼저 쓴다.
+  const free = gs.freeRerolls || 0;
   const rc   = rerollCost(gs.rerolls);
-  const rAff = gs.gold >= rc;
+  const rAff = free > 0 || gs.gold >= rc;
   const rw=170, rh=34, rx=(CW-rw)/2, ry=startY+cardH+(maxPickScroll>0?32:18);
-  uiPanel(ctx, rx, ry, rw, rh, 7, rAff ? '#1e293b' : '#12161f', rAff ? '#f59e0b' : '#2a3140', 1.5);
-  ctx.fillStyle = rAff ? '#fbbf24' : '#475569'; ctx.font='bold 12px sans-serif';
+  uiPanel(ctx, rx, ry, rw, rh, 7, rAff ? (free>0?'#0f2a1a':'#1e293b') : '#12161f',
+          rAff ? (free>0?'#22c55e':'#f59e0b') : '#2a3140', 1.5);
+  ctx.fillStyle = rAff ? (free>0?'#4ade80':'#fbbf24') : '#475569'; ctx.font='bold 12px sans-serif';
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText(`🎲 다시 뽑기  ${rc}💰`, CW/2, ry+rh/2);
+  ctx.fillText(free > 0 ? `🎲 다시 뽑기  공짜 ${free}회` : `🎲 다시 뽑기  ${rc}💰`, CW/2, ry+rh/2);
   gs.ui.rerollBtn = rAff ? {x:rx,y:ry,w:rw,h:rh} : null;
 
   ctx.fillStyle='#475569'; ctx.font='9px sans-serif'; ctx.textBaseline='top';
@@ -2037,11 +2072,17 @@ function renderUpgradePick(ctx, gs) {
     counted.slice(0, perCol*2).forEach((e, i) => {
       const col = Math.floor(i / perCol), row = i % perCol;
       const ex = 22 + col*colW, ey = by2 + row*rowH;
-      const gc = e.card.grade==='epic' ? '#a78bfa' : e.card.grade==='rare' ? '#60a5fa' : '#64748b';
+      const gc = CARD_GRADE_COLOR[e.card.grade] || '#64748b';
       ctx.textAlign='left'; ctx.font='11px sans-serif'; ctx.fillStyle='#cbd5e1';
       ctx.fillText(e.card.icon, ex, ey);
       ctx.font='10px sans-serif'; ctx.fillStyle=gc;
-      ctx.fillText(e.card.name + (e.n>1?` ×${e.n}`:''), ex+18, ey);
+      const nm = e.card.name + (e.n>1?` ×${e.n}`:'');
+      ctx.fillText(nm, ex+18, ey);
+      // 대가를 달고 온 카드는 여기서도 표시가 남는다 — 지금 무엇을 깎아 두었는지
+      if (e.card.bane) {
+        ctx.fillStyle='#7f1d1d'; ctx.font='bold 9px sans-serif';
+        ctx.fillText('▼', ex+18+ctx.measureText(nm).width+3, ey+1);
+      }
     });
     if (counted.length > perCol*2) {
       ctx.textAlign='center'; ctx.fillStyle='#334155'; ctx.font='9px sans-serif';
@@ -2159,6 +2200,7 @@ function renderLobby(ctx, gs) {
   if      (L.tab === 'sortie') renderLobbySortie(ctx, gs);
   else if (L.tab === 'skill')  renderLobbySkill(ctx, gs);
   else if (L.tab === 'camp')   renderLobbyCamp(ctx, gs);
+  else if (L.tab === 'card')   renderLobbyCardMeta(ctx, gs);
   else if (L.tab === 'unlock') renderLobbyUnlock(ctx, gs);
   else if (L.tab === 'pact')   renderLobbyPact(ctx, gs);
   else                         renderLobbyRecord(ctx, gs);
@@ -2733,6 +2775,204 @@ function renderLobbyCamp(ctx, gs) {
 
   ctx.fillStyle='#334155'; ctx.font='9px sans-serif';
   ctx.fillText('보석은 캠프에서만 씁니다 — 여기서 올린 것은 판이 끝나도 남습니다.', 14, y+2);
+  _lobbyBottom = y + 20;
+}
+
+// ── 🎴 패 — 카드 선택 자체를 강화한다 ──────────────────────────────────────
+// 여기서 파는 것은 능력이 아니라 **확률과 선택지**다. 단련(🔥)과 달리 확정으로
+// 오른다 — 확률을 사는 곳에서 확률로 굴리면 무엇을 샀는지 알 수가 없다.
+const CARD_CAT_LABEL = { tower:'🏹 타워', unit:'🛡️ 유닛', hero:'👑 영웅',
+                         base:'🏰 기지', cave:'🗿 케이브', resource:'💰 자원' };
+
+function renderLobbyCardMeta(ctx, gs) {
+  gs.ui.cardMetaBtns = []; gs.ui.cardCatBtns = []; gs.ui.cardBanBtns = [];
+  gs.ui.cardBackBtn = null;
+  const L = gs.lobby;
+  let y = LOBBY_BODY_Y + 10;
+
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle='#38bdf8'; ctx.font='bold 12px sans-serif';
+  ctx.fillText('🎴 패 — 무엇이 나올지를 삽니다', 14, y);
+  ctx.textAlign='right'; ctx.fillStyle=COLORS.gem; ctx.font='bold 11px sans-serif';
+  ctx.fillText(`💎 ${gs.soulStones||0}`, CW-14, y);
+  y += 17;
+  ctx.textAlign='left'; ctx.fillStyle='#64748b'; ctx.font='9px sans-serif';
+  ctx.fillText('단련과 달리 굴리지 않습니다 — 값을 내면 그대로 오릅니다', 14, y);
+  y += 16;
+
+  // ── 기피 목록 고르는 화면 ────────────────────────────────────────────────
+  if (L.cardCat) { _renderCardBanPicker(ctx, gs, y); return; }
+
+  // ── 지금 내 뽑기가 어떤 모양인지 ─────────────────────────────────────────
+  const odds = cardGradeOdds(gs);
+  const oh = 52;
+  uiPanel(ctx, 8, y, CW-16, oh, 7, '#08121e', '#1e3a5f', 1.5);
+  ctx.fillStyle='#7dd3fc'; ctx.font='bold 9px sans-serif';
+  ctx.fillText(`한 번에 ${cardHandSize(gs)}장 · 공짜 리롤 ${cardFreeRerolls(gs)}회 · 기피 ${cardMetaState(gs).bans.length}/${cardBanSlots(gs)}장`, 16, y+8);
+  // 등급 띠 — 숫자보다 폭이 먼저 읽힌다
+  const bx = 16, bw = CW-32, by = y+24;
+  let ox = bx;
+  CARD_GRADES.forEach(g => {
+    const w = bw * (odds[g] || 0);
+    ctx.fillStyle = CARD_GRADE_COLOR[g]; ctx.fillRect(ox, by, Math.max(0, w-1), 8);
+    ox += w;
+  });
+  ctx.font='bold 8px sans-serif';
+  let lx = 16;
+  CARD_GRADES.forEach(g => {
+    ctx.fillStyle = CARD_GRADE_COLOR[g];
+    const t = `${CARD_GRADE_LABEL[g]} ${(odds[g]*100).toFixed(1)}%`;
+    ctx.fillText(t, lx, y+36);
+    lx += ctx.measureText(t).width + 9;
+  });
+  y += oh + 8;
+
+  // ── 트랙 ─────────────────────────────────────────────────────────────────
+  for (const tr of CARD_META_TRACKS) {
+    const lv    = cardMetaLevel(gs, tr.id);
+    const maxed = lv >= tr.max;
+    const cost  = cardMetaCost(gs, tr.id);
+    const aff   = !maxed && cost != null && (gs.soulStones||0) >= cost;
+    const rowH  = 66;
+
+    uiPanel(ctx, 8, y, CW-16, rowH, 7, maxed?'#0f2a1a':'#0b1220', maxed?'#22c55e':tr.color, maxed?2:1.5);
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.font='15px sans-serif'; ctx.fillStyle='#e2e8f0';
+    ctx.fillText(tr.icon, 15, y+8);
+    ctx.fillStyle=tr.color; ctx.font='bold 11px sans-serif';
+    ctx.fillText(tr.name, 36, y+9);
+    ctx.textAlign='right';
+    ctx.fillStyle=maxed?'#86efac':'#e2e8f0'; ctx.font='bold 12px sans-serif';
+    ctx.fillText(`+${lv}`, CW-18, y+8);
+    ctx.fillStyle='#475569'; ctx.font='bold 8px sans-serif';
+    ctx.fillText(`/ ${tr.max}`, CW-18, y+22);
+
+    ctx.textAlign='left';
+    ctx.fillStyle='#94a3b8'; ctx.font='bold 8px sans-serif';
+    ctx.fillText(tr.desc(lv), 36, y+24);
+    ctx.fillStyle='#475569'; ctx.font='8px sans-serif';
+    ctx.fillText(tr.note, 36, y+35);
+
+    // 단계 막대 — 설명 줄 아래로 충분히 내린다 (8px 글자가 y+46까지 내려온다)
+    const px=15, pw=CW-30, py=y+55;
+    ctx.fillStyle='#1a2333'; ctx.fillRect(px, py, pw, 3);
+    ctx.fillStyle=tr.color;  ctx.fillRect(px, py, pw * (lv/tr.max), 3);
+
+    // 🚫 기피 목록은 "사는 것"과 "고르는 것"이 따로다 — 버튼이 둘이다
+    const bw2 = tr.id === 'ban' ? 74 : 98, bh2 = 20;
+    const bx2 = CW-16-bw2, by2 = y+31;
+    if (maxed) {
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillStyle='#22c55e'; ctx.font='bold 9px sans-serif';
+      ctx.fillText('★ 최대', bx2+bw2/2, by2+bh2/2);
+    } else {
+      uiPanel(ctx, bx2, by2, bw2, bh2, 4, aff?'#08202e':'#12161f', aff?'#38bdf8':'#2a3140', 1);
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillStyle=aff?'#7dd3fc':'#475569'; ctx.font='bold 10px sans-serif';
+      ctx.fillText(`💎${cost}`, bx2+bw2/2, by2+bh2/2);
+      if (aff) gs.ui.cardMetaBtns.push({x:bx2,y:by2,w:bw2,h:bh2,id:tr.id});
+    }
+    if (tr.id === 'ban' && lv > 0) {
+      const ew=74, ex=bx2-ew-6, ey=by2;
+      uiPanel(ctx, ex, ey, ew, bh2, 4, '#2a0e0e', '#f87171', 1);
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillStyle='#fca5a5'; ctx.font='bold 10px sans-serif';
+      ctx.fillText('목록 고르기', ex+ew/2, ey+bh2/2);
+      gs.ui.cardMetaBtns.push({x:ex,y:ey,w:ew,h:bh2,id:'__banpick'});
+    }
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    y += rowH + 6;
+  }
+
+  // 지금 무엇을 빼 두었는지 — 목록 화면에 들어가지 않아도 보이게
+  const bans = cardMetaState(gs).bans;
+  if (bans.length) {
+    const cards = bans.map(id => UPGRADE_CARDS.find(c => c.id === id)).filter(Boolean);
+    const rows = Math.ceil(cards.length / 3), bh = 20 + rows*16;
+    uiPanel(ctx, 8, y, CW-16, bh, 6, '#150b0b', '#3f1d1d', 1);
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillStyle='#f87171'; ctx.font='bold 9px sans-serif';
+    ctx.fillText(`🚫 지금 빼 둔 카드 ${cards.length}장`, 16, y+7);
+    cards.forEach((c, i) => {
+      const cx = 16 + (i % 3) * ((CW-32)/3), cy = y + 20 + Math.floor(i/3)*16;
+      ctx.fillStyle='#7f1d1d'; ctx.font='9px sans-serif';
+      ctx.fillText(`${c.icon} ${c.name}`, cx, cy);
+    });
+    y += bh + 8;
+  }
+
+  const spent = cardMetaSpent(gs);
+  ctx.fillStyle='#334155'; ctx.font='9px sans-serif'; ctx.textAlign='left';
+  ctx.fillText(spent > 0 ? `지금까지 💎${spent}를 패에 넣었습니다 — 판이 끝나도 남습니다.`
+                         : '여기서 산 것은 판이 끝나도 남습니다.', 14, y+2);
+  _lobbyBottom = y + 20;
+}
+
+// 🚫 기피 목록 — 분류로 접어 두고, 펼친 분류의 카드만 고른다.
+// 76장을 한 화면에 늘어놓으면 무엇을 뺐는지가 오히려 안 보인다.
+function _renderCardBanPicker(ctx, gs, y) {
+  const L = gs.lobby;
+  const bans = cardMetaState(gs).bans, slots = cardBanSlots(gs);
+
+  const bkW=58, bkH=22;
+  uiPanel(ctx, 10, y, bkW, bkH, 5, '#0b1220', '#334155', 1);
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillStyle='#94a3b8'; ctx.font='bold 10px sans-serif';
+  ctx.fillText('‹ 돌아가기', 10+bkW/2, y+bkH/2);
+  gs.ui.cardBackBtn = {x:10, y, w:bkW, h:bkH};
+  ctx.textAlign='right';
+  ctx.fillStyle = bans.length >= slots ? '#f87171' : '#94a3b8';
+  ctx.font='bold 10px sans-serif';
+  ctx.fillText(`뺀 카드 ${bans.length} / ${slots}`, CW-14, y+bkH/2);
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  y += bkH + 8;
+
+  // 분류 줄
+  const cats = Object.keys(CARD_CAT_LABEL);
+  const cw = (CW - 16 - 5*3) / 6, ch = 26;
+  cats.forEach((cid, i) => {
+    const cx = 8 + i*(cw+3);
+    const on = L.cardCat === cid;
+    const n  = UPGRADE_CARDS.filter(c => c.cat === cid && bans.includes(c.id)).length;
+    uiPanel(ctx, cx, y, cw, ch, 4, on?'#08202e':'#0b1220', on?'#38bdf8':'#1e293b', on?2:1);
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.font='bold 8px sans-serif'; ctx.fillStyle = on?'#7dd3fc':'#64748b';
+    ctx.fillText(CARD_CAT_LABEL[cid].split(' ')[0], cx+cw/2, y+10);
+    ctx.fillStyle = n>0 ? '#f87171' : (on?'#38bdf8':'#334155');
+    ctx.fillText(n>0 ? `🚫${n}` : CARD_CAT_LABEL[cid].split(' ')[1], cx+cw/2, y+19);
+    gs.ui.cardCatBtns.push({x:cx, y, w:cw, h:ch, id:cid});
+  });
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  y += ch + 8;
+
+  const rows = UPGRADE_CARDS.filter(c => c.cat === L.cardCat);
+  const rh = 34;
+  for (const c of rows) {
+    const off = bans.includes(c.id);
+    const gc  = CARD_GRADE_COLOR[c.grade] || '#94a3b8';
+    uiPanel(ctx, 8, y, CW-16, rh, 5, off?'#1c0a0a':'#0b1220', off?'#f87171':'#1e293b', off?1.5:1);
+    ctx.globalAlpha = off ? 0.45 : 1;
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.font='13px sans-serif'; ctx.fillStyle='#e2e8f0';
+    ctx.fillText(c.icon, 16, y+12);
+    ctx.font='bold 10px sans-serif'; ctx.fillStyle=gc;
+    ctx.fillText(c.name, 38, y+11);
+    ctx.font='8px sans-serif'; ctx.fillStyle='#64748b';
+    ctx.fillText(c.desc, 38, y+23);
+    if (c.bane) {
+      ctx.fillStyle='#7f1d1d'; ctx.font='8px sans-serif';
+      ctx.fillText(`▼ ${c.bane}`, 38 + ctx.measureText(c.desc).width + 8, y+23);
+    }
+    ctx.globalAlpha = 1;
+    ctx.textAlign='right';
+    ctx.fillStyle = off ? '#f87171' : '#334155'; ctx.font='bold 10px sans-serif';
+    ctx.fillText(off ? '🚫 뺌' : (CARD_GRADE_LABEL[c.grade]||''), CW-18, y+rh/2);
+    gs.ui.cardBanBtns.push({x:8, y, w:CW-16, h:rh, id:c.id});
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    y += rh + 4;
+  }
+  ctx.fillStyle='#334155'; ctx.font='9px sans-serif';
+  ctx.fillText('뺀 카드는 이번부터 뽑기에 나오지 않습니다. 눌러서 되돌릴 수 있습니다.', 14, y+2);
   _lobbyBottom = y + 20;
 }
 

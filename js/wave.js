@@ -364,8 +364,11 @@ function createWaveManager() {
                           || (runHasFinish(gs) && gs.bossDefeated);
       if (!atCampaignEnd) {
         this.phase = 'upgradePick';
-        gs.upgradePick = { active: true, cards: rollUpgradeCards(gs.activeUpgrades, fev('cards', 3)) };
+        // 장수는 캠프 🎴패의 폭이 정한다. 층 이벤트(🎲풍요)가 더 크면 그쪽을 쓴다.
+        const hand = Math.max(cardHandSize(gs), fev('cards', 0));
+        gs.upgradePick = { active: true, cards: rollUpgradeCards(gs.activeUpgrades, hand, gs) };
         gs.pickScroll = 0;   // 새 패는 언제나 왼쪽 끝에서 본다
+        gs.freeRerolls = cardFreeRerolls(gs);   // 층마다 다시 채워진다
       } else {
         this.phase = 'intermission';
         this.intermissionTimer = 0;

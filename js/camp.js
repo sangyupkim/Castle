@@ -228,3 +228,117 @@ function campSpentOn(gs, id) {
   for (let i = 0; i < campLevel(gs, id); i++) t += Math.max(3, Math.round(base * Math.pow(1.165, i)));
   return t;
 }
+
+// ─── 🎴 패 — 카드 선택 자체를 강화한다 ────────────────────────────────────────
+// 강화 카드는 이 게임의 중추다. 한 판에서 30번 넘게 고르고, 그 30번이 그 판의
+// 성격을 만든다. 그런데 지금까지 플레이어가 그 30번에 개입할 수 있는 방법은
+// **골드를 내고 다시 뽑기** 하나뿐이었다 — 무엇이 나올지에는 손을 댈 수 없었다.
+//
+// 여기서 그 확률 자체를 산다. 넷 다 성격이 다르다.
+//   🃏 패의 폭   — 몇 장 중에 고르나 (선택지의 수)
+//   ✨ 감정안     — 좋은 등급이 얼마나 자주 오나 (질)
+//   ✦ 전설의 예감 — 전설만 따로 밀어 올린다 (뾰족하게)
+//   🚫 기피 목록  — 보기 싫은 카드를 아예 빼 버린다 (내가 정하는 풀)
+//   🎲 다시 뽑기  — 층마다 공짜 리롤
+//
+// 값은 보석이고 영구다. 단련(🔥)과 달리 **확정**으로 오른다 — 확률을 사는 곳에서
+// 확률로 굴리게 하면 두 겹이 되어 무엇을 샀는지 알 수 없다.
+const CARD_META_TRACKS = [
+  { id:'hand',   name:'패의 폭',     icon:'🃏', color:'#38bdf8', max:3,
+    cost: lv => Math.round(180 * Math.pow(3.1, lv)),
+    desc: lv => `카드 ${3 + lv}장 중에서 고릅니다`,
+    note: '고를 수 있는 장수가 늘어납니다' },
+  { id:'eye',    name:'감정안',      icon:'✨', color:'#a78bfa', max:20,
+    cost: lv => Math.round(60 * Math.pow(1.20, lv)),
+    desc: lv => `희귀 이상 등장 가중치 +${Math.round(lv * 6)}%`,
+    note: '좋은 등급이 더 자주 옵니다' },
+  { id:'omen',   name:'전설의 예감', icon:'✦', color:'#fbbf24', max:15,
+    cost: lv => Math.round(140 * Math.pow(1.26, lv)),
+    desc: lv => `✦전설 등장 가중치 +${Math.round(lv * 14)}%`,
+    note: '전설만 따로 밀어 올립니다' },
+  { id:'ban',    name:'기피 목록',   icon:'🚫', color:'#f87171', max:8,
+    cost: lv => Math.round(260 * Math.pow(1.42, lv)),
+    desc: lv => lv > 0 ? `보기 싫은 카드 ${lv}장을 뺍니다` : '아직 뺄 수 없습니다',
+    note: '고른 카드는 이제 나오지 않습니다' },
+  { id:'reroll', name:'다시 뽑기',   icon:'🎲', color:'#4ade80', max:3,
+    cost: lv => Math.round(320 * Math.pow(2.2, lv)),
+    desc: lv => lv > 0 ? `층마다 공짜 리롤 ${lv}회` : '리롤은 골드로만',
+    note: '골드를 내지 않고 다시 뽑습니다' },
+];
+function cardMetaTrack(id) { return CARD_META_TRACKS.find(t => t.id === id) || null; }
+
+function cardMetaState(gs) {
+  if (!gs.cardMeta) gs.cardMeta = { levels:{}, bans:[] };
+  if (!gs.cardMeta.levels) gs.cardMeta.levels = {};
+  if (!Array.isArray(gs.cardMeta.bans)) gs.cardMeta.bans = [];
+  return gs.cardMeta;
+}
+function cardMetaLevel(gs, id) { return cardMetaState(gs).levels[id] || 0; }
+function cardMetaCost(gs, id) {
+  const tr = cardMetaTrack(id); if (!tr) return null;
+  const lv = cardMetaLevel(gs, id);
+  if (lv >= tr.max) return null;
+  return tr.cost(lv);
+}
+// 확정 구매 — 확률로 굴리지 않는다
+function buyCardMeta(gs, id) {
+  const cost = cardMetaCost(gs, id);
+  if (cost == null || (gs.soulStones || 0) < cost) return false;
+  gs.soulStones -= cost;
+  const c = cardMetaState(gs);
+  c.levels[id] = cardMetaLevel(gs, id) + 1;
+  // 기피 칸이 줄어들 일은 없지만, 넘치면 뒤에서 자른다
+  const slots = cardMetaLevel(gs, 'ban');
+  if (c.bans.length > slots) c.bans.length = slots;
+  return true;
+}
+
+// ── 기피 목록 ──
+function cardBanSlots(gs)    { return cardMetaLevel(gs, 'ban'); }
+function isCardBanned(gs, id){ return cardMetaState(gs).bans.includes(id); }
+function toggleCardBan(gs, id) {
+  const c = cardMetaState(gs);
+  const i = c.bans.indexOf(id);
+  if (i >= 0) { c.bans.splice(i, 1); return true; }
+  if (c.bans.length >= cardBanSlots(gs)) return false;   // 칸이 없다
+  c.bans.push(id);
+  return true;
+}
+
+// ── 뽑기에 쓰이는 값 ──
+// 한 번에 보여줄 장수 (층 이벤트 🎲풍요가 더 크면 그쪽을 쓴다)
+function cardHandSize(gs)   { return 3 + cardMetaLevel(gs, 'hand'); }
+// 층마다 주어지는 공짜 리롤
+function cardFreeRerolls(gs){ return cardMetaLevel(gs, 'reroll'); }
+// 등급별 가중치 — 감정안은 희귀 이상 전체를, 예감은 전설만 밀어 올린다
+function cardGradeWeights(gs) {
+  const eye  = cardMetaLevel(gs, 'eye')  * 0.06;
+  const omen = cardMetaLevel(gs, 'omen') * 0.14;
+  return {
+    common: CARD_GRADE_WEIGHT.common,
+    rare:   CARD_GRADE_WEIGHT.rare   * (1 + eye),
+    epic:   CARD_GRADE_WEIGHT.epic   * (1 + eye),
+    legend: CARD_GRADE_WEIGHT.legend * (1 + eye) * (1 + omen),
+  };
+}
+// 지금 설정으로 각 등급이 나올 확률 (표시용)
+function cardGradeOdds(gs) {
+  const w = cardGradeWeights(gs);
+  const n = {};
+  // 기피로 뺀 카드는 풀에서 사라진다 — 여기서도 빼야 화면의 확률이 실제와 맞는다.
+  // (일반을 여덟 장 빼 놓고 "일반 34%"라고 적혀 있으면 그 표시가 거짓말이 된다)
+  const bans = new Set(cardMetaState(gs).bans);
+  for (const c of UPGRADE_CARDS) if (!bans.has(c.id)) n[c.grade] = (n[c.grade] || 0) + 1;
+  let total = 0;
+  for (const g of CARD_GRADES) total += (w[g] || 0) * (n[g] || 0);
+  const out = {};
+  for (const g of CARD_GRADES) out[g] = total > 0 ? (w[g] || 0) * (n[g] || 0) / total : 0;
+  return out;
+}
+// 캠프에서 🎴패에 넣은 보석 총액 (기록용)
+function cardMetaSpent(gs) {
+  let t = 0;
+  for (const tr of CARD_META_TRACKS)
+    for (let i = 0; i < cardMetaLevel(gs, tr.id); i++) t += tr.cost(i);
+  return t;
+}

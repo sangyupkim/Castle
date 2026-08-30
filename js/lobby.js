@@ -16,6 +16,9 @@ const LOBBY_TABS = [
   { id:'sortie', label:'출격', icon:'⚔️', color:'#22c55e' },
   { id:'skill',  label:'스킬', icon:'🌳', color:'#a78bfa' },
   { id:'camp',   label:'단련', icon:'🔥', color:'#fb923c' },
+  // 🎴 패 — 카드 선택은 한 판에서 30번 넘게 돌아오는 결정이다. 단련 안에 한 줄로
+  // 끼워 넣으면 그 무게가 보이지 않아서, 단독 탭으로 뺐다.
+  { id:'card',   label:'패',   icon:'🎴', color:'#38bdf8' },
   { id:'unlock', label:'해금', icon:'🔓', color:'#f59e0b' },
   { id:'pact',   label:'서약', icon:'📜', color:'#f43f5e' },
   { id:'record', label:'기록', icon:'📊', color:'#60a5fa' },
@@ -25,6 +28,7 @@ function createLobby() {
   return {
     tab: 'sortie',
     campGroup: 'tower',   // 🔥 단련 — 지금 펼친 무리
+    cardCat: null,        // 🎴 패 — 기피 목록에서 지금 펼친 분류 (null이면 트랙 화면)
     skillTree: 'tower',   // 스킬 탭 안의 계열
     nightmare: 0,         // 🌑 고른 악몽 단계 (0 = 심연)
     scroll: 0

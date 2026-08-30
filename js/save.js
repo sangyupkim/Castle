@@ -40,6 +40,7 @@ const SaveManager = {
       endlessGemsOld: gs.endlessGemsOld || 0,
       runBestAtStart: gs.runBestAtStart || 0,
       rerolls:     gs.rerolls || 0,
+      freeRerolls: gs.freeRerolls || 0,
       totalGoldEarned: gs.battle ? gs.battle.totalGoldEarned : 0,
       townBuildings: JSON.parse(JSON.stringify(gs.town?.buildings || {})),
       townGear:      gs.town?.gear ? JSON.parse(JSON.stringify(gs.town.gear)) : null,
@@ -71,6 +72,7 @@ const SaveManager = {
       // 여기 남는 forge는 옛 세이브를 읽을 때만 쓰인다.
       townForge:      gs.town?.forge ? JSON.parse(JSON.stringify(gs.town.forge)) : null,
       camp:           gs.camp ? JSON.parse(JSON.stringify(gs.camp)) : null,
+      cardMeta:       gs.cardMeta ? JSON.parse(JSON.stringify(gs.cardMeta)) : null,
       charms:         gs.charms ? JSON.parse(JSON.stringify(gs.charms)) : [],
       charmSlots:     gs.charmSlots ? gs.charmSlots.slice() : [null, null],
       ascension:      gs.ascension || 0,
