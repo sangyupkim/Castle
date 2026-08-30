@@ -4,6 +4,8 @@ function createWaveManager() {
   return {
     waveIndex: 0,
     phase: 'idle',            // 'idle' | 'active' | 'upgradePick' | 'intermission'
+    midBossSide: null,        // 🐲 이번 층 중간보스가 나오는 곳 ('defense' | 'arena')
+    midBossPending: null,     // 하단 중간보스는 아레나가 열린 뒤에 넣는다
     timer: 0,
     elapsed: 0,
     intermissionTimer: 0,
@@ -85,6 +87,13 @@ function createWaveManager() {
       if (isBossFloor(gs, this.waveIndex)) {
         this.defenseQueues = [];       // 일반 스폰은 없다
         spawnDemonLord(gs, this.waveIndex);
+      } else if (isMidBossFloor(gs, this.waveIndex)) {
+        // 🐲 10층마다 중간보스 — 상단이냐 하단이냐는 층이 정하고, 미리 예고돼 있다.
+        // 마왕과 달리 잡몹 스폰을 막지 않는다. 평소의 층 위에 벽이 하나 얹히는 것.
+        const tier = endlessTier(this.waveIndex);
+        this.midBossSide = midBossSide(tier);
+        if (this.midBossSide === 'defense') spawnMidBoss(gs, this.waveIndex);
+        else this.midBossPending = tier;     // 하단은 아레나가 열린 뒤에 넣는다
       }
 
       // 예약해둔 현상수배는 웨이브 시작 조금 뒤에 등장한다
@@ -95,6 +104,10 @@ function createWaveManager() {
       gs.chargers = [];
       startFighting(gs.battle);
       startArena(gs, this.waveIndex);
+      if (this.midBossPending) {
+        spawnMidBossMob(gs, this.midBossPending);
+        this.midBossPending = null;
+      }
       if (typeof SFX !== 'undefined') SFX.waveStart();
     },
 
@@ -372,7 +385,7 @@ function createWaveManager() {
         // 그러지 않으면 1단계를 깬 사람이 2단계로 갈 이유가 없다.
         const step  = endlessGemStepFor(et, gs.runBestAtStart)
                     * fev('gemMult', 1) * (BONUSES.gemMult || 1)
-                    * nightmareGemMult(gs.nightmare || 0);
+                    * (gs.unbounded ? unboundedGemMult() : nightmareGemMult(gs.nightmare || 0));
         gs.endlessGems = (gs.endlessGems || 0) + step;
         if (first) gs.endlessGemsNew = (gs.endlessGemsNew || 0) + step;
         else       gs.endlessGemsOld = (gs.endlessGemsOld || 0) + step;

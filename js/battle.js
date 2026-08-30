@@ -36,11 +36,15 @@ function applyUnitStats(u, hpRatio) {
   const ratio = hpRatio !== undefined ? hpRatio : (u.maxHp > 0 ? u.hp / u.maxHp : 1);
   // 🏨 여관의 '명성' — 특수 용병에게만 붙는 배율
   const sp = t.special ? (BONUSES.specialUnitMult || 1) : 1;
+  // 🔥 캠프 단련 — 이 병종만 오르는 배율. 조합을 정해 놓고 그쪽을 키우게 한다.
+  const cHp  = campUnitMult(u.typeId, 'hp');
+  const cAtk = campUnitMult(u.typeId, 'atk');
+  const cDef = campUnitMult(u.typeId, 'def');
   u.maxHp     = Math.max(1, Math.round((t.hp + BONUSES.unitHp) * (BONUSES.unitHpMult || 1)
-                                       * (BONUSES.pactUnitHpMult || 1) * sp));
-  u.atk       = Math.round((t.atk + BONUSES.unitAtk) * (BONUSES.unitAtkMult || 1) * sp);
-  u.def       = Math.round((t.def + BONUSES.unitDef + BONUSES.heroAura) * sp);
-  u.skillAtk  = t.skillAtk  ? Math.round((t.skillAtk + BONUSES.unitAtk) * sp) : 0;
+                                       * (BONUSES.pactUnitHpMult || 1) * sp * cHp));
+  u.atk       = Math.round((t.atk + BONUSES.unitAtk) * (BONUSES.unitAtkMult || 1) * sp * cAtk);
+  u.def       = Math.round((t.def + BONUSES.unitDef + BONUSES.heroAura) * sp * cDef);
+  u.skillAtk  = t.skillAtk  ? Math.round((t.skillAtk + BONUSES.unitAtk) * sp * cAtk) : 0;
   u.healAmt   = t.healAmt   ? t.healAmt   + BONUSES.healBonus   : 0;
   u.shieldAmt = t.shieldAmt ? t.shieldAmt + BONUSES.shieldBonus : 0;
   u.hp        = Math.max(1, Math.min(u.maxHp, Math.round(u.maxHp * ratio)));

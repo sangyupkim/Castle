@@ -194,22 +194,41 @@ const UPGRADE_CARDS = [
 // 퍼센트 표기 헬퍼 — 트리 설명은 전부 이걸 쓴다
 function skpct(x) { return Math.round(x * 1000) / 10 + '%'; }
 
-const SKILL_MAX_LV   = 10;   // 노드 하나가 오를 수 있는 최대 레벨
-const SKILL_ROW_GATE = 5;    // 아랫줄을 열려면 윗줄들에 쌓아야 하는 레벨 수
+// ─── 트리의 눈금과 값 ────────────────────────────────────────────────────────
+// v12.9에서 노드 하나가 10레벨에서 **100레벨**이 됐다. 보석을 쓸 데가 없어
+// 남아돈다는 보고 때문인데, 단순히 값만 올리면 "같은 것을 더 비싸게"일 뿐이라
+// 눈금 자체를 잘게 쪼갰다 — 한 번에 크게 오르는 대신 오래 오른다.
+//
+// 계수는 노드 정의에 그대로 두고 **넘겨주는 값**을 8로 나눈다(SKILL_EFFECT_SCALE).
+// 100레벨이 옛 12.5레벨만큼이므로 끝까지 올리면 예전보다 25% 세다 — 값이 훨씬
+// 무거워진 만큼의 몫이다. 계수 45줄을 일일이 고치면 Math.min 상한이나
+// `v>=5` 같은 문턱을 하나씩 놓치기 마련이라, 한 군데서 나눈다.
+const SKILL_MAX_LV      = 100;  // 노드 하나가 오를 수 있는 최대 레벨
+const SKILL_ROW_GATE    = 30;   // 아랫줄 한 줄을 열 때마다 윗줄에 쌓아야 하는 레벨 수
+const SKILL_EFFECT_SCALE= 0.125;
 
-// 레벨 L을 찍는 값 = 기본값 × L × (1 + 0.35(L-1)).
-// 예전에는 그냥 기본값 × L이라 한 노드를 끝까지 올리는 데 기본값 × 55,
-// 트리 전체가 4,236보석이었다. 100층을 한 번 돌파하면 9,000보석이 들어오니
-// 첫 돌파에서 트리가 통째로 끝났다 — 영구 성장이 두 번째 판 전에 사라진 셈이다.
-// 뒷 레벨을 가파르게 만들어 한 노드를 '끝까지' 올리는 것 자체가 판단이 되게 한다
-// (노드 총액 × 55 → × 170.5, 트리 전체 ≈ 13,100).
-const SKILL_LEVEL_STEEPNESS = 0.35;
+// maxLv를 따로 적은 노드(편성 슬롯 +N 같은 '개수' 노드)는 눈금이 곧 개수다.
+// 이런 것은 100칸으로 늘릴 수도, 계수를 나눌 수도 없다 — 제 눈금을 그대로 쓴다.
+function skillMaxLv(sk)      { return sk.maxLv || SKILL_MAX_LV; }
+function skillEffV(sk, lv)   { return sk.maxLv ? lv : lv * SKILL_EFFECT_SCALE; }
+function skillIsFine(sk)     { return !sk.maxLv; }   // 눈금이 잘게 쪼개진 노드인가
+
+// 아랫줄일수록 한 칸이 비싸다 — 줄을 내려가는 것 자체가 값을 치르는 선택이 되게.
+// 기본값(cost)도 1→3으로 오르므로 3줄 아래는 실질 18배다.
+const SKILL_ROW_COST_MULT = [1, 2, 3.5, 6];
+function skillRowMult(sk) {
+  const r = Math.max(0, sk.row || 0);
+  return SKILL_ROW_COST_MULT[Math.min(SKILL_ROW_COST_MULT.length - 1, r)];
+}
 function skillLevelCost(sk, level) {
   const L = Math.max(1, level);
-  return Math.max(1, Math.round((sk.cost || 1) * L * (1 + SKILL_LEVEL_STEEPNESS * (L - 1))));
+  const base = (sk.cost || 1) * skillRowMult(sk);
+  // 개수 노드는 눈금이 4~8칸뿐이라 같은 식으로는 거저가 된다 — 한 칸을 무겁게.
+  const per = sk.maxLv ? 25 : 0.35;
+  return Math.max(1, Math.round(base * L * per));
 }
 function skillNodeTotal(sk) {
-  let t = 0; for (let i = 1; i <= SKILL_MAX_LV; i++) t += skillLevelCost(sk, i); return t;
+  let t = 0; for (let i = 1; i <= skillMaxLv(sk); i++) t += skillLevelCost(sk, i); return t;
 }
 
 const SKILL_TREES = {
@@ -360,7 +379,6 @@ function treeLevelsAbove(gs, treeId, row) {
   for (const sk of tree.skills) if (sk.row < row) n += skillLevel(gs, sk.id);
   return n;
 }
-function skillMaxLv(sk) { return sk.maxLv || SKILL_MAX_LV; }
 // 이 노드를 지금 한 단계 올릴 수 있는가
 function skillCanBuy(gs, treeId, sk) {
   const lv = skillLevel(gs, sk.id);
@@ -389,7 +407,7 @@ function applySkillTree(gs) {
   for (const treeId of SKILL_TREE_ORDER) {
     for (const sk of SKILL_TREES[treeId].skills) {
       const lv = skillLevel(gs, sk.id);
-      if (lv > 0) sk.apply(BONUSES, lv);
+      if (lv > 0) sk.apply(BONUSES, skillEffV(sk, lv));
     }
   }
 }

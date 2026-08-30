@@ -74,7 +74,10 @@ function makeArenaMob(typeId, waveIndex, killCount, _unusedCaveLevel, eliteBonus
                            : (1 + (waveIndex || 0) * WAVE_GOLD_SCALE);
   const gm = goldBase * (1 + (killCount || 0) * KILL_SCALE)
            * cv.goldMult * (isElite ? ELITE_GOLD_MULT : 1);
-  const hp = Math.max(1, Math.round(t.hp * sm * BONUSES.mobHpMult));
+  // ♾️ 무한은 하단에도 같은 무게가 붙는다 — 한쪽만 어려우면 갈래가 아니라 편식이다
+  const unb = (typeof gs !== 'undefined' && gs && gs.unbounded)
+            ? unboundedFloorMult(endlessTier(waveIndex)) : 1;
+  const hp = Math.max(1, Math.round(t.hp * sm * BONUSES.mobHpMult * unb));
   // 방어력만 sm을 그대로 먹으면 층이 깊어질수록 아군 공격이 통째로 막힌다.
   // 아군 공격력은 정액 합산(마을 트랙·트리)이라 곱셈 곡선을 따라갈 수가 없다 —
   // 40층 마왕이 방어력 111인데 궁수 공격력이 117이라 유효타가 6이었다.
@@ -756,6 +759,40 @@ function spawnSummonedElite(gs, n) {
   addFloaty(gs.battle, '⚔️ 소환 정예!', m.x, m.y - 24, '#fbbf24');
   if (typeof FX  !== 'undefined') { FX.ring(m.x, m.y, '#fbbf24', 30); FX.shake(5, 0.35); }
   if (typeof SFX !== 'undefined') SFX.waveStart();
+}
+
+// 🐲 하단 중간보스 — 부대가 정면으로 이겨야 하는 한 마리.
+// 소환 정예와 달리 플레이어가 부른 것이 아니라 **층이 데려온다**.
+function spawnMidBossMob(gs, tier) {
+  const a = gs.arena;
+  const pool = (a.pool || [['goblin', 1]]);
+  const typeId = pool.map(([t]) => t)
+    .sort((x, y) => (BATTLE_MOB_TYPES[y]?.hp || 0) - (BATTLE_MOB_TYPES[x]?.hp || 0))[0] || 'orc';
+
+  const m = makeArenaMob(typeId, a.waveIndex, gs.battle.killCount, 0, 0);
+  m.isElite = true;
+  m.isMidBoss = true;
+  m.name  = midBossName(tier);
+  m.color = '#f43f5e';
+  m.maxHp = Math.max(400, Math.round(m.maxHp * MIDBOSS_ARENA_MULT
+                                     * (1 + (gs.nightmare || 0) * NIGHTMARE_BOSS_HP_STEP)));
+  m.hp    = m.maxHp;
+  m.atk   = Math.round(m.atk * 2.2);
+  m.def   = Math.round(m.def * 1.5);
+  m.radius = Math.round(m.radius * 1.7);
+  m.goldReward = Math.round(m.goldReward * 12);
+  m.gems  = Math.round((2 + Math.floor(tier / 20)) * (BONUSES.summonRewardMult || 1));
+
+  const allies = gs.battle.ourTeam.filter(u => !u.dead);
+  const p = pickSpawnPoint(a, allies);
+  m.x = p.x; m.y = p.y;
+  a.mobs.push(m);
+
+  addLog(gs.battle, `🐲 ${m.name} — 아레나에 내려옵니다 (처치 시 💎+${m.gems})`, '#f43f5e');
+  addFloaty(gs.battle, `🐲 ${m.name}!`, m.x, m.y - 26, '#f43f5e');
+  if (typeof FX  !== 'undefined') { FX.ring(m.x, m.y, '#f43f5e', 36); FX.shake(7, 0.5); }
+  if (typeof SFX !== 'undefined') SFX.waveStart();
+  return m;
 }
 
 // 값나가는 드랍 하나를 처치 지점 바깥에 떨군다.

@@ -157,7 +157,7 @@ function newState() {
          buildingScroll:null, pageScroll:null, briefScroll:null, lobbyScroll:null, pickScroll:null,
          pauseResumeBtn:null, pauseGiveUpBtn:null,
          backupExportBtn:null, backupImportBtn:null, backupMsg:null,
-         tutReplayBtn:null, tutResetTipBtn:null, guideReplayBtn:null, campBtns:[], bgmToggleBtn:null, sfxToggleBtn:null,
+         tutReplayBtn:null, tutResetTipBtn:null, guideReplayBtn:null, campBtns:[], campGroupBtns:[], bgmToggleBtn:null, sfxToggleBtn:null,
          tutSkipBtn:null, tutBackBtn:null, sigilCards:[] },
     // 영구 데이터 참조
     get soulStones()    { return _soulStones; },
@@ -789,7 +789,7 @@ const _PAGE_UI_KEYS = [
   'forgeTabs','forgeGearBtns','forgeFuseBtns','forgeTemperBtn','forgeCoreBtn',
   'charmRollBtn','charmCards','charmSlotBtns',
   'specialCards','specialSlots','heroDefBtn','heroBatBtn','bountyBtn','eliteBtn','towerMiniGrid',
-  'lobbyTabBtns','sortieBtn','trainBtn','unboundedBtn','nightmareBtns','metaCards','metaBulkCards','unlockBtns','pactBtns','sigilCards','campBtns',
+  'lobbyTabBtns','sortieBtn','trainBtn','unboundedBtn','nightmareBtns','metaCards','metaBulkCards','unlockBtns','pactBtns','sigilCards','campBtns','campGroupBtns',
   'skillTreeTabs','ascendBtn','trainSkipBtn','skillResetBtn','heroActiveBtns','heroAutoBtn',
   'backupExportBtn','backupImportBtn',
   'tutReplayBtn','tutResetTipBtn','guideReplayBtn','bgmToggleBtn','sfxToggleBtn','guideSkipBtn',
@@ -946,6 +946,9 @@ function handleLobbyTap(x, y) {
   // 🔥 단련 — 보석을 걸고 굴린다
   if (L.tab === 'camp') {
     const ry = y + (gs.lobbyScroll || 0);
+    for (const g of gs.ui.campGroupBtns||[]) {
+      if (hitTest(x,ry,g)) { L.campGroup = g.id; gs.lobbyScroll = 0; SFX.click(); return; }
+    }
     for (const b of gs.ui.campBtns||[]) {
       if (!hitTest(x,ry,b)) continue;
       const r = campTemper(gs, b.id);
