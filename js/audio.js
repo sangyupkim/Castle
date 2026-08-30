@@ -103,6 +103,9 @@ const BGM = (() => {
   // A 마이너 계열로 통일한다 — 곡을 바꿔도 서로 부딪히지 않는다
   const Am = [57, 60, 64], F = [53, 57, 60], C = [48, 52, 55], G = [55, 59, 62];
   const Dm = [50, 53, 57], E7 = [52, 56, 59];
+  // 보스용 — 감7과 반음 위 화음. 셋째 음이 삼전음이라 화음 자체가 안 풀린다.
+  // '더 빠른 전투곡'이 아니라 **해결되지 않는 곡**이어야 보스처럼 들린다.
+  const Bdim = [50, 53, 56], Fm = [53, 56, 60], Ab = [56, 60, 63];
 
   const TRACKS = {
     camp: {
@@ -131,6 +134,28 @@ const BGM = (() => {
       kick:  [1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0],
       hat:   [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,1,1],
       arpOct: 0, lead: 'triangle', bassType: 'sine', arpVol: 0.42, bassVol: 0.95
+    },
+    // 🐲 중간보스 — 10층마다. 쫓기는 느낌. 베이스가 8분으로 계속 걷고,
+    // 화음이 Am → Bdim으로 반음 어긋나며 자리를 못 잡는다.
+    midboss: {
+      bpm: 148, vol: 0.105,
+      chords: [Am, Bdim, Am, E7],
+      bass:  [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0],
+      arp:   [1,1,0,1, 1,0,1,1, 0,1,1,0, 1,1,0,1],
+      kick:  [1,0,0,1, 0,0,1,0, 1,0,0,1, 0,0,1,0],
+      hat:   [0,0,1,0, 0,0,1,0, 0,0,1,0, 0,1,1,1],
+      arpOct: 12, lead: 'square', bassType: 'sawtooth', arpVol: 0.36, bassVol: 0.85
+    },
+    // 👹 마왕 — 100층. 16분 베이스가 쉬지 않고, 킥이 거의 매 박에 떨어진다.
+    // 리드는 한 옥타브 위로 올려 비명처럼 얹는다. 네 마디 내내 해결되지 않는다.
+    boss: {
+      bpm: 164, vol: 0.115,
+      chords: [Am, Fm, Bdim, Ab],
+      bass:  [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1],
+      arp:   [1,0,1,1, 1,0,1,1, 1,1,0,1, 1,0,1,1],
+      kick:  [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,1],
+      hat:   [0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,1,1],
+      arpOct: 24, lead: 'square', bassType: 'sawtooth', arpVol: 0.30, bassVol: 1.0
     }
   };
 
@@ -226,7 +251,13 @@ const BGM = (() => {
       let want = 'camp';
       if (gs && gs.inRun && (gs.page === 'battle' || gs.page === 'town')) {
         const deep = gs.mode === 'endless' && (gs.wave + 1) >= (typeof DEEP_FLOOR_FROM === 'number' ? DEEP_FLOOR_FROM : 40);
-        want = (wm && wm.phase === 'active') ? (deep ? 'deep' : 'battle') : 'camp';
+        // 보스 층은 곡부터 다르다 — 층에 들어선 순간 '오늘은 다르다'가 귀로 먼저 온다
+        let boss = null;
+        try {
+          if (typeof isBossFloor === 'function' && isBossFloor(gs, gs.wave)) boss = 'boss';
+          else if (typeof isMidBossFloor === 'function' && isMidBossFloor(gs, gs.wave)) boss = 'midboss';
+        } catch (e) { boss = null; }
+        want = (wm && wm.phase === 'active') ? (boss || (deep ? 'deep' : 'battle')) : 'camp';
       }
       if (want !== curName) this.play(want);
     }

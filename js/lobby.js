@@ -24,6 +24,7 @@ const LOBBY_TABS = [
 function createLobby() {
   return {
     tab: 'sortie',
+    campGroup: 'tower',   // 🔥 단련 — 지금 펼친 무리
     skillTree: 'tower',   // 스킬 탭 안의 계열
     nightmare: 0,         // 🌑 고른 악몽 단계 (0 = 심연)
     scroll: 0
@@ -124,9 +125,14 @@ function clearAbyssRun(gsp) {
 // ─── 서약 ────────────────────────────────────────────────────────────────────
 // 악몽 단계가 걸려 있으면 그 사다리의 서약이 강제로 켜진다.
 // 플레이어가 캠프에서 직접 건 서약과 합쳐진다 — 악몽 위에 더 걸 수는 있어도 뺄 수는 없다.
+// ♾️ 무한은 **모든 악몽보다 어려워야 한다.** 예전에는 nightmare=0이라 강제 서약이
+// 하나도 안 붙었고, 결승선만 없앤 악몽 0단계 — 즉 악몽 1단계보다도 쉬웠다.
+// 무한은 악몽 10의 서약 전부를 그대로 지고 간다. 캠프에서 자원해 건 서약은
+// 그 위에 더 얹힌다 (togglePact가 막지 않는 한).
 function forcedPacts() {
   const gsp = (typeof gs !== 'undefined' && gs) ? gs : null;
   if (!gsp || !gsp.inRun) return [];
+  if (gsp.unbounded) return nightmarePacts(NIGHTMARE_MAX);
   return nightmarePacts(gsp.nightmare || 0);
 }
 function isPactForced(id) { return forcedPacts().includes(id); }

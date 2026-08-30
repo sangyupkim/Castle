@@ -682,8 +682,21 @@ function nightmareColor(level) {
 // 한 갈래를 처음 깼을 때 주는 보석 — 단계가 오를수록 크다
 const NIGHTMARE_CLEAR_GEMS      = 40;
 const NIGHTMARE_CLEAR_GEMS_STEP = 25;
+// 단계당 선형 0.35였다 — 악몽 10이 ×4.5라 "열 배 어려운데 네 배 반"이었다.
+// 서약이 하나씩 겹치는 난이도는 선형이 아니라 곱으로 오르므로 보상도 곱을 따라간다.
+// 악몽 10 = ×9.5, 5단계 = ×4.5.
 function nightmareGemMult(level) {
-  return 1 + Math.max(0, Math.min(NIGHTMARE_MAX, level || 0)) * 0.35;
+  const n = Math.max(0, Math.min(NIGHTMARE_MAX + 1, level || 0));
+  return 1 + n * 0.55 + n * n * 0.03;
+}
+// ♾️ 무한은 악몽 10 위에 한 칸 더 있는 것으로 친다
+function unboundedGemMult() { return nightmareGemMult(NIGHTMARE_MAX + 1); }
+// ♾️ 무한 — 악몽 10의 서약을 전부 지고 시작하는 데 더해, 층마다 무게가 한 겹 더 붙는다.
+// 결승선이 없다는 것만으로는 '더 어렵다'가 되지 않는다 — 같은 50층이면 악몽 10과
+// 똑같은 50층이었다. 여기서는 층이 깊어질수록 그 차이가 벌어진다.
+const UNBOUNDED_HP_PER_FLOOR = 0.010;   // 층당 적 체력 +1%p (복리 아님, 누적 가산)
+function unboundedFloorMult(tier) {
+  return 1 + Math.max(0, (tier || 1) - 1) * UNBOUNDED_HP_PER_FLOOR;
 }
 
 // ─── 👹 마왕 — 100층의 끝 ────────────────────────────────────────────────────
@@ -1827,6 +1840,46 @@ const WAVE_CLEANUP_MAX = 90;
 // 10층마다 관문 — 물량이 줄고 대형·보스가 몰려온다. 조합이 안 맞으면 여기서 막힌다.
 function isGateTier(tier) { return tier > 0 && tier % 10 === 0; }
 
+// ─── 🐲 중간보스 — 10층마다 한 마리 ──────────────────────────────────────────
+// 관문은 "물량이 줄고 대형이 몰려오는 층"이었을 뿐, 그 층을 **기억하게 만드는 것**이
+// 없었다. 100층 마왕 하나만으로는 90층을 내려가는 동안 목표가 너무 멀다.
+// 그래서 10·20…90층에 중간보스를 세운다.
+//
+// 핵심은 **어느 쪽에서 나오는가**다. 상단이면 타워와 과부하를, 하단이면 부대와
+// 영웅 배치를 고민해야 한다. 층에 들어가기 전에 미리 알려 주므로, 그 한 층을
+// 위해 무엇을 사고 영웅을 어디에 둘지가 실제 판단이 된다.
+// 층 번호와 런 시드로 정해지므로 판마다 배치가 달라지되, 예고와 실제는 늘 같다.
+const MIDBOSS_EVERY     = 10;
+// 그 층 전체 체력의 이만큼을 혼자 진다. 마왕(0.85)은 층을 통째로 독차지하지만
+// 중간보스는 **잡몹과 함께** 오므로 몫이 훨씬 작아야 한다 — 0.55로 뒀더니
+// 90층 중간보스가 1억 6천만이라 마왕보다 무거웠다.
+const MIDBOSS_HP_SHARE  = 0.20;
+const MIDBOSS_ARENA_MULT= 9.0;    // 하단은 잡몹 기준이 낮아 따로 곱한다
+
+// 이 층에 중간보스가 있는가 — 100층(마왕)과 겹치지 않는다
+function isMidBossTier(tier) {
+  if (!(tier > 0 && tier % MIDBOSS_EVERY === 0)) return false;
+  return tier !== ABYSS_FINAL_FLOOR;
+}
+function isMidBossFloor(gsp, waveIndex) {
+  if (!gsp || gsp.mode !== 'endless') return false;
+  return isMidBossTier(endlessTier(waveIndex));
+}
+// 'defense'(상단) | 'arena'(하단) — 층과 시드로 정해진다
+function midBossSide(tier) {
+  return endlessRand(tier, 917) < 0.5 ? 'defense' : 'arena';
+}
+function midBossName(tier) {
+  const names = ['둔중한 파수꾼', '피에 젖은 우두머리', '깨진 뿔의 군장', '잿빛 포식자',
+                 '무쇠 턱', '심연의 감시자', '뒤틀린 거인', '재의 군주', '뼈의 왕'];
+  return names[Math.max(0, Math.floor(tier / MIDBOSS_EVERY) - 1) % names.length];
+}
+// 중간보스 체력 — 그 층 전체 체력에 걸어 둔다. 곡선을 나중에 고쳐도 같이 따라온다.
+function midBossHp(tier, nightmare) {
+  const base = floorTotalHp(tier) * MIDBOSS_HP_SHARE;
+  return Math.max(200, Math.round(base * (1 + (nightmare || 0) * NIGHTMARE_BOSS_HP_STEP)));
+}
+
 // ─── 층 생성 ─────────────────────────────────────────────────────────────────
 let _endlessDefCache = new Map();
 let _endlessCacheSeed = null;
@@ -2008,21 +2061,46 @@ const HERO_RETURN_HP_PER = 0.05; // 구원의 손 1단계당 +5%p
 
 // ─── 영웅 기본 스탯 ───────────────────────────────────────────────────────────
 // 30웨이브 분량에 맞춰 Lv.10까지 확장
-const HERO_LEVELS = [
-  //  atk, hp,  def, expNeeded, atkRange(px)
-  null,                                                            // index 0 unused
-  { atk:15,  hp:80,  def:5,  expNeeded:30,   range: CELL_W*3.0 },  // Lv.1
-  { atk:18,  hp:90,  def:6,  expNeeded:70,   range: CELL_W*3.2 },  // Lv.2
-  { atk:22,  hp:105, def:7,  expNeeded:130,  range: CELL_W*3.4 },  // Lv.3
-  { atk:28,  hp:125, def:9,  expNeeded:220,  range: CELL_W*3.6 },  // Lv.4
-  { atk:35,  hp:150, def:11, expNeeded:340,  range: CELL_W*4.0 },  // Lv.5
-  { atk:44,  hp:180, def:13, expNeeded:500,  range: CELL_W*4.2 },  // Lv.6
-  { atk:55,  hp:215, def:16, expNeeded:720,  range: CELL_W*4.4 },  // Lv.7
-  { atk:68,  hp:255, def:19, expNeeded:1000, range: CELL_W*4.6 },  // Lv.8
-  { atk:84,  hp:300, def:22, expNeeded:1400, range: CELL_W*4.8 },  // Lv.9
-  { atk:105, hp:360, def:26, expNeeded:9999, range: CELL_W*5.2 }   // Lv.10
-];
-const HERO_MAX_LEVEL = HERO_LEVELS.length - 1;
+// ─── 👑 영웅 레벨 ────────────────────────────────────────────────────────────
+// v12.9에서 10 → 99. 열 판이면 끝나는 성장은 무한 모드의 길이와 맞지 않았다.
+//
+// 경험치 곡선은 **10레벨이 한 마디**다. 한 마디 안(예: 11~19)에서는 필요 경험치가
+// 고르게 오르다가, 마디를 넘는 순간(11·21·31…)에 한 번 크게 뛴다. 그래서
+// "이번 마디는 금방 오르는데 다음 마디로 넘어가는 그 한 칸이 무겁다"가 된다 —
+// 밋밋한 지수 곡선보다 어디쯤 왔는지가 손에 잡힌다.
+const HERO_MAX_LEVEL   = 99;
+const HERO_BAND        = 10;     // 이 레벨마다 한 마디
+// 마디를 넘을 때 뛰는 배수. 마디 안에서 9칸이 오르므로(1 + 9×STEP = 1.54),
+// 이 값이 그보다 커야 11·21·31레벨에서 실제로 **뛴다**. 처음엔 2.35에 STEP 0.16을
+// 뒀다가 마디 끝(2.44)이 다음 마디 시작(2.35)보다 커져 요구치가 되레 내려갔다.
+const HERO_BAND_JUMP   = 2.60;
+const HERO_STEP_IN_BAND= 0.06;   // 마디 안에서 한 레벨당 완만한 증가
+
+// 레벨 L → 다음 레벨까지 필요한 경험치
+function heroExpNeeded(L) {
+  if (L >= HERO_MAX_LEVEL) return Infinity;
+  const band  = Math.floor((L - 1) / HERO_BAND);          // 0,0..0,1,1..
+  const inBand= (L - 1) % HERO_BAND;
+  return Math.round(30 * Math.pow(HERO_BAND_JUMP, band) * (1 + inBand * HERO_STEP_IN_BAND));
+}
+// 레벨 L의 스탯 — 마디마다 한 단씩 굵어진다
+function heroStatsAt(L) {
+  const lv = Math.max(1, Math.min(HERO_MAX_LEVEL, L));
+  const t  = lv - 1;
+  return {
+    atk:  Math.round(15 * Math.pow(1.055, t) + t * 1.6),
+    hp:   Math.round(80 * Math.pow(1.048, t) + t * 5),
+    def:  Math.round(5  * Math.pow(1.042, t) + t * 0.55),
+    range: CELL_W * (3.0 + Math.min(2.6, t * 0.035)),
+    expNeeded: heroExpNeeded(lv)
+  };
+}
+// 예전 코드가 HERO_LEVELS[lv]로 바로 읽으므로 표를 만들어 둔다 (인덱스 0은 안 쓴다)
+const HERO_LEVELS = (() => {
+  const out = [null];
+  for (let L = 1; L <= HERO_MAX_LEVEL; L++) out.push(heroStatsAt(L));
+  return out;
+})();
 
 // ─── 게임 속도 ────────────────────────────────────────────────────────────────
 // 배속. 캠프 강화가 쌓이면 초반 층은 타워 두 개로도 밀리므로,

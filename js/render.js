@@ -2056,9 +2056,15 @@ function renderUpgradePick(ctx, gs) {
   const nextIdx = gs.wave + 1;
   const nd = waveDefFor(nextIdx);
   if (nd) {
+    // 🐲 중간보스가 있는 층이면 예고를 한 줄 더 쓴다 — 어느 쪽에서 나오는지가 핵심.
+    // 상단이면 타워와 과부하를, 하단이면 부대와 영웅 배치를 다시 생각해야 하므로,
+    // 들어가기 전에 알아야 그 한 층을 위해 무엇을 살지가 판단이 된다.
+    const nTier = endlessTier(nextIdx);
+    const nMid  = (gs.mode === 'endless') && isMidBossTier(nTier);
+    const nSide = nMid ? midBossSide(nTier) : null;
     const npY = by2 + 6*17 + 16;
-    const npH = 78;
-    uiPanel(ctx, 20, npY, CW-40, npH, 7, '#0a0f1a', '#1e293b', 1);
+    const npH = nMid ? 100 : 78;
+    uiPanel(ctx, 20, npY, CW-40, npH, 7, nMid ? '#180a10' : '#0a0f1a', nMid ? '#7f1d3a' : '#1e293b', nMid ? 1.5 : 1);
 
     const nst = getStageInfo(nextIdx);
     ctx.textAlign='left'; ctx.textBaseline='top';
@@ -2069,29 +2075,43 @@ function renderUpgradePick(ctx, gs) {
     ctx.textAlign='right'; ctx.fillStyle='#22c55e'; ctx.font='bold 9px sans-serif';
     ctx.fillText(`★완주 +${clearBonusGold(nextIdx)}💰 · 성벽 +${clearRepair(nextIdx)}`, CW-32, npY+10);
 
+    // 🐲 중간보스 예고 — 어느 전선인지를 크게
+    let npBody = npY + 30;
+    if (nMid) {
+      const up = nSide === 'defense';
+      uiPanel(ctx, 30, npBody-4, CW-60, 24, 5, up ? '#2a1208' : '#1a0a24', up ? '#f97316' : '#a855f7', 1.5);
+      ctx.textAlign='left'; ctx.textBaseline='middle';
+      ctx.fillStyle = up ? '#fb923c' : '#c084fc'; ctx.font='bold 10px sans-serif';
+      ctx.fillText(`🐲 ${midBossName(nTier)} — ${up ? '상단 타워라인' : '하단 아레나'}에 나타납니다`, 38, npBody+8);
+      ctx.textAlign='right'; ctx.fillStyle='#7c8ba1'; ctx.font='bold 8px sans-serif';
+      ctx.fillText(up ? '타워·과부하' : '부대·영웅', CW-38, npBody+8);
+      ctx.textAlign='left'; ctx.textBaseline='top';
+      npBody += 26;
+    }
+
     // 아레나 스폰 풀
     ctx.textAlign='left'; ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif';
-    ctx.fillText('아레나', 32, npY+30);
+    ctx.fillText('아레나', 32, npBody);
     const npool = nd.arenaPool || [];
     const ntot  = npool.reduce((a,[,w])=>a+w,0) || 1;
     npool.forEach(([id,w],i) => {
       const mt = BATTLE_MOB_TYPES[id]; if (!mt) return;
       const ix = 72 + i*42;
       ctx.font='14px sans-serif'; ctx.fillStyle='#e2e8f0'; ctx.textAlign='left';
-      ctx.fillText(mt.icon, ix, npY+27);
+      ctx.fillText(mt.icon, ix, npBody-3);
       ctx.font='bold 8px sans-serif'; ctx.fillStyle='#475569';
-      ctx.fillText(`${Math.round(w/ntot*100)}%`, ix+17, npY+31);
+      ctx.fillText(`${Math.round(w/ntot*100)}%`, ix+17, npBody+1);
     });
 
     // 상단 침입자
     ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif'; ctx.textAlign='left';
-    ctx.fillText('상단', 32, npY+54);
+    ctx.fillText('상단', 32, npBody+24);
     const ncm = 1 + nextIdx * DEF_WAVE_COUNT_SCALE;
     let nx = 72;
     for (const d of nd.defenseEnemies) {
       const t = ENEMY_TYPES[d.type]; if (!t) continue;
       ctx.fillStyle=t.color; ctx.font='bold 9px sans-serif';
-      ctx.fillText(`● ${t.name} ×${Math.max(1,Math.round(d.count*ncm))}`, nx, npY+54);
+      ctx.fillText(`● ${t.name} ×${Math.max(1,Math.round(d.count*ncm))}`, nx, npBody+24);
       nx += 96;
     }
   }
@@ -2595,8 +2615,13 @@ function renderLobbySkill(ctx, gs) {
 // 스킬 트리가 '확정으로 사는 곳'이라면 여기는 '걸고 굴리는 곳'이다.
 // 값·성공률·실패했을 때 무슨 일이 나는지를 **누르기 전에** 전부 적어 둔다 —
 // 파괴가 있는 판에서 확률을 숨기면 그건 도박이 아니라 사기다.
+//
+// 항목이 34개(성벽 1 · 타워 6 · 분기 18 · 용병 6 · 특수 3)라 한 화면에 다 펼치면
+// 아무것도 못 찾는다. 무리별로 접어 두고 고른 무리만 편다.
 function renderLobbyCamp(ctx, gs) {
-  gs.ui.campBtns = [];
+  gs.ui.campBtns = []; gs.ui.campGroupBtns = [];
+  const L = gs.lobby;
+  if (!L.campGroup) L.campGroup = 'tower';
   let y = LOBBY_BODY_Y + 10;
 
   ctx.textAlign='left'; ctx.textBaseline='top';
@@ -2606,18 +2631,36 @@ function renderLobbyCamp(ctx, gs) {
   ctx.fillText(`💎 ${gs.soulStones||0}`, CW-14, y);
   y += 17;
   ctx.textAlign='left'; ctx.fillStyle='#64748b'; ctx.font='9px sans-serif';
-  ctx.fillText(`성공하면 +1 · 실패하면 그대로거나 내려갑니다 · ${CAMP_SAFE_STEP}단마다 안전지대`, 14, y);
-  y += 16;
-
-  const st = campState(gs);
-  if ((st.tries||0) > 0) {
+  ctx.fillText(`대상마다 따로 오릅니다 · 실패하면 그대로거나 내려갑니다 · ${CAMP_SAFE_STEP}단마다 안전지대`, 14, y);
+  y += 15;
+  const stC = campState(gs);
+  if ((stC.tries||0) > 0) {
     ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif';
-    ctx.fillText(`지금까지 ${st.tries}번 굴려 ${st.breaks||0}번 무너졌습니다`, 14, y);
+    ctx.fillText(`지금까지 ${stC.tries}번 굴려 ${stC.breaks||0}번 무너졌습니다`, 14, y);
     y += 14;
   }
   y += 2;
 
-  for (const tr of CAMP_TRACKS) {
+  // ── 무리 고르기 ──
+  const gw = (CW - 16 - 4*4) / 5, gh = 30;
+  CAMP_GROUPS.forEach((g, i) => {
+    const gx = 8 + i*(gw+4);
+    const on = L.campGroup === g.id;
+    const lvs = campTracks().filter(t => t.group === g.id)
+                            .reduce((a2,t) => a2 + campLevel(gs, t.id), 0);
+    uiPanel(ctx, gx, y, gw, gh, 5, on ? '#1e1408' : '#0b1220', on ? g.color : '#1e293b', on ? 2 : 1);
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.font='12px sans-serif'; ctx.fillStyle = on ? '#e2e8f0' : '#475569';
+    ctx.fillText(g.icon, gx+gw/2, y+10);
+    ctx.fillStyle = on ? g.color : '#64748b'; ctx.font='bold 8px sans-serif';
+    ctx.fillText(lvs > 0 ? `${g.short} +${lvs}` : g.short, gx+gw/2, y+22);
+    gs.ui.campGroupBtns.push({ x:gx, y, w:gw, h:gh, id:g.id });
+  });
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  y += gh + 10;
+
+  const rows = campTracks().filter(t => t.group === L.campGroup);
+  for (const tr of rows) {
     const lv    = campLevel(gs, tr.id);
     const maxed = lv >= CAMP_MAX_LV;
     const cost  = campCost(gs, tr.id);
@@ -2625,43 +2668,44 @@ function renderLobbyCamp(ctx, gs) {
     const fail  = campFailOdds(gs, tr.id);
     const floorLv = campSafeFloor(gs, tr.id);
     const aff   = !maxed && cost != null && (gs.soulStones||0) >= cost;
-    const rowH  = 84;
+    const rowH  = 74;
 
     uiPanel(ctx, 8, y, CW-16, rowH, 7, maxed?'#0f2a1a':'#0b1220', maxed?'#22c55e':tr.color, maxed?2:1.5);
 
     ctx.textAlign='left'; ctx.textBaseline='top';
-    ctx.font='16px sans-serif'; ctx.fillText(tr.icon, 16, y+9);
+    ctx.font='15px sans-serif'; ctx.fillText(tr.icon, 15, y+8);
     ctx.fillStyle=tr.color; ctx.font='bold 11px sans-serif';
-    ctx.fillText(tr.name, 38, y+11);
+    ctx.fillText(tr.name, 36, y+9);
+    if (tr.parent) {   // 분기는 어느 타워의 갈래인지
+      ctx.fillStyle='#475569'; ctx.font='bold 8px sans-serif';
+      ctx.fillText(tr.parent, 36 + ctx.measureText(tr.name).width + 26, y+11);
+    }
     ctx.textAlign='right';
-    ctx.fillStyle = maxed?'#86efac':'#e2e8f0'; ctx.font='bold 13px sans-serif';
-    ctx.fillText(`+${lv}`, CW-18, y+9);
+    ctx.fillStyle = maxed?'#86efac':'#e2e8f0'; ctx.font='bold 12px sans-serif';
+    ctx.fillText(`+${lv}`, CW-18, y+8);
     ctx.fillStyle='#475569'; ctx.font='bold 8px sans-serif';
-    ctx.fillText(`/ ${CAMP_MAX_LV}`, CW-18, y+24);
+    ctx.fillText(`/ ${CAMP_MAX_LV}`, CW-18, y+22);
 
-    // 지금 효과 → 다음 효과
     ctx.textAlign='left';
-    ctx.fillStyle='#94a3b8'; ctx.font='bold 9px sans-serif';
-    ctx.fillText(tr.desc(lv * tr.per), 38, y+26);
+    ctx.fillStyle='#94a3b8'; ctx.font='bold 8px sans-serif';
+    ctx.fillText(tr.desc(lv * tr.per), 36, y+24);
     if (!maxed) {
       ctx.fillStyle='#4ade80'; ctx.font='bold 8px sans-serif';
-      ctx.fillText(`▲ ${tr.desc((lv+1) * tr.per)}`, 38, y+38);
+      ctx.fillText(`▲ ${tr.desc((lv+1) * tr.per)}`, 36, y+35);
     }
 
-    // 단계 눈금 — 안전지대는 밝게
-    const bx=16, bw=CW-32, seg=bw/CAMP_MAX_LV, by=y+52;
-    for (let i=0;i<CAMP_MAX_LV;i++) {
-      const safe = ((i+1) % CAMP_SAFE_STEP) === 0;
-      ctx.fillStyle = i < lv ? (safe?'#fbbf24':tr.color) : (safe?'#33405a':'#1a2333');
-      ctx.fillRect(bx + i*seg + 0.5, by, Math.max(1.5, seg-1.2), 4);
-    }
+    // 단계 막대 — 안전지대에 눈금
+    const bx=15, bw=CW-30, seg=bw/CAMP_MAX_LV, by=y+47;
+    ctx.fillStyle='#1a2333'; ctx.fillRect(bx, by, bw, 4);
+    ctx.fillStyle=tr.color;  ctx.fillRect(bx, by, bw * (lv/CAMP_MAX_LV), 4);
+    ctx.fillStyle='rgba(8,13,24,0.8)';
+    for (let i=CAMP_SAFE_STEP;i<CAMP_MAX_LV;i+=CAMP_SAFE_STEP) ctx.fillRect(bx + seg*i, by, 1, 4);
 
-    // 굴리기 버튼 + 확률
     if (maxed) {
       ctx.textAlign='center'; ctx.fillStyle='#22c55e'; ctx.font='bold 10px sans-serif';
-      ctx.fillText('★ 끝까지 단련했습니다', CW/2, y+64);
+      ctx.fillText('★ 끝까지 단련했습니다', CW/2, y+56);
     } else {
-      const bw2=104, bh2=22, bx2=CW-16-bw2, by2=y+60;
+      const bw2=98, bh2=20, bx2=CW-16-bw2, by2=y+52;
       uiPanel(ctx, bx2, by2, bw2, bh2, 4, aff?'#2a1f08':'#12161f', aff?'#f59e0b':'#2a3140', 1);
       ctx.textAlign='center'; ctx.textBaseline='middle';
       ctx.fillStyle=aff?'#fbbf24':'#475569'; ctx.font='bold 10px sans-serif';
@@ -2670,23 +2714,21 @@ function renderLobbyCamp(ctx, gs) {
 
       ctx.textAlign='left'; ctx.textBaseline='middle';
       ctx.fillStyle='#22c55e'; ctx.font='bold 9px sans-serif';
-      ctx.fillText(`성공 ${Math.round(odds*100)}%`, 16, by2+7);
-      // 실패했을 때 — 무슨 일이 나는지 그대로 적는다
+      ctx.fillText(`성공 ${Math.round(odds*100)}%`, 15, by2+5);
       const parts = [];
       if (fail.keep > 0.001) parts.push(`유지 ${Math.round(fail.keep*100)}%`);
       if (fail.down > 0.001) parts.push(`하락 ${Math.round(fail.down*100)}%`);
       if (fail.brk  > 0.001) parts.push(`파괴 ${Math.round(fail.brk*100)}%`);
       ctx.fillStyle = fail.brk > 0.001 ? '#f87171' : '#64748b';
       ctx.font='bold 8px sans-serif';
-      ctx.fillText(`실패 시 ${parts.join(' · ')}`, 16, by2+19);
-      if (lv > 0) {
-        ctx.fillStyle='#475569'; ctx.font='bold 8px sans-serif';
-        ctx.textAlign='right';
-        ctx.fillText(`무너져도 +${floorLv}까지`, bx2-8, by2+19);
+      ctx.fillText(`실패 ${parts.join(' · ')}`, 15, by2+16);
+      if (lv > CAMP_SAFE_STEP) {
+        ctx.fillStyle='#475569'; ctx.font='bold 8px sans-serif'; ctx.textAlign='right';
+        ctx.fillText(`무너져도 +${floorLv}`, bx2-8, by2+16);
       }
     }
     ctx.textAlign='left'; ctx.textBaseline='top';
-    y += rowH + 8;
+    y += rowH + 6;
   }
 
   ctx.fillStyle='#334155'; ctx.font='9px sans-serif';
@@ -2823,6 +2865,14 @@ function renderLobbyPact(ctx, gs) {
   ctx.fillText(`×${pactGemMult().toFixed(2)}`, CW-14, y+1);
   ctx.textAlign='left';
   y += 18;
+
+  // 갈래마다 서약이 어떻게 붙는지 — 고르기 전에 알아야 한다
+  uiPanel(ctx, 8, y, CW-16, 30, 5, '#140a12', '#3f1d2e', 1);
+  ctx.fillStyle='#94a3b8'; ctx.font='bold 8px sans-serif'; ctx.textBaseline='top';
+  ctx.fillText(`🌑 악몽 N단계 — 위에서 N개가 강제로 붙습니다 (보석 ×${nightmareGemMult(NIGHTMARE_MAX).toFixed(2)}까지)`, 15, y+6);
+  ctx.fillStyle='#fbbf24';
+  ctx.fillText(`♾️ 무한 — ${PACT_DEFS.length}개가 전부 붙고 층마다 더 무거워집니다 (보석 ×${unboundedGemMult().toFixed(2)})`, 15, y+17);
+  y += 36;
 
   // 세 갈래로 묶어서 보여준다 — 무엇을 포기하는지가 한눈에 갈리도록
   const pRowH = 34;
@@ -3096,7 +3146,7 @@ function renderSortieBar(ctx, gs) {
     ctx.fillStyle='#fbbf24'; ctx.font='bold 14px sans-serif';
     ctx.fillText('\u267e\ufe0f \ubb34\ud55c', nx+unbW/2, byy+bh/2-6);
     ctx.fillStyle='#a16207'; ctx.font='bold 8px sans-serif';
-    ctx.fillText('\ub05d\uc774 \uc5c6\ub2e4', nx+unbW/2, byy+bh/2+10);
+    ctx.fillText('\uac00\uc7a5 \uc5b4\ub835\ub2e4', nx+unbW/2, byy+bh/2+10);
     gs.ui.unboundedBtn = {x:nx,y:byy,w:unbW,h:bh};
     nx += unbW + gap;
   } else {
@@ -3336,18 +3386,28 @@ function _renderSkillTree(ctx, gs, treeId, startY) {
     ctx.fillStyle = maxed ? '#86efac' : lv>0 ? '#e2e8f0' : '#475569';
     ctx.font='bold 9px sans-serif'; ctx.fillText(`${lv}/${max}`, x+nodeW-7, y+10);
 
-    // 레벨 눈금 — 칸 수만큼 잘라 채운다
-    const bx=x+7, bw=nodeW-14, by=y+26, seg=bw/max;
-    for (let i=0;i<max;i++) {
-      ctx.fillStyle = i < lv ? tree.color : '#1a2333';
-      ctx.fillRect(bx + i*seg + 0.5, by, seg-1.5, 4);
+    // 레벨 표시 — 눈금이 100칸이면 칸 하나가 1px도 안 돼 읽히지 않는다.
+    // 잘게 쪼갠 노드는 이어진 막대로, '개수' 노드는 예전처럼 칸으로 그린다.
+    const bx=x+7, bw=nodeW-14, by=y+26;
+    if (max > 20) {
+      ctx.fillStyle='#1a2333'; ctx.fillRect(bx, by, bw, 4);
+      ctx.fillStyle=tree.color; ctx.fillRect(bx, by, bw * (lv/max), 4);
+      // 10칸마다 눈금 하나 — 어디쯤인지 가늠할 자리는 남긴다
+      ctx.fillStyle='rgba(8,13,24,0.75)';
+      for (let i=1;i<10;i++) ctx.fillRect(bx + bw*(i/10), by, 1, 4);
+    } else {
+      const seg=bw/max;
+      for (let i=0;i<max;i++) {
+        ctx.fillStyle = i < lv ? tree.color : '#1a2333';
+        ctx.fillRect(bx + i*seg + 0.5, by, seg-1.5, 4);
+      }
     }
 
     // 지금 효과(레벨 0이면 1레벨 미리보기)
     ctx.textAlign='left';
     ctx.fillStyle = lv>0 ? '#94a3b8' : '#64748b';
     ctx.font='8px sans-serif';
-    const txt = sk.desc(lv > 0 ? lv : 1);
+    const txt = sk.desc(skillEffV(sk, lv > 0 ? lv : 1));
     _wrapSkillDesc(ctx, txt, x+7, y+36, nodeW-14, 10, 2);
 
     // 아래줄 — 다음 레벨 값
@@ -3360,30 +3420,30 @@ function _renderSkillTree(ctx, gs, treeId, startY) {
       ctx.fillText(`🔒 윗줄 ${sk.row*SKILL_ROW_GATE}Lv 필요`, x+nodeW/2, y+nodeH-12);
     } else {
       // 카드 전체가 '한 단계' 버튼이고, 오른쪽 끝에 ×10 칩을 붙인다.
-      // 노드 하나가 10레벨이라 나무 하나를 채우려면 수십 번을 눌러야 했다.
+      // 노드가 100레벨이라 칩이 없으면 나무 하나에 수백 번을 눌러야 한다.
+      // 칩은 **정확히 열 칸**만 산다 — 지갑을 다 쓰는 올인 버튼이 아니다.
       const cost = skillLevelCost(sk, lv+1);
-      let can10 = 0, sum10 = 0;
+      let bulkN = 0, bulkSum = 0;
       for (let k = 0; k < 10; k++) {
         const nk = lv + k; if (nk >= max) break;
-        const ck = skillLevelCost(sk, nk + 1);
-        if (sum10 + ck > (gs.soulStones || 0)) break;
-        sum10 += ck; can10++;
+        bulkSum += skillLevelCost(sk, nk + 1); bulkN++;
       }
-      const chipW = 30, chipH = 15, chipX = x+nodeW-chipW-5, chipY = y+nodeH-chipH-4;
+      const bulkAff = bulkN > 0 && (gs.soulStones||0) >= bulkSum && !gated;
+      const chipW = 34, chipH = 15, chipX = x+nodeW-chipW-5, chipY = y+nodeH-chipH-4;
       ctx.fillStyle = canBuy ? '#f59e0b' : '#64748b';
-      ctx.font='bold 10px sans-serif';
-      ctx.fillText(`💎 ${cost} → Lv${lv+1}`, x+(nodeW-chipW)/2, y+nodeH-13);
+      ctx.font='bold 9px sans-serif';
+      ctx.fillText(`💎 ${compactNum(cost)} → Lv${lv+1}`, x+(nodeW-chipW)/2, y+nodeH-13);
       gs.ui.metaCards.push({x,y,w:nodeW,h:nodeH,skillId:sk.id,icon:sk.icon,bulk:1});
-      if (can10 > 1 && !gated) {
+      if (bulkN > 1 && !gated) {
         roundRect(ctx, chipX, chipY, chipW, chipH, 3);
-        ctx.fillStyle='#2a1f08'; ctx.fill();
-        ctx.strokeStyle='#a16207'; ctx.lineWidth=1; ctx.stroke();
-        ctx.fillStyle='#fbbf24'; ctx.font='bold 8px sans-serif';
+        ctx.fillStyle = bulkAff ? '#2a1f08' : '#141824'; ctx.fill();
+        ctx.strokeStyle = bulkAff ? '#a16207' : '#252b38'; ctx.lineWidth=1; ctx.stroke();
+        ctx.fillStyle = bulkAff ? '#fbbf24' : '#3f4a5c'; ctx.font='bold 8px sans-serif';
         ctx.textAlign='center'; ctx.textBaseline='middle';
-        ctx.fillText(`×${can10}`, chipX+chipW/2, chipY+chipH/2);
+        ctx.fillText(`×${bulkN}`, chipX+chipW/2, chipY+chipH/2);
         ctx.textAlign='center'; ctx.textBaseline='top';
         // 칩이 카드보다 먼저 판정돼야 한다 — 카드가 통째로 탭을 먹지 않도록
-        gs.ui.metaBulkCards.push({x:chipX,y:chipY,w:chipW,h:chipH,skillId:sk.id,icon:sk.icon,bulk:can10});
+        if (bulkAff) gs.ui.metaBulkCards.push({x:chipX,y:chipY,w:chipW,h:chipH,skillId:sk.id,icon:sk.icon,bulk:bulkN});
       }
     }
     ctx.globalAlpha = 1;
@@ -3737,49 +3797,59 @@ function _renderTrackList(ctx, gs, def, bs, listTop) {
     ctx.textAlign='right';
     if (inf) {
       ctx.fillStyle='#a78bfa'; ctx.font='bold 10px sans-serif';
-      ctx.fillText(`×${n}`, CW-104, uy+rowH/2);
+      ctx.fillText(`×${n}`, CW-118, uy+rowH/2);
     } else {
       // 30레벨짜리를 점으로 찍으면 읽히지 않는다 — 막대로 바꾼다.
       // 채운 칸(초록) / 지금 레벨로 살 수 있는 칸(회색) / 승급해야 열리는 칸(어둡게).
-      const bw3 = 54, bx3 = CW-104-bw3, by3 = uy+rowH/2-4;
+      const bw3 = 50, bx3 = CW-118-bw3, by3 = uy+rowH/2-4;
       ctx.fillStyle='#1b2230'; ctx.fillRect(bx3, by3, bw3, 5);
       ctx.fillStyle='#334155'; ctx.fillRect(bx3, by3, bw3 * (mx/hardMax), 5);
       ctx.fillStyle= capped?'#a16207':'#22c55e'; ctx.fillRect(bx3, by3, bw3 * (n/hardMax), 5);
       ctx.fillStyle = capped?'#a16207':'#475569'; ctx.font='bold 7px sans-serif'; ctx.textAlign='right';
-      ctx.fillText(`${n}/${mx}` + (capped?` (최대 ${hardMax})`:''), CW-104, uy+rowH/2+12);
+      ctx.fillText(`${n}/${mx}` + (capped?` (최대 ${hardMax})`:''), CW-118, uy+rowH/2+12);
     }
 
     if (!maxed) {
       // ── 한 칸 / 열 칸 ────────────────────────────────────────────────────
-      // 트랙이 24~30단인데 한 칸씩만 살 수 있으면 후반에는 같은 버튼을 서른 번
-      // 눌러야 한다. ×10을 옆에 두고, 지금 지갑으로 실제 몇 칸 살 수 있는지와
-      // 그 총액을 미리 적어 둔다 — 눌러 보고 알게 되는 값이 아니어야 한다.
-      const bw2=58,bh2=30,bx2=CW-8-bw2,by2=uy+(rowH-bh2)/2;
+      // 트랙이 24~30단인데 한 칸씩만 살 수 있으면 같은 버튼을 서른 번 눌러야 한다.
+      //
+      // 처음에는 "지갑으로 살 수 있는 만큼"을 샀는데, 그건 **올인 버튼**이었다 —
+      // 골드가 어중간하면 그 트랙 하나에 지갑을 통째로 쏟아붓는다. 여러 트랙에
+      // 나눠 쓰고 싶으면 결국 한 칸씩 눌러야 했으니 있으나 마나였다.
+      // 그래서 **정확히 열 칸**만 산다. 열 칸 값이 모자라면 아예 안 눌린다 —
+      // 얼마가 나갈지 모르는 버튼보다, 못 누르지만 값이 분명한 버튼이 낫다.
+      const BULK_N = 10;
+      // 열 칸(또는 상한까지 남은 칸)의 총액
+      let bulkN = 0, bulkSum = 0;
+      for (let k = 0; k < BULK_N; k++) {
+        const nk = n + k;
+        if (!inf && nk >= mx) break;
+        bulkSum += trackCost(tr, nk); bulkN++;
+      }
+      const bulkAff = bulkN > 0 && gs.gold >= bulkSum;
+
+      const bh2=30, by2=uy+(rowH-bh2)/2;
+      const bw4=44, bw2=56, gapB=4;
+      const bx2=CW-8-bw2, bx4=bx2-bw4-gapB;
+
       roundRect(ctx,bx2,by2,bw2,bh2,4);
       ctx.fillStyle=canAff?(inf?'#6d28d9':def.color):'#1e293b'; ctx.fill();
       ctx.fillStyle=canAff?'#fff':'#475569'; ctx.font='bold 11px sans-serif';
       ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText(`${cost}💰`,bx2+bw2/2,by2+bh2/2);
+      ctx.fillText(`${compactNum(cost)}💰`,bx2+bw2/2,by2+bh2/2);
       gs.ui.upgradeBtns.push({x:bx2,y:by2,w:bw2,h:bh2,id:tr.id,bulk:1});
 
-      // 지금 지갑과 상한으로 실제 몇 칸이 사지는지 세어 본다
-      let can10 = 0, sum10 = 0;
-      for (let k = 0; k < 10; k++) {
-        const nk = n + k;
-        if (!inf && nk >= mx) break;
-        const ck = trackCost(tr, nk);
-        if (sum10 + ck > gs.gold) break;
-        sum10 += ck; can10++;
+      if (bulkN > 0) {
+        roundRect(ctx,bx4,by2,bw4,bh2,4);
+        ctx.fillStyle = bulkAff ? (inf?'#3b2470':'#14304d') : '#141824'; ctx.fill();
+        ctx.strokeStyle = bulkAff ? (inf?'#a78bfa':def.color) : '#252b38'; ctx.lineWidth=1; ctx.stroke();
+        ctx.fillStyle = bulkAff ? '#e2e8f0' : '#3f4a5c'; ctx.font='bold 10px sans-serif';
+        ctx.fillText(`×${bulkN}`, bx4+bw4/2, by2+bh2/2-5);
+        ctx.fillStyle = bulkAff ? '#94a3b8' : '#333b4a'; ctx.font='bold 7px sans-serif';
+        ctx.fillText(compactNum(bulkSum), bx4+bw4/2, by2+bh2/2+8);
+        // 값이 모자라면 rect를 등록하지 않는다 — 눌리지 않는 것이 곧 설명이다
+        if (bulkAff) gs.ui.upgradeBtns.push({x:bx4,y:by2,w:bw4,h:bh2,id:tr.id,bulk:bulkN});
       }
-      const bw4=34, bx4=bx2-bw4-4;
-      roundRect(ctx,bx4,by2,bw4,bh2,4);
-      ctx.fillStyle = can10>0 ? (inf?'#3b2470':'#14304d') : '#141824'; ctx.fill();
-      ctx.strokeStyle = can10>0 ? (inf?'#a78bfa':def.color) : '#252b38'; ctx.lineWidth=1; ctx.stroke();
-      ctx.fillStyle = can10>0 ? '#e2e8f0' : '#3f4a5c'; ctx.font='bold 10px sans-serif';
-      ctx.fillText(`×${can10>0?can10:10}`, bx4+bw4/2, by2+bh2/2-5);
-      ctx.fillStyle = can10>0 ? '#94a3b8' : '#333b4a'; ctx.font='bold 7px sans-serif';
-      ctx.fillText(can10>0 ? compactNum(sum10) : '—', bx4+bw4/2, by2+bh2/2+8);
-      if (can10 > 0) gs.ui.upgradeBtns.push({x:bx4,y:by2,w:bw4,h:bh2,id:tr.id,bulk:10});
     } else if (capped) {
       // 레벨에 막힌 것과 트랙을 다 찍은 것은 다른 상태다 — 다르게 보여야 승급이 목표가 된다
       ctx.fillStyle='#a16207'; ctx.font='bold 8px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
@@ -4814,6 +4884,24 @@ function renderTownPageArmy(ctx, gs, startY) {
   }
   gs.ui.eliteBtn = (eLeft > 0 || eOn) ? {x:6,y,w:CW-12,h:bh3} : null;
   y += bh3 + 8;
+
+  // ── 🐲 중간보스 예고 ─────────────────────────────────────────────────────
+  // 출전 버튼 바로 위에 둔다. 영웅을 위로 보낼지 아래로 보낼지가 이 한 줄에
+  // 달려 있으므로, 배치 버튼과 출전 버튼 사이가 이 정보의 자리다.
+  {
+    const mTier = endlessTier(gs.wave);
+    if (gs.mode === 'endless' && isMidBossTier(mTier)) {
+      const up = midBossSide(mTier) === 'defense';
+      uiPanel(ctx, 6, y, CW-12, 34, 6, up ? '#2a1208' : '#1a0a24', up ? '#f97316' : '#a855f7', 2);
+      ctx.textAlign='left'; ctx.textBaseline='middle';
+      ctx.fillStyle = up ? '#fb923c' : '#c084fc'; ctx.font='bold 11px sans-serif';
+      ctx.fillText(`🐲 ${midBossName(mTier)}`, 14, y+12);
+      ctx.fillStyle='#94a3b8'; ctx.font='bold 9px sans-serif';
+      ctx.fillText(up ? '상단 타워라인에 나타납니다 — 타워와 과부하를 준비하세요'
+                      : '하단 아레나에 나타납니다 — 부대와 영웅을 아래로', 14, y+25);
+      y += 40;
+    }
+  }
 
   // ── 출전 버튼 ────────────────────────────────────────────────────────────
   // 영웅 배치는 필수다 — 상단이든 하단이든 어딘가에는 서야 한다.

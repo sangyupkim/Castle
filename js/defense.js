@@ -69,6 +69,9 @@ function makeTower(col, row, typeId) {
 
 // 레벨 + 현재 BONUSES를 반영한 실효 스탯.
 // 건설 시점에 스냅샷하지 않으므로, 나중에 산 강화도 기존 타워에 적용된다.
+// 분기 객체에서 id만 — towerStats 안에서 여러 번 쓰므로 짧게
+function st_branchId(br) { return br ? br.id : null; }
+
 function towerStats(t) {
   const tpl = TOWER_TYPES[t.typeId];
   const m   = TOWER_LEVEL_MULT[Math.min(t.level || 1, towerLevelCap())] || TOWER_LEVEL_MULT[1];
@@ -83,11 +86,17 @@ function towerStats(t) {
   const st = {
     sealed,
     branch: br ? br.id : null,
+    // 🔥 캠프 단련 — 종류별(campTower)과 분기별(campBranch) 배율이 여기서 붙는다.
+    // "저격탑을 주력으로 쓰겠다"가 캠프에서부터 시작되는 결정이 되게 하는 자리다.
     dmg:   sealed ? 0 : Math.round((tpl.dmg + BONUSES.towerDmg) * m.dmg * (bm.dmg || 1)
              * (BONUSES.towerDmgMult || 1)
+             * campTowerMult(t.typeId, 'dmg') * campBranchMult(st_branchId(br), 'dmg')
              * (BONUSES.pactTowerDmgMult || 1) * fev('towerDmgMult', 1)),
-    spd:   tpl.spd   * m.spd   * (bm.spd || 1) * BONUSES.towerSpdMult * (overloaded ? OVERLOAD_SPD_MULT : 1),
-    range: sealed ? 0 : tpl.range * m.range * (bm.range || 1) * BONUSES.towerRangeMult * fev('towerRangeMult', 1),
+    spd:   tpl.spd   * m.spd   * (bm.spd || 1) * BONUSES.towerSpdMult
+             * campTowerMult(t.typeId, 'spd') * campBranchMult(st_branchId(br), 'spd')
+             * (overloaded ? OVERLOAD_SPD_MULT : 1),
+    range: sealed ? 0 : tpl.range * m.range * (bm.range || 1) * BONUSES.towerRangeMult
+             * campTowerMult(t.typeId, 'range') * fev('towerRangeMult', 1),
     slow:        Math.min(0.85, baseSlow + (BONUSES.towerSlow || 0)),
     slowDur:     (tpl.slowDur || (BONUSES.towerSlow > 0 ? 0.9 : 0)) * (sp.slowDurMult || 1),
     splash:      sp.splash !== undefined ? sp.splash : (tpl.splash || 0),
@@ -124,7 +133,11 @@ function makeDefenseEnemy(typeId, waveIndex, opts) {
   const mods  = endlessMods(w);
   const scale = (mods ? endlessStatMult(w) * (mods.hpBonus || 1)
                       : (1 + w * DEF_WAVE_HP_SCALE))
-              * (BONUSES.pactDefHpMult || 1) * fev('hpMult', 1);
+              * (BONUSES.pactDefHpMult || 1) * fev('hpMult', 1)
+              // ♾️ 무한 — 층마다 한 겹씩 더 무거워진다. 악몽 10과 같은 층에서
+              // 시작해 갈수록 벌어지므로, 무한이 언제나 가장 어려운 갈래로 남는다.
+              * (typeof gs !== 'undefined' && gs && gs.unbounded
+                 ? unboundedFloorMult(endlessTier(w)) : 1);
   const hp    = Math.max(1, Math.round((opts && opts.hp) || tpl.hp * scale));
 
   // 비행은 ∞ 경로가 아니라 항로를 탄다 — 좌우를 번갈아 써서 한쪽만 막지 못하게
@@ -181,6 +194,29 @@ function spawnDemonLord(gsp, waveIndex) {
     addLog(gsp.battle, `👹 마왕 — HP ${hp.toLocaleString()} · 기지에 닿으면 그대로 끝납니다`, '#dc2626');
   if (typeof FX  !== 'undefined') FX.shake(9, 0.8);
   if (typeof SFX !== 'undefined') SFX.lose();
+  return e;
+}
+
+// 🐲 상단 중간보스 — 잡몹과 함께 온다. 마왕과 달리 일반 스폰을 막지 않는다.
+// 마왕은 '그 한 마리가 곧 결승선'이지만, 중간보스는 **평소의 층 위에 얹힌 벽**이다.
+function spawnMidBoss(gsp, waveIndex) {
+  const tier = endlessTier(waveIndex);
+  const hp   = midBossHp(tier, gsp.nightmare || 0);
+  const e = makeDefenseEnemy('brute', waveIndex, { hp, reward: 60 + tier * 4 });
+  e.isMidBoss = true;
+  e.name   = midBossName(tier);
+  e.color  = '#f43f5e';
+  e.radius = Math.round((e.radius || 14) * 1.7);
+  e.spd    = (e.spd || 1) * 0.72;          // 느리고 무겁다
+  e.armor  = Math.round((e.armor || 0) + 4 + tier * 0.10);
+  e.dmg    = Math.round((e.dmg || 1) * 3);  // 놓치면 성벽이 크게 깎인다
+  e.spawnDelay = 6;                         // 잡몹이 먼저, 보스는 조금 뒤에
+  // 잡으면 보석 — 하단 중간보스와 같은 값을 준다. 어느 쪽에 나오든 값은 같아야
+  // "이번엔 상단이라 손해"가 되지 않는다.
+  e.gems = Math.round((2 + Math.floor(tier / 20)) * (BONUSES.summonRewardMult || 1));
+  gsp.defenseEnemies.push(e);
+  if (typeof addLog === 'function')
+    addLog(gsp.battle, `🐲 ${e.name} — 상단에 나타납니다 (HP ${Math.round(hp).toLocaleString()})`, '#f43f5e');
   return e;
 }
 
