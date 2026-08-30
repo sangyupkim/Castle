@@ -2060,6 +2060,10 @@ let _breachAccum = 0;
 // 하단을 비웠을 때 남은 것들이 기지로 달려간다. 타워는 이들을 잡지 못한다 —
 // 잡을 수 있으면 하단을 버리고 상단만 키우는 쪽이 정답이 되어 버린다.
 // 이건 막을 수 있는 적이 아니라, 이미 치른 값을 눈으로 보여주는 연출이다.
+// 달려든 값의 소수점 나머지. 한 마리씩 반올림하면 값이 통째로 증발한다 —
+// 아래 설명 참고. 웨이브를 넘어 이어지므로 모듈 스코프에 둔다.
+let _chargeFrac = 0;
+
 function updateChargers(dt) {
   const list = gs.chargers;
   if (!list || !list.length) return;
@@ -2078,7 +2082,17 @@ function updateChargers(dt) {
         if (typeof SFX !== 'undefined') SFX.denied();
         continue;
       }
-      const dmg = Math.max(0, Math.round(c.dmg * baseDamageMult()));
+      // ── 값을 소수점째 모은다 ────────────────────────────────────────────
+      // 예전에는 `Math.round(c.dmg * baseDamageMult())`로 **한 마리씩** 반올림했다.
+      // 전멸 비용은 마릿수로 쪼개져 오는데(38을 18기로 나누면 한 기당 2),
+      // 거기에 피해 감소가 곱해지면 2×0.2=0.4 → 반올림 0이 된다.
+      // 열여덟 마리가 전부 0이 되어 **전멸 대가가 통째로 사라졌다** —
+      // "몹이 성으로 박는데 데미지가 안 들어온다"는 보고가 정확히 이것이다.
+      // 게다가 아레나에 몹이 많을수록(=더 크게 진 판일수록) 더 잘게 쪼개져
+      // 손해가 줄었다. 이제 나머지를 모아 두었다가 1이 차면 함께 넣는다.
+      _chargeFrac += c.dmg * baseDamageMult();
+      const dmg = Math.floor(_chargeFrac);
+      _chargeFrac -= dmg;
       if (dmg > 0) {
         gs.baseHP = Math.max(0, gs.baseHP - dmg);
         spawnFloaty(`-${dmg}HP`, base.x, base.y - 16, '#ef4444');
@@ -2086,6 +2100,11 @@ function updateChargers(dt) {
         FX.burst(base.x, base.y, '#ef4444', 8, 10);
         SFX.baseHit();
         if (gs.baseHP <= 0) { gs.gameOver = true; bankRunResult(); return; }
+      } else {
+        // 값이 0으로 떨어졌어도 **아무 일도 안 일어난 것처럼 보이면 안 된다.**
+        // 막아낸 것인지 버그인지 플레이어가 구분할 수 없기 때문이다.
+        FX.burst(base.x, base.y, '#64748b', 4, 7);
+        if ((gs.baseWardUntil || 0) > 0) spawnFloaty('🧱 결계', base.x, base.y - 16, '#38bdf8');
       }
       continue;
     }
@@ -2251,6 +2270,7 @@ function resetGame() {
   _giveUpArmed = false;
   _breachAccum = 0;
   _defGoldFrac = 0;
+  _chargeFrac  = 0;
   // 잠긴 타워가 선택돼 있으면 화살탑으로 되돌린다
   if (!isUnlocked(gs.selectedTowerType)) gs.selectedTowerType = 'arrow';
   refreshHeroShop(gs);
