@@ -355,7 +355,7 @@ function heroStatSnapshot(gs) {
   return {
     atk:   Math.round((lv.atk + B.heroAtk) * sm * B.sigilHeroAtkMult),
     hp:    Math.round((lv.hp + B.heroHpFlat) * sm * B.sigilHeroHpMult),
-    def:   Math.round((lv.def + B.heroAura) * sm),
+    def:   Math.max(0, Math.round((lv.def + B.heroAura) * sm)),
     regen: Math.round(B.heroRegen * 10) / 10,
     aspd:  Math.round(B.sigilHeroSpdMult * B.heroSpdMult * 100) / 100,
     range: Math.round(HERO_ARENA.range * B.sigilHeroRangeMult * B.heroRangeMult),

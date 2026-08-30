@@ -75,6 +75,7 @@ let _clearedStages = new Array(10).fill(false);
 let _skillLevels   = {};   // 스킬 노드 id → 레벨(0~10)
 let _forge         = { cores:{}, best:5, mastery:0, plus:{} };  // (옛 세이브 호환)
 let _camp          = { levels:{}, tries:0, breaks:0 };          // 🔥 캠프 단련 (보석·영구)
+let _cardMeta      = { levels:{}, bans:[] };                    // 🎴 패 강화 (보석·영구)
 let _charms        = [];   // 🎴 보관 중인 일회용 부적
 let _charmSlots    = [null, null];
 let _ascension     = 0;    // ♾️ 승천 단계
@@ -128,7 +129,8 @@ function newState() {
     briefScroll: 0,
     lobbyScroll: 0,     // 캠프 기록 탭 스크롤
     wallRepairs:0,      // 이번 런에서 성벽을 몇 번 보수했는지 (비용 체증)
-    rerolls:0,          // 이번 런에서 강화 카드를 몇 번 리롤했는지
+    rerolls:0,          // 이번 런에서 강화 카드를 몇 번 리롤했는지 (골드 비용 체증)
+    freeRerolls:0,      // 🎴패에서 산 공짜 리롤 — 층마다 다시 채워진다
     bountyUsed:0,       // 현상수배를 몇 번 불렀는지 (강해지고 보상도 오른다)
     mode:'campaign',    // 'campaign'(훈련 30웨이브) | 'endless'(심연·악몽·무한)
     nightmare:0,        // 🌑 악몽 단계 — 서약이 그만큼 강제로 붙는다 (0 = 심연)
@@ -157,7 +159,7 @@ function newState() {
          buildingScroll:null, pageScroll:null, briefScroll:null, lobbyScroll:null, pickScroll:null,
          pauseResumeBtn:null, pauseGiveUpBtn:null,
          backupExportBtn:null, backupImportBtn:null, backupMsg:null,
-         tutReplayBtn:null, tutResetTipBtn:null, guideReplayBtn:null, campBtns:[], campGroupBtns:[], bgmToggleBtn:null, sfxToggleBtn:null,
+         tutReplayBtn:null, tutResetTipBtn:null, guideReplayBtn:null, campBtns:[], campGroupBtns:[], cardMetaBtns:[], cardCatBtns:[], cardBanBtns:[], cardBackBtn:null, bgmToggleBtn:null, sfxToggleBtn:null,
          tutSkipBtn:null, tutBackBtn:null, sigilCards:[] },
     // 영구 데이터 참조
     get soulStones()    { return _soulStones; },
@@ -172,6 +174,8 @@ function newState() {
     set forge(v) { _forge = v; },
     get camp()   { return _camp; },
     set camp(v)  { _camp = v; },
+    get cardMeta()  { return _cardMeta; },
+    set cardMeta(v) { _cardMeta = v; },
     get charms()  { return _charms; },
     set charms(v) { _charms = v; },
     get charmSlots()  { return _charmSlots; },
@@ -222,6 +226,9 @@ let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적�
   _forge          = sv.forge      || { cores:{}, best:5, mastery:0, plus:{} };
   _camp           = sv.camp       || { levels:{}, tries:0, breaks:0 };
   if (!_camp.levels) _camp.levels = {};
+  _cardMeta       = sv.cardMeta   || { levels:{}, bans:[] };
+  if (!_cardMeta.levels) _cardMeta.levels = {};
+  if (!Array.isArray(_cardMeta.bans)) _cardMeta.bans = [];
   _charms         = sv.charms     || [];
   _charmSlots     = sv.charmSlots || [null, null];
   _ascension      = sv.ascension  || 0;
@@ -267,6 +274,7 @@ let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적�
   gs.runBestAtStart = sv.runBestAtStart !== undefined
                     ? sv.runBestAtStart : ((sv.stats && sv.stats.bestEndless) || 0);
   gs.rerolls     = sv.rerolls     || 0;
+  gs.freeRerolls = sv.freeRerolls || 0;
   if (sv.townBuildings) {
     // v0.9.6에서 🏰성채가 생겼다. 옛 세이브에는 없으므로 기본값이 그대로 남게 둔다.
     for (const [k, v] of Object.entries(sv.townBuildings)) {
@@ -632,13 +640,18 @@ function tap({x,y}) {
 
   if (gs.upgradePick.active) {
     if (hitTest(x,y,gs.ui.rerollBtn||{})) {
-      const cost = rerollCost(gs.rerolls);
-      if (gs.gold < cost) { spawnFloaty('골드 부족!',x,y,'#ef4444'); SFX.denied(); return; }
-      gs.gold -= cost;
+      // 🎲 캠프에서 산 공짜 리롤을 먼저 쓴다 — 값을 치른 것을 놔두고 골드를 받으면
+      // "샀는데 왜 안 쓰이지"가 된다.
+      const free = (gs.freeRerolls || 0) > 0;
+      const cost = free ? 0 : rerollCost(gs.rerolls);
+      if (!free && gs.gold < cost) { spawnFloaty('골드 부족!',x,y,'#ef4444'); SFX.denied(); return; }
+      if (free) { gs.freeRerolls--; spawnFloaty('🎲 공짜 리롤', x, y, '#4ade80'); }
+      else gs.gold -= cost;
       gs.rerolls++;
       // 장수는 그대로 다시 뽑는다 — 🎲풍요(5장) 층에서 리롤했더니 3장으로
       // 줄어드는 버그가 있었다. 돈을 내고 이벤트 혜택을 잃는 셈이었다.
-      gs.upgradePick.cards = rollUpgradeCards(gs.activeUpgrades, fev('cards', 3));
+      gs.upgradePick.cards = rollUpgradeCards(gs.activeUpgrades,
+        Math.max(cardHandSize(gs), fev('cards', 0)), gs);
       gs.pickScroll = 0;
       SFX.click();
       return;
@@ -812,7 +825,7 @@ let _lastUiScope = null;
 function uiScopeKey() {
   const L = gs.lobby || {}, t = gs.town || {};
   if (gs.page === 'lobby') {
-    return `lobby|${L.tab}|${L.tab === 'skill' ? (L.skillTree||'') : ''}|${L.tab === 'camp' ? (L.campGroup||'') : ''}`;
+    return `lobby|${L.tab}|${L.tab === 'skill' ? (L.skillTree||'') : ''}|${L.tab === 'camp' ? (L.campGroup||'') : ''}|${L.tab === 'card' ? (L.cardCat||'-') : ''}`;
   }
   if (gs.page === 'town') {
     return `town|${t.screen||'main'}|${t.tab||''}|${t.heroView?'hero':''}|${t.forgeTab||''}|${t.shopTab||''}`;
@@ -1003,6 +1016,48 @@ function handleLobbyTap(x, y) {
     return;
   }
 
+  // 🎴 패 — 카드 선택 자체를 산다. 확정 구매라 실패 분기가 없다.
+  if (L.tab === 'card') {
+    const ry = y + (gs.lobbyScroll || 0);
+    if (gs.ui.cardBackBtn && hitTest(x, ry, gs.ui.cardBackBtn)) {
+      L.cardCat = null; gs.lobbyScroll = 0; SFX.click(); return;
+    }
+    for (const c of gs.ui.cardCatBtns||[]) {
+      if (hitTest(x,ry,c)) { L.cardCat = c.id; gs.lobbyScroll = 0; SFX.click(); return; }
+    }
+    for (const b of gs.ui.cardBanBtns||[]) {
+      if (!hitTest(x,ry,b)) continue;
+      const card = UPGRADE_CARDS.find(c => c.id === b.id);
+      if (toggleCardBan(gs, b.id)) {
+        SaveManager.save(gs);
+        const off = isCardBanned(gs, b.id);
+        spawnFloaty(off ? `🚫 ${card.name} 제외` : `${card.name} 되돌림`,
+                    CW/2, 300, off ? '#f87171' : '#94a3b8');
+        SFX.click();
+      } else {
+        spawnFloaty(`기피 칸이 없습니다 (${cardBanSlots(gs)}칸)`, CW/2, 300, '#ef4444');
+        SFX.denied();
+      }
+      return;
+    }
+    for (const b of gs.ui.cardMetaBtns||[]) {
+      if (!hitTest(x,ry,b)) continue;
+      if (b.id === '__banpick') {
+        L.cardCat = L.cardCat || 'tower'; gs.lobbyScroll = 0; SFX.click(); return;
+      }
+      if (buyCardMeta(gs, b.id)) {
+        SaveManager.save(gs);
+        const tr = cardMetaTrack(b.id);
+        spawnFloaty(`${tr.icon} ${tr.name} +${cardMetaLevel(gs, b.id)}`, CW/2, 300, '#38bdf8');
+        SFX.levelUp();
+      } else {
+        spawnFloaty('보석 부족!', x, y, '#ef4444'); SFX.denied();
+      }
+      return;
+    }
+    return;
+  }
+
   if (L.tab === 'pact') {
     for (const b of gs.ui.pactBtns||[]) {
       if (hitTest(x,y,b)) {
@@ -1104,6 +1159,7 @@ function resetAllProgress() {
   _skillLevels = {};
   _forge = { cores:{}, best:5, mastery:0, plus:{} };
   _camp  = { levels:{}, tries:0, breaks:0 };
+  _cardMeta = { levels:{}, bans:[] };
   _charms = []; _charmSlots = [null, null]; _ascension = 0; _heroPlacePref = 'none';
   _trainSkipped = false;
   _unlocked = [];

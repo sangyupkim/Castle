@@ -139,8 +139,13 @@ function nearestFreeCell(col, row, occupied) {
 // 처음엔 판을 가로지르는 대각선으로 잡았는데, 그 대각선이 하필 판 중앙 —
 // ∞ 경로에 붙여 지은 타워가 이미 덮고 있는 자리 — 를 지나가서 위협이 되지 않았다.
 // 바깥을 크게 도는 경로로 바꿨다. 경로 루프만 촘촘히 막은 배치는 하늘을 놓친다.
-const AIR_PATH_L = [[4,0],[1,1],[0,3],[0,5],[2,6],[4,6]];
-const AIR_PATH_R = [[4,0],[7,1],[8,3],[8,5],[6,6],[4,6]];
+// v0.14.0 — 항로가 지상 경로의 절반 길이(603px vs 1236~1448px)였다. 거기에 박쥐가
+// 게임에서 가장 빠른 유닛이라, 35층 기준 박쥐는 타워 사거리 안에 26타워·초만 머물렀다
+// (오크 147). 상성까지 겹치면 대포탑이 박쥐에게 내는 실효 화력은 오크의 1/21이다.
+// 플레이어 눈에는 그냥 "공중은 안 맞는다"로 보인다. 항로를 판 바깥으로 크게 돌려 길이를
+// 603 → 845px로 늘렸다. 여전히 지상보다 짧다 — 하늘은 미로를 건너뛰는 길이 맞다.
+const AIR_PATH_L = [[4,0],[1,0],[0,2],[2,3],[0,4],[1,6],[3,5],[4,6]];
+const AIR_PATH_R = [[4,0],[7,0],[8,2],[6,3],[8,4],[7,6],[5,5],[4,6]];
 function airPathFor(n) { return (n % 2 === 0) ? AIR_PATH_L : AIR_PATH_R; }
 
 // ─── 도보 시간 ───────────────────────────────────────────────────────────────
@@ -315,16 +320,19 @@ const MOB_CLASSES = {
 const MOB_CLASS_ORDER = ['small', 'medium', 'large', 'air'];
 
 // 타워 × 등급 피해 배율. 행 합이 비슷하도록 잡아 "무조건 좋은 타워"가 없게 했다.
+// 대공 배율의 바닥을 올렸다(v0.14.0). 0.30은 "약하다"가 아니라 "안 통한다"였다 —
+// 방어력은 상성을 곱한 뒤에 빼기 때문에 배율이 낮을수록 방어력 벽이 같이 두꺼워진다.
+// 저격·번개가 대공 특화라는 관계는 그대로 두고, 나머지가 0이 되는 것만 막는다.
 const TOWER_AFFINITY = {
-  arrow:  { small:1.25, medium:1.00, large:0.60, air:0.75 },
-  frost:  { small:1.10, medium:1.25, large:0.70, air:0.50 },
-  cannon: { small:0.65, medium:1.10, large:1.50, air:0.30 },
-  sniper: { small:0.70, medium:1.05, large:1.45, air:1.20 },
+  arrow:  { small:1.25, medium:1.00, large:0.60, air:0.85 },
+  frost:  { small:1.10, medium:1.25, large:0.70, air:0.65 },
+  cannon: { small:0.65, medium:1.10, large:1.50, air:0.55 },
+  sniper: { small:0.70, medium:1.05, large:1.45, air:1.30 },
   tesla:  { small:1.40, medium:0.90, large:0.55, air:1.60 },
-  // 장판은 오래 밟을수록 아프다 — 느린 대형에게 가장 세고 비행은 그냥 지나간다
-  poison: { small:0.80, medium:1.20, large:1.55, air:0.35 }
+  // 장판은 오래 밟을수록 아프다 — 느린 대형에게 가장 세고 비행은 스쳐 지나간다
+  poison: { small:0.80, medium:1.20, large:1.55, air:0.50 }
 };
-const HERO_AFFINITY = { small:1.00, medium:1.00, large:0.85, air:0.55 };
+const HERO_AFFINITY = { small:1.00, medium:1.00, large:0.85, air:0.70 };
 
 // branchId를 주면 ★5 분기가 상성 행을 다시 쓴다 (곱한다)
 function affinityOf(towerTypeId, enemy, branchId) {
@@ -819,8 +827,8 @@ const ENEMY_TYPES = {
 
   // ── 비행 ──
   // 지상보다 빠르고 항로가 짧다. 대신 대포탑·서리탑은 거의 못 맞힌다.
-  bat:    { id:'bat',    name:'박쥐',     cls:'air',    hp:26,  spd:1.50, dmg:4,  reward:7,  armor:0, color:'#c084fc', radius:9,  flying:true },
-  wyvern: { id:'wyvern', name:'비룡',     cls:'air',    hp:150, spd:0.90, dmg:16, reward:30, armor:2, color:'#7c3aed', radius:15, flying:true },
+  bat:    { id:'bat',    name:'박쥐',     cls:'air',    hp:26,  spd:1.15, dmg:4,  reward:7,  armor:0, color:'#c084fc', radius:9,  flying:true },
+  wyvern: { id:'wyvern', name:'비룡',     cls:'air',    hp:150, spd:0.78, dmg:16, reward:30, armor:2, color:'#7c3aed', radius:15, flying:true },
 
   // ── 현상수배 (플레이어가 직접 소환) ──
   bounty: { id:'bounty', name:'현상수배', cls:'large',  hp:340, spd:0.55, dmg:26, reward:40, armor:4, color:'#fbbf24', radius:18, isBounty:true },
@@ -1907,6 +1915,23 @@ function endlessWaveDef(tier) {
     w *= 0.85 + endlessRand(tier, 40 + i) * 0.45;   // 층마다 조금씩 흔든다
     return { type: u.type, w, tpl };
   }).sort((a, b) => b.w - a.w).slice(0, 4);
+
+  // 하늘 비중 상한 — 60층에서 69%, 80층에서 HP의 85%가 비행이던 적이 있다.
+  // 대공은 저격·번개 두 종류로만 제대로 잡히니, 한 층이 사실상 전부 비행이 되면
+  // 그 층은 "배치를 잘못했다"가 아니라 "그 두 타워를 안 열었으면 끝"이 된다.
+  // 종류를 지우지는 않고 비중만 눌러, 하늘은 늘 있되 하늘만 오지는 않게 한다.
+  const AIR_SHARE_CAP = 0.45;
+  const airW = weighted.reduce((a, x) => a + (x.tpl.flying ? x.w : 0), 0);
+  const allW = weighted.reduce((a, x) => a + x.w, 0) || 1;
+  if (airW / allW > AIR_SHARE_CAP) {
+    const groundW = allW - airW;
+    // 지상이 아예 없으면 누를 곳이 없다 — 그때는 그대로 둔다
+    if (groundW > 0) {
+      const want = groundW * AIR_SHARE_CAP / (1 - AIR_SHARE_CAP);
+      const k = want / airW;
+      for (const x of weighted) if (x.tpl.flying) x.w *= k;
+    }
+  }
 
   const wSum = weighted.reduce((a, x) => a + x.w, 0) || 1;
   // 층당 총 마릿수 — 완만하게 늘되 밀도(간격)가 실제 압력을 만든다

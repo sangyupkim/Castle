@@ -315,13 +315,18 @@ function enemyActive(e) { return !e.dead && !e.reached && !(e.spawnDelay > 0); }
 function pickTargetSmart(enemies, center, range, mode, towerTypeId, branchId) {
   let best = null, bestScore = -Infinity;
   for (const e of enemies) {
-    if (e.dead || e.reached) continue;
+    // 아직 들어오지 않은 적에게 쏘면 그 탄은 버려진다 — enemyActive와 기준을 맞춘다
+    if (!enemyActive(e)) continue;
     const d = Math.hypot(e.x - center.x, e.y - center.y);
     if (d > range) continue;
     const aff = affinityOf(towerTypeId, e, branchId);
-    // 거의 안 통하는 상대(0.5 미만)는 다른 표적이 있으면 넘긴다
+    // 거의 안 통하는 상대는 다른 표적이 있으면 넘긴다
     let score = aff * 100;
-    if (mode === 'strongest') score += e.hp * 0.05;
+    // 'strongest'의 체력 항이 예전엔 hp * 0.05였다. 체력이 세 자리이던 시절의 값이라
+    // 35층(808~4660)만 가도 상성 항(최대 160)을 완전히 덮어버렸고, 모든 저격탑이
+    // 체력 1등 하나에게만 몰려 쏘는 동안 나머지는 무피해로 지나갔다.
+    // 로그로 눌러서 "센 놈 우선"은 유지하되 상성이 끝까지 의미를 갖게 한다.
+    if (mode === 'strongest') score += Math.min(60, Math.log10(Math.max(1, e.hp)) * 12);
     else                      score += (range - d) * 0.02;
     if (e.isBounty) score += 40;          // 현상수배는 놓치면 손해가 크다
     if (score > bestScore) { bestScore = score; best = e; }
@@ -332,7 +337,9 @@ function pickTargetSmart(enemies, center, range, mode, towerTypeId, branchId) {
 function updateTowers(towers, enemies, projectiles, dt) {
   for (const tower of towers) {
     if (tower.muzzle > 0) tower.muzzle = Math.max(0, tower.muzzle - dt);
-    if (tower.overloadUntil > 0) tower.overloadUntil = Math.max(0, tower.overloadUntil - dt);
+    // ✦ 영구 기관 — 한 번 걸린 과부하가 풀리지 않는다
+    if (tower.overloadUntil > 0 && !BONUSES.overloadEternal)
+      tower.overloadUntil = Math.max(0, tower.overloadUntil - dt);
     // 쿨다운이 NaN이거나 터무니없이 크면 되돌린다.
     // 한 번 NaN이 들어가면 `NaN > 0`이 false라 통과는 하지만, 이후 어떤 계산도 NaN이 되어
     // 그 타워는 영영 쏘지 않는다. 값이 오염될 경로를 다 막기보다 매 프레임 제자리로 돌린다.
