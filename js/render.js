@@ -3163,6 +3163,104 @@ function renderLobbyPact(ctx, gs) {
 }
 
 // ── 📜 기록 ─────────────────────────────────────────────────────────────────
+// ── 🏆 순위표 ────────────────────────────────────────────────────────────────
+// 재미로 보는 기록판이다. 값을 증명할 방법이 없다는 것을 화면에서도 숨기지 않는다.
+function _renderRankBoard(ctx, gs, y) {
+  gs.ui.rankBoardBtns = []; gs.ui.rankReloadBtn = null;
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle='#fbbf24'; ctx.font='bold 11px sans-serif';
+  ctx.fillText('🏆 순위표', 14, y);
+  ctx.textAlign='right'; ctx.fillStyle='#334155'; ctx.font='9px sans-serif';
+  ctx.fillText('재미로 보는 기록판입니다', CW-14, y+1);
+  ctx.textAlign='left';
+  y += 18;
+
+  // 갈래 고르기 — 심연·무한·악몽은 난이도가 달라 한 표에 섞지 않는다
+  const shown = ['abyss', 'unbounded', 'nm1', 'nm3', 'nm5', 'nm10'];
+  const gw = (CW - 20 - 5*3) / 6, gh = 24;
+  shown.forEach((id, i) => {
+    const bx = 10 + i*(gw+3);
+    const on = rankState.board === id;
+    const def = RANK_BOARDS.find(b => b.id === id) || {};
+    uiPanel(ctx, bx, y, gw, gh, 4, on ? '#2a1f05' : '#0a0e18', on ? '#f59e0b' : '#1e293b', on ? 2 : 1);
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.font='bold 8px sans-serif';
+    ctx.fillStyle = on ? '#fbbf24' : '#475569';
+    const lbl = (def.label || id).replace('악몽 ', 'N');
+    ctx.fillText(lbl, bx+gw/2, y+gh/2);
+    gs.ui.rankBoardBtns.push({ x:bx, y, w:gw, h:gh, id });
+  });
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  y += gh + 8;
+
+  // 표
+  const rowH = 22, maxRows = 10;
+  const rows = rankState.rows.slice(0, maxRows);
+  const boxH = 24 + Math.max(1, rows.length) * rowH + 8;
+  uiPanel(ctx, 10, y, CW-20, boxH, 6, '#0a0e18', '#1e293b', 1);
+
+  // 머리줄
+  ctx.fillStyle='#334155'; ctx.font='bold 8px sans-serif';
+  ctx.fillText('#',    18,  y+8);
+  ctx.fillText('이름',  38,  y+8);
+  ctx.textAlign='right';
+  ctx.fillText('층',    CW-120, y+8);
+  ctx.fillText('보석',  CW-78,  y+8);
+  ctx.fillText('날짜',  CW-24,  y+8);
+  ctx.textAlign='left';
+  let ry = y + 24;
+
+  if (rankState.phase === 'loading') {
+    ctx.fillStyle='#475569'; ctx.font='10px sans-serif';
+    ctx.fillText('불러오는 중…', 18, ry+4);
+  } else if (rankState.phase === 'error') {
+    ctx.fillStyle='#f87171'; ctx.font='10px sans-serif';
+    ctx.fillText(`불러올 수 없습니다 — ${rankState.err}`, 18, ry+4);
+  } else if (!rows.length) {
+    ctx.fillStyle='#475569'; ctx.font='10px sans-serif';
+    ctx.fillText('아직 올라온 기록이 없습니다', 18, ry+4);
+  } else {
+    for (const r of rows) {
+      if (r.mine) {   // 내 기록은 바탕으로 구분한다
+        ctx.fillStyle='rgba(251,191,36,0.10)';
+        ctx.fillRect(13, ry-2, CW-26, rowH-2);
+      }
+      const top = r.rank <= 3;
+      ctx.textAlign='left'; ctx.textBaseline='top';
+      ctx.fillStyle = top ? '#fbbf24' : '#475569';
+      ctx.font='bold 9px sans-serif';
+      ctx.fillText(`${r.rank}`, 18, ry+3);
+      ctx.fillStyle = r.mine ? '#fbbf24' : '#cbd5e1'; ctx.font='10px sans-serif';
+      ctx.fillText(r.name + (r.bossDown ? ' 👑' : ''), 38, ry+3);
+      ctx.textAlign='right';
+      ctx.fillStyle='#e2e8f0'; ctx.font='bold 10px sans-serif';
+      ctx.fillText(`${r.tier}`, CW-120, ry+3);
+      ctx.fillStyle='#64748b'; ctx.font='9px sans-serif';
+      ctx.fillText(`${r.gems}`, CW-78, ry+3);
+      ctx.fillStyle='#475569'; ctx.font='9px sans-serif';
+      ctx.fillText(rankDateText(r.at), CW-24, ry+3);
+      ctx.textAlign='left';
+      ry += rowH;
+    }
+  }
+  y += boxH + 6;
+
+  // 아래 줄 — 내 순위와 새로고침
+  ctx.fillStyle='#475569'; ctx.font='9px sans-serif';
+  const mine = rankState.myRank
+    ? `내 기록 ${rankState.myRank}위 / ${rankState.total}명`
+    : (rankState.phase === 'ready' ? '이 갈래에 올린 기록이 없습니다' : '');
+  ctx.fillText(mine, 14, y+5);
+  const rw=64, rh=20, rx=CW-14-rw;
+  uiPanel(ctx, rx, y, rw, rh, 4, '#0b1220', '#334155', 1);
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillStyle='#94a3b8'; ctx.font='bold 9px sans-serif';
+  ctx.fillText('↻ 새로고침', rx+rw/2, y+rh/2);
+  gs.ui.rankReloadBtn = { x:rx, y, w:rw, h:rh };
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  return y + rh + 14;
+}
+
 function renderLobbyRecord(ctx, gs) {
   const st = gs.stats;
   let y = LOBBY_BODY_Y + 12;
@@ -3270,6 +3368,10 @@ function renderLobbyRecord(ctx, gs) {
     }
   });
   y += Math.ceil(mobIds.length/4)*(mh+5) + 14;
+
+  // ── 🏆 순위표 ────────────────────────────────────────────────────────────
+  // 내 기록 바로 아래가 남의 기록이 있을 자리다. 탭을 새로 파지 않고 여기에 둔다.
+  y = _renderRankBoard(ctx, gs, y);
 
   // ── 세이브 백업 ──────────────────────────────────────────────────────────
   // 기록이 이 브라우저 안에만 있다는 걸 알려 주고, 빠져나갈 길을 준다.
@@ -3581,6 +3683,39 @@ function renderResult(ctx, gs) {
   ctx.fillText(pactCount ? `📜 서약 ${pactCount}개 유지 중 — 보석 ×${pactGemMult().toFixed(2)}`
                          : '📜 서약을 걸면 보석을 최대 +87%까지 더 받습니다', 32, py);
   ctx.textAlign='center';
+
+  // ── 🏆 랭킹 등록 ──────────────────────────────────────────────────────
+  // 심연·악몽·무한만 올린다. 훈련은 순위의 뜻이 다르다.
+  gs.ui.rankSubmitBtn = null;
+  const rBoard = (typeof rankBoardOf === 'function') ? rankBoardOf(r) : null;
+  if (rBoard) {
+    const sb = rankState.submit;
+    const sent = sb.phase === 'done' || rankAlreadySent(r);
+    const rby = CH - 148, rbh = 34, rbw = CW - 60, rbx = 30;
+    uiPanel(ctx, rbx, rby, rbw, rbh, 7,
+            sent ? '#0f2a1a' : '#1a1508', sent ? '#22c55e' : '#f59e0b', 1.5);
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.font='bold 12px sans-serif';
+    if (sb.phase === 'sending') {
+      ctx.fillStyle='#94a3b8'; ctx.fillText('올리는 중…', CW/2, rby+rbh/2);
+    } else if (sent) {
+      ctx.fillStyle='#86efac';
+      ctx.fillText(`🏆 ${rankBoardLabel(rBoard)} 순위표에 올렸습니다`, CW/2, rby+rbh/2);
+    } else {
+      ctx.fillStyle='#fbbf24';
+      ctx.fillText(`🏆 ${rankBoardLabel(rBoard)} 순위표에 올리기`, CW/2, rby+rbh/2);
+      gs.ui.rankSubmitBtn = { x:rbx, y:rby, w:rbw, h:rbh };
+    }
+    // 결과 한 줄 — 성공이든 실패든 왜 그런지 남긴다
+    ctx.textBaseline='top'; ctx.font='9px sans-serif';
+    if (sb.msg) {
+      ctx.fillStyle = sb.color;
+      ctx.fillText(sb.msg, CW/2, rby+rbh+5);
+    } else {
+      ctx.fillStyle='#475569';
+      ctx.fillText('재미로 보는 기록판입니다 — 이름만 남습니다', CW/2, rby+rbh+5);
+    }
+  }
 
   // 로비 복귀
   const bw=CW-60, bh=46, bx=30, by=CH-90;

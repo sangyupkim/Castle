@@ -129,6 +129,8 @@ function newState() {
     briefScroll: 0,
     lobbyScroll: 0,     // 캠프 기록 탭 스크롤
     wallRepairs:0,      // 이번 런에서 성벽을 몇 번 보수했는지 (비용 체증)
+    runGameSec:0,       // 이 판의 게임 내 경과 시간(초) — 배속과 무관하다
+    runWallStart:0,     // 이 판을 시작한 실제 시각 — 랭킹 개연성 검사에 쓴다
     rerolls:0,          // 이번 런에서 강화 카드를 몇 번 리롤했는지 (골드 비용 체증)
     freeRerolls:0,      // 🎴패에서 산 공짜 리롤 — 층마다 다시 채워진다
     bountyUsed:0,       // 현상수배를 몇 번 불렀는지 (강해지고 보상도 오른다)
@@ -159,7 +161,8 @@ function newState() {
          buildingScroll:null, pageScroll:null, briefScroll:null, lobbyScroll:null, pickScroll:null,
          pauseResumeBtn:null, pauseGiveUpBtn:null,
          backupExportBtn:null, backupImportBtn:null, backupMsg:null,
-         tutReplayBtn:null, tutResetTipBtn:null, guideReplayBtn:null, campBtns:[], campGroupBtns:[], cardMetaBtns:[], cardCatBtns:[], cardBanBtns:[], cardBackBtn:null, bgmToggleBtn:null, sfxToggleBtn:null,
+         tutReplayBtn:null, tutResetTipBtn:null, guideReplayBtn:null, campBtns:[], campGroupBtns:[], cardMetaBtns:[], cardCatBtns:[], cardBanBtns:[], cardBackBtn:null,
+         rankSubmitBtn:null, rankBoardBtns:[], rankReloadBtn:null, bgmToggleBtn:null, sfxToggleBtn:null,
          tutSkipBtn:null, tutBackBtn:null, sigilCards:[] },
     // 영구 데이터 참조
     get soulStones()    { return _soulStones; },
@@ -850,7 +853,12 @@ function handleLobbyTap(x, y) {
   const L = gs.lobby;
 
   for (const b of gs.ui.lobbyTabBtns || []) {
-    if (hitTest(x,y,b)) { L.tab = b.id; gs.lobbyScroll = 0; SFX.click(); return; }
+    if (hitTest(x,y,b)) {
+      L.tab = b.id; gs.lobbyScroll = 0; SFX.click();
+      // 📊 기록 탭에는 순위표가 들어 있다 — 열 때 한 번 읽어 온다
+      if (b.id === 'record') fetchRank(rankState.board, false);
+      return;
+    }
   }
 
   // ── 출격 바 — 로비 어느 탭에서도 아래에 고정으로 그려진다 ──
@@ -1071,6 +1079,11 @@ function handleLobbyTap(x, y) {
   }
 
   if (L.tab === 'record') {
+    const ry0 = y + (gs.lobbyScroll || 0);
+    for (const b of gs.ui.rankBoardBtns||[]) {
+      if (hitTest(x,ry0,b)) { fetchRank(b.id, true); SFX.click(); return; }
+    }
+    if (hitTest(x,ry0,gs.ui.rankReloadBtn||{})) { fetchRank(rankState.board, true); SFX.click(); return; }
     // 본문은 스크롤된 채 그려지지만 버튼 좌표는 스크롤 이전 값으로 기록된다.
     // 탭 좌표를 같은 기준으로 옮겨서 견준다.
     const ry = y + (gs.lobbyScroll || 0);
@@ -1141,6 +1154,24 @@ function importSaveCode() {
   SFX.levelUp();
   // 메모리에 흩어진 전역들을 일일이 되돌리는 것보다 다시 켜는 쪽이 확실하다
   setTimeout(() => { try { location.reload(); } catch (e) {} }, 700);
+}
+
+// ─── 🏆 랭킹 등록 ────────────────────────────────────────────────────────────
+// 캔버스 게임이라 텍스트 입력 수단이 prompt뿐이다 — 백업 코드 입력과 같은 방식.
+function askAndSubmitRank() {
+  const r = gs.runSummary;
+  if (!r) return;
+  let nm = null;
+  try {
+    nm = window.prompt('순위표에 올릴 이름 (12자까지)', rankName() || '');
+  } catch (e) {
+    rankSetSubmit('error', '이 환경에서는 이름을 입력할 수 없습니다', '#ef4444');
+    return;
+  }
+  if (nm === null) return;                     // 취소
+  if (!String(nm).trim()) { rankSetSubmit('error', '이름을 입력하세요', '#ef4444'); return; }
+  submitRank(r, nm);
+  SFX.click();
 }
 
 // ─── 데이터 초기화 ───────────────────────────────────────────────────────────
@@ -1219,6 +1250,8 @@ function startRun(mode, nightmare) {
   // 판이 도는 동안 최고 기록은 계속 갱신된다. 첫 돌파를 판정하려면
   // 시작 시점의 기록을 따로 붙들고 있어야 한다.
   gs.runBestAtStart = (gs.stats && gs.stats.bestEndless) || 0;
+  gs.runGameSec   = 0;
+  gs.runWallStart = Date.now();
   applyPathVariant(0);
   gs.pathChanged = null;
   refreshInnOffers(gs);
@@ -1267,6 +1300,7 @@ function showResult() {
 }
 
 function handleResultTap(x, y) {
+  if (hitTest(x,y,gs.ui.rankSubmitBtn||{})) { askAndSubmitRank(); return; }
   if (hitTest(x,y,gs.ui.resultBtn||{})) { returnToLobby(); return; }
 }
 
@@ -2063,6 +2097,10 @@ function update(dt) {
   // 로비 · 결과 화면에서는 런이 진행되지 않는다
   if (gs.page === 'lobby' || gs.page === 'result') return;
 
+  // 게임 내 경과 시간. 배속은 update(dt)를 여러 번 부르므로 여기서 더하면
+  // 저절로 '게임 시간'이 된다 — 10배속으로 돌려도 한 층은 60초다.
+  if (gs.inRun) gs.runGameSec = (gs.runGameSec || 0) + dt;
+
   if (gs.gameOver || gs.stageCleared) { bankRunResult(); return; }
   if (gs.upgradePick.active) return;
 
@@ -2231,6 +2269,10 @@ function bankRunResult() {
     unbounded:   !!gs.unbounded,
     bossDown:    !!gs.bossDefeated,
     clearGems:   gs.clearBonusGems || 0,
+    // 🏆 랭킹 — 개연성 검사에 쓰는 두 시간. 게임시간은 배속과 무관하고,
+    // 실시간은 "최대 10배속이므로 이보다 짧을 수 없다"를 따지는 데 쓴다.
+    gameSec:     Math.round(gs.runGameSec || 0),
+    wallSec:     gs.runWallStart ? Math.round((Date.now() - gs.runWallStart) / 1000) : 0,
     nextOpen:    (gs.bossDefeated && !gs.unbounded)
                  ? ((gs.nightmare || 0) + 1 <= NIGHTMARE_MAX
                      ? nightmareName((gs.nightmare || 0) + 1) : '♾️ 무한')
