@@ -5,6 +5,13 @@
   command   = ""
   functions = "netlify/functions"
 
+# 웹 배포에 devDependencies는 필요 없다. 그대로 두면 Netlify가 npm install에서
+# Electron 바이너리(수백 MB)를 내려받는다 — 데스크톱 빌드용이라 여기선 쓸 데가 없고,
+# 느려지거나 그대로 실패한다. 함수가 쓰는 @netlify/blobs는 dependencies라 남는다.
+[build.environment]
+  NPM_FLAGS                    = "--omit=dev"
+  ELECTRON_SKIP_BINARY_DOWNLOAD = "1"
+
 [functions]
   node_bundler = "esbuild"
 
