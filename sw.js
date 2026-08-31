@@ -91,8 +91,10 @@ self.addEventListener('fetch', e => {
     return;
   }
 
+  // 그림·소리는 캐시 우선. 실패하면 그냥 실패해야 한다 —
+  // 예전에는 index.html을 돌려줬는데, <img>가 HTML을 받으면 디코드에 실패하고
+  // 그 자리는 영영 빈 채로 남는다. 오류를 오류로 두는 편이 회복이 빠르다.
   e.respondWith(
-    caches.match(req).then(hit => hit || fetch(req).then(putCopy)
-      .catch(() => caches.match('index.html')))
+    caches.match(req).then(hit => hit || fetch(req).then(putCopy))
   );
 });
