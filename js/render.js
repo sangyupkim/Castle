@@ -178,7 +178,15 @@ function drawBtn(ctx, x, y, w, h, label, bg, fg, on) {
 // 칸 좌표로 정하므로 매 프레임 같은 타일이 나온다 (깜빡이지 않는다).
 let _fieldCount = -1;
 function fieldTileKey(c, r) {
-  if (_fieldCount < 0) { let n = 0; while (Sprites.has(`tile.field.${n}`)) n++; _fieldCount = n; }
+  // 스프라이트가 다 도착하기 전에 세면 0이 나오고, 그 0이 판이 끝날 때까지 굳는다.
+  // 느린 회선에서는 8초 로딩 타임아웃이 먼저 걸려 그림 없이 첫 프레임을 그리므로
+  // 실제로 그렇게 됐다 — 타워·몹은 나오는데 **바닥만** 통째로 사라진 화면이 그것이다.
+  // 다 오기 전에는 캐시하지 않고 다음 프레임에 다시 센다.
+  if (_fieldCount < 0) {
+    let n = 0; while (Sprites.has(`tile.field.${n}`)) n++;
+    if (n > 0 || Sprites.ready) _fieldCount = n;
+    else return null;                     // 아직 오는 중 — 이번 프레임은 색 사각형으로
+  }
   if (!_fieldCount) return Sprites.pick('tile.ground');
   const h = (c * 73856093) ^ (r * 19349663);
   return `tile.field.${(h >>> 0) % _fieldCount}`;
@@ -1401,7 +1409,9 @@ let _arenaFloor = null;
 // 바닥은 변하지 않는다. 매 프레임 108장을 다시 깔 이유가 없어서 한 번 구워 둔다.
 function arenaFloorCanvas() {
   if (_arenaFloor !== null) return _arenaFloor;
-  if (!Sprites.has('tile.field.0')) return (_arenaFloor = false);
+  // 위와 같은 함정 — 아직 안 온 것을 '없다'로 구워 두면 영영 바닥이 안 깔린다.
+  // 로딩이 끝나기 전에는 판단을 미룬다.
+  if (!Sprites.has('tile.field.0')) return Sprites.ready ? (_arenaFloor = false) : false;
   const c = document.createElement('canvas');
   c.width = ARENA_W * 2; c.height = ARENA_H * 2;      // 화면이 DPR 2로 그려지므로 두 배로 굽는다
   const x = c.getContext('2d');
