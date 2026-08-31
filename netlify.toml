@@ -1,0 +1,15 @@
+# ─── Netlify ─────────────────────────────────────────────────────────────────
+# 빌드 단계가 없다. 저장소를 그대로 퍼블리시하고, 랭킹만 함수로 돈다.
+[build]
+  publish   = "."
+  command   = ""
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+# 랭킹 API — 짧은 주소로 쓴다. 서비스 워커도 이 접두사를 보고 비켜선다.
+[[redirects]]
+  from = "/api/*"
+  to   = "/.netlify/functions/:splat"
+  status = 200

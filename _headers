@@ -1,0 +1,20 @@
+# ─── 캐시 ────────────────────────────────────────────────────────────────────
+# 코드와 버전 파일은 절대 오래 물고 있으면 안 된다. sw.js가 GAME_VERSION으로
+# 캐시 키를 잡는데, sw.js 자체가 캐시되면 새 버전을 올려도 옛 워커가 계속 돈다
+# (js/version.js에 적힌 v0.8.0 사고가 그것이었다).
+/sw.js
+  Cache-Control: no-cache
+/js/version.js
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+/manifest.webmanifest
+  Cache-Control: no-cache
+
+# 랭킹 응답은 캐시하지 않는다
+/api/*
+  Cache-Control: no-store
+
+# 그림·소리는 파일명이 바뀌지 않는 한 그대로다 — 길게 잡아 대역폭을 아낀다
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

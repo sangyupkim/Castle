@@ -25,9 +25,29 @@
       "assets/**/*",
       "desktop/**/*"
     ],
-    "directories": { "output": "dist" },
-    "win":   { "target": ["nsis", "portable"] },
-    "mac":   { "target": ["dmg"], "category": "public.app-category.games" },
-    "linux": { "target": ["AppImage"], "category": "Game" }
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.games"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Game"
+    }
+  },
+  "dependencies": {
+    "@netlify/blobs": "^8.1.0"
   }
 }
