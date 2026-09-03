@@ -8,28 +8,50 @@
 const GIVE_UP_GEM_MULT = 0.6;
 
 // ─── Canvas / Layout ────────────────────────────────────────────────────────
+// 폭도 세로도 고정한다. v0.16.0에서 세로만 기기 비율을 따라가게 했었는데,
+// 그게 두 가지를 한꺼번에 망가뜨렸다.
+//
+//  ① **형평성** — 늘어난 세로를 전부 아레나가 가져가서, 세로로 긴 폰일수록
+//     전투 영역이 넓어졌다. 800일 때 330이던 아레나가 1040에서는 562였다.
+//     같은 판을 70% 넓은 자리에서 싸우는 셈이라, 기기가 실력을 대신했다.
+//  ② **성능** — 화면이 길수록 캔버스 픽셀이 늘어난다. 주소창이 없는 PWA는
+//     늘 최대치로 가는데, 갤럭시 폴드 커버 화면(≈23:9)이면 상한 1040에 DPR 3이
+//     겹쳐 1440×3120 = 449만 픽셀을 매 프레임 칠했다. 같은 폰이라도
+//     브라우저(주소창만큼 짧다)는 멀쩡한데 설치 앱만 렉이 걸린 이유가 이것이다.
+//
+// 그래서 논리 해상도를 480×928로 못 박는다. 화면은 여백으로 채운다 —
+// 여백이 남는 편이 "긴 폰이 유리한 게임"보다 낫다.
 const CW = 480;
-const CH = 800;
+const CH = 928;
+// 예전 기준값. 저장된 수치·밸런스 문서가 이 높이를 전제로 적혀 있어 남겨 둔다.
+const CH_BASE = 800;
 
 const DEFENSE_Y  = 0;
-const DEFENSE_H  = 355;
-const UIBAR_Y    = 355;
+// 격자가 7줄 → 8줄이 되면서 355 → 405. 칸 높이(50)는 그대로다.
+const DEFENSE_H  = 405;
+const UIBAR_Y    = 405;
 const UIBAR_H    = 55;
-const BATTLE_Y   = 410;
-const BATTLE_H   = 390;
+const BATTLE_Y   = 460;
+const BATTLE_H   = CH - BATTLE_Y;   // 468
 
 // ─── Defense Grid ────────────────────────────────────────────────────────────
 const GRID_COLS = 9;
-const GRID_ROWS = 7;
+const GRID_ROWS = 8;
 const CELL_W = Math.floor(CW / GRID_COLS);
 const CELL_H = Math.floor(DEFENSE_H / GRID_ROWS);
 const GRID_OX = Math.floor((CW - GRID_COLS * CELL_W) / 2);
 const GRID_OY = 5;
+// 기지(성) 칸. 예전에는 네 파일에 cellCenter(4, 6)으로 흩어져 있어서
+// 격자를 한 줄 늘리자 전부 어긋났다. 좌표는 한 군데서만 정한다.
+const CASTLE_C = 4;
+const CASTLE_R = GRID_ROWS - 1;
 
 // ─── 경로 변형 ───────────────────────────────────────────────────────────────
 // 경로가 하나뿐이면 최적 배치도 하나뿐이다 — 몇 판만 지나면 같은 자리에 같은 타워를 놓는다.
 // 관문(10층)마다 경로가 바뀌면 그 최적해가 리셋되고, 배치를 다시 생각하게 된다.
-// 모든 변형은 [4,0]에서 출발해 [4,6](기지)에서 끝나고 인접 칸으로만 이어진다.
+// 모든 변형은 [4,0]에서 출발해 [4,7](기지)에서 끝나고 인접 칸으로만 이어진다.
+// 격자가 8줄이 되면서 마지막 [4,6]→[4,7] 한 칸이 모든 변형에 붙었다 —
+// 마지막 직선이 한 칸 길어지고, 그만큼 기지 앞에 지을 자리가 늘었다.
 const PATH_VARIANTS = [
   // 0 — 기본 ∞ (8자). 1~10층은 항상 이것 — 배우는 구간
   [ [4,0],[4,1],
@@ -40,7 +62,7 @@ const PATH_VARIANTS = [
     [5,1],[6,1],[7,1],
     [7,2],[7,3],[7,4],
     [6,4],[5,4],[4,4],
-    [4,5],[4,6] ],
+    [4,5],[4,6],[4,7] ],
   // 1 — 넓은 ∞. 판 바깥을 크게 돌아 안쪽이 넓게 비고, 사거리가 짧은 타워가 불리해진다
   [ [4,0],[4,1],
     [3,1],[2,1],[1,1],[0,1],
@@ -50,7 +72,7 @@ const PATH_VARIANTS = [
     [5,1],[6,1],[7,1],[8,1],
     [8,2],[8,3],[8,4],
     [7,4],[6,4],[5,4],[4,4],
-    [4,5],[4,6] ],
+    [4,5],[4,6],[4,7] ],
   // 2 — 뱀 (S자). 가로로 세 번 훑어서 세로줄 하나에 몰아 지으면 세 번 때린다
   [ [4,0],[4,1],
     [5,1],[6,1],[7,1],
@@ -58,7 +80,7 @@ const PATH_VARIANTS = [
     [1,3],
     [1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],
     [7,5],[6,5],[5,5],[4,5],
-    [4,6] ],
+    [4,6],[4,7] ],
   // 3 — 나선. 바깥을 한 바퀴 돌고 안으로 감겨 들어온다 — 중앙 타워가 강해진다
   [ [4,0],[4,1],[3,1],[2,1],[1,1],
     [1,2],[1,3],[1,4],[1,5],
@@ -66,7 +88,7 @@ const PATH_VARIANTS = [
     [7,4],[7,3],[7,2],
     [6,2],[5,2],[4,2],[3,2],
     [3,3],[4,3],[4,4],
-    [4,5],[4,6] ]
+    [4,5],[4,6],[4,7] ]
 ];
 
 // 현재 활성 경로. 층이 바뀔 때 applyPathVariant로 교체된다.
@@ -139,8 +161,13 @@ function nearestFreeCell(col, row, occupied) {
 // 처음엔 판을 가로지르는 대각선으로 잡았는데, 그 대각선이 하필 판 중앙 —
 // ∞ 경로에 붙여 지은 타워가 이미 덮고 있는 자리 — 를 지나가서 위협이 되지 않았다.
 // 바깥을 크게 도는 경로로 바꿨다. 경로 루프만 촘촘히 막은 배치는 하늘을 놓친다.
-const AIR_PATH_L = [[4,0],[1,1],[0,3],[0,5],[2,6],[4,6]];
-const AIR_PATH_R = [[4,0],[7,1],[8,3],[8,5],[6,6],[4,6]];
+// v0.14.0 — 항로가 지상 경로의 절반 길이(603px vs 1236~1448px)였다. 거기에 박쥐가
+// 게임에서 가장 빠른 유닛이라, 35층 기준 박쥐는 타워 사거리 안에 26타워·초만 머물렀다
+// (오크 147). 상성까지 겹치면 대포탑이 박쥐에게 내는 실효 화력은 오크의 1/21이다.
+// 플레이어 눈에는 그냥 "공중은 안 맞는다"로 보인다. 항로를 판 바깥으로 크게 돌려 길이를
+// 603 → 845px로 늘렸다. 여전히 지상보다 짧다 — 하늘은 미로를 건너뛰는 길이 맞다.
+const AIR_PATH_L = [[4,0],[1,0],[0,2],[2,3],[0,4],[1,6],[3,6],[4,7]];
+const AIR_PATH_R = [[4,0],[7,0],[8,2],[6,3],[8,4],[7,6],[5,6],[4,7]];
 function airPathFor(n) { return (n % 2 === 0) ? AIR_PATH_L : AIR_PATH_R; }
 
 // ─── 도보 시간 ───────────────────────────────────────────────────────────────
@@ -206,10 +233,22 @@ const SPAWN_TARGET_GAP = 1.3;   // 이보다 뜸하면 상단이 비어 보인�
 // 1-1은 타워 한 기로 막을 수 있어야 하는 곳이다. 처음 세 웨이브만 성기게 잡고
 // 그 뒤로는 곧장 기본값으로 붙인다.
 const OPENING_TARGET_GAPS = [4.5, 3.2, 2.2];
+
+// ── 층이 깊어질수록 도착 간격을 좁힌다 ──────────────────────────────────────
+// 1.3초를 끝까지 유지하면 상단은 층이 깊어져도 **같은 밀도**로만 온다. 적이
+// 세지긴 해도 손이 바빠지지는 않아서, 타워를 다 세우고 나면 남는 것은 구경뿐이다
+// ("상단이 여전히 쉽다"는 보고가 이것이다). 마릿수를 늘리는 쪽이 체감이 크다 —
+// 사거리 밖으로 새는 적이 생기고, 과부하를 언제 쓸지가 실제 판단이 된다.
+// 마리당 보상은 buildSpawnPlan의 rewardMult가 자동으로 낮추므로 골드는 그대로다.
+const SPAWN_TARGET_GAP_DEEP = 0.70;   // 이 아래로는 좁히지 않는다
+const SPAWN_GAP_TIGHTEN_BY  = 45;     // 이 층에 걸쳐 서서히
 function spawnTargetGap(waveIndex) {
   const t = waveIndex || 0;
-  if (isEndlessRun()) return SPAWN_TARGET_GAP;   // 심연은 첫 층부터 본편이다
-  return t < OPENING_TARGET_GAPS.length ? OPENING_TARGET_GAPS[t] : SPAWN_TARGET_GAP;
+  const k = Math.min(1, Math.max(0, t) / SPAWN_GAP_TIGHTEN_BY);
+  const deep = SPAWN_TARGET_GAP + (SPAWN_TARGET_GAP_DEEP - SPAWN_TARGET_GAP) * k;
+  if (isEndlessRun()) return deep;               // 심연은 첫 층부터 본편이다
+  // 훈련도 뒤로 갈수록 조인다. 다만 처음 세 웨이브는 손에 익히는 자리로 남긴다.
+  return t < OPENING_TARGET_GAPS.length ? OPENING_TARGET_GAPS[t] : deep;
 }
 // 마지막 스폰 시각 (웨이브 길이 대비).
 // 기본은 "마지막 한 마리가 웨이브가 끝날 때 기지에 닿도록" 역산한 시각이지만,
@@ -261,10 +300,20 @@ function buildSpawnPlan(defenseEnemies, waveIndex, opts) {
     let lastSpawn = Math.max(SPAWN_FIRST_AT, dur - g.walk);
     lastSpawn = Math.max(lastSpawn, dur * (g.walk < dur * 0.5 ? SPAWN_LAST_FILL : SPAWN_LAST_MIN));
     lastSpawn = Math.min(lastSpawn, dur * SPAWN_LAST_CAP);
-    const interval  = g.count > 1
-      ? Math.max(SPAWN_MIN_GAP, (lastSpawn - SPAWN_FIRST_AT) / (g.count - 1))
-      : 0;
-    return { type: g.type, remaining: g.count, interval, nextSpawn: SPAWN_FIRST_AT, rewardMult };
+    // ── 마릿수가 창을 넘치면 '늘어뜨리지' 말고 '뭉쳐서' 내보낸다 ──────────
+    // 예전에는 간격에만 하한(SPAWN_MIN_GAP)을 걸었다. 마릿수가 창보다 많아지면
+    // 간격이 더 못 줄어드니 **일정 자체가 뒤로 늘어났다** — 91층은 60초짜리
+    // 웨이브에 118초치 스폰 일정이 잡혔다. 웨이브는 큐가 빌 때까지 끝나지 않으므로
+    // 타이머가 0이 된 뒤에도 몹이 계속 걸어 나왔다(53층 보고가 이것이다).
+    // 이제 창의 길이는 고정하고, 한 번에 여러 마리씩 내보내 마릿수를 채운다.
+    // 압력은 그대로 늘면서 웨이브의 길이는 약속대로 남는다.
+    const span   = Math.max(0, lastSpawn - SPAWN_FIRST_AT);
+    const maxTicks = Math.max(1, Math.floor(span / SPAWN_MIN_GAP) + 1);
+    const batch  = Math.max(1, Math.ceil(g.count / maxTicks));
+    const ticks  = Math.max(1, Math.ceil(g.count / batch));
+    const interval = ticks > 1 ? span / (ticks - 1) : 0;
+    return { type: g.type, remaining: g.count, interval, batch,
+             nextSpawn: SPAWN_FIRST_AT, rewardMult };
   });
 }
 
@@ -278,7 +327,7 @@ function cellCenter(col, row) {
 // 타워를 세울 수 없는 칸 (경로 + 출발/기지)
 function isBlockedCell(c, r) {
   if (PATH_CELLS.has(`${c},${r}`)) return true;
-  if (c === 4 && (r === 0 || r === 6)) return true;
+  if (c === CASTLE_C && (r === 0 || r === CASTLE_R)) return true;
   return false;
 }
 
@@ -293,16 +342,19 @@ const MOB_CLASSES = {
 const MOB_CLASS_ORDER = ['small', 'medium', 'large', 'air'];
 
 // 타워 × 등급 피해 배율. 행 합이 비슷하도록 잡아 "무조건 좋은 타워"가 없게 했다.
+// 대공 배율의 바닥을 올렸다(v0.14.0). 0.30은 "약하다"가 아니라 "안 통한다"였다 —
+// 방어력은 상성을 곱한 뒤에 빼기 때문에 배율이 낮을수록 방어력 벽이 같이 두꺼워진다.
+// 저격·번개가 대공 특화라는 관계는 그대로 두고, 나머지가 0이 되는 것만 막는다.
 const TOWER_AFFINITY = {
-  arrow:  { small:1.25, medium:1.00, large:0.60, air:0.75 },
-  frost:  { small:1.10, medium:1.25, large:0.70, air:0.50 },
-  cannon: { small:0.65, medium:1.10, large:1.50, air:0.30 },
-  sniper: { small:0.70, medium:1.05, large:1.45, air:1.20 },
+  arrow:  { small:1.25, medium:1.00, large:0.60, air:0.85 },
+  frost:  { small:1.10, medium:1.25, large:0.70, air:0.65 },
+  cannon: { small:0.65, medium:1.10, large:1.50, air:0.55 },
+  sniper: { small:0.70, medium:1.05, large:1.45, air:1.30 },
   tesla:  { small:1.40, medium:0.90, large:0.55, air:1.60 },
-  // 장판은 오래 밟을수록 아프다 — 느린 대형에게 가장 세고 비행은 그냥 지나간다
-  poison: { small:0.80, medium:1.20, large:1.55, air:0.35 }
+  // 장판은 오래 밟을수록 아프다 — 느린 대형에게 가장 세고 비행은 스쳐 지나간다
+  poison: { small:0.80, medium:1.20, large:1.55, air:0.50 }
 };
-const HERO_AFFINITY = { small:1.00, medium:1.00, large:0.85, air:0.55 };
+const HERO_AFFINITY = { small:1.00, medium:1.00, large:0.85, air:0.70 };
 
 // branchId를 주면 ★5 분기가 상성 행을 다시 쓴다 (곱한다)
 function affinityOf(towerTypeId, enemy, branchId) {
@@ -552,16 +604,19 @@ function towerRebranchCost(t) {
 // ─── 해금 (로비에서 보석으로 영구 개방) ──────────────────────────────────────
 // 처음부터 열려 있는 것은 화살탑 · 궁수 · 검사뿐이다.
 // 나머지는 런을 돌며 모은 보석으로 하나씩 연다 — 로그라이트의 주 진행축.
+// 값은 첫 판에 다 열리지 않을 만큼만 올렸다 (총 86 → 322).
+// 해금은 초반 진행축이라 너무 무겁게 하면 판이 늘 같은 그림으로 시작한다 —
+// 보석을 크게 먹어야 하는 곳은 스킬 트리와 🔥단련이지 여기가 아니다.
 const UNLOCK_DEFS = [
-  { id:'frost',    kind:'tower', cost:4,  name:'서리탑',   icon:'❄️',  desc:'이동속도 45% 감속' },
-  { id:'healer',   kind:'unit',  cost:5,  name:'치유사',   icon:'✚',   desc:'주변 아군 회복' },
-  { id:'cannon',   kind:'tower', cost:8,  name:'대포탑',   icon:'💣',  desc:'착탄 범위 피해' },
-  { id:'guardian', kind:'unit',  cost:9,  name:'방패병',   icon:'🛡️', desc:'전방 방벽 · 도발' },
-  { id:'rogue',    kind:'unit',  cost:10, name:'도적',     icon:'🗡️', desc:'은신 · 기습 · 드랍 회수' },
-  { id:'mage',     kind:'unit',  cost:12, name:'마법사',   icon:'✨',  desc:'자기 중심 광역' },
-  { id:'tesla',    kind:'tower', cost:11, name:'번개탑',   icon:'⚡',  desc:'대공 특화 · 연쇄' },
-  { id:'sniper',   kind:'tower', cost:14, name:'저격탑',   icon:'🎯',  desc:'초장거리 · 방어 무시' },
-  { id:'poison',   kind:'tower', cost:13, name:'독탑',     icon:'☠️', desc:'착탄점에 독 장판' },
+  { id:'frost',    kind:'tower', cost:12, name:'서리탑',   icon:'❄️',  desc:'이동속도 45% 감속' },
+  { id:'healer',   kind:'unit',  cost:16, name:'치유사',   icon:'✚',   desc:'주변 아군 회복' },
+  { id:'cannon',   kind:'tower', cost:28, name:'대포탑',   icon:'💣',  desc:'착탄 범위 피해' },
+  { id:'guardian', kind:'unit',  cost:32, name:'방패병',   icon:'🛡️', desc:'전방 방벽 · 도발' },
+  { id:'rogue',    kind:'unit',  cost:38, name:'도적',     icon:'🗡️', desc:'은신 · 기습 · 드랍 회수' },
+  { id:'mage',     kind:'unit',  cost:46, name:'마법사',   icon:'✨',  desc:'자기 중심 광역' },
+  { id:'tesla',    kind:'tower', cost:42, name:'번개탑',   icon:'⚡',  desc:'대공 특화 · 연쇄' },
+  { id:'sniper',   kind:'tower', cost:56, name:'저격탑',   icon:'🎯',  desc:'초장거리 · 방어 무시' },
+  { id:'poison',   kind:'tower', cost:52, name:'독탑',     icon:'☠️', desc:'착탄점에 독 장판' },
 ];
 const UNLOCK_TOTAL_COST = UNLOCK_DEFS.reduce((a, u) => a + u.cost, 0);
 const INITIAL_UNLOCKED  = ['arrow', 'archer', 'swordsman'];
@@ -657,8 +712,21 @@ function nightmareColor(level) {
 // 한 갈래를 처음 깼을 때 주는 보석 — 단계가 오를수록 크다
 const NIGHTMARE_CLEAR_GEMS      = 40;
 const NIGHTMARE_CLEAR_GEMS_STEP = 25;
+// 단계당 선형 0.35였다 — 악몽 10이 ×4.5라 "열 배 어려운데 네 배 반"이었다.
+// 서약이 하나씩 겹치는 난이도는 선형이 아니라 곱으로 오르므로 보상도 곱을 따라간다.
+// 악몽 10 = ×9.5, 5단계 = ×4.5.
 function nightmareGemMult(level) {
-  return 1 + Math.max(0, Math.min(NIGHTMARE_MAX, level || 0)) * 0.35;
+  const n = Math.max(0, Math.min(NIGHTMARE_MAX + 1, level || 0));
+  return 1 + n * 0.55 + n * n * 0.03;
+}
+// ♾️ 무한은 악몽 10 위에 한 칸 더 있는 것으로 친다
+function unboundedGemMult() { return nightmareGemMult(NIGHTMARE_MAX + 1); }
+// ♾️ 무한 — 악몽 10의 서약을 전부 지고 시작하는 데 더해, 층마다 무게가 한 겹 더 붙는다.
+// 결승선이 없다는 것만으로는 '더 어렵다'가 되지 않는다 — 같은 50층이면 악몽 10과
+// 똑같은 50층이었다. 여기서는 층이 깊어질수록 그 차이가 벌어진다.
+const UNBOUNDED_HP_PER_FLOOR = 0.010;   // 층당 적 체력 +1%p (복리 아님, 누적 가산)
+function unboundedFloorMult(tier) {
+  return 1 + Math.max(0, (tier || 1) - 1) * UNBOUNDED_HP_PER_FLOOR;
 }
 
 // ─── 👹 마왕 — 100층의 끝 ────────────────────────────────────────────────────
@@ -738,11 +806,23 @@ function towerBuildCost(typeId, towers) {
 // Lv.3까지는 완만하고, Lv.4부터 급격히 비싸진다
 const TOWER_HIGH_LEVEL_ESCALATION = 2.6;
 // 합성으로 연 별과 서약 상한 중 낮은 쪽
+// 💰 골드로 올릴 수 있는 한계. ★5까지다.
+//
+// 예전에는 여기서 forgeBestStar(가진 최고 별)를 읽었다. 그래서 ★6 심을 하나
+// 만들면 **판 위의 모든 타워**가 골드만으로 ★6이 됐다 — 심 하나에 타워 하나라는
+// 규칙이 성립하지 않았다. ★5 위로는 골드가 아니라 심을 태워야 오른다.
 function towerLevelCap() {
-  const forged = (typeof gs !== 'undefined' && gs && gs.town && typeof forgeBestStar === 'function')
-               ? forgeBestStar(gs) : TOWER_BASE_LEVEL_CAP;
-  return Math.max(1, Math.min(TOWER_MAX_LEVEL, forged,
+  return Math.max(1, Math.min(TOWER_BASE_LEVEL_CAP,
                               BONUSES.pactTowerLevelCap || TOWER_MAX_LEVEL));
+}
+// 🔥 심을 태워 올릴 수 있는 한계 (★10). 서약이 상한을 낮추면 그것도 따른다.
+function towerStarCap() {
+  return Math.max(1, Math.min(TOWER_MAX_LEVEL, BONUSES.pactTowerLevelCap || TOWER_MAX_LEVEL));
+}
+// 능력치를 찾을 때 쓰는 레벨 — 골드 상한이 아니라 **그 타워가 실제로 가진 별**이다.
+// 여기서 towerLevelCap을 쓰면 심으로 올린 ★7 타워가 ★5 능력치로 계산된다.
+function towerStatLevel(t) {
+  return Math.max(1, Math.min(TOWER_MAX_LEVEL, (t && t.level) || 1));
 }
 function towerUpgradeCost(t) {
   const lv = t.level || 1;
@@ -752,6 +832,19 @@ function towerUpgradeCost(t) {
                        : 0.9 * lv * Math.pow(TOWER_HIGH_LEVEL_ESCALATION, lv - 2);
   return Math.max(1, Math.round(base * mult));
 }
+// 이 자리에 세우면 경로를 몇 칸이나 사정권에 넣는가.
+// 사거리 원만 보여주면 "커 보이는데 정작 길을 안 덮는" 자리를 못 거른다.
+function pathCellsInRange(col, row, rangePx) {
+  const c0 = cellCenter(col, row);
+  let n = 0;
+  for (const key of PATH_CELLS) {
+    const [pc, pr] = key.split(',').map(Number);
+    const p = cellCenter(pc, pr);
+    if (Math.hypot(p.x - c0.x, p.y - c0.y) <= rangePx) n++;
+  }
+  return n;
+}
+
 function towerSellValue(t) {
   return Math.max(1, Math.floor((t.invested || TOWER_TYPES[t.typeId].cost)
                                 * (0.6 + (BONUSES.towerSellBonus || 0))));
@@ -768,8 +861,8 @@ const ENEMY_TYPES = {
 
   // ── 비행 ──
   // 지상보다 빠르고 항로가 짧다. 대신 대포탑·서리탑은 거의 못 맞힌다.
-  bat:    { id:'bat',    name:'박쥐',     cls:'air',    hp:26,  spd:1.50, dmg:4,  reward:7,  armor:0, color:'#c084fc', radius:9,  flying:true },
-  wyvern: { id:'wyvern', name:'비룡',     cls:'air',    hp:150, spd:0.90, dmg:16, reward:30, armor:2, color:'#7c3aed', radius:15, flying:true },
+  bat:    { id:'bat',    name:'박쥐',     cls:'air',    hp:26,  spd:1.15, dmg:4,  reward:7,  armor:0, color:'#c084fc', radius:9,  flying:true },
+  wyvern: { id:'wyvern', name:'비룡',     cls:'air',    hp:150, spd:0.78, dmg:16, reward:30, armor:2, color:'#7c3aed', radius:15, flying:true },
 
   // ── 현상수배 (플레이어가 직접 소환) ──
   bounty: { id:'bounty', name:'현상수배', cls:'large',  hp:340, spd:0.55, dmg:26, reward:40, armor:4, color:'#fbbf24', radius:18, isBounty:true },
@@ -787,18 +880,37 @@ const DEF_WAVE_ARMOR_EVERY = 5;
 const DEF_WAVE_COUNT_SCALE = 0.07;
 
 // ─── 하단 아레나 레이아웃 ─────────────────────────────────────────────────────
-// 410 ┌ 상태 바 28 ┐ 438 ┌ 아레나 330 ┐ 768 ┌ 컨트롤 바 32 ┐ 800
+// 460 ┌ 상태 바 28 ┐ 488 ┌ 아레나 400 ┐ 888 ┌ 컨트롤 바 40 ┐ 928
+//
+// 아레나 세로는 **고정 400**이다. 기준 높이(800)에서 330이었으니 +21% —
+// 사용자가 "좀 넓어지니까 시원하다"고 한 그 느낌은 남기되, 기기 비율과는 끊었다.
+// 이 값이 화면을 따라가면 폰이 길수록 유리해진다(위 CH 주석 참고).
 const ARENA_STATUS_H = 28;
 // 컨트롤 바를 40으로 키웠다. 32였을 때 버튼이 24px밖에 안 돼서
 // 480 논리폭을 6인치 화면에 늘려 놓아도 손가락에는 여전히 작았다.
-// 아레나가 8px 줄지만, 개체 몸집을 키운 뒤라 체감은 없다.
 const ARENA_CTRL_H   = 40;
 // 준비 화면 위쪽 ⏸·배속·🔊 전용 띠. 브리핑 본문은 이 아래에서 시작한다.
 const BRIEF_CTRL_H   = 38;
 const ARENA_X = 0;
-const ARENA_Y = BATTLE_Y + ARENA_STATUS_H;
 const ARENA_W = CW;
-const ARENA_H = BATTLE_H - ARENA_STATUS_H - ARENA_CTRL_H;   // 330
+// 👹 하단 레이드에서는 상단 라인을 통째로 치우고 아레나가 화면을 다 가져간다.
+// 그때만 이 둘이 바뀐다 — applyArenaBounds()가 다시 잡는다.
+const BOSS_HUD_H = 54;
+const ARENA_H_NORMAL = 400;
+const ARENA_H_RAID   = CH - ARENA_CTRL_H - (BOSS_HUD_H + ARENA_STATUS_H);   // 806
+let   ARENA_Y = BATTLE_Y + ARENA_STATUS_H;
+let   ARENA_H = ARENA_H_NORMAL;
+
+// 지금 아레나가 '레이드 배치'인가. 이 모듈이 직접 들고 있는다 —
+// 아래 모듈이 위 모듈의 전역을 읽으면 로드 순서에 묶인다. 제 상태는 제가 든다.
+// (예전에 gs.boss를 들여다봤다가 TDZ로 화면이 통째로 검게 나온 적이 있다.)
+let _arenaRaidMode = false;
+function applyArenaBounds(raid) {
+  _arenaRaidMode = !!raid;
+  ARENA_Y = _arenaRaidMode ? (BOSS_HUD_H + ARENA_STATUS_H) : (BATTLE_Y + ARENA_STATUS_H);
+  ARENA_H = _arenaRaidMode ? ARENA_H_RAID : ARENA_H_NORMAL;
+  return ARENA_H;
+}
 
 // ── 개체 몸집 ────────────────────────────────────────────────────────────────
 // 아군 반지름이 7.5px였다. 이모지는 그 크기에서도 실루엣이 읽히지만 그림은 안 읽힌다 —
@@ -865,11 +977,26 @@ function surgeCount(tier) {
 // 전멸은 후퇴보다 비싸다 — 병력까지 잃었으므로.
 // 예전 돌파(DPS × 15초)가 주던 양을 한 번에 환산해 같은 무게로 맞춘다.
 const WIPE_BASE   = 14;    // 기본 성벽 피해
-const WIPE_PER_SEC= 0.34;  // 남은 스폰 시간 1초당 가산
 const WIPE_TIER   = 0.55;  // 층당 가산
+// 얼마나 일찍 무너졌나 — 남은 스폰 시간의 비율만큼 값이 붙는다.
+//
+// 예전에는 초당 정액(0.34)이었다. 그러면 층이 깊어질수록 정액 항(기본+층)이
+// 커져서 시간 항이 묻힌다 — 50층에서 시작하자마자 전멸하나 끝나기 직전에
+// 전멸하나 62 대 42, 1.5배밖에 안 갈렸다. 1초 만에 무너진 것과 59초를 버틴 것이
+// 거의 같은 값이면 "버틴다"는 행동에 값이 없다.
+// 비율로 바꾸면 층과 무관하게 늘 같은 배수로 갈린다.
+const WIPE_EARLY_MULT = 1.0;   // 시작하자마자 무너지면 두 배
+// 다만 한 번의 전멸이 만피에서 즉사가 되지는 않게 상한을 둔다.
+// 아레나에서 전멸은 예외가 아니라 흔한 일이다.
+const WIPE_HP_CAP_PCT = 0.55;
 function wipeCost(remainSec, waveIndex) {
-  const t = Math.max(0, waveIndex || 0);
-  return Math.round(WIPE_BASE + Math.max(0, remainSec || 0) * WIPE_PER_SEC + t * WIPE_TIER);
+  const t    = Math.max(0, waveIndex || 0);
+  const dur  = (typeof waveDuration === 'function') ? Math.max(1, waveDuration()) : 60;
+  const left = Math.max(0, Math.min(1, (remainSec || 0) / dur));
+  const raw  = (WIPE_BASE + t * WIPE_TIER) * (1 + left * WIPE_EARLY_MULT);
+  const cap  = (typeof baseHpMax === 'function')
+    ? Math.max(WIPE_BASE, Math.round(baseHpMax() * WIPE_HP_CAP_PCT)) : Infinity;
+  return Math.min(cap, Math.round(raw));
 }
 
 const DROP_TYPES = [
@@ -923,16 +1050,26 @@ function arenaCenter() {
 // ─── 아군 유닛 — 실시간 스탯 ─────────────────────────────────────────────────
 // atkPeriod(초) · range(px) · moveSpd(px/s) · skillCd(초)
 // DPS는 v1.0 틱 전투(ATK = 초당 피해)와 같은 값이 되도록 주기를 맞췄다.
+//
+// ── v12.8 근접·원거리 재조정 ──
+// 보고: "후반부로 가니까 근접 유닛은 모두 죽어버리고 활밖에 못 쓰게 돼."
+// 몹 공격력은 층을 따라 sm^0.80으로 오르는데 아군 체력은 정액 합산이라
+// 곡선을 따라가지 못한다. 그 차이를 **접촉하는 쪽**이 전부 뒤집어쓴다 —
+// 근접은 맞고 원거리는 안 맞으니, 깊어질수록 답이 활 하나로 수렴한다.
+// 그래서 역할대로 갈랐다.
+//   근접 — 체력·방어를 올리고 공격을 내린다 (버티는 것이 일이다)
+//   활   — 체력을 내린다 (안 맞는 값을 이미 사거리로 받고 있다)
+// 특히 ✝️성기사는 '방패병보다 단단하다'가 이름값이라 폭을 가장 크게 줬다.
 const UNIT_TYPES = {
   swordsman: {
     id:'swordsman', name:'검사',   cost:8,
-    hp:105, atk:12, def:3, atkPeriod:0.90, range:26, moveSpd:85, radius:7.5,
+    hp:152, atk:10, def:5, atkPeriod:0.90, range:26, moveSpd:85, radius:7.5,
     skillName:'회전 베기', skillKind:'spin', skillAtk:28, skillCd:6, skillRadius:52, skillColor:'#f59e0b',
     color:'#60a5fa', icon:'⚔️', role:'균형 잡힌 근접 딜러'
   },
   archer: {
     id:'archer',    name:'궁수',   cost:6,
-    hp:70, atk:10, def:1, atkPeriod:0.75, range:130, moveSpd:90, radius:7.5, ranged:true,
+    hp:52, atk:10, def:1, atkPeriod:0.75, range:130, moveSpd:90, radius:7.5, ranged:true,
     skillName:'연사', skillKind:'volley', skillAtk:12, skillHits:3, skillCd:5, skillColor:'#a78bfa',
     color:'#a78bfa', icon:'🏹', role:'긴 사거리 · 카이팅'
   },
@@ -944,7 +1081,7 @@ const UNIT_TYPES = {
   },
   guardian: {
     id:'guardian',  name:'방패병', cost:14,
-    hp:210, atk:7,  def:9, atkPeriod:1.10, range:24, moveSpd:70, radius:9, isTank:true,
+    hp:305, atk:6,  def:12, atkPeriod:1.10, range:24, moveSpd:70, radius:9, isTank:true,
     skillName:'방벽', skillKind:'bulwark', skillAtk:0, skillCd:8, skillRadius:110, shieldAmt:22, skillColor:'#38bdf8',
     color:'#38bdf8', icon:'🛡️', role:'앞에 서서 맞고 도발'
   },
@@ -962,7 +1099,7 @@ const UNIT_TYPES = {
   //          그동안 전열에서 빠지므로, 쓸모와 손해가 같이 온다.
   rogue: {
     id:'rogue',     name:'도적',   cost:13,
-    hp:82, atk:14, def:1, atkPeriod:0.62, range:26, moveSpd:112, radius:7.5,
+    hp:106, atk:12, def:2, atkPeriod:0.62, range:26, moveSpd:112, radius:7.5,
     skillName:'은신', skillKind:'stealth', skillAtk:0, skillCd:ROGUE_STEALTH_CD, skillColor:'#c084fc',
     stealth:true, greed:ROGUE_GREED_CHANCE,
     color:'#c084fc', icon:'🗡️', role:'은신 · 기습 · 드랍 회수'
@@ -977,19 +1114,19 @@ const SPECIAL_UNIT_TYPES = {
   // 여관의 첫 손님은 "싸고 빠른 근접 DPS"여야 조합이 이어진다.
   berserker: {
     id:'berserker', name:'광전사', cost:22, innLevel:0,
-    hp:130, atk:21, def:2, atkPeriod:0.58, range:28, moveSpd:104, radius:8,
+    hp:176, atk:18, def:4, atkPeriod:0.58, range:28, moveSpd:104, radius:8,
     skillName:'광란', skillKind:'spin', skillAtk:36, skillCd:5, skillRadius:52, skillColor:'#f43f5e',
     color:'#f43f5e', icon:'🪓', role:'가장 빠른 근접 DPS · 물몸', special:true
   },
   paladin: {
     id:'paladin', name:'성기사', cost:28, innLevel:1,
-    hp:265, atk:13, def:13, atkPeriod:1.10, range:26, moveSpd:70, radius:9, isTank:true,
+    hp:445, atk:10, def:19, atkPeriod:1.10, range:26, moveSpd:70, radius:9, isTank:true,
     skillName:'성역', skillKind:'bulwark', skillAtk:0, skillCd:7, skillRadius:120, shieldAmt:38, skillColor:'#fbbf24',
     color:'#fbbf24', icon:'✝️', role:'방패병보다 단단하고 보호막도 크다', special:true
   },
   marksman: {
     id:'marksman', name:'명사수', cost:32, innLevel:2,
-    hp:78, atk:17, def:1, atkPeriod:1.00, range:180, moveSpd:84, radius:7.5, ranged:true,
+    hp:58, atk:17, def:1, atkPeriod:1.00, range:180, moveSpd:84, radius:7.5, ranged:true,
     skillName:'관통 사격', skillKind:'volley', skillAtk:30, skillHits:4, skillCd:6, skillColor:'#22d3ee',
     color:'#22d3ee', icon:'🎯', role:'사거리 180 · 아레나 절반을 덮는다', special:true
   }
@@ -1027,9 +1164,13 @@ function rollInnOffers(innLv) {
   }
   return out;
 }
-// 특수 용병 전용 슬롯 — 일반 편성 슬롯과 따로 센다
+// 특수 용병 전용 슬롯 — 일반 편성 슬롯과 따로 센다.
+// 🏨 여관 레벨 두 단마다 한 칸. 예전에는 보석 트랙 하나에만 매달려 있어서
+// 여관을 Lv.10까지 올려도 자리가 늘지 않았다 — 건물을 올린 보람이 없었다.
 function specialSlotMax() {
-  return 1 + (BONUSES.specialSlotBonus || 0);
+  const lv = (typeof townBuildingLevel === 'function' && typeof gs !== 'undefined')
+    ? townBuildingLevel(gs, 'inn') : 0;
+  return 1 + Math.floor(lv / 2) + (BONUSES.specialSlotBonus || 0);
 }
 // 일반 용병과 특수 용병을 한 표에서 찾을 수 있게 합쳐 둔다
 Object.assign(UNIT_TYPES, SPECIAL_UNIT_TYPES);
@@ -1068,6 +1209,19 @@ const HERO_SIGILS = [
             desc:'가장 넓은 범위 · 맞은 적은 둔화' },
     passive:'영웅 사거리 +40% · 스킬 피해 +25%',
     apply:b=>{ b.sigilHeroRangeMult *= 1.40; b.sigilSkillMult *= 1.25; } },
+
+  // 🏹 신궁 — 술사와 같은 원거리지만 성격이 반대다.
+  // 술사는 한 방을 넓게 터뜨리고, 신궁은 여러 발을 빠르게 꽂는다.
+  // 방패병이 원거리를 반으로 깎는 판에서 '원거리인데도 뚫는' 갈래를 하나 둔다 —
+  // 그래서 관통(방어 무시)이 이 각인의 몫이다.
+  { id:'ranger', name:'신궁', icon:'🏹', color:'#4ade80',
+    tagline:'멀리서, 빠르게, 여러 발',
+    ranged:true,
+    skill:{ name:'연사', kind:'volley', cd:5.5, radius:0, mult:1.5, color:'#86efac',
+            hits:4, desc:'사거리 안 넷에게 연달아 쏜다' },
+    passive:'영웅 사거리 +90% · 공격속도 +25% · 원거리 저항 무시',
+    apply:b=>{ b.sigilHeroRangeMult *= 1.90; b.sigilHeroSpdMult *= 1.25;
+               b.heroPierceRanged = true; } },
 ];
 const DEFAULT_SIGIL = 'blade';
 
@@ -1089,6 +1243,14 @@ const BATTLE_MOB_TYPES = {
   orc:      { id:'orc',      name:'오크',     hp:80,  atk:15, def:4,  atkPeriod:1.2, range:22,  moveSpd:55,  radius:8,  goldReward:8,  color:'#818cf8', icon:'👹', behavior:'charge' },
   darkarch: { id:'darkarch', name:'다크아처', hp:45,  atk:12, def:2,  atkPeriod:1.4, range:140, moveSpd:60,  radius:7,  goldReward:9,  color:'#c084fc', icon:'🏹', behavior:'kite', ranged:true },
   ogre:     { id:'ogre',     name:'오우거',   hp:150, atk:22, def:6,  atkPeriod:1.6, range:26,  moveSpd:45,  radius:10, goldReward:15,  color:'#a16207', icon:'🧌', behavior:'charge' },
+  // 🛡 방패병 — 화살을 막는다. 궁수 한 종류로 칸을 다 채우는 것이 늘 정답이던 것을
+  // 되돌리려고 넣었다. 궁수를 약하게 만드는 대신 **궁수만으로는 안 되는 적**을 둔다 —
+  // 숫자를 깎으면 궁수가 나빠지지만, 이 적을 두면 검사를 섞을 이유가 생긴다.
+  // 붙어서 때리면 그대로 아프다. 막는 것은 날아오는 것뿐이다.
+  // 저항 0.65 + 방어 5는 두 겹으로 물려 궁수가 '약한' 게 아니라 '안 통하는' 것이 됐다 —
+  // 궁수 여섯이 30초 동안 방패병 여섯을 한 마리도 못 잡았다. 그건 편성을 섞게 만드는 게
+  // 아니라 궁수를 버리게 만든다. 방어를 낮추고 저항만 남겨 한 겹으로 만든다.
+  shieldman:{ id:'shieldman',name:'방패병',   hp:110, atk:14, def:2,  atkPeriod:1.3, range:22,  moveSpd:58,  radius:9,  goldReward:13,  color:'#38bdf8', icon:'🛡', behavior:'charge', rangedResist:0.50 },
   boss:     { id:'boss',     name:'보스',     hp:200, atk:25, def:8,  atkPeriod:1.5, range:30,  moveSpd:40,  radius:11, goldReward:24,  color:'#ef4444', icon:'💀', behavior:'dash',  isBoss:true },
   warlord:  { id:'warlord',  name:'마왕',     hp:520, atk:40, def:14, atkPeriod:1.8, range:34,  moveSpd:35,  radius:11, goldReward:70, color:'#db2777', icon:'🐲', behavior:'slam',  isBoss:true }
 };
@@ -1161,7 +1323,15 @@ function clearRepair(waveIndex) {
 // 이 상태에서는 기지에 닿는 모든 피해가 1/7이 되어, 적을 아무리 강하게 만들어도
 // 만렙 편성이 죽지 않는다. 실측(∞-29, 적 ×44.7)에서 한 웨이브 피해가
 // 상수 9HP로 고정돼 있던 원인 중 하나가 이것이다.
-const BASE_DEF_PCT_CAP = 0.55;
+// 기지 피해 감소의 **합계** 상한. 갈래마다 따로 상한을 두고 곱했더니
+// (1-0.55) × (1-0.6) = 0.18, 즉 82%까지 깎였다. 거기서 피해가 1로 바닥을 치고
+// 기지 재생이 그걸 도로 채워서 "맞았는데 체력이 안 줄어든다"가 됐다.
+// 이제 어느 갈래를 얼마나 쌓든 **절반 아래로는 내려가지 않는다.**
+const BASE_DEF_PCT_CAP   = 0.55;   // (개별 갈래 표시용으로만 남긴다)
+const BASE_DEF_TOTAL_CAP = 0.50;
+// 아군 비율 방어의 상한. 기지와 같은 이유로 둔다 — 100%에 닿으면 그 뒤로는
+// 아무것도 위험하지 않아서 판이 끝난다.
+const UNIT_DEF_PCT_CAP   = 0.50;
 // 웨이브가 끝나도 아직 걸어오던 적은 사라지지 않고 다음 웨이브로 넘어간다.
 // 상한은 성능과 가독성 때문이지, 밸런스 때문이 아니다.
 const CARRYOVER_MAX = 40;
@@ -1169,9 +1339,13 @@ const CARRYOVER_MAX = 40;
 function baseDamageMult() {
   // 🧱 성벽 결계가 걸려 있는 동안은 기지가 아무 피해도 받지 않는다
   if (typeof gs !== 'undefined' && gs && (gs.baseWardUntil || 0) > 0) return 0;
-  return (1 - Math.min(BASE_DEF_PCT_CAP, BONUSES.baseDefPct || 0))
-       * (1 - Math.min(0.6, BONUSES.breachReduce || 0));
+  // 두 갈래를 각각 자른 뒤 곱하면 상한이 상한 구실을 못 한다 — 합쳐서 한 번 자른다.
+  const combined = 1 - (1 - Math.max(0, BONUSES.baseDefPct    || 0))
+                     * (1 - Math.max(0, BONUSES.breachReduce  || 0));
+  return 1 - Math.min(BASE_DEF_TOTAL_CAP, combined);
 }
+// 화면에 적어 주기 위한 값 — 지금 실제로 몇 %가 깎이는가
+function baseDefPctShown() { return Math.round((1 - baseDamageMult()) * 100); }
 
 // 🏰 최후 저지선 — 성채가 직접 쏜다. 강화를 사지 않으면 공격력이 0이라 아무 일도 없다.
 const CASTLE_BASE_RANGE = CELL_W * 1.6;
@@ -1263,10 +1437,10 @@ const WAVE_DEFS = [
   // ── 1-3 : 오크 · 체력 벽 ─────────────────────────────────────────────────
   { defenseEnemies:[{type:'goblin',count:8,interval:1200},{type:'orc',count:2,interval:4000}], arenaPool:[['goblin',8],['hound',5],['orc',3]] },
   { defenseEnemies:[{type:'goblin',count:9,interval:1100},{type:'orc',count:3,interval:3500}], arenaPool:[['goblin',7],['hound',5],['orc',5]] },
-  { defenseEnemies:[{type:'goblin',count:10,interval:1000},{type:'orc',count:3,interval:3200}], arenaPool:[['goblin',6],['hound',5],['orc',6]] },
+  { defenseEnemies:[{type:'goblin',count:10,interval:1000},{type:'orc',count:3,interval:3200}], arenaPool:[['goblin',6],['hound',5],['orc',6],['shieldman',3]] },
   // ── 1-4 : 다크아처 · 접근 강제 ───────────────────────────────────────────
-  { defenseEnemies:[{type:'goblin',count:8,interval:1000},{type:'brute',count:1,interval:6000},{type:'bat',count:3,interval:3000}], arenaPool:[['goblin',6],['hound',5],['orc',6],['darkarch',3]] },
-  { defenseEnemies:[{type:'orc',count:4,interval:2500},{type:'brute',count:1,interval:6000},{type:'bat',count:4,interval:2600}], arenaPool:[['goblin',5],['hound',5],['orc',6],['darkarch',4]] },
+  { defenseEnemies:[{type:'goblin',count:8,interval:1000},{type:'brute',count:1,interval:6000},{type:'bat',count:3,interval:3000}], arenaPool:[['goblin',6],['hound',5],['orc',5],['shieldman',4],['darkarch',3]] },
+  { defenseEnemies:[{type:'orc',count:4,interval:2500},{type:'brute',count:1,interval:6000},{type:'bat',count:4,interval:2600}], arenaPool:[['goblin',5],['hound',4],['orc',5],['shieldman',4],['darkarch',4]] },
   { defenseEnemies:[{type:'orc',count:5,interval:2200},{type:'brute',count:2,interval:5000},{type:'bat',count:5,interval:2400}], arenaPool:[['goblin',4],['hound',5],['orc',7],['darkarch',5]] },
   // ── 1-5 : 오우거 · 고타격 저속 ───────────────────────────────────────────
   { defenseEnemies:[{type:'runner',count:6,interval:1400},{type:'orc',count:3,interval:2200},{type:'bat',count:5,interval:2200}], arenaPool:[['goblin',4],['hound',5],['orc',6],['darkarch',4],['ogre',2]] },
@@ -1585,6 +1759,9 @@ const ENDLESS_ARENA_UNLOCK = [
   { tier: 1,  type: 'goblin'  },
   { tier: 3,  type: 'hound'   },
   { tier: 6,  type: 'orc'     },
+  // 🛡 방패병 — 다크아처(원거리 적)보다 먼저 나온다. 궁수로만 밀던 편성이
+  // 처음으로 막히는 자리다.
+  { tier: 7,  type: 'shieldman'},
   { tier: 9,  type: 'darkarch'},
   { tier: 13, type: 'ogre'    },
   { tier: 17, type: 'boss'    },
@@ -1779,6 +1956,49 @@ const WAVE_CLEANUP_MAX = 90;
 // 10층마다 관문 — 물량이 줄고 대형·보스가 몰려온다. 조합이 안 맞으면 여기서 막힌다.
 function isGateTier(tier) { return tier > 0 && tier % 10 === 0; }
 
+// ─── 🐲 중간보스 — 10층마다 한 마리 ──────────────────────────────────────────
+// 관문은 "물량이 줄고 대형이 몰려오는 층"이었을 뿐, 그 층을 **기억하게 만드는 것**이
+// 없었다. 100층 마왕 하나만으로는 90층을 내려가는 동안 목표가 너무 멀다.
+// 그래서 10·20…90층에 중간보스를 세운다.
+//
+// 핵심은 **어느 쪽에서 나오는가**다. 상단이면 타워와 과부하를, 하단이면 부대와
+// 영웅 배치를 고민해야 한다. 층에 들어가기 전에 미리 알려 주므로, 그 한 층을
+// 위해 무엇을 사고 영웅을 어디에 둘지가 실제 판단이 된다.
+// 층 번호와 런 시드로 정해지므로 판마다 배치가 달라지되, 예고와 실제는 늘 같다.
+const MIDBOSS_EVERY     = 10;
+// 그 층 전체 체력의 이만큼을 혼자 진다.
+//
+// 한때 0.62까지 올렸다. 중간보스도 전면 보스전이라 그 층에 한 마리뿐이던 시절의
+// 값이다. 지금은 다시 **잡몹과 함께** 오므로 그만한 몫이면 층이 통째로 벽이 된다.
+// 예전 0.20보다는 조금 무겁게(0.30) — '조금 더 체력이 많은 한 마리'가 되도록.
+const MIDBOSS_HP_SHARE  = 0.30;
+// 하단은 잡몹 기준이 낮아 따로 곱한다. 다시 잡몹과 섞여 나오므로 15.0에서 되돌린다.
+const MIDBOSS_ARENA_MULT= 10.0;
+
+// 이 층에 중간보스가 있는가 — 100층(마왕)과 겹치지 않는다
+function isMidBossTier(tier) {
+  if (!(tier > 0 && tier % MIDBOSS_EVERY === 0)) return false;
+  return tier !== ABYSS_FINAL_FLOOR;
+}
+function isMidBossFloor(gsp, waveIndex) {
+  if (!gsp || gsp.mode !== 'endless') return false;
+  return isMidBossTier(endlessTier(waveIndex));
+}
+// 'defense'(상단) | 'arena'(하단) — 층과 시드로 정해진다
+function midBossSide(tier) {
+  return endlessRand(tier, 917) < 0.5 ? 'defense' : 'arena';
+}
+function midBossName(tier) {
+  const names = ['둔중한 파수꾼', '피에 젖은 우두머리', '깨진 뿔의 군장', '잿빛 포식자',
+                 '무쇠 턱', '심연의 감시자', '뒤틀린 거인', '재의 군주', '뼈의 왕'];
+  return names[Math.max(0, Math.floor(tier / MIDBOSS_EVERY) - 1) % names.length];
+}
+// 중간보스 체력 — 그 층 전체 체력에 걸어 둔다. 곡선을 나중에 고쳐도 같이 따라온다.
+function midBossHp(tier, nightmare) {
+  const base = floorTotalHp(tier) * MIDBOSS_HP_SHARE;
+  return Math.max(200, Math.round(base * (1 + (nightmare || 0) * NIGHTMARE_BOSS_HP_STEP)));
+}
+
 // ─── 층 생성 ─────────────────────────────────────────────────────────────────
 let _endlessDefCache = new Map();
 let _endlessCacheSeed = null;
@@ -1806,6 +2026,23 @@ function endlessWaveDef(tier) {
     w *= 0.85 + endlessRand(tier, 40 + i) * 0.45;   // 층마다 조금씩 흔든다
     return { type: u.type, w, tpl };
   }).sort((a, b) => b.w - a.w).slice(0, 4);
+
+  // 하늘 비중 상한 — 60층에서 69%, 80층에서 HP의 85%가 비행이던 적이 있다.
+  // 대공은 저격·번개 두 종류로만 제대로 잡히니, 한 층이 사실상 전부 비행이 되면
+  // 그 층은 "배치를 잘못했다"가 아니라 "그 두 타워를 안 열었으면 끝"이 된다.
+  // 종류를 지우지는 않고 비중만 눌러, 하늘은 늘 있되 하늘만 오지는 않게 한다.
+  const AIR_SHARE_CAP = 0.45;
+  const airW = weighted.reduce((a, x) => a + (x.tpl.flying ? x.w : 0), 0);
+  const allW = weighted.reduce((a, x) => a + x.w, 0) || 1;
+  if (airW / allW > AIR_SHARE_CAP) {
+    const groundW = allW - airW;
+    // 지상이 아예 없으면 누를 곳이 없다 — 그때는 그대로 둔다
+    if (groundW > 0) {
+      const want = groundW * AIR_SHARE_CAP / (1 - AIR_SHARE_CAP);
+      const k = want / airW;
+      for (const x of weighted) if (x.tpl.flying) x.w *= k;
+    }
+  }
 
   const wSum = weighted.reduce((a, x) => a + x.w, 0) || 1;
   // 층당 총 마릿수 — 완만하게 늘되 밀도(간격)가 실제 압력을 만든다
@@ -1869,16 +2106,24 @@ function getStageInfo(waveIndex) {
   return { stageIdx, waveInStage, stageLabel: `1-${stageIdx+1}`, isBossStage, endless: false, tier: 0 };
 }
 
-// ─── 케이브 업그레이드 ────────────────────────────────────────────────────────
-// statMult: 몹 기본 스탯 배율, goldMult: 보상 배율, upgradeCost: 업그레이드 비용
-const CAVE_LEVELS = [
-  null,
-  { label:'자연 동굴', statMult:1.0, goldMult:1.0, upgradeCost:  0 },
-  { label:'강화 동굴', statMult:1.4, goldMult:1.5, upgradeCost: 45 },
-  { label:'위험 동굴', statMult:1.9, goldMult:2.2, upgradeCost: 110 },
-  { label:'심연 동굴', statMult:2.6, goldMult:3.2, upgradeCost: 240 },
-  { label:'지옥 동굴', statMult:3.5, goldMult:4.5, upgradeCost: 480 }
-];
+// ─── 🗿 몬스터 케이브 ────────────────────────────────────────────────────────
+// 예전에는 다섯 칸짜리 사다리(CAVE_LEVELS)에 버튼 하나였다. 이제 건물이라
+// 갱도 심화·정예 소굴 같은 트랙으로 나뉘어 js/town.js에 있다.
+// 여기 남는 것은 케이브 레벨의 이름표뿐 — 마을 카드와 상태 바에 쓴다.
+const CAVE_LABELS = ['자연 동굴','다듬은 갱도','강화 동굴','위험 동굴','깊은 갱도',
+                     '심연 동굴','흉험한 소굴','지옥 동굴','폐허의 심장','마경','끝없는 굴'];
+function caveLabel(lv) { return CAVE_LABELS[Math.max(0, Math.min(CAVE_LABELS.length-1, lv|0))]; }
+// 보석 정산에서 처치 몇 마리를 1보석으로 칠 것인가
+const GEM_KILLS_PER = 100;
+// 정예 확률 상한 — 이 위로는 아무리 쌓아도 오르지 않는다
+const ELITE_CHANCE_CAP = 0.55;
+// 케이브 레벨은 이제 따로 세지 않는다 — 건물 레벨이 곧 케이브 레벨이다.
+// 짓지 않았으면 0. 예전에는 새 판에서도 최소 1이라, 한 층도 못 넘긴 판이
+// 이 항 하나로 보석 1개를 받아 갔다.
+function caveLevelOf(state) {
+  const bs = state && state.town && state.town.buildings && state.town.buildings.cave;
+  return (bs && bs.built) ? (bs.level || 0) + 1 : 0;
+}
 // ─── 현상수배 몹 ─────────────────────────────────────────────────────────────
 // 준비 단계에서 플레이어가 직접 불러오는 강한 적. 잡으면 보석, 놓치면 큰 피해.
 // 스테이지당 한 번씩 기회가 생기고, 부를수록 강해지며 보상도 조금씩 오른다.
@@ -1905,7 +2150,10 @@ const ELITE_HP_ESCALATION   = 0.80;   // 소환 1회당 HP +80%
 const ELITE_SPAWN_DELAY     = 6;      // 웨이브 시작 후 등장까지(초)
 const ELITE_STAT_BONUS      = 6.0;    // 같은 층 일반 몹 대비 배율
 const ELITE_MIN_HP          = 200;    // 1층 고블린이 뻥튀기돼도 벽처럼 느껴질 최소치
-function eliteCharges(waveIndex) { return Math.floor((waveIndex || 0) / 4) + 1; }
+// 🏹사냥 허가증(케이브) 한 장에 기회가 한 번씩 더 늘어난다
+function eliteCharges(waveIndex) {
+  return Math.floor((waveIndex || 0) / 4) + 1 + Math.round(BONUSES.eliteChargeBonus || 0);
+}
 function eliteGems(n)   { return 1 + Math.floor((n || 0) / 3); }
 function eliteGoldMult(n) { return 6 + (n || 0) * 1.5; }
 
@@ -1919,8 +2167,6 @@ const HERO_DEF_MOVE_SPD = 105;  // 상단 영웅 이동속도(px/s)
 // 👑 영웅과 겹친 적은 느려진다 — 상단에 세우는 것이 "몸으로 막는" 선택이 되도록
 const HERO_BLOCK_SLOW      = 0.45;  // 이동속도 배율
 const HERO_BLOCK_SLOW_DUR  = 0.35;  // 겹침이 끊겨도 이만큼은 남는다(초)
-
-const CAVE_MAX_LEVEL = CAVE_LEVELS.length - 1;
 
 // 몹 강화 곡선.
 // v1.0에서는 "처치 1회마다 +8%"였다. 한 웨이브에 10마리쯤 잡던 그룹 전투에서는
@@ -1951,21 +2197,46 @@ const HERO_RETURN_HP_PER = 0.05; // 구원의 손 1단계당 +5%p
 
 // ─── 영웅 기본 스탯 ───────────────────────────────────────────────────────────
 // 30웨이브 분량에 맞춰 Lv.10까지 확장
-const HERO_LEVELS = [
-  //  atk, hp,  def, expNeeded, atkRange(px)
-  null,                                                            // index 0 unused
-  { atk:15,  hp:80,  def:5,  expNeeded:30,   range: CELL_W*3.0 },  // Lv.1
-  { atk:18,  hp:90,  def:6,  expNeeded:70,   range: CELL_W*3.2 },  // Lv.2
-  { atk:22,  hp:105, def:7,  expNeeded:130,  range: CELL_W*3.4 },  // Lv.3
-  { atk:28,  hp:125, def:9,  expNeeded:220,  range: CELL_W*3.6 },  // Lv.4
-  { atk:35,  hp:150, def:11, expNeeded:340,  range: CELL_W*4.0 },  // Lv.5
-  { atk:44,  hp:180, def:13, expNeeded:500,  range: CELL_W*4.2 },  // Lv.6
-  { atk:55,  hp:215, def:16, expNeeded:720,  range: CELL_W*4.4 },  // Lv.7
-  { atk:68,  hp:255, def:19, expNeeded:1000, range: CELL_W*4.6 },  // Lv.8
-  { atk:84,  hp:300, def:22, expNeeded:1400, range: CELL_W*4.8 },  // Lv.9
-  { atk:105, hp:360, def:26, expNeeded:9999, range: CELL_W*5.2 }   // Lv.10
-];
-const HERO_MAX_LEVEL = HERO_LEVELS.length - 1;
+// ─── 👑 영웅 레벨 ────────────────────────────────────────────────────────────
+// v12.9에서 10 → 99. 열 판이면 끝나는 성장은 무한 모드의 길이와 맞지 않았다.
+//
+// 경험치 곡선은 **10레벨이 한 마디**다. 한 마디 안(예: 11~19)에서는 필요 경험치가
+// 고르게 오르다가, 마디를 넘는 순간(11·21·31…)에 한 번 크게 뛴다. 그래서
+// "이번 마디는 금방 오르는데 다음 마디로 넘어가는 그 한 칸이 무겁다"가 된다 —
+// 밋밋한 지수 곡선보다 어디쯤 왔는지가 손에 잡힌다.
+const HERO_MAX_LEVEL   = 99;
+const HERO_BAND        = 10;     // 이 레벨마다 한 마디
+// 마디를 넘을 때 뛰는 배수. 마디 안에서 9칸이 오르므로(1 + 9×STEP = 1.54),
+// 이 값이 그보다 커야 11·21·31레벨에서 실제로 **뛴다**. 처음엔 2.35에 STEP 0.16을
+// 뒀다가 마디 끝(2.44)이 다음 마디 시작(2.35)보다 커져 요구치가 되레 내려갔다.
+const HERO_BAND_JUMP   = 2.60;
+const HERO_STEP_IN_BAND= 0.06;   // 마디 안에서 한 레벨당 완만한 증가
+
+// 레벨 L → 다음 레벨까지 필요한 경험치
+function heroExpNeeded(L) {
+  if (L >= HERO_MAX_LEVEL) return Infinity;
+  const band  = Math.floor((L - 1) / HERO_BAND);          // 0,0..0,1,1..
+  const inBand= (L - 1) % HERO_BAND;
+  return Math.round(30 * Math.pow(HERO_BAND_JUMP, band) * (1 + inBand * HERO_STEP_IN_BAND));
+}
+// 레벨 L의 스탯 — 마디마다 한 단씩 굵어진다
+function heroStatsAt(L) {
+  const lv = Math.max(1, Math.min(HERO_MAX_LEVEL, L));
+  const t  = lv - 1;
+  return {
+    atk:  Math.round(15 * Math.pow(1.055, t) + t * 1.6),
+    hp:   Math.round(80 * Math.pow(1.048, t) + t * 5),
+    def:  Math.round(5  * Math.pow(1.042, t) + t * 0.55),
+    range: CELL_W * (3.0 + Math.min(2.6, t * 0.035)),
+    expNeeded: heroExpNeeded(lv)
+  };
+}
+// 예전 코드가 HERO_LEVELS[lv]로 바로 읽으므로 표를 만들어 둔다 (인덱스 0은 안 쓴다)
+const HERO_LEVELS = (() => {
+  const out = [null];
+  for (let L = 1; L <= HERO_MAX_LEVEL; L++) out.push(heroStatsAt(L));
+  return out;
+})();
 
 // ─── 게임 속도 ────────────────────────────────────────────────────────────────
 // 배속. 캠프 강화가 쌓이면 초반 층은 타워 두 개로도 밀리므로,

@@ -15,14 +15,118 @@ const LOBBY_BODY_H   = CH - LOBBY_BODY_Y - LOBBY_SORTIE_H;
 const LOBBY_TABS = [
   { id:'sortie', label:'출격', icon:'⚔️', color:'#22c55e' },
   { id:'skill',  label:'스킬', icon:'🌳', color:'#a78bfa' },
+  { id:'camp',   label:'단련', icon:'🔥', color:'#fb923c' },
+  // 🎴 패 — 카드 선택은 한 판에서 30번 넘게 돌아오는 결정이다. 단련 안에 한 줄로
+  // 끼워 넣으면 그 무게가 보이지 않아서, 단독 탭으로 뺐다.
+  { id:'card',   label:'패',   icon:'🎴', color:'#38bdf8' },
   { id:'unlock', label:'해금', icon:'🔓', color:'#f59e0b' },
   { id:'pact',   label:'서약', icon:'📜', color:'#f43f5e' },
   { id:'record', label:'기록', icon:'📊', color:'#60a5fa' },
 ];
 
+
+// ─── 🏅 업적 ──────────────────────────────────────────────────────────────────
+// 판이 끝날 때마다 숫자는 쌓이는데 그 숫자를 봐 주는 곳이 없었다. 기록 탭은
+// "지금까지 몇 마리 잡았다"를 적을 뿐, 그게 많은 건지 적은 건지는 안 알려준다.
+// 업적은 그 숫자에 **눈금을 붙이는 일**이다 — 50마리가 첫 칸이고 20만이 끝 칸이라는
+// 것을 알면 같은 숫자가 다르게 읽힌다.
+//
+// 보상은 보석으로 준다. 다만 한 번만 받는다 — 받은 것은 claimed에 적어 둔다.
+// 업적을 위해 따로 플레이하게 만들지는 않는다. 이미 하는 일에 이름을 붙일 뿐이다.
+//
+// 값은 전부 **이미 쌓고 있던 통계**에서 읽는다. 새로 세는 것을 만들지 않은 것은,
+// 세는 곳이 늘면 세는 곳마다 어긋날 자리가 생기기 때문이다.
+const ACHIEVEMENTS = [
+  // ── 깊이 ──
+  { id:'depth10',  icon:'🪜', name:'첫 하강',     desc:'10층 도달',        gem:5,
+    cat:'depth', goal:10,     val:g => g.stats.bestEndless || 0 },
+  { id:'depth30',  icon:'⛰️', name:'중반의 벽',   desc:'30층 도달',        gem:15,
+    cat:'depth', goal:30,     val:g => g.stats.bestEndless || 0 },
+  { id:'depth50',  icon:'🌋', name:'심층',        desc:'50층 도달',        gem:40,
+    cat:'depth', goal:50,     val:g => g.stats.bestEndless || 0 },
+  { id:'depth100', icon:'👹', name:'마왕 격파',   desc:'100층 도달',       gem:120,
+    cat:'depth', goal:100,    val:g => g.stats.bestEndless || 0 },
+
+  // ── 처치 ──
+  { id:'kill1k',   icon:'⚔️', name:'토벌대',      desc:'누적 1,000 처치',  gem:10,
+    cat:'kill',  goal:1000,   val:g => g.stats.totalKills || 0 },
+  { id:'kill20k',  icon:'💀', name:'학살자',      desc:'누적 20,000 처치', gem:35,
+    cat:'kill',  goal:20000,  val:g => g.stats.totalKills || 0 },
+  { id:'kill200k', icon:'☠️', name:'심연의 청소부',desc:'누적 200,000 처치',gem:100,
+    cat:'kill',  goal:200000, val:g => g.stats.totalKills || 0 },
+  { id:'bounty25', icon:'💰', name:'현상금 사냥꾼',desc:'현상수배 25마리',  gem:25,
+    cat:'kill',  goal:25,     val:g => g.stats.bountyKills || 0 },
+  { id:'elite100', icon:'🔥', name:'정예 사냥',   desc:'소환 정예 100마리', gem:30,
+    cat:'kill',  goal:100,    val:g => g.stats.eliteKills || 0 },
+
+  // ── 수집 ──
+  { id:'mobdex',   icon:'📖', name:'몬스터 도감', desc:'아레나 몹 전부 만나기', gem:30,
+    cat:'collect', goal:() => Object.keys(BATTLE_MOB_TYPES).length,
+    val:g => (g.seenMobs || []).length },
+  { id:'relic5',   icon:'🏺', name:'수집가',      desc:'유물 5종 획득',     gem:40,
+    cat:'collect', goal:5,
+    val:g => new Set((g.relics && g.relics.owned) || []).size },
+  { id:'relicall', icon:'✨', name:'유물 완성',   desc:'유물 전부 획득',    gem:120,
+    cat:'collect', goal:() => (typeof RELICS !== 'undefined' ? RELICS.length : 9),
+    val:g => new Set((g.relics && g.relics.owned) || []).size },
+  { id:'unlockall',icon:'🔓', name:'전부 해금',   desc:'해금 목록 전부',    gem:60,
+    cat:'collect', goal:() => UNLOCK_DEFS.length,
+    val:g => UNLOCK_DEFS.filter(u => isUnlocked(u.id)).length },
+
+  // ── 도전 ──
+  { id:'nm1',      icon:'🌑', name:'악몽의 문',   desc:'악몽 1단계 돌파',  gem:30,
+    cat:'trial', goal:1,      val:g => g.stats.bestNightmare || 0 },
+  { id:'nm5',      icon:'🌘', name:'깊은 악몽',   desc:'악몽 5단계 돌파',  gem:80,
+    cat:'trial', goal:5,      val:g => g.stats.bestNightmare || 0 },
+  { id:'nm10',     icon:'♾️', name:'무한의 문',   desc:'악몽 10단계 돌파', gem:200,
+    cat:'trial', goal:10,     val:g => g.stats.bestNightmare || 0 },
+  { id:'runs50',   icon:'🎲', name:'끈질김',      desc:'50판 플레이',      gem:20,
+    cat:'trial', goal:50,     val:g => g.stats.runs || 0 },
+  { id:'gems5k',   icon:'💎', name:'광부',        desc:'누적 보석 5,000',  gem:50,
+    cat:'trial', goal:5000,   val:g => g.stats.totalGems || 0 },
+];
+const ACH_CATS = [
+  { id:'depth',   icon:'🪜', name:'깊이' },
+  { id:'kill',    icon:'⚔️', name:'처치' },
+  { id:'collect', icon:'📖', name:'수집' },
+  { id:'trial',   icon:'🌑', name:'도전' },
+];
+
+function achDef(id) { return ACHIEVEMENTS.find(a => a.id === id) || null; }
+function achState(gs) {
+  if (!gs.achievements) gs.achievements = { claimed: [] };
+  if (!Array.isArray(gs.achievements.claimed)) gs.achievements.claimed = [];
+  return gs.achievements;
+}
+function achGoal(a) { return typeof a.goal === 'function' ? a.goal() : a.goal; }
+function achValue(gs, a) {
+  try { return Math.max(0, a.val(gs) || 0); } catch (e) { return 0; }
+}
+function achDone(gs, a)    { return achValue(gs, a) >= achGoal(a); }
+function achClaimed(gs, a) { return achState(gs).claimed.includes(a.id); }
+// 받을 수 있는데 아직 안 받은 것 — 탭에 뱃지로 띄운다
+function achClaimable(gs)  { return ACHIEVEMENTS.filter(a => achDone(gs, a) && !achClaimed(gs, a)); }
+
+function claimAch(gs, id) {
+  const a = achDef(id);
+  if (!a || !achDone(gs, a) || achClaimed(gs, a)) return 0;
+  achState(gs).claimed.push(id);
+  gs.soulStones = (gs.soulStones || 0) + a.gem;
+  gs.stats.totalGems = (gs.stats.totalGems || 0) + a.gem;
+  return a.gem;
+}
+// 받을 수 있는 것을 한꺼번에
+function claimAllAch(gs) {
+  let n = 0, gem = 0;
+  for (const a of achClaimable(gs)) { const v = claimAch(gs, a.id); if (v) { n++; gem += v; } }
+  return { n, gem };
+}
+
 function createLobby() {
   return {
     tab: 'sortie',
+    campGroup: 'tower',   // 🔥 단련 — 지금 펼친 무리
+    cardCat: null,        // 🎴 패 — 기피 목록에서 지금 펼친 분류 (null이면 트랙 화면)
     skillTree: 'tower',   // 스킬 탭 안의 계열
     nightmare: 0,         // 🌑 고른 악몽 단계 (0 = 심연)
     scroll: 0
@@ -123,9 +227,14 @@ function clearAbyssRun(gsp) {
 // ─── 서약 ────────────────────────────────────────────────────────────────────
 // 악몽 단계가 걸려 있으면 그 사다리의 서약이 강제로 켜진다.
 // 플레이어가 캠프에서 직접 건 서약과 합쳐진다 — 악몽 위에 더 걸 수는 있어도 뺄 수는 없다.
+// ♾️ 무한은 **모든 악몽보다 어려워야 한다.** 예전에는 nightmare=0이라 강제 서약이
+// 하나도 안 붙었고, 결승선만 없앤 악몽 0단계 — 즉 악몽 1단계보다도 쉬웠다.
+// 무한은 악몽 10의 서약 전부를 그대로 지고 간다. 캠프에서 자원해 건 서약은
+// 그 위에 더 얹힌다 (togglePact가 막지 않는 한).
 function forcedPacts() {
   const gsp = (typeof gs !== 'undefined' && gs) ? gs : null;
   if (!gsp || !gsp.inRun) return [];
+  if (gsp.unbounded) return nightmarePacts(NIGHTMARE_MAX);
   return nightmarePacts(gsp.nightmare || 0);
 }
 function isPactForced(id) { return forcedPacts().includes(id); }

@@ -27,7 +27,6 @@ const SaveManager = {
       baseHP:     gs.baseHP,
       heroLevel:  gs.hero.level,
       heroExp:    gs.hero.exp,
-      caveLevel:  gs.caveLevel,
       wallRepairs: gs.wallRepairs || 0,
       bountyUsed:  gs.bountyUsed || 0,
       eliteUsed:   gs.eliteUsed  || 0,
@@ -41,6 +40,15 @@ const SaveManager = {
       endlessGemsOld: gs.endlessGemsOld || 0,
       runBestAtStart: gs.runBestAtStart || 0,
       rerolls:     gs.rerolls || 0,
+      freeRerolls: gs.freeRerolls || 0,
+      // 🃏 이번 판에 고른 강화 카드. 이걸 빼먹어서 이어하면 카드 효과가 통째로
+      // 사라졌다 — reapplyAllBonuses가 applyRunUpgrades에 빈 배열을 넘기기 때문이다.
+      // 용병칸 +2를 먹고 종료했다 돌아오면 칸이 없어지던 것이 이것이었다.
+      activeUpgrades: (gs.activeUpgrades || []).slice(),
+      // 🏆 랭킹 개연성 검사용 — 이어했다고 시간이 0으로 돌아가면 안 된다
+      runGameSec:  Math.round(gs.runGameSec || 0),
+      runGems:     gs.runGems ? Object.assign({}, gs.runGems) : {},
+      runWallMs:   gs.runWallStart ? (Date.now() - gs.runWallStart) : 0,
       totalGoldEarned: gs.battle ? gs.battle.totalGoldEarned : 0,
       townBuildings: JSON.parse(JSON.stringify(gs.town?.buildings || {})),
       townGear:      gs.town?.gear ? JSON.parse(JSON.stringify(gs.town.gear)) : null,
@@ -51,6 +59,7 @@ const SaveManager = {
       towers: (gs.towers || []).map(t => ({
         col:t.col, row:t.row, typeId:t.typeId, level:t.level || 1, invested:t.invested || 0,
         branch:t.branch || null,
+        perks: Array.isArray(t.perks) ? t.perks.slice() : null,   // ✦ ★6부터 붙은 능력
         kills:t.kills || 0, damageDealt:t.damageDealt || 0
       })),
       team: (gs.battle?.ourTeam || []).filter(u => !u.isHero).map(u => ({
@@ -68,7 +77,13 @@ const SaveManager = {
       metaUpgrades:   gs.metaUpgrades || {},
       clearedStages:  gs.clearedStages || new Array(10).fill(false),
       skillLevels:    gs.skillLevels || {},
-      forge:          gs.forge ? JSON.parse(JSON.stringify(gs.forge)) : null,
+      // ⚒️ 대장간은 이제 판 안의 것이라 townGear 옆(townForge)으로 옮겼다.
+      // 여기 남는 forge는 옛 세이브를 읽을 때만 쓰인다.
+      townForge:      gs.town?.forge ? JSON.parse(JSON.stringify(gs.town.forge)) : null,
+      camp:           gs.camp ? JSON.parse(JSON.stringify(gs.camp)) : null,
+      cardMeta:       gs.cardMeta ? JSON.parse(JSON.stringify(gs.cardMeta)) : null,
+      relics:         gs.relics ? JSON.parse(JSON.stringify(gs.relics)) : null,
+      achievements:   gs.achievements ? JSON.parse(JSON.stringify(gs.achievements)) : null,
       charms:         gs.charms ? JSON.parse(JSON.stringify(gs.charms)) : [],
       charmSlots:     gs.charmSlots ? gs.charmSlots.slice() : [null, null],
       ascension:      gs.ascension || 0,

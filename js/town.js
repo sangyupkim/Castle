@@ -45,7 +45,12 @@ const CASTLE_LEAD = 1;
 function trackCapAt(tr, level) {
   const hard = trackMax(tr);
   if (hard === Infinity) return Infinity;   // ♾ 트랙은 최고 레벨 전용이라 따로 안 막는다
-  return Math.min(hard, TRACK_CAP_BASE + (level || 0) * TRACK_CAP_PER_LV);
+  const lv = level || 0;
+  // perLevel 트랙 — 해금 레벨부터 **한 단에 딱 하나씩**만 열린다.
+  // 편성 칸은 하나 늘 때마다 판이 통째로 달라져서, 한 레벨에서 몰아 살 수 있으면
+  // 그 자리에서 병영을 더 올릴 이유가 사라진다. 레벨을 올려야 다음 칸이 나온다.
+  if (tr.perLevel) return Math.max(0, Math.min(hard, lv - (tr.unlockLv || 0) + 1));
+  return Math.min(hard, TRACK_CAP_BASE + lv * TRACK_CAP_PER_LV);
 }
 // 그 건물에서 지금까지 산 강화 총 횟수
 function buildingUpgradeCount(bs) {
@@ -64,6 +69,12 @@ function buildingBuyableAt(def, level) {
 }
 function levelUpUpgradeReq(def, level) {
   return Math.ceil(buildingBuyableAt(def, level) * LEVELUP_UPGRADE_RATIO);
+}
+
+// 건물의 화면상 레벨(Lv.1..Lv.10). 내부 level은 0-based다.
+function townBuildingLevel(gs, id) {
+  const b = gs.town && gs.town.buildings && gs.town.buildings[id];
+  return (b && b.built) ? ((b.level || 0) + 1) : 0;
 }
 
 // 🏰 성채 레벨이 정하는 다른 건물의 레벨 상한
@@ -160,8 +171,16 @@ const TOWN_BUILDINGS = [
         desc:v=>`용병 고용비 -${Math.round(v)}`,             apply:(b,v)=>{ b.hireCostDiscount += Math.round(v); } },
       { id:'u_crit', name:'급소 교본',  icon:'🎯', unlockLv:4, cost:51, costMult:1.2, step:0.018, growth:0.0267, maxLv:24,
         desc:v=>`치명타 확률 +${pct(v)}`,                    apply:(b,v)=>{ b.critChance += v; } },
-      { id:'u_slot', name:'병력 증원',  icon:'➕', unlockLv:5, cost:90, costMult:1.423, step:1,    growth:0,    maxLv:4,
-        desc:v=>`편성 슬롯 +${Math.round(v)}`,               apply:(b,v)=>{ b.maxSlotBonus += Math.round(v); } },
+      // ➕ 편성 슬롯. 병영 레벨 자체도 두 단마다 한 칸을 주고(barracksSlotBonus),
+      // 이 트랙이 그 위에 얹는다.
+      //
+      // Lv.3에 열려 두 칸을 한꺼번에 살 수 있던 것을 Lv.5~8에 한 칸씩으로 미뤘다.
+      // 셋째 층에 벌써 편성 칸을 살 수 있으면 병영에서 할 일이 그것뿐이 되고,
+      // 두 칸을 그 자리에서 다 사고 나면 병영을 더 올릴 이유도 같이 사라진다.
+      // perLevel이 한 단에 하나씩만 내주므로, 칸을 원하면 병영을 올려야 한다.
+      { id:'u_slot', name:'병력 증원',  icon:'➕', unlockLv:4, cost:60, costMult:1.24, step:1,    growth:0,    maxLv:4, perLevel:true,
+        desc:v=>`편성 슬롯 +${Math.round(v)} (병영 레벨에 더해집니다)`,
+        apply:(b,v)=>{ b.maxSlotBonus += Math.round(v); } },
       { id:'u_regen',name:'야전 의무',  icon:'🩹', unlockLv:3, cost:46, costMult:1.2, step:0.0018, growth:0.02, maxLv:24,
         desc:v=>`전투 이탈 회복 +${pct(v)}/s`,               apply:(b,v)=>{ b.regenBonus += v; } },
       { id:'u_combo',name:'연계 훈련',  icon:'🔗', unlockLv:6, cost:76, costMult:1.212, step:0.015, growth:0.02, maxLv:24,
@@ -220,8 +239,11 @@ const TOWN_BUILDINGS = [
         desc:v=>`특수 용병 등장 확률 +${pct(v)}`,            apply:(b,v)=>{ b.specialChance += v; } },
       { id:'i_fame', name:'명성',          icon:'📜', unlockLv:1, cost:45, costMult:1.192, step:0.048, growth:0.0333,
         desc:v=>`특수 용병 능력치 +${pct(v)}`,               apply:(b,v)=>{ b.specialUnitMult += v; } },
-      { id:'i_slot', name:'별관 증축',     icon:'🚪', unlockLv:2, cost:82, costMult:1.404, step:1,    growth:0,    maxLv:4,
-        desc:v=>`특수 용병 슬롯 +${Math.round(v)}`,          apply:(b,v)=>{ b.specialSlotBonus += Math.round(v); } },
+      // 🚪 특수 용병 슬롯도 같은 이유로 여관 레벨에 딸렸다. 이 트랙은 그 위에
+      // 얹는 한두 칸만 남긴다 — 82보석에서 ×1.404씩 네 번은 아무도 끝까지 못 샀다.
+      { id:'i_slot', name:'별관 증축',     icon:'🚪', unlockLv:2, cost:55, costMult:1.24, step:1,    growth:0,    maxLv:2,
+        desc:v=>`특수 용병 슬롯 +${Math.round(v)} (여관 레벨에 더해집니다)`,
+        apply:(b,v)=>{ b.specialSlotBonus += Math.round(v); } },
       { id:'i_stock',name:'보급 계약',   icon:'📦', unlockLv:3, cost:44, costMult:1.2, step:8, growth:0.04,
         desc:v=>`매 층 시작 골드 +${Math.round(v)}`,          apply:(b,v)=>{ b.startGoldBonus += Math.round(v); } },
       { id:'i_gold', name:'단골 손님',   icon:'💰', unlockLv:5, cost:66, costMult:1.212, step:0.024, growth:0.0267, maxLv:24,
@@ -235,7 +257,7 @@ const TOWN_BUILDINGS = [
     id:'forge', name:'대장간', icon:'⚒️', buildCost:98, color:'#fb923c',
     desc:'장비를 연마하고 타워 심을 벼리는 곳',
     lvCost:84, lvMult:1.85,
-    // 대장간의 본체는 보석을 쓰는 세 갈래(연마·합성·담금질)이고 아래 트랙은 곁가지다.
+    // 대장간의 본체는 골드를 쓰는 세 갈래(연마·합성·담금질)이고 아래 트랙은 곁가지다.
     tracks:[
       { id:'f_gearcost', name:'풀무 개량', icon:'🔥', unlockLv:0, cost:30, costMult:1.192, step:0.024, growth:0.0267, maxLv:24,
         desc:v=>`장비 연마 효과 +${pct(v)}`,                 apply:(b,v)=>{ b.gearPlusBonus += v; } },
@@ -292,9 +314,45 @@ const TOWN_BUILDINGS = [
     ]
   },
   {
-    id:'cave', name:'몬스터 케이브', icon:'🗿', buildCost:0, color:'#6b7280',
-    desc:'몬스터 던전을 관리합니다', alwaysBuilt:true,
-    lvCost:0, lvMult:1, tracks:[]
+    // 🗿 몬스터 케이브 — 아레나에 무엇이 나올지를 정하는 곳.
+    // v12.8까지는 건물이 아니라 마을 카드에 붙은 버튼 하나였다(CAVE_LEVELS 1~5).
+    // 다섯 칸짜리 사다리라 3층쯤 올리고 나면 더 볼 것이 없었고, "몹을 세게 만들어
+    // 더 번다"는 판단 하나뿐이라 들어가 볼 화면도 없었다.
+    // 이제 다른 건물과 같은 규칙을 따른다 — 짓고, 들어가고, 트랙을 고른다.
+    //
+    // 이 건물만의 성격: **위험을 사서 보상을 얻는다.** ⛏️갱도 심화는 몹을 강하게
+    // 만들면서 보상을 더 크게 올리고, 🪢길들이기는 그 위험만 도로 깎는다.
+    // 둘 다 사면 제자리인 것 같지만 갱도가 보상 1.6배율이라 남는 장사다 —
+    // 대신 골드 두 배를 태워야 한다.
+    id:'cave', name:'몬스터 케이브', icon:'🗿', buildCost:40, color:'#a78bfa',
+    desc:'아레나에 나올 몬스터를 관리합니다',
+    lvCost:56, lvMult:1.80,
+    tracks:[
+      { id:'v_haul',  name:'전리품 회수', icon:'💰', unlockLv:0, cost:26, costMult:1.185, step:0.05, growth:0.04,
+        desc:v=>`아레나 처치 골드 +${pct(v)}`,
+        apply:(b,v)=>{ b.mobGoldMult += v; } },
+      { id:'v_depth', name:'갱도 심화',   icon:'⛏️', unlockLv:0, cost:34, costMult:1.205, step:0.11, growth:0.028, maxLv:24,
+        desc:v=>`몬스터 스탯 +${pct(v)} · 처치 보상 +${pct(v*1.6)}`,
+        apply:(b,v)=>{ b.mobStatMult += v; b.mobGoldMult += v*1.6; } },
+      { id:'v_elite', name:'정예 소굴',   icon:'⚔️', unlockLv:1, cost:44, costMult:1.21, step:0.022, growth:0.018, maxLv:24,
+        desc:v=>`정예 등장 확률 +${pct(Math.min(ELITE_CHANCE_CAP,v))}${v>ELITE_CHANCE_CAP?' (상한)':''}`,
+        apply:(b,v)=>{ b.eliteChance += v; } },
+      { id:'v_trophy',name:'정예 전리품', icon:'💎', unlockLv:2, cost:52, costMult:1.212, step:0.055, growth:0.03,
+        desc:v=>`소환 정예 보석 보상 +${pct(v)}`,
+        apply:(b,v)=>{ b.summonRewardMult *= 1 + v; } },
+      { id:'v_scrap', name:'부산물 회수', icon:'🎁', unlockLv:3, cost:58, costMult:1.212, step:0.013, growth:0.014, maxLv:24,
+        desc:v=>`특수 드랍 확률 +${pct(v)}`,
+        apply:(b,v)=>{ b.dropChance += v; } },
+      { id:'v_tame',  name:'길들이기',    icon:'🪢', unlockLv:4, cost:62, costMult:1.215, step:0.022, growth:0.016, maxLv:24,
+        desc:v=>`몬스터 공격력 -${pct(Math.min(0.55,v))}${v>0.55?' (상한)':''}`,
+        apply:(b,v)=>{ b.mobAtkMult *= 1 - Math.min(0.55, v); } },
+      { id:'v_hunt',  name:'사냥 허가증', icon:'🏹', unlockLv:5, cost:96, costMult:1.30, step:1, growth:0, maxLv:4,
+        desc:v=>`정예 소환 기회 +${Math.round(v)}회`,
+        apply:(b,v)=>{ b.eliteChargeBonus += Math.round(v); } },
+      { id:'v_lair',  name:'심연의 소굴', icon:'🌑', unlockLv:BUILDING_MAX_LEVEL-1, cost:300, costMult:1.26, step:0.03, growth:0.035, maxLv:Infinity,
+        desc:v=>`아레나 처치 골드 +${pct(v)} · 정예 확률 +${pct(v*0.25)}`,
+        apply:(b,v)=>{ b.mobGoldMult += v; b.eliteChance += v*0.25; } },
+    ]
   }
 ];
 
@@ -332,7 +390,7 @@ function createTown() {
       inn:      { built:false, level:0, upgrades:{} },
       forge:    { built:false, level:0, upgrades:{} },
       castle:   { built:true,  level:0, upgrades:{} },
-      cave:     { built:true,  level:0, upgrades:{} },
+      cave:     { built:false, level:0, upgrades:{} },
     },
     gear:createHeroGear(),
     forgeTab:'gear',   // 대장간 — 'gear' | 'fuse' | 'temper'
@@ -344,11 +402,19 @@ function createTown() {
 function refreshHeroShop(gs) {
   // 이미 가진 물건은 매대에서 빼둔다 — 같은 검이 세 자루 쌓이면 매대가 벌이 된다
   const owned = new Set((heroGear(gs).inventory || []).map(e => e.itemId));
-  const pool = HERO_EQUIPMENT_POOL.filter(e => !owned.has(e.id));
+  // 등급마다 열리는 상점 레벨이 다르다. 전부 균등하게 뽑던 시절에는 전설이
+  // 첫 웨이브 매대에 뜨거나 (넣었다면) 영영 안 뜨거나 둘 중 하나였다 —
+  // 건물을 올리는 것이 매대를 바꾸는 일이 되어야 상점 레벨에 뜻이 생긴다.
+  const shopLv = townBuildingLevel(gs, 'heroShop');
+  const pool = HERO_EQUIPMENT_POOL.filter(e =>
+    !owned.has(e.id) && shopLv >= (GRADE_SHOP_LEVEL[e.grade] || 1));
   const picked=[], avail=[...pool];
   while (picked.length<3 && avail.length>0) {
-    const i=Math.floor(Math.random()*avail.length);
-    picked.push(avail.splice(i,1)[0]);
+    // 등급 가중치로 뽑는다 — 전설이 흔해지면 전설이 아니다
+    const wSum = avail.reduce((a,e) => a + (GRADE_WEIGHT[e.grade] || 10), 0);
+    let roll = Math.random() * wSum, i = 0;
+    for (; i < avail.length; i++) { roll -= (GRADE_WEIGHT[avail[i].grade] || 10); if (roll <= 0) break; }
+    picked.push(avail.splice(Math.min(i, avail.length-1), 1)[0]);
   }
   gs.town.shopItems = picked;
   if (skillShopOpen(gs)) refreshSkillOffers(gs);
@@ -380,6 +446,18 @@ function levelUpBuilding(id, gs) {
   }
   reapplyAllBonuses(gs);
   return true;
+}
+
+// ─── 한 번에 여러 단계 ───────────────────────────────────────────────────────
+// 트랙 하나가 24~30단이라 한 칸씩 누르면 서른 번을 눌러야 한다. 후반 강화는
+// 늘 "다 지를 것인가"라서, 그 판단을 서른 번의 탭으로 받을 이유가 없다.
+// 값은 매 단계 다시 계산한다 — 계단식 비용이라 한 번에 사도 같은 값을 낸다.
+// 살 수 있는 만큼만 사고 몇 번 샀는지 돌려준다 (0이면 한 번도 못 샀다).
+function buyTownUpgradeBulk(buildingId, trackId, gs, count) {
+  let n = 0;
+  const want = Math.max(1, count || 1);
+  while (n < want && buyTownUpgrade(buildingId, trackId, gs)) n++;
+  return n;
 }
 
 function buyTownUpgrade(buildingId, trackId, gs) {
@@ -445,12 +523,14 @@ function applyTownUpgrades(gs) {
 function reapplyAllBonuses(gs) {
   resetBonuses();
   applySkillTree(gs);
+  applyCamp(gs);         // 🔥 캠프 단련 — 스킬 트리와 같은 영구 층
   applyPacts();          // 서약은 스킬 트리 뒤, 마을 강화 앞에 적용한다
   applyTownUpgrades(gs);
   applyRunUpgrades(gs);   // 이번 판에 집은 강화 카드
   applyForge(gs);         // ⚒️ 대장간 담금질 숙련도
   applyAscend(gs);        // ♾️ 승천 — 끝나지 않는 보석 사용처
   applyCharms(gs);        // 🎴 이번 판에 들고 온 부적
+  if (typeof applyRelics === 'function') applyRelics(gs);   // 🏺 보스에서 얻은 유물
   // 각인은 마지막에 — 스킬 트리와 마을 강화 위에 얹힌다
   const sg = (typeof activeSigil === 'function') ? activeSigil() : null;
   if (sg && sg.apply) sg.apply(BONUSES);

@@ -69,9 +69,12 @@ function makeTower(col, row, typeId) {
 
 // 레벨 + 현재 BONUSES를 반영한 실효 스탯.
 // 건설 시점에 스냅샷하지 않으므로, 나중에 산 강화도 기존 타워에 적용된다.
+// 분기 객체에서 id만 — towerStats 안에서 여러 번 쓰므로 짧게
+function st_branchId(br) { return br ? br.id : null; }
+
 function towerStats(t) {
   const tpl = TOWER_TYPES[t.typeId];
-  const m   = TOWER_LEVEL_MULT[Math.min(t.level || 1, towerLevelCap())] || TOWER_LEVEL_MULT[1];
+  const m   = TOWER_LEVEL_MULT[towerStatLevel(t)] || TOWER_LEVEL_MULT[1];
   const overloaded = (t.overloadUntil || 0) > 0;
   // 층 이벤트 — 안개는 사거리를, 부식은 공격력을, 봉인은 한 종류를 통째로 막는다
   const sealed = fev('sealedTower', null) === t.typeId;
@@ -83,11 +86,20 @@ function towerStats(t) {
   const st = {
     sealed,
     branch: br ? br.id : null,
+    // 🔥 캠프 단련 — 종류별(campTower)과 분기별(campBranch) 배율이 여기서 붙는다.
+    // "저격탑을 주력으로 쓰겠다"가 캠프에서부터 시작되는 결정이 되게 하는 자리다.
     dmg:   sealed ? 0 : Math.round((tpl.dmg + BONUSES.towerDmg) * m.dmg * (bm.dmg || 1)
              * (BONUSES.towerDmgMult || 1)
+             * campTowerMult(t.typeId, 'dmg') * campBranchMult(st_branchId(br), 'dmg')
              * (BONUSES.pactTowerDmgMult || 1) * fev('towerDmgMult', 1)),
-    spd:   tpl.spd   * m.spd   * (bm.spd || 1) * BONUSES.towerSpdMult * (overloaded ? OVERLOAD_SPD_MULT : 1),
-    range: sealed ? 0 : tpl.range * m.range * (bm.range || 1) * BONUSES.towerRangeMult * fev('towerRangeMult', 1),
+    spd:   tpl.spd   * m.spd   * (bm.spd || 1) * BONUSES.towerSpdMult
+             * campTowerMult(t.typeId, 'spd') * campBranchMult(st_branchId(br), 'spd')
+             * (overloaded ? OVERLOAD_SPD_MULT : 1)
+             // 🌫 중간보스의 흐림 — 잠깐 굼떠진다. 부수는 게 아니라 무르게 하는 정도다.
+             * ((typeof midBossDulled === 'function' && typeof gs !== 'undefined'
+                 && midBossDulled(gs)) ? 0.75 : 1),
+    range: sealed ? 0 : tpl.range * m.range * (bm.range || 1) * BONUSES.towerRangeMult
+             * campTowerMult(t.typeId, 'range') * fev('towerRangeMult', 1),
     slow:        Math.min(0.85, baseSlow + (BONUSES.towerSlow || 0)),
     slowDur:     (tpl.slowDur || (BONUSES.towerSlow > 0 ? 0.9 : 0)) * (sp.slowDurMult || 1),
     splash:      sp.splash !== undefined ? sp.splash : (tpl.splash || 0),
@@ -110,6 +122,28 @@ function towerStats(t) {
     corrode:     sp.corrode    || 0,
     overloaded
   };
+  // ✦ ★6부터 붙은 특수능력을 얹는다. 분기(sp) 위에 더해지므로
+  // "저격탑 대공 분기 + 연쇄 + 처형" 같은 조합이 나온다.
+  applyTowerPerks(t, st);
+  return st;
+}
+
+// 타워에 붙은 특수능력을 실효 스탯에 반영한다.
+// 배율은 곱하고, 확률·범위 같은 것은 이미 있는 값과 큰 쪽을 쓴다 —
+// 분기가 이미 급소를 주는데 능력이 그것을 덮어써 낮추면 승급이 손해가 된다.
+function applyTowerPerks(t, st) {
+  const ids = (t && Array.isArray(t.perks)) ? t.perks : null;
+  if (!ids || !ids.length || typeof towerPerkDef !== 'function') return st;
+  for (const id of ids) {
+    const p = towerPerkDef(id);
+    if (!p) continue;
+    if (p.mult) for (const k of Object.keys(p.mult)) st[k] = (st[k] || 0) * p.mult[k];
+    if (p.add)  for (const k of Object.keys(p.add))  st[k] = (st[k] || 0) + p.add[k];
+    if (p.set)  for (const k of Object.keys(p.set))  st[k] = Math.max(st[k] || 0, p.set[k]);
+    if (p.pierceMul) st.piercePct = Math.min(0.90, (st.piercePct || 0) + p.pierceMul);
+  }
+  st.dmg  = Math.round(st.dmg);
+  st.slow = Math.min(0.85, st.slow);
   return st;
 }
 
@@ -124,7 +158,11 @@ function makeDefenseEnemy(typeId, waveIndex, opts) {
   const mods  = endlessMods(w);
   const scale = (mods ? endlessStatMult(w) * (mods.hpBonus || 1)
                       : (1 + w * DEF_WAVE_HP_SCALE))
-              * (BONUSES.pactDefHpMult || 1) * fev('hpMult', 1);
+              * (BONUSES.pactDefHpMult || 1) * fev('hpMult', 1)
+              // ♾️ 무한 — 층마다 한 겹씩 더 무거워진다. 악몽 10과 같은 층에서
+              // 시작해 갈수록 벌어지므로, 무한이 언제나 가장 어려운 갈래로 남는다.
+              * (typeof gs !== 'undefined' && gs && gs.unbounded
+                 ? unboundedFloorMult(endlessTier(w)) : 1);
   const hp    = Math.max(1, Math.round((opts && opts.hp) || tpl.hp * scale));
 
   // 비행은 ∞ 경로가 아니라 항로를 탄다 — 좌우를 번갈아 써서 한쪽만 막지 못하게
@@ -184,6 +222,31 @@ function spawnDemonLord(gsp, waveIndex) {
   return e;
 }
 
+// 🐲 상단 중간보스 — 잡몹과 함께 온다. 마왕과 달리 일반 스폰을 막지 않는다.
+// 마왕은 '그 한 마리가 곧 결승선'이지만, 중간보스는 **평소의 층 위에 얹힌 벽**이다.
+function spawnMidBoss(gsp, waveIndex) {
+  const tier = endlessTier(waveIndex);
+  const hp   = midBossHp(tier, gsp.nightmare || 0);
+  const e = makeDefenseEnemy('brute', waveIndex, { hp, reward: 60 + tier * 4 });
+  e.isMidBoss = true;
+  e.name   = midBossName(tier);
+  e.color  = '#f43f5e';
+  e.radius = Math.round((e.radius || 14) * 1.7);
+  e.spd    = (e.spd || 1) * 0.72;          // 느리고 무겁다
+  e.armor  = Math.round((e.armor || 0) + 6 + tier * 0.16);
+  e.dmg    = Math.round((e.dmg || 1) * 3);  // 놓치면 성벽이 크게 깎인다
+  // 예전에는 잡몹이 먼저 오고 보스가 6초 뒤에 왔다. 지금은 중간보스 층도
+  // 한쪽 전선만 쓰므로 잡몹 자체가 없다 — 기다릴 이유가 사라져서 0으로 뒀다.
+  e.spawnDelay = 0;
+  // 잡으면 보석 — 하단 중간보스와 같은 값을 준다. 어느 쪽에 나오든 값은 같아야
+  // "이번엔 상단이라 손해"가 되지 않는다.
+  e.gems = Math.round((2 + Math.floor(tier / 20)) * (BONUSES.summonRewardMult || 1));
+  gsp.defenseEnemies.push(e);
+  if (typeof addLog === 'function')
+    addLog(gsp.battle, `🐲 ${e.name} — 상단에 나타납니다 (HP ${Math.round(hp).toLocaleString()})`, '#f43f5e');
+  return e;
+}
+
 // ─── Projectile ───────────────────────────────────────────────────────────────
 function makeProjectile(sx, sy, target, dmg, color, opts) {
   return Object.assign({
@@ -199,13 +262,34 @@ function defDamage(enemy, dmg, pierceArmor, affinity, pierce) {
   const corroded = (enemy.corrodeUntil || 0) > 0;
   const base = dmg * (affinity === undefined ? 1 : affinity) * (corroded ? 1 + enemy.corrodeAmt : 1);
   if (pierceArmor || corroded) return Math.max(1, Math.round(base));
-  const armor = Math.max(0, (enemy.armor || 0) - (pierce || 0));
+  // 관통은 두 겹이다. 비율(towerPiercePct)이 먼저 방어력을 깎고, 그 뒤에 정액이 빠진다.
+  // 정액만 있던 시절엔 60층 몹 방어력이 세 자리라 '방어 12 무시'가 사실상 0이었다.
+  const pct   = Math.min(0.90, Math.max(0, BONUSES.towerPiercePct || 0));
+  // 🪨 중간보스의 단단해짐 — 잠깐 방어가 두꺼워진다
+  const hard  = (enemy.hardenUntil || 0) > 0 ? 1.6 : 1;
+  const armor = Math.max(0, (enemy.armor || 0) * hard * (1 - pct) - (pierce || 0));
   return Math.max(1, Math.round(base - armor));
+}
+
+// 👹 기믹이 이 적에게 걸려 있나 — 보스 본인에게만 적용된다.
+// 잡몹까지 면역이 되면 그건 기믹이 아니라 그냥 층이 하나 더 어려워지는 것이다.
+function bossImmune(e, id) {
+  return !!(e && (e.isBoss || e.isMidBoss) && typeof bossEffect === 'function'
+            && typeof gs !== 'undefined' && bossEffect(gs, id));
 }
 
 function hurtDefenseEnemy(e, dmg, pierceArmor, onKill, affinity, pierce) {
   if (e.dead || e.reached) return 0;
-  const real = defDamage(e, dmg, pierceArmor, affinity, pierce);
+  // 🛡 경화 — 대형 특화(상성 1.2 이상) 공격이 통하지 않는다
+  if (bossImmune(e, 'antibig') && (affinity === undefined ? 1 : affinity) >= 1.2) {
+    if (typeof spawnFloaty === 'function' && Math.random() < 0.2)
+      spawnFloaty('🛡 무효', e.x, e.y - 18, '#94a3b8');
+    return 0;
+  }
+  let real = defDamage(e, dmg, pierceArmor, affinity, pierce);
+  // 🎯 사냥 표식(신궁) — 표식이 붙은 동안 받는 피해가 늘어난다.
+  // 상단은 아레나처럼 경과 시간(elapsed)이 없어서 남은 초를 직접 깎는다.
+  if ((e.markedUntil || 0) > 0) real = Math.round(real * 1.6);
   e.hp -= real;
   e.hitFlash = 0.12;
   if (e.hp <= 0) {
@@ -223,12 +307,21 @@ function updateDefenseEnemies(enemies, dt) {
     // 시간차를 두고 들어오는 적 (지금은 쓰지 않지만 배관은 남긴다)
     if (e.spawnDelay > 0) { e.spawnDelay = Math.max(0, e.spawnDelay - dt); continue; }
     if (e.hitFlash > 0) e.hitFlash = Math.max(0, e.hitFlash - dt);
+    // 🐲 중간보스가 건 것들 — 시간이 지나면 풀린다
+    if (e.rallyUntil  > 0) e.rallyUntil  = Math.max(0, e.rallyUntil  - dt);
+    if (e.hardenUntil > 0) e.hardenUntil = Math.max(0, e.hardenUntil - dt);
     // 🧪 부식 — 장판을 벗어나면 곧 풀린다 (장판이 매 프레임 다시 채워 준다)
     if (e.corrodeUntil > 0) { e.corrodeUntil = Math.max(0, e.corrodeUntil - dt); if (!e.corrodeUntil) e.corrodeAmt = 0; }
     // 🌱 재생 — 꾸준히 깎지 못하면 원점으로 돌아간다. 단발 화력보다 지속 화력을 요구한다.
     if (e.regen > 0 && e.hp < e.maxHp) e.hp = Math.min(e.maxHp, e.hp + e.maxHp * e.regen * dt);
+    if (e.markedUntil > 0) e.markedUntil = Math.max(0, e.markedUntil - dt);
 
     let mult = 1;
+    // 📣 포효 — 중간보스가 북돋운 잡몹이 잠깐 빨라진다
+    if (e.rallyUntil > 0) mult *= 1.35;
+    // 💨 질주 — 보스만 빨라진다
+    if ((e.isBoss || e.isMidBoss) && typeof bossEffect === 'function' && bossEffect(gs, 'haste'))
+      mult *= 1.6;
     if (e.slowTimer > 0) {
       e.slowTimer = Math.max(0, e.slowTimer - dt);
       mult = 1 - e.slowFactor;
@@ -240,7 +333,21 @@ function updateDefenseEnemies(enemies, dt) {
       mult *= HERO_BLOCK_SLOW;
     }
 
-    if (e.wpIdx >= e.path.length - 1) { e.reached = true; continue; }
+    if (e.wpIdx >= e.path.length - 1) {
+      // 👹 보스는 끝에 닿아도 바로 성으로 박지 않는다 — 정해진 바퀴를 다 돌아야 한다.
+      // 그 안에 못 잡으면 그때 성으로 간다. 못 막으면 클리어가 안 되는 구조다.
+      if ((e.isBoss || e.isMidBoss) && typeof bossLapDone === 'function'
+          && typeof bossActive === 'function' && bossActive(gs) && gs.boss.side === 'top') {
+        const done = bossLapDone(gs);
+        if (!done) {                      // 다시 출발점으로 — 한 바퀴 더
+          e.wpIdx = 0;
+          const s0 = cellCenter(e.path[0][0], e.path[0][1]);
+          e.x = s0.x; e.y = s0.y;
+          continue;
+        }
+      }
+      e.reached = true; continue;
+    }
 
     const next = cellCenter(e.path[e.wpIdx + 1][0], e.path[e.wpIdx + 1][1]);
     const dx = next.x - e.x, dy = next.y - e.y;
@@ -279,13 +386,18 @@ function enemyActive(e) { return !e.dead && !e.reached && !(e.spawnDelay > 0); }
 function pickTargetSmart(enemies, center, range, mode, towerTypeId, branchId) {
   let best = null, bestScore = -Infinity;
   for (const e of enemies) {
-    if (e.dead || e.reached) continue;
+    // 아직 들어오지 않은 적에게 쏘면 그 탄은 버려진다 — enemyActive와 기준을 맞춘다
+    if (!enemyActive(e)) continue;
     const d = Math.hypot(e.x - center.x, e.y - center.y);
     if (d > range) continue;
     const aff = affinityOf(towerTypeId, e, branchId);
-    // 거의 안 통하는 상대(0.5 미만)는 다른 표적이 있으면 넘긴다
+    // 거의 안 통하는 상대는 다른 표적이 있으면 넘긴다
     let score = aff * 100;
-    if (mode === 'strongest') score += e.hp * 0.05;
+    // 'strongest'의 체력 항이 예전엔 hp * 0.05였다. 체력이 세 자리이던 시절의 값이라
+    // 35층(808~4660)만 가도 상성 항(최대 160)을 완전히 덮어버렸고, 모든 저격탑이
+    // 체력 1등 하나에게만 몰려 쏘는 동안 나머지는 무피해로 지나갔다.
+    // 로그로 눌러서 "센 놈 우선"은 유지하되 상성이 끝까지 의미를 갖게 한다.
+    if (mode === 'strongest') score += Math.min(60, Math.log10(Math.max(1, e.hp)) * 12);
     else                      score += (range - d) * 0.02;
     if (e.isBounty) score += 40;          // 현상수배는 놓치면 손해가 크다
     if (score > bestScore) { bestScore = score; best = e; }
@@ -296,7 +408,9 @@ function pickTargetSmart(enemies, center, range, mode, towerTypeId, branchId) {
 function updateTowers(towers, enemies, projectiles, dt) {
   for (const tower of towers) {
     if (tower.muzzle > 0) tower.muzzle = Math.max(0, tower.muzzle - dt);
-    if (tower.overloadUntil > 0) tower.overloadUntil = Math.max(0, tower.overloadUntil - dt);
+    // ✦ 영구 기관 — 한 번 걸린 과부하가 풀리지 않는다
+    if (tower.overloadUntil > 0 && !BONUSES.overloadEternal)
+      tower.overloadUntil = Math.max(0, tower.overloadUntil - dt);
     // 쿨다운이 NaN이거나 터무니없이 크면 되돌린다.
     // 한 번 NaN이 들어가면 `NaN > 0`이 false라 통과는 하지만, 이후 어떤 계산도 NaN이 되어
     // 그 타워는 영영 쏘지 않는다. 값이 오염될 경로를 다 막기보다 매 프레임 제자리로 돌린다.
@@ -327,6 +441,7 @@ function updateTowers(towers, enemies, projectiles, dt) {
       chain: st.chain, chainRange: st.chainRange,
       // ★5 분기 고유 — 명중 시점에 발사체가 그대로 들고 간다
       critChance: st.critChance, critMult: st.critMult, execute: st.execute,
+      piercePct: st.piercePct || 0,
       vsSlowed: st.vsSlowed, stunChance: st.stunChance, stunDur: st.stunDur,
       corrode: st.corrode
     });
@@ -434,7 +549,10 @@ function updateProjectiles(projectiles, onKill, dt) {
     // 🎯 헤드샷 — 평균은 ×1.8이지만 한 발 한 발이 흔들린다
     if (p.critChance > 0 && Math.random() < p.critChance) { dmg *= p.critMult; crit = true; }
 
-    const dealt = hurtDefenseEnemy(tgt, dmg, p.pierceArmor, credit, aff, p.pierce);
+    // 🔩 철갑탄(★6 능력)은 비율 관통이다. 그 자리에서 상대의 방어력을 보고
+    // 정액으로 환산해 더한다 — 계산 함수의 모양을 바꾸지 않으면서 값은 정확하다.
+    const pierceAll = (p.pierce || 0) + (tgt.armor || 0) * (p.piercePct || 0);
+    const dealt = hurtDefenseEnemy(tgt, dmg, p.pierceArmor, credit, aff, pierceAll);
     if (p.owner) p.owner.damageDealt += dealt;
     if (crit && typeof spawnFloaty === 'function') {
       spawnFloaty('치명타!', tgt.x, tgt.y - (tgt.radius || 8) - 12, '#f0abfc');
@@ -450,8 +568,10 @@ function updateProjectiles(projectiles, onKill, dt) {
     }
     // 🔋 과충전 — 감전. 스턴 전용 필드를 새로 만들지 않고 아주 센 감속으로 낸다.
     if (p.stunChance > 0 && !tgt.dead && Math.random() < p.stunChance) {
-      tgt.slowFactor = Math.max(tgt.slowFactor, 0.95);
-      tgt.slowTimer  = Math.max(tgt.slowTimer, p.stunDur);
+      if (!bossImmune(tgt, 'unslow')) {
+        tgt.slowFactor = Math.max(tgt.slowFactor, 0.95);
+        tgt.slowTimer  = Math.max(tgt.slowTimer, p.stunDur);
+      }
       if (typeof FX !== 'undefined') FX.ring(tgt.x, tgt.y, '#facc15', 10);
     }
     // 상성이 갈리는 순간을 눈에 보이게 — 왜 안 죽는지 알아야 배치를 바꾼다
@@ -483,7 +603,7 @@ function updateProjectiles(projectiles, onKill, dt) {
       }
     }
 
-    if (p.slow > 0) {
+    if (p.slow > 0 && !bossImmune(tgt, 'unslow')) {
       tgt.slowFactor = Math.max(tgt.slowFactor, p.slow);
       tgt.slowTimer  = Math.max(tgt.slowTimer, p.slowDur);
     }
@@ -498,7 +618,7 @@ function updateProjectiles(projectiles, onKill, dt) {
           if (p.owner) p.owner.damageDealt += d;
           // 🌨️ 눈보라 — 감속을 들고 있는 발사체는 범위에도 감속을 남긴다.
           // 이게 없으면 "착탄 범위 감속"이 그냥 범위 피해였다.
-          if (p.slow > 0) {
+          if (p.slow > 0 && !bossImmune(e, 'unslow')) {
             e.slowFactor = Math.max(e.slowFactor, p.slow);
             e.slowTimer  = Math.max(e.slowTimer, p.slowDur);
           }

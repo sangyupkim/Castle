@@ -16,9 +16,9 @@ const CACHE = 'dual-frontier-' + (self.GAME_VERSION || 'dev');
 
 const SHELL = [
   '.', 'index.html', 'manifest.webmanifest',
-  'assets/images/manifest.js', 'js/version.js', 'js/constants.js', 'js/sprites.js', 'js/audio.js', 'js/fx.js', 'js/upgrade.js', 'js/hero.js', 'js/forge.js', 'js/town.js',
-  'js/save.js', 'js/lobby.js', 'js/defense.js', 'js/battle.js', 'js/arena.js',
-  'js/formation.js', 'js/wave.js', 'js/tutorial.js', 'js/render.js', 'js/game.js',
+  'assets/images/manifest.js', 'js/version.js', 'js/constants.js', 'js/sprites.js', 'js/audio.js', 'js/fx.js', 'js/upgrade.js', 'js/hero.js', 'js/forge.js', 'js/camp.js', 'js/town.js',
+  'js/patch.js', 'js/save.js', 'js/rank.js', 'js/lobby.js', 'js/boss.js', 'js/defense.js', 'js/battle.js', 'js/arena.js',
+  'js/formation.js', 'js/wave.js', 'js/tutorial.js', 'js/guide.js', 'js/render.js', 'js/game.js',
   'assets/images/mainpage.png',
   'assets/images/icon-192.png', 'assets/images/icon-512.png', 'assets/images/icon-maskable-512.png',
   // 스프라이트 — 매니페스트에 켜둔 것만 담는다.
@@ -69,6 +69,10 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+  // 🏆 랭킹 — 같은 오리진이지만 캐시하면 안 된다.
+  // 여기를 비켜서지 않으면 순위표가 처음 한 번 받은 옛 목록을 계속 보여준다.
+  if (url.pathname.startsWith('/api/') ||
+      url.pathname.startsWith('/.netlify/')) return;
 
   const putCopy = res => {
     if (res && res.ok && res.type === 'basic') {
@@ -87,8 +91,10 @@ self.addEventListener('fetch', e => {
     return;
   }
 
+  // 그림·소리는 캐시 우선. 실패하면 그냥 실패해야 한다 —
+  // 예전에는 index.html을 돌려줬는데, <img>가 HTML을 받으면 디코드에 실패하고
+  // 그 자리는 영영 빈 채로 남는다. 오류를 오류로 두는 편이 회복이 빠르다.
   e.respondWith(
-    caches.match(req).then(hit => hit || fetch(req).then(putCopy)
-      .catch(() => caches.match('index.html')))
+    caches.match(req).then(hit => hit || fetch(req).then(putCopy))
   );
 });

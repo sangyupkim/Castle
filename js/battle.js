@@ -36,11 +36,17 @@ function applyUnitStats(u, hpRatio) {
   const ratio = hpRatio !== undefined ? hpRatio : (u.maxHp > 0 ? u.hp / u.maxHp : 1);
   // 🏨 여관의 '명성' — 특수 용병에게만 붙는 배율
   const sp = t.special ? (BONUSES.specialUnitMult || 1) : 1;
+  // 🔥 캠프 단련 — 이 병종만 오르는 배율. 조합을 정해 놓고 그쪽을 키우게 한다.
+  const cHp  = campUnitMult(u.typeId, 'hp');
+  const cAtk = campUnitMult(u.typeId, 'atk');
+  const cDef = campUnitMult(u.typeId, 'def');
   u.maxHp     = Math.max(1, Math.round((t.hp + BONUSES.unitHp) * (BONUSES.unitHpMult || 1)
-                                       * (BONUSES.pactUnitHpMult || 1) * sp));
-  u.atk       = Math.round((t.atk + BONUSES.unitAtk) * (BONUSES.unitAtkMult || 1) * sp);
-  u.def       = Math.round((t.def + BONUSES.unitDef + BONUSES.heroAura) * sp);
-  u.skillAtk  = t.skillAtk  ? Math.round((t.skillAtk + BONUSES.unitAtk) * sp) : 0;
+                                       * (BONUSES.pactUnitHpMult || 1) * sp * cHp));
+  u.atk       = Math.round((t.atk + BONUSES.unitAtk) * (BONUSES.unitAtkMult || 1) * sp * cAtk);
+  // 방어력은 0 아래로 내려가지 않는다 — ★영웅 카드의 대가(방어 -5 등)가 겹치면
+  // 음수가 되어 '맞을수록 튼튼해지는' 식으로 뒤집힐 수 있다.
+  u.def       = Math.max(0, Math.round((t.def + BONUSES.unitDef + BONUSES.heroAura) * sp * cDef));
+  u.skillAtk  = t.skillAtk  ? Math.round((t.skillAtk + BONUSES.unitAtk) * sp * cAtk) : 0;
   u.healAmt   = t.healAmt   ? t.healAmt   + BONUSES.healBonus   : 0;
   u.shieldAmt = t.shieldAmt ? t.shieldAmt + BONUSES.shieldBonus : 0;
   u.hp        = Math.max(1, Math.min(u.maxHp, Math.round(u.maxHp * ratio)));
@@ -79,7 +85,7 @@ function makeHeroUnit(hero) {
   const sm  = BONUSES.heroStatMult;
   const atk = Math.round((lv.atk + BONUSES.heroAtk) * sm * BONUSES.sigilHeroAtkMult);
   const hp  = Math.round((lv.hp + BONUSES.heroHpFlat) * sm * BONUSES.sigilHeroHpMult);
-  const def = Math.round((lv.def + BONUSES.heroAura) * sm);
+  const def = Math.max(0, Math.round((lv.def + BONUSES.heroAura) * sm));
   const A   = HERO_ARENA;
   // 각인이 아레나 스킬을 통째로 갈아치운다 — 이름·종류·쿨다운·범위 전부
   const sg  = activeSigil();
@@ -91,9 +97,10 @@ function makeHeroUnit(hero) {
     hp:Math.min(hp, Math.max(1, hero.hp)), maxHp:hp, atk, def, shield:0,
     atkPeriod:A.atkPeriod / (BONUSES.sigilHeroSpdMult * BONUSES.heroSpdMult), atkCd:0,
     range:A.range * BONUSES.sigilHeroRangeMult * BONUSES.heroRangeMult, moveSpd:A.moveSpd, radius:bodyRadius(A.radius),
-    ranged:false, isTank:false,
+    // 🏹 신궁은 붙지 않는다 — 각인이 원거리를 선언하면 평타도 날아간다
+    ranged:!!sg.ranged, isTank:false,
     skillName:sk.name, skillKind:sk.kind, skillCd:sk.cd, skillCdLeft:sk.cd,
-    skillRadius:sk.radius, skillHits:1, skillColor:sk.color,
+    skillRadius:sk.radius, skillHits:sk.hits || 1, skillColor:sk.color,
     skillAtk:Math.floor(atk * sk.mult * BONUSES.sigilSkillMult * BONUSES.heroSkillMult),
     healAmt:0,
     // 🛡 수호자의 함성은 최대 HP에 비례한다 — 단단할수록 부대를 더 감싼다
@@ -123,15 +130,39 @@ function createBattle() {
 }
 
 // ─── 고용 / 해고 ─────────────────────────────────────────────────────────────
-function hireCost(typeId) {
-  return Math.max(1, Math.round(UNIT_TYPES[typeId].cost * (1 - Math.min(0.75, BONUSES.hireCostPct || 0)))
+// 같은 용병을 더 뽑을수록 값이 오른다. 정액이던 시절에는 골드가 모이는 순간
+// **가장 센 용병 하나로 칸을 다 채우는 것**이 늘 정답이었다 — 고를 것이 없으면
+// 편성은 결정이 아니라 절차가 된다. 종류마다 따로 오르므로, 값이 오른 쪽 대신
+// 아직 싼 다른 종류를 섞는 선택지가 생긴다.
+const HIRE_STEP     = 1.34;   // 같은 종류 한 명 늘 때마다 이만큼
+const HIRE_STEP_CAP = 6;      // 이 이상은 안 오른다 (칸을 다 채워도 계산이 터지지 않게)
+
+function hireCountOf(battle, typeId) {
+  if (!battle || !Array.isArray(battle.ourTeam)) return 0;
+  return battle.ourTeam.filter(u => !u.isHero && u.typeId === typeId).length;
+}
+
+// n번째(0부터)로 뽑는 그 종류의 값
+function hireCostAt(typeId, n) {
+  const t = UNIT_TYPES[typeId];
+  if (!t) return 1;
+  // 특수 용병은 여관에 뜬 그 자리를 사는 것이라 '더 뽑을수록'이 성립하지 않는다
+  const step = t.special ? 1
+    : Math.pow(HIRE_STEP, Math.min(HIRE_STEP_CAP, Math.max(0, n | 0)));
+  const base = t.cost * step;
+  return Math.max(1, Math.round(base * (1 - Math.min(0.75, BONUSES.hireCostPct || 0)))
                      - BONUSES.hireCostDiscount);
+}
+
+// battle을 넘기면 지금 편성 기준의 '다음 한 명' 값. 안 넘기면 첫 명 값.
+function hireCost(typeId, battle) {
+  return hireCostAt(typeId, hireCountOf(battle, typeId));
 }
 
 function hireUnit(battle, typeId, gold) {
   const t = UNIT_TYPES[typeId];
   if (!t) return gold;
-  const cost = hireCost(typeId);
+  const cost = hireCost(typeId, battle);
   if (gold < cost) return gold;
 
   if (t.special) {
@@ -156,7 +187,9 @@ function fireUnit(battle, idx) {
   if (idx < 0 || idx >= battle.ourTeam.length) return 0;
   const u = battle.ourTeam[idx];
   if (u.isHero) return 0;
-  const refund = Math.floor(hireCost(u.typeId) / 2);
+  // 값이 오르는 만큼, 돌려받는 것도 **방금 낸 그 값**의 절반이어야 한다.
+  // 늘 첫 명 값으로 돌려주면 비싸게 뽑고 싸게 무르는 구멍이 된다.
+  const refund = Math.floor(hireCostAt(u.typeId, hireCountOf(battle, u.typeId) - 1) / 2);
   battle.ourTeam.splice(idx, 1);
   return refund;
 }

@@ -4,6 +4,8 @@ function createWaveManager() {
   return {
     waveIndex: 0,
     phase: 'idle',            // 'idle' | 'active' | 'upgradePick' | 'intermission'
+    midBossSide: null,        // 🐲 이번 층 중간보스가 나오는 곳 ('defense' | 'arena')
+    midBossPending: null,     // 하단 중간보스는 아레나가 열린 뒤에 넣는다
     timer: 0,
     elapsed: 0,
     intermissionTimer: 0,
@@ -80,11 +82,27 @@ function createWaveManager() {
         extraMult: spawnMult / Math.max(0.01, density)
       });
 
-      // 👹 100층 — 마왕. 잡몹 대신 한 마리만 오고, 그 한 마리가 곧 결승선이다.
+      // 👹 마왕 층 — **한쪽 전선만** 쓴다. 어디서 싸울지는 준비 화면에서 고른
+      // 값(gs.bossPick)이 정하고, '무작위'를 골랐으면 여기서 굴린다(보상 우대).
       this.bossPhase = 0;
-      if (isBossFloor(gs, this.waveIndex)) {
-        this.defenseQueues = [];       // 일반 스폰은 없다
-        spawnDemonLord(gs, this.waveIndex);
+      this.midBossSide = null;
+      const bkind = bossKindFor(gs, this.waveIndex);
+      if (bkind === 'lord') {
+        const b = beginBossFight(gs, this.waveIndex, bkind, gs.bossPick || 'random');
+        this.midBossSide = b.side === 'top' ? 'defense' : 'arena';
+        this.defenseQueues = [];       // 잡몹 없이 보스 한 마리만
+        if (b.side === 'top') spawnDemonLord(gs, this.waveIndex);
+        else { this.midBossPending = endlessTier(this.waveIndex); this.midBossKind = 'lord'; }
+      }
+      // 🐲 중간보스 층 — 보스전을 열지 않는다. **평소의 층 위에 한 마리가 얹힌다.**
+      // 위아래 중 한쪽에 나오되(층·시드로 정해져 예고와 실제가 늘 같다)
+      // 반대쪽 라인은 평소대로 돈다.
+      else if (typeof isMidBossFloor === 'function' && isMidBossFloor(gs, this.waveIndex)) {
+        const side = midBossSide(endlessTier(this.waveIndex));
+        this.midBossSide = side;
+        beginMidBoss(gs, side);
+        if (side === 'defense') spawnMidBoss(gs, this.waveIndex);
+        else { this.midBossPending = endlessTier(this.waveIndex); this.midBossKind = 'mid'; }
       }
 
       // 예약해둔 현상수배는 웨이브 시작 조금 뒤에 등장한다
@@ -95,12 +113,29 @@ function createWaveManager() {
       gs.chargers = [];
       startFighting(gs.battle);
       startArena(gs, this.waveIndex);
+      if (this.midBossPending) {
+        // 마왕은 레이드 보스(멀리 서서 장판) · 중간보스는 그냥 무거운 한 마리로 붙는다.
+        // 중간보스까지 레이드로 세우면 층이 또 다른 게임이 된다.
+        if (this.midBossKind === 'lord') spawnRaidBoss(gs, this.midBossPending, 'lord');
+        else                             spawnMidBossMob(gs, this.midBossPending);
+        this.midBossPending = null;
+      }
       if (typeof SFX !== 'undefined') SFX.waveStart();
     },
 
     // 👹 마왕 진행 — 페이즈 전환만. 처치 판정은 onDefenseKill이 죽는 순간에 한다
     // (죽은 적은 그 프레임에 배열에서 걸러지므로 여기서 '찾아' 판정할 수 없다).
     updateBoss(gs, dt) {
+      // 👹 보스전 공통 — 기믹 지속시간·하단 장판·제한시간
+      if (typeof bossUpdate === 'function') bossUpdate(gs, dt);
+      // 체력 줄이 깎일 때마다 기믹. 상단·하단 어느 쪽이든 같은 규칙으로 센다.
+      if (typeof bossCheckBars === 'function' && bossActive(gs)) {
+        const b = gs.boss;
+        const m = b.side === 'top'
+          ? (gs.defenseEnemies || []).find(e => (e.isBoss || e.isMidBoss) && !e.dead && !e.reached)
+          : (gs.arena?.mobs || []).find(e => (e.isRaidBoss || e.isMidBoss) && !e.dead);
+        if (m) bossCheckBars(gs, m.hp, m.maxHp);
+      }
       if (gs.bossDefeated) return;
       const boss = (gs.defenseEnemies || []).find(e => e.isBoss && !e.dead && !e.reached);
       if (!boss) return;
@@ -162,8 +197,12 @@ function createWaveManager() {
         if (q.remaining <= 0) continue;
         q.nextSpawn -= dt;
         if (q.nextSpawn <= 0) {
-          gs.defenseEnemies.push(makeDefenseEnemy(q.type, this.waveIndex, { rewardMult: q.rewardMult }));
-          q.remaining--;
+          // 깊은 층은 한 번에 여러 마리씩 나온다 — 일정을 늘리는 대신 뭉쳐서 낸다
+          const n = Math.min(q.remaining, Math.max(1, q.batch || 1));
+          for (let i = 0; i < n; i++) {
+            gs.defenseEnemies.push(makeDefenseEnemy(q.type, this.waveIndex, { rewardMult: q.rewardMult }));
+          }
+          q.remaining -= n;
           q.nextSpawn = q.interval;
         }
       }
@@ -189,10 +228,20 @@ function createWaveManager() {
         }
       }
 
-      // 👹 마왕 — 체력이 한 토막씩 깎일 때마다 호위를 부른다.
-      // 한 번 세운 배치로 끝까지 가지 못하게 하려는 것이다.
-      if (isBossFloor(gs, this.waveIndex)) {
+      // 👹 보스 — 마왕이든 중간보스든 여기서 돈다. 예전에는 마왕 층에서만 불렀는데
+      // 이제 중간보스도 기믹·장판·제한시간을 쓰므로 보스전이면 언제나 돌아야 한다.
+      if (bossActive(gs) || isBossFloor(gs, this.waveIndex)) {
         this.updateBoss(gs, dt);
+        // 하단 레이드는 전멸하거나 제한시간을 넘기면 그 자리에서 진다.
+        // 상단처럼 "성벽이 깎여 언젠가 끝나는" 구조가 아니라서 끝을 따로 그어야 한다.
+        if (gs.boss && gs.boss.failed && !gs.gameOver) {
+          endBossFight(gs, false);
+          gs.gameOver = true;
+          addLog(gs.battle, '💀 레이드 실패 — 보스를 막지 못했습니다', '#ef4444');
+          if (typeof SFX !== 'undefined') SFX.lose();
+          bankRunResult();
+          return;
+        }
         // 마왕을 잡으면 그 층은 거기서 끝난다. 100층의 목적은 마왕이지 시간 때우기가 아니다 —
         // 잡고 나서 남은 40초를 아레나만 돌게 하면 최종전이 최종전으로 안 읽힌다.
         if (gs.bossDefeated) {
@@ -243,6 +292,7 @@ function createWaveManager() {
     },
 
     endWave(gs) {
+      if (typeof endMidBoss === 'function') endMidBoss(gs);
       // 타이머 만료까지 'fighting'이었다면 완주다.
       const cleared   = (gs.battle.phase === 'fighting');
       const retreated = (gs.battle.phase === 'retreated');
@@ -347,7 +397,11 @@ function createWaveManager() {
                           || (runHasFinish(gs) && gs.bossDefeated);
       if (!atCampaignEnd) {
         this.phase = 'upgradePick';
-        gs.upgradePick = { active: true, cards: rollUpgradeCards(gs.activeUpgrades, fev('cards', 3)) };
+        // 장수는 캠프 🎴패의 폭이 정한다. 층 이벤트(🎲풍요)가 더 크면 그쪽을 쓴다.
+        const hand = Math.max(cardHandSize(gs), fev('cards', 0));
+        gs.upgradePick = { active: true, cards: rollUpgradeCards(gs.activeUpgrades, hand, gs) };
+        gs.pickScroll = 0;   // 새 패는 언제나 왼쪽 끝에서 본다
+        gs.freeRerolls = cardFreeRerolls(gs);   // 층마다 다시 채워진다
       } else {
         this.phase = 'intermission';
         this.intermissionTimer = 0;
@@ -367,7 +421,7 @@ function createWaveManager() {
         // 그러지 않으면 1단계를 깬 사람이 2단계로 갈 이유가 없다.
         const step  = endlessGemStepFor(et, gs.runBestAtStart)
                     * fev('gemMult', 1) * (BONUSES.gemMult || 1)
-                    * nightmareGemMult(gs.nightmare || 0);
+                    * (gs.unbounded ? unboundedGemMult() : nightmareGemMult(gs.nightmare || 0));
         gs.endlessGems = (gs.endlessGems || 0) + step;
         if (first) gs.endlessGemsNew = (gs.endlessGemsNew || 0) + step;
         else       gs.endlessGemsOld = (gs.endlessGemsOld || 0) + step;
@@ -380,6 +434,7 @@ function createWaveManager() {
             const bonus = ENDLESS_GATE_BONUS + Math.floor(et / 10) * ENDLESS_GATE_BONUS_STEP;
             gs.soulStones += bonus;
             gs.stats.totalGems = (gs.stats.totalGems || 0) + bonus;
+            if (typeof addRunGems === 'function') addRunGems(gs, 'gate', bonus);
             addLog(gs.battle, `🏁 ${et}층 관문 최초 돌파! 보석 +${bonus}`, '#a78bfa');
             spawnFloaty(`🏁 ${et}층 돌파 · 💎+${bonus}`, CW/2, DEFENSE_H/2, '#a78bfa');
           }
