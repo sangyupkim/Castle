@@ -81,6 +81,7 @@ let _forge         = { cores:{}, best:5, mastery:0, plus:{} };  // (옛 세이�
 let _camp          = { levels:{}, tries:0, breaks:0 };          // 🔥 캠프 단련 (보석·영구)
 let _cardMeta      = { levels:{}, bans:[] };                    // 🎴 패 강화 (보석·영구)
 let _relics        = { owned:[], equipped:[] };                 // 🏺 보스 유물 (영구)
+let _achievements  = { claimed:[] };                            // 🏅 업적 — 받은 것만 적어둔다
 let _charms        = [];   // 🎴 보관 중인 일회용 부적
 let _charmSlots    = [null, null];
 let _ascension     = 0;    // ♾️ 승천 단계
@@ -170,7 +171,7 @@ function newState() {
          buildingScroll:null, pageScroll:null, briefScroll:null, lobbyScroll:null, pickScroll:null,
          pauseResumeBtn:null, pauseGiveUpBtn:null,
          backupExportBtn:null, backupImportBtn:null, backupMsg:null,
-         tutReplayBtn:null, tutResetTipBtn:null, guideReplayBtn:null, campBtns:[], campGroupBtns:[], relicBtns:[], relicSellBtns:[], cardMetaBtns:[], cardCatBtns:[], cardBanBtns:[], cardBackBtn:null,
+         tutReplayBtn:null, achBtns:[], achClaimAllBtn:null, tutResetTipBtn:null, guideReplayBtn:null, campBtns:[], campGroupBtns:[], relicBtns:[], relicSellBtns:[], cardMetaBtns:[], cardCatBtns:[], cardBanBtns:[], cardBackBtn:null,
          rankSubmitBtn:null, rankBoardBtns:[], rankReloadBtn:null,
          pauseCardsBtn:null, runCardsCloseBtn:null, runCardsScroll:null, towerPromoteBtn:null, forgeAutoBtns:[],
          bossPickBtns:[], bgmToggleBtn:null, sfxToggleBtn:null,
@@ -192,6 +193,8 @@ function newState() {
     set cardMeta(v) { _cardMeta = v; },
     get relics()  { return _relics; },
     set relics(v) { _relics = v; },
+    get achievements()  { return _achievements; },
+    set achievements(v) { _achievements = v; },
     get charms()  { return _charms; },
     set charms(v) { _charms = v; },
     get charmSlots()  { return _charmSlots; },
@@ -242,6 +245,12 @@ let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적�
   _forge          = sv.forge      || { cores:{}, best:5, mastery:0, plus:{} };
   _camp           = sv.camp       || { levels:{}, tries:0, breaks:0 };
   if (!_camp.levels) _camp.levels = {};
+  _achievements   = (sv.achievements && typeof sv.achievements === 'object')
+                    ? sv.achievements : { claimed:[] };
+  if (!Array.isArray(_achievements.claimed)) _achievements.claimed = [];
+  // 지금 표에 없는 업적 id는 버린다 — 표가 바뀌어도 세이브가 안 깨지게
+  _achievements.claimed = _achievements.claimed.filter(
+    id => typeof achDef === 'function' && achDef(id));
   _relics         = sv.relics     || { owned:[], equipped:[] };
   if (!Array.isArray(_relics.owned))    _relics.owned = [];
   if (!Array.isArray(_relics.equipped)) _relics.equipped = [];
@@ -871,7 +880,8 @@ function uiScopeKey() {
   const L = gs.lobby || {}, t = gs.town || {};
   if (gs.page === 'lobby') {
     return `lobby|${L.tab}|${L.tab === 'skill' ? (L.skillTree||'') : ''}|${L.tab === 'camp' ? ((L.campGroup||'') + (L.campGroup === 'relic'
-        ? '|' + relicState(gs).equipped.join(',') + '|' + relicState(gs).owned.length : '')) : ''}|${L.tab === 'card' ? (L.cardCat||'-') : ''}`;
+        ? '|' + relicState(gs).equipped.join(',') + '|' + relicState(gs).owned.length : '')) : ''}|${L.tab === 'card' ? (L.cardCat||'-') : ''}|${
+      L.tab === 'record' ? achState(gs).claimed.length : ''}`;
   }
   if (gs.page === 'town') {
     return `town|${t.screen||'main'}|${t.tab||''}|${t.heroView?'hero':''}|${t.forgeTab||''}|${t.shopTab||''}`;
@@ -956,6 +966,17 @@ function handleLobbyTap(x, y) {
       if (hitTest(x,ry,b)) {   // 낀 것을 다시 누르면 뺀다
         setCharmSlot(gs, b.idx, null); SFX.click(); SaveManager.save(gs); return;
       }
+    }
+    // 💰 팔기가 먼저다 — 카드 위에 얹힌 버튼이라 카드 판정보다 앞서야 한다
+    for (const c of gs.ui.charmSellBtns||[]) {
+      if (!hitTest(x,ry,c)) continue;
+      const e = charmEntry(gs, c.uid);
+      const nm = e ? (charmDef(e.charmId)||{}).name : '부적';
+      const v = sellCharm(gs, c.uid);
+      if (v > 0) { SFX.levelUp(); SaveManager.save(gs);
+                   spawnFloaty(`💎 +${v} — ${nm} 판매`, CW/2, 300, COLORS.gem); }
+      else { SFX.denied(); spawnFloaty('낀 부적은 못 팝니다', x, y, '#ef4444'); }
+      return;
     }
     for (const c of gs.ui.charmCards||[]) {
       if (hitTest(x,ry,c)) {
@@ -1149,6 +1170,24 @@ function handleLobbyTap(x, y) {
     // 본문은 스크롤된 채 그려지지만 버튼 좌표는 스크롤 이전 값으로 기록된다.
     // 탭 좌표를 같은 기준으로 옮겨서 견준다.
     const ry = y + (gs.lobbyScroll || 0);
+    // 🏅 업적 — 한꺼번에 받기가 먼저
+    if (hitTest(x,ry,gs.ui.achClaimAllBtn||{})) {
+      const r = claimAllAch(gs);
+      if (r.n) { SaveManager.save(gs); SFX.levelUp();
+                 spawnFloaty(`🏅 ${r.n}개 달성 · 💎 +${r.gem}`, CW/2, 300, COLORS.gem);
+                 FX.burst(CW/2, 300, '#fbbf24', 18, 26); }
+      else SFX.denied();
+      return;
+    }
+    for (const b of gs.ui.achBtns||[]) {
+      if (!hitTest(x,ry,b)) continue;
+      const a = achDef(b.id);
+      const v = claimAch(gs, b.id);
+      if (v) { SaveManager.save(gs); SFX.levelUp();
+               spawnFloaty(`${a.icon} ${a.name} · 💎 +${v}`, CW/2, 300, COLORS.gem); }
+      else SFX.denied();
+      return;
+    }
     if (hitTest(x,ry,gs.ui.backupExportBtn||{})) { exportSaveCode(); return; }
     if (hitTest(x,ry,gs.ui.backupImportBtn||{})) { importSaveCode(); return; }
     if (hitTest(x,ry,gs.ui.tutReplayBtn||{}))    { replayTutorial(); return; }
@@ -1254,6 +1293,7 @@ function resetAllProgress() {
   _camp  = { levels:{}, tries:0, breaks:0 };
   _cardMeta = { levels:{}, bans:[] };
   _relics = { owned:[], equipped:[] };
+  _achievements = { claimed:[] };
   _charms = []; _charmSlots = [null, null]; _ascension = 0; _heroPlacePref = 'none';
   _trainSkipped = false;
   _unlocked = [];

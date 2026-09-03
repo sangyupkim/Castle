@@ -416,6 +416,26 @@ function setCharmSlot(gs, idx, uid) {
   return true;
 }
 function isCharmSlotted(gs, uid) { return charmSlots(gs).includes(uid); }
+// 🎰 부적 판매 — 뽑기 값의 절반. 보관함이 12칸이라 안 쓸 것이 쌓이면
+// 뽑기 자체가 막힌다. 버리기만 있으면 그 12칸이 "아까워서 못 버림"으로 굳는다 —
+// 값이 조금이라도 돌아오면 정리가 결정이 된다. 등급이 좋을수록 더 받는다.
+const CHARM_SELL_GRADE = { common:1.0, rare:1.6, epic:2.4 };
+function charmSellValue(charmId) {
+  const d = charmDef(charmId);
+  const m = (d && CHARM_SELL_GRADE[d.grade]) || 1;
+  return Math.max(1, Math.round(CHARM_ROLL_COST * 0.5 * m));
+}
+// 끼운 것은 못 판다 — 출격 직전에 사라지면 그건 판 게 아니라 잃은 거다
+function sellCharm(gs, uid) {
+  if (isCharmSlotted(gs, uid)) return 0;
+  const e = charmEntry(gs, uid);
+  if (!e) return 0;
+  const v = charmSellValue(e.charmId);
+  if (!discardCharm(gs, uid)) return 0;
+  gs.soulStones = (gs.soulStones || 0) + v;
+  return v;
+}
+
 function discardCharm(gs, uid) {
   const bag = charmBag(gs);
   const i = bag.findIndex(c => c.uid === uid);

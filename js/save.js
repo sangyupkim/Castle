@@ -83,6 +83,7 @@ const SaveManager = {
       camp:           gs.camp ? JSON.parse(JSON.stringify(gs.camp)) : null,
       cardMeta:       gs.cardMeta ? JSON.parse(JSON.stringify(gs.cardMeta)) : null,
       relics:         gs.relics ? JSON.parse(JSON.stringify(gs.relics)) : null,
+      achievements:   gs.achievements ? JSON.parse(JSON.stringify(gs.achievements)) : null,
       charms:         gs.charms ? JSON.parse(JSON.stringify(gs.charms)) : [],
       charmSlots:     gs.charmSlots ? gs.charmSlots.slice() : [null, null],
       ascension:      gs.ascension || 0,
