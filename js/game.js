@@ -3,7 +3,7 @@
 // ─── Canvas ───────────────────────────────────────────────────────────────────
 const canvas = document.getElementById('gameCanvas');
 const ctx    = canvas.getContext('2d');
-let _scale   = 1;
+let _scale   = 0;   // 0 = 아직 안 잼 — resize()가 첫 호출에서 반드시 CSS를 넣도록
 
 function getViewport() {
   // visualViewport가 있으면 사용 (모바일 브라우저 주소창 제외한 실제 높이)
@@ -13,21 +13,40 @@ function getViewport() {
   return { w: window.innerWidth, h: window.innerHeight };
 }
 
+// 렌더 배율(DPR). **2로 고정한다** — 위아래 양쪽으로.
+//
+// 아래로: PC(DPR 1)에서도 2배로 그려야 글씨가 뭉개지지 않는다.
+// 위로: 여기에 상한이 없던 게 설치 앱(PWA) 프레임 드랍의 절반이었다.
+// 요즘 폰은 DPR이 3이라 480×928을 1440×2784 = 401만 픽셀로 칠한다.
+// 2로 자르면 960×1856 = 178만 — 매 프레임 칠하는 양이 **2.2배 줄어든다**.
+// 480 논리폭짜리 2D 캔버스에서 3배와 2배의 차이는 눈으로 거의 안 보인다.
+const RENDER_DPR = 2;
+
 function resize() {
-  // 최소 DPR 2 강제: PC(DPR=1)에서도 2배 고해상도 렌더링으로 텍스트 선명도 확보
-  const dpr = Math.max(2, window.devicePixelRatio || 1);
-  const vp  = getViewport();
-  // 세로를 기기 비율에 맞춰 다시 잡는다. 바뀌면 아레나 바닥을 다시 구워야 한다 —
-  // 예전 높이로 구운 캔버스를 그대로 쓰면 바닥이 새 경계와 어긋난다.
-  if (applyViewportHeight(vp.w, vp.h) && typeof invalidateArenaFloor === 'function')
-    invalidateArenaFloor();
-  const s   = Math.min(vp.w / CW, vp.h / CH);
-  canvas.width  = Math.round(CW * dpr);
-  canvas.height = Math.round(CH * dpr);
-  canvas.style.width  = `${CW * s}px`;
-  canvas.style.height = `${CH * s}px`;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  _scale = s;
+  const vp = getViewport();
+  // 논리 해상도는 480×928 고정이다(constants.js 참고). 화면이 그보다 길거나
+  // 납작하면 남는 쪽에 여백이 생긴다 — 놀이터 크기를 기기가 정하지 않게.
+  const s  = Math.min(vp.w / CW, vp.h / CH);
+  const bw = Math.round(CW * RENDER_DPR);
+  const bh = Math.round(CH * RENDER_DPR);
+
+  // canvas.width에 **같은 값을 다시 넣어도** 브라우저는 백버퍼를 새로 잡고
+  // 화면을 지운다. 그런데 이 함수는 window.resize와 visualViewport.resize에
+  // 모두 물려 있고, 안드로이드 설치 앱(PWA)에서는 오버스크롤·시스템 바 때문에
+  // 이 이벤트가 손가락을 움직이는 내내 쏟아진다. 그때마다 960×1856 버퍼를
+  // 다시 잡으면 프레임이 끊긴다 — 브라우저에서는 멀쩡한데 설치 앱만
+  // 렉이 걸리던 이유의 나머지 절반이다. 값이 바뀔 때만 손댄다.
+  if (canvas.width !== bw || canvas.height !== bh) {
+    canvas.width  = bw;
+    canvas.height = bh;
+    ctx.setTransform(RENDER_DPR, 0, 0, RENDER_DPR, 0, 0);
+  }
+  // CSS 크기는 다시 넣어도 공짜지만, 굳이 레이아웃을 흔들 이유는 없다
+  if (_scale !== s) {
+    canvas.style.width  = `${CW * s}px`;
+    canvas.style.height = `${CH * s}px`;
+    _scale = s;
+  }
 }
 window.addEventListener('resize', resize);
 if (window.visualViewport) {
@@ -2147,7 +2166,7 @@ function updateCastleGuns(dt) {
   if (atk <= 0) return;
   gs.castleCd = Math.max(0, (gs.castleCd || 0) - dt);
   if (gs.castleCd > 0) return;
-  const base = cellCenter(4, 6);
+  const base = cellCenter(CASTLE_C, CASTLE_R);
   const best = pickTarget(gs.defenseEnemies, base, castleRange(), 'nearest');
   if (!best) return;
   gs.castleCd = 1 / Math.max(0.05, castleSpd());
@@ -2406,7 +2425,7 @@ let _chargeFrac = 0;
 function updateChargers(dt) {
   const list = gs.chargers;
   if (!list || !list.length) return;
-  const base = cellCenter(4, 6);
+  const base = cellCenter(CASTLE_C, CASTLE_R);
   for (const c of list) {
     if (c.dead) continue;
     if (c.delay > 0) { c.delay -= dt; continue; }
@@ -2575,7 +2594,7 @@ function frame(ts) {
     // 👹 보스전 — 한쪽 전선만 쓴다. 안 쓰는 쪽은 아예 그리지 않고,
     // 쓰는 쪽이 화면 세로를 다 가져간다. 반씩 보다가 보스를 놓치지 않게.
     renderBossLane(ctx, gs);
-    FX.draw(ctx);
+    FX.draw(ctx); FX.drawCasts(ctx);
   } else {
     renderDefense(ctx,gs);
     renderUIBar(ctx,gs,wm);
@@ -2585,7 +2604,7 @@ function frame(ts) {
         && gs.mid.side === 'arena' && typeof renderBossFields === 'function') {
       renderBossFields(ctx, gs);
     }
-    FX.draw(ctx);
+    FX.draw(ctx); FX.drawCasts(ctx);
   }
   ctx.restore();
   if (typeof bossActive === 'function' && bossActive(gs)
@@ -2625,7 +2644,12 @@ function frame(ts) {
   // 🧭 시킨 일을 해냈는지 매 프레임 본다. 확인 버튼이 없으므로 이게 유일한 진행 수단이다.
   if (!_titleScreen && !tut.active) { try { guide.update(gs, dt); } catch (e) {} }
 
-  // 👹 기믹 예고 창은 **실시간**으로 센다. 아래 배속 루프 안에서 세면
+  // ✨ 스킬 연출은 **실시간**으로 돈다. 아래 배속 루프 안에 넣으면
+  // 10배속에서 0.5초짜리 연출이 세 프레임 만에 끝나 보이지도 않는다.
+  // 일시정지·튜토리얼 중에도 계속 사그라들게 둔다 — 멈춘 화면에 잔상이 박히지 않게.
+  if (typeof FX !== 'undefined' && FX.updateCasts) FX.updateCasts(dt);
+
+  // 👹 기믹 예고 창도 같은 이유로 실시간이다. 배속 루프 안에서 세면
   // 10배속에서 창이 1/10로 줄어 사람이 누를 수 없다.
   if (!_paused && !tut.active && !_titleScreen && typeof bossParryTick === 'function') {
     try { bossParryTick(gs, dt); } catch (e) {}

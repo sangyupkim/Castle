@@ -587,12 +587,12 @@ function updateMob(gs, m, allies, dt) {
       // 마왕 — 광역 내려찍기
       const rad = 52;
       for (const t of allies) {
-        if (dist(t, m) <= rad) hurtAlly(gs, t, arenaDamage(m.atk, t.def), '#db2777');
+        if (dist(t, m) <= rad) hurtAlly(gs, t, arenaDamage(m.atk, t.def), '#db2777', m);
       }
       gs.arena.bursts.push({ x: m.x, y: m.y, r: rad, color: '#db2777', t: 0, dur: 0.4 });
       if (typeof FX !== 'undefined') FX.shake(3, 0.15);
     } else {
-      hurtAlly(gs, target, arenaDamage(m.atk, target.def), '#fca5a5');
+      hurtAlly(gs, target, arenaDamage(m.atk, target.def), '#fca5a5', m);
     }
   }
 }
@@ -892,6 +892,8 @@ function hurtMob(gs, m, dmg, color, fromRanged, fromShooter) {
     real = Math.max(1, Math.round(dmg * (1 - m.rangedResist)));
     if (Math.random() < 0.3) addFloaty(gs.battle, '🛡', m.x, m.y - m.radius - 8, '#38bdf8');
   }
+  // 🎯 사냥 표식(신궁) — 표식이 붙은 동안 받는 피해가 늘어난다
+  if ((m.markUntil || 0) > gs.arena.elapsed) real = Math.round(real * (1 + (m.markPct || 0.6)));
   m.hp -= real;
   m.flashTimer = 0.18; m.flashColor = color;
   addFloaty(gs.battle, `-${real}`, m.x, m.y - m.radius, color);
@@ -1002,7 +1004,7 @@ function applyDeathAffixes(gs, m) {
   }
 }
 
-function hurtAlly(gs, u, dmg, color) {
+function hurtAlly(gs, u, dmg, color, from) {
   if (u.dead) return;
   if (isHidden(u)) return;   // 🗡️ 은신 중에는 맞지 않는다
   // 비율 방어 — 정액 방어(def)가 뺄셈으로 먼저 걸리고, 남은 피해에 이 비율이 곱해진다.
@@ -1023,6 +1025,13 @@ function hurtAlly(gs, u, dmg, color) {
   u.flashTimer = 0.2; u.flashColor = color;
   addFloaty(gs.battle, `-${remain}`, u.x, u.y - u.radius, color);
   if (typeof SFX !== 'undefined') SFX.hit();
+  // 🌵 가시 갑주(파수꾼) — 근접으로 때린 쪽에만 되돌린다. 때린 놈을 알 수 있는
+  // 경로가 근접뿐이라 그렇고, "붙으면 아프다"는 규칙이 읽히기도 이쪽이 낫다.
+  const a0 = gs.arena;
+  if (from && !from.dead && (a0.allyThornUntil || 0) > a0.elapsed) {
+    const back = Math.max(1, Math.round(remain * (a0.allyThornPct || 0.45)));
+    hurtMob(gs, from, back, '#84cc16');
+  }
   if (u.hp > 0) return;
 
   // 불굴의 의지
@@ -1040,6 +1049,7 @@ function hurtAlly(gs, u, dmg, color) {
 function startArena(gs, waveIndex) {
   const a = gs.arena, def = waveDefFor(waveIndex) || {};
   a.mobs = []; a.drops = []; a.shots = []; a.bursts = [];
+  a.allyThornUntil = 0;
   a.elapsed = 0;
   a.spawnTimer = 0.6;
   a.waveIndex  = waveIndex;
@@ -1092,7 +1102,7 @@ function launchCharge(gs, total, why) {
   // 마릿수는 남은 몹과 피해량 둘 다를 본다. 아레나가 비어 있어도 값을 치렀다면
   // 그만큼은 달려드는 것이 보여야 하고, 40HP가 한 마리로 들어오면 읽히지 않는다.
   const n = Math.max(1, Math.min(CHARGE_MAX_SHOWN, Math.max(live.length, Math.ceil(total / 6))));
-  const base = cellCenter(4, 6);                    // 기지 칸
+  const base = cellCenter(CASTLE_C, CASTLE_R);                    // 기지 칸
   gs.chargers = gs.chargers || [];
 
   // 피해를 마릿수로 쪼갠다. 나머지는 앞쪽 몇에게 하나씩 더 얹어 총합을 정확히 맞춘다.
@@ -1118,6 +1128,7 @@ function launchCharge(gs, total, why) {
 function clearArena(gs) {
   const a = gs.arena;
   a.mobs = []; a.drops = []; a.shots = []; a.bursts = [];
+  a.allyThornUntil = 0;
   a.rally = null;
 }
 

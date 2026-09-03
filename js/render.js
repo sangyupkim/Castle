@@ -349,7 +349,7 @@ function renderDefense(ctx, gs) {
 
   // 🏰 최후 저지선 — 성채가 쏠 수 있으면 그 사거리를 옅게 보여준다
   if (castleAtk() > 0) {
-    const bc = cellCenter(4, 6);
+    const bc = cellCenter(CASTLE_C, CASTLE_R);
     ctx.beginPath(); ctx.arc(bc.x, bc.y, castleRange(), 0, Math.PI*2);
     ctx.strokeStyle = 'rgba(250,204,21,0.20)'; ctx.lineWidth = 1;
     ctx.setLineDash([4,4]); ctx.stroke(); ctx.setLineDash([]);
@@ -485,7 +485,7 @@ function renderDefense(ctx, gs) {
 
   // 🧱 성벽 결계 — 걸려 있는 동안은 기지가 무적이다. 그 사실이 보여야 한다.
   if ((gs.baseWardUntil || 0) > 0) {
-    const bc = cellCenter(4, 6);
+    const bc = cellCenter(CASTLE_C, CASTLE_R);
     ctx.beginPath(); ctx.arc(bc.x, bc.y, CELL_W * 0.85, 0, Math.PI*2);
     ctx.strokeStyle = 'rgba(56,189,248,0.75)'; ctx.lineWidth = 2.5; ctx.stroke();
     ctx.fillStyle = 'rgba(56,189,248,0.12)'; ctx.fill();
@@ -796,6 +796,9 @@ function renderDefEnemy(ctx, e) {
 
   // 그림을 쓰면 몸이 원보다 위로 솟으므로 표시들도 그만큼 올린다
   const top = drew ? mobArtTop(e, ey, false) : ey - e.radius;
+
+  // 🎯 사냥 표식 — 상단은 초 단위 타이머다
+  if ((e.markedUntil || 0) > 0) drawHuntMark(ctx, e.x, ey, e.radius);
 
   drawHPBar(ctx, e.x-e.radius, top-6, e.radius*2, 4, e.hp/e.maxHp);
 
@@ -1840,6 +1843,21 @@ function drawArenaFloor(ctx) {
   return true;
 }
 
+// 🎯 사냥 표식 — 네 귀퉁이 괄호 + 도는 고리. 화살표 하나보다 눈에 걸린다.
+function drawHuntMark(ctx, x, y, r) {
+  const R = (r || 10) + 7;
+  const t = (performance.now() / 1000) % 1;
+  ctx.save();
+  ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 1.6; ctx.globalAlpha = 0.85;
+  for (let k = 0; k < 4; k++) {
+    const a = t * Math.PI * 2 + k * Math.PI / 2;
+    ctx.beginPath(); ctx.arc(x, y, R, a, a + 0.5); ctx.stroke();
+  }
+  ctx.globalAlpha = 0.5;
+  ctx.beginPath(); ctx.arc(x, y, R - 3, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+}
+
 function renderArenaTerrain(ctx, a) {
   const ter = a.terrain;
   if (!ter || !ter.length) return;
@@ -1962,7 +1980,11 @@ function renderArenaPhase(ctx, gs) {
   }
 
   // 몹 → 아군 순으로 그려 아군이 위에 오게 한다
-  for (const m of a.mobs) renderArenaEntity(ctx, m, m.dead ? Math.max(0, 1 - m.deadTimer/0.5) : 1);
+  for (const m of a.mobs) {
+    renderArenaEntity(ctx, m, m.dead ? Math.max(0, 1 - m.deadTimer/0.5) : 1);
+    // 🎯 사냥 표식 — 12초짜리 버프라 화면에 남아 있어야 그때까지 몰아칠 수 있다
+    if (!m.dead && (m.markUntil || 0) > a.elapsed) drawHuntMark(ctx, m.x, m.y, m.radius);
+  }
   for (const u of b.ourTeam) {
     if (u.dead) continue;
     // 🗡️ 은신 중인 도적은 반투명하게 — 사라진 게 보여야 은신이 은신으로 읽힌다
@@ -2879,7 +2901,23 @@ function wrapLinesFirstNarrow(ctx, text, firstW, restW) {
   return out;
 }
 
+// 출격 탭은 패널 여섯 장이 위에서부터 흐르는데, 화면 세로를 928로 못 박고 나니
+// 마지막 패널과 아래 출격 버튼 사이가 240px 가까이 휑하게 비었다.
+// 남는 만큼을 패널 사이 간격에 똑같이 나눠 준다.
+//
+// 지난 프레임에 잰 바닥(_lobbyBottom)을 쓰므로 한 프레임 늦게 맞는다. 대신
+// 관계가 선형이라 — 간격을 slack/6씩 벌리면 바닥이 정확히 slack만큼 내려간다 —
+// 한 프레임이면 딱 맞아떨어지고 그 뒤로는 움직이지 않는다.
+const SORTIE_GAPS = 6;
+let _sortieGap = 10;
+function fitSortieGap() {
+  const room  = CH - LOBBY_SORTIE_H - 10;
+  const slack = room - _lobbyBottom;
+  _sortieGap = Math.max(10, Math.min(34, _sortieGap + slack / SORTIE_GAPS));
+}
+
 function renderLobbySortie(ctx, gs) {
+  const gap = Math.round(_sortieGap);
   let y = LOBBY_BODY_Y + 12;
   ctx.textAlign='left'; ctx.textBaseline='top';
 
@@ -2935,7 +2973,7 @@ function renderLobbySortie(ctx, gs) {
     gs.ui.trainSkipBtn = { x:skx, y:sky, w:skw, h:skh };
     ctx.textAlign='left'; ctx.textBaseline='top';
   }
-  y += rh + 10;
+  y += rh + gap;
 
   // ── 🌑 악몽 사다리 ──────────────────────────────────────────────────────
   // 심연이 끝이 없던 시절에는 목표가 없었다. 100층에 결승선을 긋고, 그 뒤로
@@ -2976,7 +3014,7 @@ function renderLobbySortie(ctx, gs) {
   ctx.textAlign='right'; ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif';
   ctx.fillText(`${tws.length}/${TOWER_ORDER.length} · ${uns.length}/${UNIT_ORDER.length}`, CW-18, y+9);
   ctx.textAlign='left';
-  y += th + 10;
+  y += th + gap;
 
   // 적용 중인 스킬
   const sp = skillProgress(gs);
@@ -3011,11 +3049,11 @@ function renderLobbySortie(ctx, gs) {
   // 진행 바
   ctx.fillStyle='#1e293b'; ctx.fillRect(18, y+46, CW-36, 5);
   ctx.fillStyle='#a78bfa'; ctx.fillRect(18, y+46, (CW-36)*(sp.total ? sp.owned/sp.total : 0), 5);
-  y += sh + 10;
+  y += sh + gap;
 
   // 🎴 부적 — 출전 전에 끼우는 일회용. 보석이 계속 들어오는 게임이라
   // 저축을 다시 목적으로 만들려면 확실한 소모처가 하나 있어야 한다.
-  y = _renderCharmBar(ctx, gs, y);
+  y = _renderCharmBar(ctx, gs, y) + (gap - 10);
 
   // 서약
   const pacts = PACT_DEFS.filter(p => isPactOn(p.id));
@@ -3038,12 +3076,12 @@ function renderLobbySortie(ctx, gs) {
     ctx.fillStyle='#475569'; ctx.font='10px sans-serif';
     ctx.fillText('없음 — 🔓 해금 탭에서 난이도를 올리고 보석을 더 받을 수 있습니다', 18, y+30);
   }
-  y += ph + 10;
+  y += ph + gap;
 
   // 진행 상황
   ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif';
   ctx.fillText(`관문 ${(gs.clearedGates||[]).length}개 돌파 · 누적 처치 ${gs.stats.totalKills||0} · 누적 보석 ${gs.stats.totalGems||0}`, 14, y);
-  y += 22;
+  y += 12 + gap;
 
   // 다음 목표 — 보석을 어디에 쓰면 좋을지 한 줄로 짚어준다
   const nextUnlock = UNLOCK_DEFS.find(u => !isUnlocked(u.id));
@@ -3078,6 +3116,7 @@ function renderLobbySortie(ctx, gs) {
   ctx.fillStyle='#475569'; ctx.font='9px sans-serif';
   ctx.fillText(`이번 하강 예상 보석 배율 ×${pactGemMult().toFixed(2)}`, 18, gy);
   _lobbyBottom = gy + 20;
+  fitSortieGap();
 }
 
 // ── 🌳 스킬 ─────────────────────────────────────────────────────────────────
@@ -5153,19 +5192,22 @@ function renderHeroShopScreen(ctx, gs) {
     sy+=ih+4;
   }
 
-  // ── 🔮 스킬 매대 ─────────────────────────────────────────────────────────
+  // ── 🧬 패시브 매대 ───────────────────────────────────────────────────────
+  // '영웅 스킬'이라고 불렀는데 안에 든 것은 전부 패시브다 — 끼우면 숫자가
+  // 올라갈 뿐 전투 중에 아무 일도 안 한다. 이름이 물건과 달라서
+  // 아래 ⚡액티브 매대와 무엇이 다른지 읽히지 않았다.
   // 상점을 키워야 열린다. 잠겨 있을 때도 자리를 보여준다 — 무엇을 위해 올리는지 알아야 한다.
   sy+=6;
   const _open = skillShopOpen(gs);
   ctx.fillStyle=_open?'#f0abfc':'#4b5563'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText('🔮 영웅 스킬',8,sy);
+  ctx.fillText('🧬 패시브 스킬',8,sy);
   ctx.textAlign='right'; ctx.fillStyle='#475569'; ctx.font='bold 8px sans-serif';
-  ctx.fillText(_open?'같은 스킬도 굴림값에 따라 성능이 다릅니다':`상점 Lv.${SKILL_SHOP_LEVEL} 필요`, CW-8, sy+1);
+  ctx.fillText(_open?'각인과 무관하게 같은 것이 나옵니다 · 굴림값만 다릅니다':`상점 Lv.${SKILL_SHOP_LEVEL} 필요`, CW-8, sy+1);
   ctx.textAlign='left'; sy+=14;
   if (!_open) {
     uiPanel(ctx, 6,sy,CW-12,32,5, '#0b0f1a', '#1f2937', 1);
     ctx.fillStyle='#4b5563'; ctx.font='9px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(`🔒 영웅 상점을 Lv.${SKILL_SHOP_LEVEL}까지 올리면 스킬을 팝니다`,CW/2,sy+16);
+    ctx.fillText(`🔒 영웅 상점을 Lv.${SKILL_SHOP_LEVEL}까지 올리면 패시브를 팝니다`,CW/2,sy+16);
     ctx.textAlign='left'; sy+=36;
   } else {
     const offers = heroGear(gs).skillOffers || [];
@@ -5180,7 +5222,7 @@ function renderHeroShopScreen(ctx, gs) {
       ctx.font='18px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.fillStyle='#e2e8f0';
       ctx.fillText(def.icon,12,sy+ih/2);
       ctx.fillStyle=gc; ctx.font='bold 10px sans-serif';
-      ctx.fillText(`${def.name} ${rollStars(off.roll)}`,32,sy+ih/2-9);
+      ctx.fillText(`${def.name} ${rollStars(off.roll)}` + (def.sigil ? `  ${sigilBadge(def.sigil)}` : ''),32,sy+ih/2-9);
       ctx.fillStyle='#cbd5e1'; ctx.font='bold 9px sans-serif';
       ctx.fillText(statsLine(skillStats(off)),32,sy+ih/2+5);
       const cost=skillOfferCost(off), canAff=gs.gold>=cost;
@@ -5193,7 +5235,7 @@ function renderHeroShopScreen(ctx, gs) {
     }
 
     // ── ⚡ 액티브 스킬 매대 ────────────────────────────────────────────────
-    // 위의 🔮스킬은 전부 패시브다. 액티브는 MP를 쓰고 쿨다운을 돌며,
+    // 위의 🧬패시브와 달리 액티브는 MP를 쓰고 쿨다운을 돌며,
     // 절반은 하단에 서서 상단을 건드린다 — 그래서 따로 판다.
     const aOffers = (heroGear(gs).activeOffers || []).map(activeDef).filter(Boolean);
     sy += 4;
@@ -5215,7 +5257,10 @@ function renderHeroShopScreen(ctx, gs) {
       ctx.font='18px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.fillStyle='#e2e8f0';
       ctx.fillText(d.icon,12,sy+ih/2);
       ctx.fillStyle=gc; ctx.font='bold 10px sans-serif';
-      ctx.fillText(`${d.name}   ${activeLaneTag(d.lane)} · 💧${activeMpCost(d.id)} · ${activeCooldown(d.id)}s` + (activeFitsSigil(d.id) ? '  ✦정합' : ''), 32, sy+ih/2-11);
+      // 각인 전용은 '정합'보다 강한 표시를 단다 — 이 각인이라서 살 수 있는 물건이다
+      const own = (typeof activeSigilOwner === 'function') ? activeSigilOwner(d.id) : null;
+      const tag = own ? `  ${sigilBadge(own)}` : (activeFitsSigil(d.id) ? '  ✦정합' : '');
+      ctx.fillText(`${d.name}   ${activeLaneTag(d.lane)} · 💧${activeMpCost(d.id)} · ${activeCooldown(d.id)}s` + tag, 32, sy+ih/2-11);
       ctx.fillStyle='#cbd5e1'; ctx.font='bold 9px sans-serif';
       ctx.fillText(d.desc, 32, sy+ih/2+2);
       ctx.fillStyle='#475569'; ctx.font='8px sans-serif';
@@ -5622,10 +5667,10 @@ function renderHeroDetail(ctx, gs, startY) {
     }
   }
 
-  // ── 🔮 스킬 칸 ──────────────────────────────────────────────────────────
+  // ── 🧬 패시브 칸 ────────────────────────────────────────────────────────
   const nSlots = skillSlotCount(gs), nextLv = nextSkillSlotLevel(gs);
   ctx.fillStyle='#f0abfc'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText(`🔮 스킬 칸 ${nSlots}/${SKILL_SLOT_LEVELS.length}`,6,y);
+  ctx.fillText(`🧬 패시브 칸 ${nSlots}/${SKILL_SLOT_LEVELS.length}`,6,y);
   ctx.textAlign='right'; ctx.fillStyle='#475569'; ctx.font='bold 8px sans-serif';
   ctx.fillText(nextLv ? `다음 칸 — 영웅 Lv.${nextLv}` : '모든 칸 개방', CW-6, y+1);
   ctx.textAlign='left'; y += 14;
@@ -5836,7 +5881,7 @@ function renderTownPageArmy(ctx, gs, startY) {
   const _skOn = _gear.skillSlots.filter((u,i)=>i<_skN && u!=null).length;
   ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.fillStyle='#fbbf24'; ctx.font='bold 8px sans-serif';
-  ctx.fillText(`🎒 장비 ${_eqN}/${EQUIP_SLOTS.length}  ·  🔮 스킬 ${_skOn}/${_skN}  ·  탭하여 장착·스킬`, CW/2, y+69);
+  ctx.fillText(`🎒 장비 ${_eqN}/${EQUIP_SLOTS.length}  ·  🧬 패시브 ${_skOn}/${_skN}  ·  탭하여 장착·스킬`, CW/2, y+69);
   ctx.textAlign='left'; ctx.textBaseline='top';
   y+=84;
 
