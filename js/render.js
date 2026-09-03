@@ -6833,6 +6833,24 @@ function renderTitleScreen(ctx, alpha) {
   ctx.fillText(arming ? '⚠ 정말 초기화합니다 — 다시 탭' : '↺ 데이터 초기화', CW/2, ry + rh/2);
   gs.ui.titleResetBtn = {x:rx, y:ry, w:rw, h:rh};
 
+  // 📋 업데이트 소식 — 리셋 버튼 옆이 아니라 위에 둔다.
+  // 초기화 버튼 바로 옆에 붙이면 잘못 누르는 사람이 나온다.
+  const nw2=150, nh2=30, nx=(CW-nw2)/2, ny=by-nh2-12;
+  const unread = (typeof patchUnread === 'function') && patchUnread();
+  uiPanel(ctx, nx, ny, nw2, nh2, 15,
+          unread ? 'rgba(30,58,95,0.85)' : 'rgba(15,23,42,0.72)',
+          unread ? '#60a5fa' : 'rgba(148,163,184,0.45)', unread ? 2 : 1);
+  ctx.fillStyle = unread ? '#bfdbfe' : 'rgba(226,232,240,0.72)';
+  ctx.font = unread ? 'bold 12px sans-serif' : '12px sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('📋 업데이트 소식', CW/2, ny + nh2/2);
+  // 안 읽은 소식이 있으면 점을 찍는다 — 안 찍으면 아무도 안 눌러 본다
+  if (unread) {
+    ctx.beginPath(); ctx.arc(nx + nw2 - 13, ny + 9, 4.5, 0, Math.PI*2);
+    ctx.fillStyle = '#f43f5e'; ctx.fill();
+  }
+  gs.ui.titlePatchBtn = {x:nx, y:ny, w:nw2, h:nh2};
+
   // 탭 안내
   ctx.fillStyle = 'rgba(255,255,255,0.40)';
   ctx.font = '10px sans-serif'; ctx.textBaseline = 'bottom';
@@ -6845,3 +6863,127 @@ function renderTitleScreen(ctx, alpha) {
 
   ctx.restore();
 }
+
+// ─── 📋 업데이트 소식 화면 ───────────────────────────────────────────────────
+// 타이틀 위에 덮는 문서 한 장. 스크롤되고, 닫으면 읽은 것으로 표시된다.
+//
+// **굵게**는 그 자리에서 굵은 글씨로 바꿔 그린다. 한 줄에 강조가 하나쯤 있어야
+// 스무 줄짜리 목록에서 눈이 걸린다 — 다 같은 굵기면 아무것도 안 읽힌다.
+let _patchBottom = 0;
+
+// '앞**굵게**뒤' 를 [{t,bold}] 로 쪼갠다
+function _patchSpans(text) {
+  const out = [];
+  let rest = String(text);
+  while (rest.length) {
+    const i = rest.indexOf('**');
+    if (i < 0) { out.push({ t: rest, bold: false }); break; }
+    if (i > 0) out.push({ t: rest.slice(0, i), bold: false });
+    rest = rest.slice(i + 2);
+    const j = rest.indexOf('**');
+    if (j < 0) { out.push({ t: rest, bold: true }); break; }
+    out.push({ t: rest.slice(0, j), bold: true });
+    rest = rest.slice(j + 2);
+  }
+  return out;
+}
+
+// 강조가 섞인 글을 폭에 맞춰 접어 그린다. 그린 높이를 돌려준다.
+function _patchWrapDraw(ctx, text, x, y, maxW, lineH, color, boldColor) {
+  const spans = _patchSpans(text);
+  let cx = x, cy = y, drew = 0;
+  for (const sp of spans) {
+    // 한글은 단어 경계가 드물어 글자 단위로 접는다
+    for (const ch of sp.t) {
+      ctx.font = sp.bold ? 'bold 10px sans-serif' : '10px sans-serif';
+      const w = ctx.measureText(ch).width;
+      if (cx + w > x + maxW) { cx = x; cy += lineH; }
+      ctx.fillStyle = sp.bold ? boldColor : color;
+      ctx.fillText(ch, cx, cy);
+      cx += w; drew = 1;
+    }
+  }
+  return (cy - y) + (drew ? lineH : 0);
+}
+
+function renderPatchNotes(ctx, gs) {
+  gs.ui.patchCloseBtn = null;
+  ctx.fillStyle = 'rgba(4,6,12,0.96)';
+  ctx.fillRect(0, 0, CW, CH);
+
+  // 머리 — 스크롤과 무관하게 고정
+  const headH = 46;
+  ctx.fillStyle = '#0b1220'; ctx.fillRect(0, 0, CW, headH);
+  ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, headH-0.5); ctx.lineTo(CW, headH-0.5); ctx.stroke();
+  ctx.textAlign='left'; ctx.textBaseline='middle';
+  ctx.fillStyle='#93c5fd'; ctx.font='bold 13px sans-serif';
+  ctx.fillText('📋 업데이트 소식', 14, headH/2);
+
+  const cbw=54, cbh=26, cbx=CW-cbw-10, cby=(headH-cbh)/2;
+  uiPanel(ctx, cbx, cby, cbw, cbh, 5, '#1e293b', '#475569', 1);
+  ctx.textAlign='center';
+  ctx.fillStyle='#cbd5e1'; ctx.font='bold 11px sans-serif';
+  ctx.fillText('닫기', cbx+cbw/2, headH/2);
+  gs.ui.patchCloseBtn = { x:cbx, y:cby, w:cbw, h:cbh };
+
+  // 본문 — 여기서부터 스크롤된다
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, headH, CW, CH - headH); ctx.clip();
+  ctx.translate(0, -(gs.patchScroll || 0));
+  let y = headH + 14;
+  ctx.textAlign='left'; ctx.textBaseline='top';
+
+  for (const note of PATCH_NOTES) {
+    // 판 머리
+    uiPanel(ctx, 10, y, CW-20, 44, 7, '#0d1b2e', '#2563eb', 1.5);
+    ctx.fillStyle='#60a5fa'; ctx.font='bold 15px sans-serif';
+    ctx.fillText(note.ver, 20, y+9);
+    const vw = ctx.measureText(note.ver).width;
+    ctx.fillStyle='#e2e8f0'; ctx.font='bold 11px sans-serif';
+    ctx.fillText(note.title, 20 + vw + 10, y+12);
+    ctx.fillStyle='#475569'; ctx.font='9px sans-serif';
+    ctx.fillText(note.date, 20, y+28);
+    y += 54;
+
+    for (const g of note.groups) {
+      ctx.fillStyle='#7dd3fc'; ctx.font='bold 11px sans-serif';
+      ctx.fillText(g.head, 14, y);
+      y += 18;
+
+      for (const [tag, text] of g.items) {
+        const tg = PATCH_TAG[tag] || PATCH_TAG.new;
+        // 꼬리표
+        ctx.font='bold 8px sans-serif';
+        const tw = ctx.measureText(tg.label).width + 10;
+        uiPanel(ctx, 14, y-1, tw, 14, 3, tg.bg, tg.color, 1);
+        ctx.fillStyle=tg.color; ctx.textAlign='center';
+        ctx.fillText(tg.label, 14 + tw/2, y+2);
+        ctx.textAlign='left';
+        // 본문
+        const tx = 14 + tw + 7;
+        const h = _patchWrapDraw(ctx, text, tx, y+1, CW - tx - 14, 14, '#94a3b8', '#e2e8f0');
+        y += Math.max(18, h + 5);
+      }
+      y += 8;
+    }
+    y += 6;
+  }
+
+  ctx.fillStyle='#334155'; ctx.font='9px sans-serif';
+  ctx.fillText('읽고 닫으면 다음부터 알림 점이 사라집니다.', 14, y);
+  y += 24;
+  ctx.restore();
+  _patchBottom = y + (gs.patchScroll || 0);
+
+  // 스크롤 막대 — 얼마나 남았는지 안 보이면 끝까지 안 내린다
+  const view = CH - headH;
+  if (_patchBottom > view) {
+    const th = Math.max(30, view * (view / _patchBottom));
+    const maxS = _patchBottom - view;
+    const ty = headH + (view - th) * Math.min(1, (gs.patchScroll || 0) / Math.max(1, maxS));
+    ctx.fillStyle='rgba(148,163,184,0.30)';
+    roundRect(ctx, CW-5, ty, 3, th, 1.5); ctx.fill();
+  }
+}
+function patchScrollMax() { return Math.max(0, _patchBottom - (CH - 46)); }
