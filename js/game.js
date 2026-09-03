@@ -17,6 +17,10 @@ function resize() {
   // 최소 DPR 2 강제: PC(DPR=1)에서도 2배 고해상도 렌더링으로 텍스트 선명도 확보
   const dpr = Math.max(2, window.devicePixelRatio || 1);
   const vp  = getViewport();
+  // 세로를 기기 비율에 맞춰 다시 잡는다. 바뀌면 아레나 바닥을 다시 구워야 한다 —
+  // 예전 높이로 구운 캔버스를 그대로 쓰면 바닥이 새 경계와 어긋난다.
+  if (applyViewportHeight(vp.w, vp.h) && typeof invalidateArenaFloor === 'function')
+    invalidateArenaFloor();
   const s   = Math.min(vp.w / CW, vp.h / CH);
   canvas.width  = Math.round(CW * dpr);
   canvas.height = Math.round(CH * dpr);

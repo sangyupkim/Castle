@@ -8,5 +8,5 @@
 // SW의 activate는 "키가 다른 캐시만" 지우므로 아무것도 지워지지 않았다 —
 // 한 번 설치한 사람은 무엇을 머지하든 영영 v0.8.0을 보고 있었다.
 // 두 군데에 적는 값은 반드시 어긋난다. 그래서 한 군데로 합쳤다.
-var GAME_VERSION = 'v0.15.1';
+var GAME_VERSION = 'v0.16.0';
 if (typeof self !== 'undefined') self.GAME_VERSION = GAME_VERSION;

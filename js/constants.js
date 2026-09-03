@@ -8,15 +8,29 @@
 const GIVE_UP_GEM_MULT = 0.6;
 
 // ─── Canvas / Layout ────────────────────────────────────────────────────────
+// 폭은 480으로 고정한다 — 격자·패널·버튼이 전부 이 폭을 전제로 짜여 있고,
+// 폭까지 흔들면 화면마다 배치를 다시 재야 한다.
+//
+// 세로만 기기 비율에 맞춘다(v0.16.0). 예전에는 800으로 고정이라, 세로로 긴 폰에서는
+// 위아래로 검은 띠가 남고 짧은 폰에서는 통째로 축소돼 글씨가 작아졌다.
+// 늘어난 세로는 전부 **아레나**가 가져간다 — 상단은 9×7 격자라 늘릴 자리가 없고,
+// 아래쪽 전투는 넓을수록 잘 보인다.
 const CW = 480;
-const CH = 800;
+const CH_BASE = 800;              // 기준값 — 저장된 수치·밸런스는 전부 이 높이 기준이다
+// 하한은 기준값 그대로다 — **늘리기만 하고 줄이지는 않는다.**
+// 처음엔 720까지 내렸는데, 아이패드(3:4)처럼 납작한 화면에서 아레나가 322 → 242로
+// 오히려 좁아졌다. 화면을 꽉 채우려다 놀 자리를 뺏는 셈이라 하한을 기준으로 올렸다.
+// 납작한 기기는 예전처럼 좌우에 여백이 남고, 세로로 긴 기기만 아레나를 더 받는다.
+const CH_MIN  = CH_BASE;
+const CH_MAX  = 1040;             // 이보다 길면 상단이 화면 위쪽에 외따로 떨어진다
+let   CH = CH_BASE;
 
 const DEFENSE_Y  = 0;
 const DEFENSE_H  = 355;
 const UIBAR_Y    = 355;
 const UIBAR_H    = 55;
 const BATTLE_Y   = 410;
-const BATTLE_H   = 390;
+let   BATTLE_H   = CH - BATTLE_Y;
 
 // ─── Defense Grid ────────────────────────────────────────────────────────────
 const GRID_COLS = 9;
@@ -857,7 +871,20 @@ const BRIEF_CTRL_H   = 38;
 const ARENA_X = 0;
 const ARENA_Y = BATTLE_Y + ARENA_STATUS_H;
 const ARENA_W = CW;
-const ARENA_H = BATTLE_H - ARENA_STATUS_H - ARENA_CTRL_H;   // 330
+let   ARENA_H = BATTLE_H - ARENA_STATUS_H - ARENA_CTRL_H;   // 기준 높이에서 330
+
+// 화면 비율에 맞춰 세로를 다시 잡는다. 폭(480)에 맞춰 늘렸을 때 세로로 몇이 필요한지
+// 계산하고, 그 값을 상하한 안에 가둔다. 파생값 둘도 여기서 같이 고쳐야 한다 —
+// 한 군데서만 고치면 아레나 바닥과 실제 경계가 어긋난다.
+function applyViewportHeight(vpW, vpH) {
+  const want = (vpW > 0 && vpH > 0) ? Math.round(CW * (vpH / vpW)) : CH_BASE;
+  const next = Math.max(CH_MIN, Math.min(CH_MAX, want));
+  if (next === CH) return false;
+  CH        = next;
+  BATTLE_H  = CH - BATTLE_Y;
+  ARENA_H   = BATTLE_H - ARENA_STATUS_H - ARENA_CTRL_H;
+  return true;
+}
 
 // ── 개체 몸집 ────────────────────────────────────────────────────────────────
 // 아군 반지름이 7.5px였다. 이모지는 그 크기에서도 실루엣이 읽히지만 그림은 안 읽힌다 —

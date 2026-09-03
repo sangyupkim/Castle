@@ -1406,6 +1406,8 @@ function renderBriefing(ctx, gs, top) {
 // 아레나 바닥 타일 — 상단 밭 타일을 32px 격자로 깔고 어둡게 덮는다
 const ARENA_TILE = 40;
 let _arenaFloor = null;
+// 화면 세로가 바뀌면 아레나 크기가 바뀐다 — 구워 둔 바닥을 버려야 한다
+function invalidateArenaFloor() { _arenaFloor = null; }
 // 바닥은 변하지 않는다. 매 프레임 108장을 다시 깔 이유가 없어서 한 번 구워 둔다.
 function arenaFloorCanvas() {
   if (_arenaFloor !== null) return _arenaFloor;
