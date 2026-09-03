@@ -224,9 +224,19 @@ function newState() {
   };
 }
 
-let gs  = newState();
-const wm  = createWaveManager();
-const tut = createTutorial();
+// var로 선언한다 — let/const가 아니다.
+//
+// 다른 파일 서른 곳이 `typeof gs !== 'undefined'`로 이 셋을 가드한다. 그런데
+// let/const로 선언된 이름은 초기화 **전** 구간(TDZ)에서 typeof조차 ReferenceError를
+// 던진다. 가드가 막아 주는 것처럼 보이지만 실제로는 그 자리에서 스크립트가 죽는다.
+// v0.16.0에서 resize()가 이 줄보다 먼저 도는 바람에 실제로 그렇게 죽었다 —
+// 화면이 통째로 검게 나왔고, 개발 해상도(480×800)에서만 우연히 안 터졌다.
+//
+// var는 호이스팅되어 초기화 전에도 typeof가 'undefined'를 돌려준다. 그래야 가드가
+// 실제로 가드가 된다. 셋 다 이 파일에서만 대입하므로 var로 낮춰도 잃는 것이 없다.
+var gs  = newState();
+var wm  = createWaveManager();
+var tut = createTutorial();
 // 🧭 첫걸음 안내 — 글이 아니라 손가락. 눌러야 할 버튼을 짚고, 할 때까지 기다린다.
 const guide = createGuide();
 
