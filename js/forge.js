@@ -129,7 +129,13 @@ function promoteTowerWithCore(gs, t) {
 // 숙련도를 걸고 굴린다. 5의 배수는 체크포인트라 실패해도 거기서 멈춘다.
 const TEMPER_CHECKPOINT = 5;
 const TEMPER_MAX        = 40;
-const TEMPER_GAIN       = 0.02;      // 숙련도 1당 타워·병력 공격력 +2%
+// 숙련도 1당 타워·병력 공격력. 2%는 값에 비해 너무 얇았다 —
+// 40단을 다 채워도 +80%인데, 그 40번을 굴리려면 실패까지 합쳐 백 번 가까이 누른다.
+// 파괴(체크포인트 회귀)가 있는 굴림은 성공했을 때 눈에 보여야 다시 누를 마음이 든다.
+const TEMPER_GAIN       = 0.03;      // 숙련도 1당 +3% (40단 = +120%)
+// 체크포인트를 새로 넘을 때마다 한 번씩 더 주는 몫. 5·10·15…에 닿는 것이
+// 그 자체로 사건이 되게 한다.
+const TEMPER_STEP_BONUS = 0.05;
 
 function temperCost(gs) {
   const m = forgeState(gs).mastery;
@@ -137,9 +143,15 @@ function temperCost(gs) {
 }
 function temperOdds(gs) {
   const m = forgeState(gs).mastery;
-  // 체크포인트 직후는 후하고, 다음 체크포인트에 가까워질수록 인색해진다
+  // 체크포인트 직후는 후하고, 다음 체크포인트에 가까워질수록 인색해진다.
+  //
+  // 예전 곡선(0.80 − within×0.12)은 체크포인트 하나를 넘는 것 자체가 4.3%였다.
+  // 실패하면 체크포인트로 되돌아가므로 다섯 번을 연달아 성공해야 하는데,
+  // 마지막 한 칸의 확률이 32%였다. 자동으로 60번을 굴려도 2단에서 멈췄다 —
+  // 안전지대를 둔 이유가 "여기까지는 지킨다"인데, 그 여기까지에 닿지를 못했다.
+  // 칸마다의 하락폭을 절반으로 줄여 한 구간(다섯 칸)을 넘을 확률을 16% 남짓으로 뒀다.
   const within = m % TEMPER_CHECKPOINT;
-  return Math.max(0.22, 0.80 - within * 0.12 - Math.floor(m / TEMPER_CHECKPOINT) * 0.035);
+  return Math.max(0.35, 0.82 - within * 0.06 - Math.floor(m / TEMPER_CHECKPOINT) * 0.03);
 }
 function temperFloor(gs) {
   return Math.floor(forgeState(gs).mastery / TEMPER_CHECKPOINT) * TEMPER_CHECKPOINT;
@@ -158,15 +170,44 @@ function temperForge(gs) {
   return { ok:win, before, after:f.mastery, cost };
 }
 
+// 🔁 자동 담금질 — 한 번씩 누르는 것이 손가락 운동이 되지 않게.
+// 다음 체크포인트까지, 혹은 골드가 떨어질 때까지 알아서 굴린다.
+// 체크포인트에서 멈추는 이유는 그 너머가 '잃을 수 있는 구간'이기 때문이다 —
+// 안전한 데까지만 자동으로 밀어 주고, 걸고 굴리는 결정은 손에 남긴다.
+const TEMPER_AUTO_MAX_ROLLS = 90;    // 한 번 눌러서 도는 최대 굴림 수
+function temperAuto(gs) {
+  const f = forgeState(gs);
+  const start = f.mastery;
+  const target = Math.min(TEMPER_MAX,
+    (Math.floor(start / TEMPER_CHECKPOINT) + 1) * TEMPER_CHECKPOINT);
+  let rolls = 0, spent = 0, fails = 0;
+  while (f.mastery < target && rolls < TEMPER_AUTO_MAX_ROLLS) {
+    const cost = temperCost(gs);
+    if ((gs.gold || 0) < cost) break;
+    const r = temperForge(gs);
+    if (!r) break;
+    rolls++; spent += r.cost;
+    if (!r.ok) fails++;
+  }
+  return { rolls, spent, fails, before:start, after:f.mastery,
+           reached: f.mastery >= target, target };
+}
+
 // ── 보너스 적용 ──────────────────────────────────────────────────────────────
 // reapplyAllBonuses가 매번 부른다.
 function applyForge(gs) {
   const f = forgeState(gs);
   if (f.mastery > 0) {
-    const m = 1 + f.mastery * TEMPER_GAIN;
+    const steps = Math.floor(f.mastery / TEMPER_CHECKPOINT);
+    const m = 1 + f.mastery * TEMPER_GAIN + steps * TEMPER_STEP_BONUS;
     BONUSES.towerDmgMult *= m;
     BONUSES.unitAtkMult  *= m;
   }
+}
+// 지금 숙련도가 주는 배율 — 화면에 그대로 적는다
+function temperMult(gs) {
+  const m = forgeState(gs).mastery;
+  return 1 + m * TEMPER_GAIN + Math.floor(m / TEMPER_CHECKPOINT) * TEMPER_STEP_BONUS;
 }
 
 // 합성으로 열린 타워 최고 레벨

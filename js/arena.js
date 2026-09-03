@@ -270,6 +270,10 @@ function updateArena(gs, dt) {
   a.mobs = a.mobs.filter(m => !m.dead || m.deadTimer < 0.5);
 
   // 영웅 재생
+  if (BONUSES.heroRegenPct > 0) {
+    const h = gs.battle.ourTeam.find(u => u.isHero && !u.dead);
+    if (h) h.hp = Math.min(h.maxHp, h.hp + h.maxHp * BONUSES.heroRegenPct * dt);
+  }
   if (BONUSES.heroRegen > 0) {
     const h = allies.find(u => u.isHero);
     if (h) h.hp = Math.min(h.maxHp, h.hp + BONUSES.heroRegen * dt);
@@ -928,6 +932,10 @@ function hurtMob(gs, m, dmg, color, fromRanged) {
     if (typeof FX !== 'undefined') { FX.ring(m.x, m.y, '#fbbf24', 22); FX.shake(5, 0.3); }
   }
   // 처치 회복도 전반적으로 눌렀다 — 잡기만 하면 차오르면 자연 회복을 없앤 뜻이 없다
+  if (BONUSES.killHealPct > 0) {
+    for (const u of gs.battle.ourTeam)
+      if (!u.dead) u.hp = Math.min(u.maxHp, u.hp + u.maxHp * BONUSES.killHealPct);
+  }
   if (BONUSES.killHeal > 0) {
     for (const u of gs.battle.ourTeam) {
       if (!u.dead) u.hp = Math.min(u.maxHp, u.hp + BONUSES.killHeal);
@@ -985,7 +993,11 @@ function applyDeathAffixes(gs, m) {
 function hurtAlly(gs, u, dmg, color) {
   if (u.dead) return;
   if (isHidden(u)) return;   // 🗡️ 은신 중에는 맞지 않는다
-  let remain = Math.max(1, Math.round(dmg * arenaBuff(gs, 'guard')));   // 🛡️ 수호
+  // 비율 방어 — 정액 방어(def)가 뺄셈으로 먼저 걸리고, 남은 피해에 이 비율이 곱해진다.
+  // 상한을 두는 이유는 기지 피해 감소와 같다: 100%에 닿으면 그 뒤로는 아무것도
+  // 위험하지 않아서 판이 끝난다.
+  const dpct = Math.min(UNIT_DEF_PCT_CAP, Math.max(0, BONUSES.unitDefPct || 0));
+  let remain = Math.max(1, Math.round(dmg * arenaBuff(gs, 'guard') * (1 - dpct)));   // 🛡️ 수호
   if (dmg <= 0) remain = 0;
   if (u.shield > 0) {
     const absorbed = Math.min(u.shield, remain);

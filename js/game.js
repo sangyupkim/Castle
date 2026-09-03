@@ -1502,6 +1502,16 @@ function handleForgeTap(x, y) {
     else      { SFX.denied(); FX.shake(5,0.35); say(`🎲 실패 — 숙련도 ${r.before} → ${r.after}`, '#ef4444'); }
     return true;
   }
+  if (hitTest(x,y,gs.ui.forgeTemperAutoBtn||{})) {
+    const r = temperAuto(gs);
+    if (!r || !r.rolls) { SFX.denied(); say(`💰 ${temperCost(gs)} 부족`, '#ef4444'); return true; }
+    SaveManager.save(gs);
+    if (r.reached) { SFX.levelUp();
+      say(`🔁 ${r.before} → ${r.after}단 · ${r.rolls}번 굴려 💰${r.spent}`, '#a3e635'); }
+    else { SFX.denied(); FX.shake(4,0.3);
+      say(`🔁 ${r.before} → ${r.after}단 · 골드가 떨어졌습니다 (💰${r.spent})`, '#f59e0b'); }
+    return true;
+  }
   return false;
 }
 
@@ -2237,6 +2247,9 @@ function update(dt) {
   }
 
   // 기지 재생
+  if (BONUSES.baseRegenPct > 0) {
+    gs.baseHP = Math.min(baseHpMax(), gs.baseHP + baseHpMax() * BONUSES.baseRegenPct * dt);
+  }
   if (BONUSES.baseRegen > 0) {
     gs.baseHP = Math.min(baseHpMax(), gs.baseHP + BONUSES.baseRegen * dt);
   }

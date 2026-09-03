@@ -4296,11 +4296,11 @@ function renderForgeScreen(ctx, gs) {
   });
 
   // 시설 탭은 일반 건물 화면(트랙 목록)을 그대로 쓴다
-  if (cur === 'track') { gs.ui.forgeGearBtns=null; gs.ui.forgeFuseBtns=null; gs.ui.forgeTemperBtn=null;
+  if (cur === 'track') { gs.ui.forgeGearBtns=null; gs.ui.forgeFuseBtns=null; gs.ui.forgeTemperBtn=null; gs.ui.forgeTemperAutoBtn=null;
                          _renderForgeTracks(ctx, gs, tabY+th+8); return; }
 
   const top = tabY+th+10;
-  gs.ui.forgeGearBtns=null; gs.ui.forgeFuseBtns=null; gs.ui.forgeTemperBtn=null; gs.ui.forgeCoreBtn=null;
+  gs.ui.forgeGearBtns=null; gs.ui.forgeFuseBtns=null; gs.ui.forgeTemperBtn=null; gs.ui.forgeTemperAutoBtn=null; gs.ui.forgeCoreBtn=null;
   if      (cur==='gear')   _renderForgeGear(ctx, gs, top);
   else if (cur==='fuse')   _renderForgeFuse(ctx, gs, top);
   else                     _renderForgeTemper(ctx, gs, top);
@@ -4423,7 +4423,8 @@ function _renderForgeTemper(ctx, gs, y) {
   ctx.fillStyle='#fdba74'; ctx.font='bold 26px sans-serif';
   ctx.fillText(`숙련도 ${m}`, CW/2, y+26);
   ctx.fillStyle='#cbd5e1'; ctx.font='bold 11px sans-serif';
-  ctx.fillText(`타워 공격력 +${Math.round(m*TEMPER_GAIN*100)}%  ·  아군 공격력 +${Math.round(m*TEMPER_GAIN*100)}%`, CW/2, y+52);
+  const tpc = Math.round((temperMult(gs) - 1) * 100);
+  ctx.fillText(`타워 공격력 +${tpc}%  ·  아군 공격력 +${tpc}%`, CW/2, y+52);
   ctx.fillStyle='#64748b'; ctx.font='9px sans-serif';
   ctx.fillText(`실패 시 되돌아갈 지점 ${floorLv}  ·  ${TEMPER_CHECKPOINT}단위마다 체크포인트`, CW/2, y+70);
   y += 96;
@@ -4452,6 +4453,23 @@ function _renderForgeTemper(ctx, gs, y) {
     ctx.font='bold 10px sans-serif';
     ctx.fillText(`성공 확률 ${Math.round(odds*100)}%`, CW/2, by+bh/2+12);
     gs.ui.forgeTemperBtn={x:12,y:by,w:CW-24,h:bh};
+  }
+  y += bh + 8;
+
+  // 🔁 자동 — 다음 체크포인트까지, 혹은 골드가 떨어질 때까지
+  if (!maxed) {
+    const nextCp = Math.min(TEMPER_MAX,
+      (Math.floor(m / TEMPER_CHECKPOINT) + 1) * TEMPER_CHECKPOINT);
+    const ah = 34;
+    const canA = gs.gold >= cost;
+    uiPanel(ctx, 12, y, CW-24, ah, 8, canA?'#131c10':'#12161f', canA?'#65a30d':'#293040', 1.5);
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle=canA?'#a3e635':'#475569'; ctx.font='bold 12px sans-serif';
+    ctx.fillText(`🔁 자동 — ${nextCp}단까지 굴리기`, CW/2, y+ah/2-6);
+    ctx.fillStyle='#64748b'; ctx.font='9px sans-serif';
+    ctx.fillText('골드가 떨어지면 멈춥니다 · 체크포인트에서 끊습니다', CW/2, y+ah/2+9);
+    if (canA) gs.ui.forgeTemperAutoBtn={x:12,y,w:CW-24,h:ah};
+    y += ah + 6;
   }
   ctx.textAlign='left'; ctx.textBaseline='top';
 }

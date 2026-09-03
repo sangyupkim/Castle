@@ -10,6 +10,15 @@ function createDefaultBonuses() {
     cardHandBonus: 0,         // 🔮 유물 — 카드 선택지가 늘어난다
     // 유닛
     unitAtk: 0, unitHp: 0, unitDef: 0, unitAtkMult: 1.0, unitHpMult: 1.0,
+    // ── 깊이를 타는 값들 ──
+    // 정액 강화는 층이 깊어지면 없는 것과 같아진다. 30층 몹이 300으로 때리는데
+    // 방어 +24는 8%고, 60층에서는 1%다. 영구 성장이 초반에만 보이고 본편에서
+    // 사라지면 "무엇을 올려도 똑같다"가 된다. 그래서 비율로 세는 칸을 따로 뒀다.
+    unitDefPct: 0,      // 아군이 받는 피해 감소 (합산, 상한 있음)
+    killHealPct: 0,     // 처치 시 최대 HP의 이 비율만큼 회복
+    heroRegenPct: 0,    // 영웅 최대 HP의 이 비율/초
+    baseRegenPct: 0,    // 기지 최대 HP의 이 비율/초
+    towerPiercePct: 0,  // 적 방어를 이 비율만큼 무시
     hireCostDiscount: 0, hireCostPct: 0, maxSlotBonus: 0,
     killHeal: 0, comboChance: 0, critChance: 0,
     healBonus: 0, shieldBonus: 0, mpRegenBonus: 0, heroMpMax: 0, restHealBonus: 0,
@@ -254,9 +263,13 @@ const UPGRADE_CARDS = [
   { id:'c_deep',    name:'갱도 개방',     desc:'처치 골드 +120%',       bane:'몬스터 능력 +35%',
     grade:'epic', icon:'⛏️', cat:'cave',
     apply: b => { b.mobGoldMult += 1.20; b.mobStatMult += 0.35; } },
-  { id:'c_swarm',   name:'벌집 건드리기', desc:'보석 +60% · 정예 등장 +30%', bane:'아레나 스폰 간격 -35%',
+  // 보석 +60%는 에픽 한 장이 전설(엘도라도 +50%)을 넘어서는 값이었다. 보석은
+  // 영구 성장 전부를 사는 화폐라 한 판의 카드 한 장이 다음 판들의 출발선을 옮긴다 —
+  // 그 크기가 '이번 판을 어떻게 풀까'가 아니라 '이 카드가 떴나'로 판을 가른다.
+  // 에픽다운 폭(+25%)으로 낮추고, 대신 그 자리에서 바로 벌리는 쪽(정예)을 키웠다.
+  { id:'c_swarm',   name:'벌집 건드리기', desc:'보석 +25% · 정예 등장 +40%', bane:'아레나 스폰 간격 -35%',
     grade:'epic', icon:'🐝', cat:'cave',
-    apply: b => { b.gemMult *= 1.60; b.eliteChance += 0.30; b.pactSpawnMult *= 0.65; } },
+    apply: b => { b.gemMult *= 1.25; b.eliteChance += 0.40; b.pactSpawnMult *= 0.65; } },
   // ✦ 전설
   { id:'c_eldorado',name:'엘도라도',      desc:'처치 보상 ×2 · 층당 보석 +50%', grade:'legend', icon:'🌟', cat:'cave',
     apply: b => { b.battleGoldMult *= 2.0; b.defenseGoldMult *= 2.0; b.gemMult *= 1.50; } },
@@ -350,7 +363,7 @@ const SKILL_TREES = {
       { id:'tw_s5', name:'저격 조준', icon:'👁️', cost:2, row:2, col:0,
         desc:v=>`타워 사거리 +${skpct(v*0.035)}`,      apply:(b,v)=>{ b.towerRangeMult *= 1 + v*0.035; } },
       { id:'tw_s6', name:'관통탄',    icon:'🔩', cost:2, row:2, col:1,
-        desc:v=>`적 방어 무시 +${Math.round(v)}`,    apply:(b,v)=>{ b.towerPierce += Math.round(v); } },
+        desc:v=>`적 방어 ${skpct(v*0.03)} 무시`,     apply:(b,v)=>{ b.towerPiercePct += v*0.03; } },
       { id:'tw_s7', name:'연사 기계', icon:'⚙️', cost:2, row:2, col:2,
         desc:v=>`타워 공격속도 +${skpct(v*0.05)}`,     apply:(b,v)=>{ b.towerSpdMult *= 1 + v*0.05; } },
       { id:'tw_s8', name:'폭발 화살', icon:'💥', cost:3, row:3, col:0,
@@ -365,11 +378,11 @@ const SKILL_TREES = {
     name: '병력', icon: '⚔️', color: '#f97316',
     skills: [
       { id:'un_s1', name:'기초 훈련', icon:'⚔️', cost:1, row:0, col:1,
-        desc:v=>`아군 공격력 +${Math.round(v*2)}`,   apply:(b,v)=>{ b.unitAtk += v*2; } },
+        desc:v=>`아군 공격력 +${skpct(v*0.05)}`,      apply:(b,v)=>{ b.unitAtkMult *= 1 + v*0.05; } },
       { id:'un_s2', name:'체력 단련', icon:'💪', cost:1, row:1, col:0,
-        desc:v=>`아군 HP +${Math.round(v*10)}`,       apply:(b,v)=>{ b.unitHp += v*10; } },
+        desc:v=>`아군 HP +${skpct(v*0.05)}`,          apply:(b,v)=>{ b.unitHpMult *= 1 + v*0.05; } },
       { id:'un_s3', name:'방어 훈련', icon:'🛡️', cost:1, row:1, col:1,
-        desc:v=>`아군 방어력 +${Math.round(v)}`,      apply:(b,v)=>{ b.unitDef += Math.round(v); } },
+        desc:v=>`받는 피해 -${skpct(v*0.02)}`,        apply:(b,v)=>{ b.unitDefPct += v*0.02; } },
       { id:'un_s4', name:'속공',      icon:'🌀', cost:1, row:1, col:2,
         desc:v=>`아군 공격속도 +${skpct(v*0.03)}`,      apply:(b,v)=>{ b.unitAtkSpdMult *= 1 + v*0.03; } },
       { id:'un_s5', name:'급소 교본', icon:'💥', cost:2, row:2, col:0,
@@ -377,10 +390,10 @@ const SKILL_TREES = {
       { id:'un_s6', name:'연계 공격', icon:'🔗', cost:2, row:2, col:1,
         desc:v=>`추가 타격 확률 +${skpct(v*0.025)}`,    apply:(b,v)=>{ b.comboChance += v*0.025; } },
       { id:'un_s7', name:'전장 치유', icon:'💚', cost:2, row:2, col:2,
-        desc:v=>`처치 시 아군 회복 +${(v*0.8).toFixed(1)}`, apply:(b,v)=>{ b.killHeal += v*0.8; } },
+        desc:v=>`처치 시 최대 HP의 ${skpct(v*0.006)} 회복`, apply:(b,v)=>{ b.killHealPct += v*0.006; } },
       { id:'un_s8', name:'정예 부대', icon:'🔥', cost:3, row:3, col:0,
-        desc:v=>`아군 공격력 +${Math.round(v*3)} · HP +${Math.round(v*14)}`,
-        apply:(b,v)=>{ b.unitAtk += v*3; b.unitHp += v*14; } },
+        desc:v=>`아군 공격력 +${skpct(v*0.06)} · HP +${skpct(v*0.07)}`,
+        apply:(b,v)=>{ b.unitAtkMult *= 1 + v*0.06; b.unitHpMult *= 1 + v*0.07; } },
       { id:'un_s9', name:'대열 확장', icon:'➕', cost:3, row:3, col:1, maxLv:4,
         desc:v=>`편성 슬롯 +${Math.round(v)}`,        apply:(b,v)=>{ b.maxSlotBonus += Math.round(v); } },
     ]
@@ -390,15 +403,15 @@ const SKILL_TREES = {
     name: '영웅', icon: '👑', color: '#f59e0b',
     skills: [
       { id:'hr_s1', name:'영웅 훈련', icon:'⚔️', cost:1, row:0, col:1,
-        desc:v=>`영웅 공격력 +${Math.round(v*3)}`,    apply:(b,v)=>{ b.heroAtk += v*3; } },
+        desc:v=>`영웅 공격력 +${skpct(v*0.05)}`,      apply:(b,v)=>{ b.sigilHeroAtkMult *= 1 + v*0.05; } },
       { id:'hr_s2', name:'투사',      icon:'🗡️', cost:1, row:1, col:0,
         desc:v=>`영웅 전체 능력 +${skpct(v*0.03)}`,     apply:(b,v)=>{ b.heroStatMult *= 1 + v*0.03; } },
       { id:'hr_s3', name:'재생',      icon:'💚', cost:1, row:1, col:1,
-        desc:v=>`영웅 재생 +${(v*0.5).toFixed(1)}/s`,   apply:(b,v)=>{ b.heroRegen += v*0.5; } },
+        desc:v=>`영웅 재생 최대 HP의 ${skpct(v*0.004)}/s`, apply:(b,v)=>{ b.heroRegenPct += v*0.004; } },
       { id:'hr_s4', name:'경험 축적', icon:'📖', cost:1, row:1, col:2,
         desc:v=>`영웅 EXP +${skpct(v*0.08)}`,           apply:(b,v)=>{ b.heroExpMult *= 1 + v*0.08; } },
       { id:'hr_s5', name:'지휘 오라', icon:'🎖️', cost:2, row:2, col:0,
-        desc:v=>`아군 방어 오라 +${Math.round(v)}`,    apply:(b,v)=>{ b.heroAura += Math.round(v); } },
+        desc:v=>`부대가 받는 피해 -${skpct(v*0.015)}`,  apply:(b,v)=>{ b.unitDefPct += v*0.015; } },
       { id:'hr_s6', name:'각인 증폭', icon:'✨', cost:2, row:2, col:1,
         desc:v=>`영웅 스킬 피해 +${skpct(v*0.05)}`,      apply:(b,v)=>{ b.heroSkillMult *= 1 + v*0.05; } },
       { id:'hr_s7', name:'질풍',      icon:'🌀', cost:2, row:2, col:2,
@@ -418,11 +431,11 @@ const SKILL_TREES = {
     name: '기지', icon: '🏰', color: '#60a5fa',
     skills: [
       { id:'bs_s1', name:'성벽 증축', icon:'🏰', cost:1, row:0, col:1,
-        desc:v=>`기지 최대 HP +${Math.round(v*12)}`,  apply:(b,v)=>{ b.baseHpMax += v*12; } },
+        desc:v=>`기지 최대 HP +${skpct(v*0.05)}`,     apply:(b,v)=>{ b.baseHpMax += BASE_HP_MAX * v*0.05; } },
       { id:'bs_s2', name:'철갑',      icon:'🛡️', cost:1, row:1, col:0, maxLv:8,
         desc:v=>`기지 피해 -${skpct(v*0.04)}`,          apply:(b,v)=>{ b.baseDefPct += v*0.04; } },
       { id:'bs_s3', name:'자가 수복', icon:'🔧', cost:1, row:1, col:1,
-        desc:v=>`기지 재생 +${(v*0.15).toFixed(1)}/s`, apply:(b,v)=>{ b.baseRegen += v*0.15; } },
+        desc:v=>`기지 재생 최대 HP의 ${skpct(v*0.0012)}/s`, apply:(b,v)=>{ b.baseRegenPct += v*0.0012; } },
       { id:'bs_s4', name:'보급 창고', icon:'📦', cost:1, row:1, col:2,
         desc:v=>`시작 골드 +${Math.round(v*8)}`,       apply:(b,v)=>{ b.startGoldBonus += v*8; } },
       { id:'bs_s5', name:'황금 광맥', icon:'💰', cost:2, row:2, col:0,
@@ -433,8 +446,8 @@ const SKILL_TREES = {
         desc:v=>`고용비 -${Math.round(v)} · 타워 건설비 -${Math.round(v*0.5)}`,
         apply:(b,v)=>{ b.hireCostDiscount += Math.round(v); b.towerCostDiscount += Math.round(v*0.5); } },
       { id:'bs_s8', name:'난공불락', icon:'🏯', cost:3, row:3, col:0,
-        desc:v=>`기지 최대 HP +${Math.round(v*18)} · 재생 +${(v*0.2).toFixed(1)}/s`,
-        apply:(b,v)=>{ b.baseHpMax += v*18; b.baseRegen += v*0.2; } },
+        desc:v=>`기지 최대 HP +${skpct(v*0.07)} · 재생 ${skpct(v*0.0016)}/s`,
+        apply:(b,v)=>{ b.baseHpMax += BASE_HP_MAX * v*0.07; b.baseRegenPct += v*0.0016; } },
       { id:'bs_s9', name:'전시 경제', icon:'🏦', cost:3, row:3, col:1,
         desc:v=>`전투 골드 +${skpct(v*0.06)} · 시작 골드 +${Math.round(v*10)}`,
         apply:(b,v)=>{ b.battleGoldMult *= 1 + v*0.06; b.startGoldBonus += v*10; } },
@@ -594,10 +607,18 @@ function applyUpgradeCard(card, gs) {
 }
 
 // 편성 슬롯 — 네 군데에서 제각기 계산하고 있었고 그중 둘만 층 이벤트를 반영했다
+// ⚔️ 병영 레벨 두 단마다 편성 칸 하나. 기본 4칸에서 Lv.10이면 +5.
+// 보석 트랙 하나로만 늘리던 시절엔 값이 가팔라 대부분 6칸에서 멈췄고,
+// 판이 깊어져도 편성 화면이 그대로였다.
+function barracksSlotBonus(gs) {
+  const lv = (typeof townBuildingLevel === 'function') ? townBuildingLevel(gs, 'barracks') : 0;
+  return Math.floor(lv / 2);
+}
 function recalcMaxSlots(gs) {
   if (!gs || !gs.battle) return;
+  const base = 4 + barracksSlotBonus(gs) + BONUSES.maxSlotBonus;
   gs.battle.maxSlots = Math.max(1,
-    Math.floor((4 + BONUSES.maxSlotBonus) * (BONUSES.pactSlotMult || 1)) + fev('slotBonus', 0));
+    Math.floor(base * (BONUSES.pactSlotMult || 1)) + fev('slotBonus', 0));
 }
 
 // 슬롯이 줄었는데 이미 그보다 많이 데리고 있으면 넘치는 만큼 돌려보낸다.

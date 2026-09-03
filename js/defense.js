@@ -237,7 +237,10 @@ function defDamage(enemy, dmg, pierceArmor, affinity, pierce) {
   const corroded = (enemy.corrodeUntil || 0) > 0;
   const base = dmg * (affinity === undefined ? 1 : affinity) * (corroded ? 1 + enemy.corrodeAmt : 1);
   if (pierceArmor || corroded) return Math.max(1, Math.round(base));
-  const armor = Math.max(0, (enemy.armor || 0) - (pierce || 0));
+  // 관통은 두 겹이다. 비율(towerPiercePct)이 먼저 방어력을 깎고, 그 뒤에 정액이 빠진다.
+  // 정액만 있던 시절엔 60층 몹 방어력이 세 자리라 '방어 12 무시'가 사실상 0이었다.
+  const pct   = Math.min(0.90, Math.max(0, BONUSES.towerPiercePct || 0));
+  const armor = Math.max(0, (enemy.armor || 0) * (1 - pct) - (pierce || 0));
   return Math.max(1, Math.round(base - armor));
 }
 

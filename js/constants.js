@@ -1150,9 +1150,13 @@ function rollInnOffers(innLv) {
   }
   return out;
 }
-// 특수 용병 전용 슬롯 — 일반 편성 슬롯과 따로 센다
+// 특수 용병 전용 슬롯 — 일반 편성 슬롯과 따로 센다.
+// 🏨 여관 레벨 두 단마다 한 칸. 예전에는 보석 트랙 하나에만 매달려 있어서
+// 여관을 Lv.10까지 올려도 자리가 늘지 않았다 — 건물을 올린 보람이 없었다.
 function specialSlotMax() {
-  return 1 + (BONUSES.specialSlotBonus || 0);
+  const lv = (typeof townBuildingLevel === 'function' && typeof gs !== 'undefined')
+    ? townBuildingLevel(gs, 'inn') : 0;
+  return 1 + Math.floor(lv / 2) + (BONUSES.specialSlotBonus || 0);
 }
 // 일반 용병과 특수 용병을 한 표에서 찾을 수 있게 합쳐 둔다
 Object.assign(UNIT_TYPES, SPECIAL_UNIT_TYPES);
@@ -1290,6 +1294,9 @@ function clearRepair(waveIndex) {
 // 이제 어느 갈래를 얼마나 쌓든 **절반 아래로는 내려가지 않는다.**
 const BASE_DEF_PCT_CAP   = 0.55;   // (개별 갈래 표시용으로만 남긴다)
 const BASE_DEF_TOTAL_CAP = 0.50;
+// 아군 비율 방어의 상한. 기지와 같은 이유로 둔다 — 100%에 닿으면 그 뒤로는
+// 아무것도 위험하지 않아서 판이 끝난다.
+const UNIT_DEF_PCT_CAP   = 0.50;
 // 웨이브가 끝나도 아직 걸어오던 적은 사라지지 않고 다음 웨이브로 넘어간다.
 // 상한은 성능과 가독성 때문이지, 밸런스 때문이 아니다.
 const CARRYOVER_MAX = 40;
