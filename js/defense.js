@@ -105,6 +105,9 @@ function towerStats(t) {
     splash:      sp.splash !== undefined ? sp.splash : (tpl.splash || 0),
     pierceArmor: sp.pierceArmor !== undefined ? !!sp.pierceArmor : !!tpl.pierceArmor,
     pierce:      (BONUSES.towerPierce || 0) + (sp.pierce || 0),
+    // 분기가 주는 **비율** 방어 관통. 정액(pierce)은 층이 깊어지면 의미가 없어진다 —
+    // 60층 몹 방어력이 두 자리인데 '+3 무시'는 반올림 오차다.
+    piercePct:   (sp.piercePct || 0),
     // ☠️ 독탑 — 장판 피해는 그 탑의 실효 공격력에 비례한다. 강화가 장판에도 붙는다.
     poolDps:     (tpl.poolDps || 0)    * (sp.poolDpsMult || 1),
     poolRadius:  (tpl.poolRadius || 0) * (sp.poolRadiusMult || 1),

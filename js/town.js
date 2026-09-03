@@ -171,15 +171,16 @@ const TOWN_BUILDINGS = [
         desc:v=>`용병 고용비 -${Math.round(v)}`,             apply:(b,v)=>{ b.hireCostDiscount += Math.round(v); } },
       { id:'u_crit', name:'급소 교본',  icon:'🎯', unlockLv:4, cost:51, costMult:1.2, step:0.018, growth:0.0267, maxLv:24,
         desc:v=>`치명타 확률 +${pct(v)}`,                    apply:(b,v)=>{ b.critChance += v; } },
-      // ➕ 편성 슬롯. 병영 레벨 자체도 두 단마다 한 칸을 주고(barracksSlotBonus),
-      // 이 트랙이 그 위에 얹는다.
+      // ➕ 편성 슬롯. **칸이 느는 길은 이 트랙 하나뿐이다.**
+      // 예전에는 병영 레벨 두 단마다 한 칸이 자동으로 붙었는데(barracksSlotBonus),
+      // 그러면 이걸 찍지 않아도 Lv.2·4에서 칸이 늘어나 트랙을 살 이유가 흐려진다.
       //
       // Lv.3에 열려 두 칸을 한꺼번에 살 수 있던 것을 Lv.5~8에 한 칸씩으로 미뤘다.
       // 셋째 층에 벌써 편성 칸을 살 수 있으면 병영에서 할 일이 그것뿐이 되고,
       // 두 칸을 그 자리에서 다 사고 나면 병영을 더 올릴 이유도 같이 사라진다.
       // perLevel이 한 단에 하나씩만 내주므로, 칸을 원하면 병영을 올려야 한다.
       { id:'u_slot', name:'병력 증원',  icon:'➕', unlockLv:4, cost:60, costMult:1.24, step:1,    growth:0,    maxLv:4, perLevel:true,
-        desc:v=>`편성 슬롯 +${Math.round(v)} (병영 레벨에 더해집니다)`,
+        desc:v=>`편성 슬롯 +${Math.round(v)}`,
         apply:(b,v)=>{ b.maxSlotBonus += Math.round(v); } },
       { id:'u_regen',name:'야전 의무',  icon:'🩹', unlockLv:3, cost:46, costMult:1.2, step:0.0018, growth:0.02, maxLv:24,
         desc:v=>`전투 이탈 회복 +${pct(v)}/s`,               apply:(b,v)=>{ b.regenBonus += v; } },

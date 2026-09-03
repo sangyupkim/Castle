@@ -658,14 +658,15 @@ function renderTower(ctx, t) {
   const key = towerSpriteKey(t.typeId, t.level);
   const ksz = key && Sprites.size(key);
   const br0 = towerBranchOf(t);
-  // 점유자 — ★5 분기를 골랐으면 그 분기 전용 얼굴, 아니면 종류 기본값.
-  // 두 겹으로 가른 값어치가 여기서 나온다: 18갈래에 18명이 붙는데 석대는 그대로다.
+  // 점유자 — **타워 종류로만** 정한다. 화살탑은 어느 분기든 같은 궁수다.
+  //
+  // 예전에는 분기마다 전용 얼굴을 붙였다(18갈래에 18명). 조합이 늘어 보기에는
+  // 좋았는데, 실제로는 같은 활타워인데 속사는 도둑, 관통은 궁수, 공성은
+  // 대형 기사가 서 있었다 — 판 위에서 같은 타워로 안 읽힌다.
+  // 분기는 석대에 걸리는 **분기색 깃발**로 구분한다(drawTowerKeep에 색을 넘긴다).
   // 넷씩 돌린다 — 칸마다 위상을 어긋나게 해서 마흔 기가 한 박자로 흔들리지 않게.
   const cf = (Math.floor(Date.now() / 160) + t.col * 3 + t.row * 5) % 4;
-  const crewKey = Sprites.pick(
-    br0 ? `crew.${br0.id}.${cf}` : `crew.${t.typeId}.${cf}`,
-    br0 ? `crew.${br0.id}.0`     : `crew.${t.typeId}.0`,
-    `crew.${t.typeId}.${cf}`, `crew.${t.typeId}.0`);
+  const crewKey = Sprites.pick(`crew.${t.typeId}.${cf}`, `crew.${t.typeId}.0`);
   if (crewKey) {
     // 👷 석대 + 사람
     const groundY = y + CELL_H/2 - 2;

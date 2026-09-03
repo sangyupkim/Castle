@@ -664,17 +664,16 @@ function applyUpgradeCard(card, gs) {
   refreshTeamStats(gs.battle);    // 이미 고용한 병력에도 즉시 적용
 }
 
-// 편성 슬롯 — 네 군데에서 제각기 계산하고 있었고 그중 둘만 층 이벤트를 반영했다
-// ⚔️ 병영 레벨 두 단마다 편성 칸 하나. 기본 4칸에서 Lv.10이면 +5.
-// 보석 트랙 하나로만 늘리던 시절엔 값이 가팔라 대부분 6칸에서 멈췄고,
-// 판이 깊어져도 편성 화면이 그대로였다.
-function barracksSlotBonus(gs) {
-  const lv = (typeof townBuildingLevel === 'function') ? townBuildingLevel(gs, 'barracks') : 0;
-  return Math.floor(lv / 2);
-}
+// 편성 슬롯 — 네 군데에서 제각기 계산하고 있었고 그중 둘만 층 이벤트를 반영했다.
+//
+// 한때 '병영 레벨 두 단마다 한 칸'을 자동으로 얹었다. 보석 트랙 하나로만
+// 늘리던 시절이 너무 가팔랐던 것에 대한 보정이었는데, 트랙을 Lv.5~8에 한 칸씩
+// 여는 방식으로 고친 뒤로는 **찍지도 않은 칸이 저절로 늘어나는** 상태가 됐다.
+// 병영을 2레벨로 올리기만 해도 칸이 하나 붙으니, ➕병력 증원을 사는 일이
+// 무엇을 위한 것인지가 흐려진다. 칸이 느는 길은 하나로 둔다.
 function recalcMaxSlots(gs) {
   if (!gs || !gs.battle) return;
-  const base = 4 + barracksSlotBonus(gs) + BONUSES.maxSlotBonus;
+  const base = 4 + BONUSES.maxSlotBonus;
   gs.battle.maxSlots = Math.max(1,
     Math.floor(base * (BONUSES.pactSlotMult || 1)) + fev('slotBonus', 0));
 }
