@@ -142,6 +142,10 @@ const CAMP_GROUPS = [
   { id:'branch',  icon:'🌟', short:'분기', label:'타워 분기', color:'#a78bfa' },
   { id:'unit',    icon:'⚔️', short:'용병', label:'용병',      color:'#f97316' },
   { id:'special', icon:'🏨', short:'특수', label:'특수 용병', color:'#f43f5e' },
+  // 🏺 유물은 굴려서 올리는 것이 아니라 보스에게서 얻어 **끼우는** 것이다.
+  // 단련과 성격이 다르지만 "판을 넘어 남는 것을 손보는 자리"라는 점은 같아서
+  // 탭을 새로 파지 않고 같은 화면의 한 무리로 뒀다.
+  { id:'relic',   icon:'🏺', short:'유물', label:'유물',      color:'#fbbf24' },
 ];
 
 function campState(gs) {
@@ -343,7 +347,7 @@ function toggleCardBan(gs, id) {
 
 // ── 뽑기에 쓰이는 값 ──
 // 한 번에 보여줄 장수 (층 이벤트 🎲풍요가 더 크면 그쪽을 쓴다)
-function cardHandSize(gs)   { return 3 + cardMetaLevel(gs, 'hand'); }
+function cardHandSize(gs)   { return 3 + cardMetaLevel(gs, 'hand') + (BONUSES.cardHandBonus || 0); }
 // 층마다 주어지는 공짜 리롤
 function cardFreeRerolls(gs){ return cardMetaLevel(gs, 'reroll'); }
 // 등급별 가중치 — 감정안은 희귀 이상 전체를, 예감은 전설만 밀어 올린다

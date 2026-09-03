@@ -101,8 +101,41 @@ const HERO_EQUIPMENT_POOL = [
   { id:'c_amulet',  name:'힘의 부적',     icon:'🔮', slot:'acc',    grade:'rare',   cost:52,  stats:{atk:11, crit:0.05} },
   { id:'c_cross',   name:'성스러운 십자가',icon:'✝️',slot:'acc',    grade:'rare',   cost:58,  stats:{hp:34, regen:2} },
   { id:'c_tome',    name:'현자의 서',     icon:'📕', slot:'acc',    grade:'epic',   cost:118, stats:{skill:0.30, exp:0.20} },
+
+  // ── ✦ 전설 ──
+  // 등급 표(GRADE_NAME)에는 전설이 있는데 물건이 하나도 없었다. 영웅 상점을
+  // 끝까지 올려도 살 것이 영웅 등급에서 멈추니, 건물을 올릴 이유가 중간에 끊겼다.
+  // 한 부위에 하나씩. 값은 영웅의 두 배쯤이고, 상점 레벨이 높아야 매대에 오른다.
+  { id:'w_worldend',name:'세계의 끝',     icon:'🌑', slot:'weapon', grade:'legend', cost:290, stats:{atk:62, crit:0.14, aspd:0.10} },
+  { id:'h_halo',    name:'성좌의 고리',   icon:'💫', slot:'helmet', grade:'legend', cost:260, stats:{hp:130, def:7, exp:0.30} },
+  { id:'a_aegis',   name:'불멸의 흉갑',   icon:'🜲', slot:'armor',  grade:'legend', cost:300, stats:{def:22, hp:150, regen:2.5} },
+  { id:'p_stride',  name:'천리보',        icon:'🌀', slot:'pants',  grade:'legend', cost:250, stats:{hp:120, def:11, aspd:0.14} },
+  { id:'b_void',    name:'공허의 발자국', icon:'🕳', slot:'boots',  grade:'legend', cost:270, stats:{aspd:0.42, range:0.35, hp:50} },
+  { id:'c_eye',     name:'심연의 눈',     icon:'👁', slot:'acc',    grade:'legend', cost:280, stats:{atk:24, skill:0.45, crit:0.10} },
 ];
+// 등급별 매대 등장 가중치와, 그 등급이 열리는 상점 레벨(화면상 Lv.)
+const GRADE_WEIGHT     = { common:34, rare:26, epic:12, legend:4 };
+const GRADE_SHOP_LEVEL = { common:1,  rare:1,  epic:3,  legend:6 };
 function equipDef(id) { return HERO_EQUIPMENT_POOL.find(e => e.id === id); }
+
+// 보관함에서 파는 값 — 산 값의 절반. 낀 것은 못 판다 (실수로 알몸이 되지 않게).
+const GEAR_SELL_PCT = 0.5;
+function gearSellValue(gs, uid) {
+  const e = invEntry(gs, uid); if (!e) return 0;
+  const d = equipDef(e.itemId); if (!d) return 0;
+  return Math.max(1, Math.round(d.cost * GEAR_SELL_PCT));
+}
+function sellGear(gs, uid) {
+  if (isEquipped(gs, uid)) return 0;
+  const v = gearSellValue(gs, uid);
+  if (!v) return 0;
+  const g = heroGear(gs);
+  const i = g.inventory.findIndex(e => e.uid === uid);
+  if (i < 0) return 0;
+  g.inventory.splice(i, 1);
+  gs.gold = (gs.gold || 0) + v;
+  return v;
+}
 
 // ── 🔮 영웅 스킬 ─────────────────────────────────────────────────────────────
 // 스킬은 굴림값(roll)을 함께 들고 다닌다. 같은 '광폭'이라도 0.72짜리와 1.34짜리는
@@ -201,6 +234,42 @@ const HERO_ACTIVE_POOL = [
     note:'마을 값이 오른 만큼 벌이도 필요하다' },
 ];
 function activeDef(id) { return HERO_ACTIVE_POOL.find(a => a.id === id); }
+
+// ── 각인 정합 ────────────────────────────────────────────────────────────────
+// 액티브 여덟 개가 각인과 무관하게 똑같이 돌았다. 그래서 각인은 아레나 스킬만
+// 바꾸고, 액티브는 늘 '센 것 두 개'가 정답이었다 — 고르는 자리가 하나 죽어 있었다.
+//
+// 잠그지는 않는다. 잠그면 각인을 바꾸는 순간 사둔 액티브가 쓰레기가 되고,
+// 그러면 각인을 안 바꾸게 된다. 대신 **맞는 각인이면 값이 싸고 빨리 돌아온다.**
+// 안 맞아도 쓸 수는 있으니 "이 조합으로 갈까"가 판단으로 남는다.
+const ACTIVE_FIT = {
+  a_overload: ['sorcerer', 'ranger'],   // 상단을 미는 것 — 멀리 보는 갈래
+  a_meteor:   ['sorcerer'],
+  a_bulwark:  ['warden'],
+  a_freeze:   ['sorcerer', 'warden'],
+  a_smite:    ['blade', 'ranger'],      // 한 마리를 지우는 것 — 단일 화력 갈래
+  a_mend:     ['warden'],
+  a_rally:    ['blade'],                // 모아서 한꺼번에 베는 것
+  a_plunder:  ['ranger', 'blade'],
+};
+const ACTIVE_FIT_MP = 0.70;   // 맞으면 MP 30% 싸고
+const ACTIVE_FIT_CD = 0.80;   // 쿨다운 20% 짧다
+
+function activeFitsSigil(id, sigilId) {
+  const list = ACTIVE_FIT[id];
+  if (!list) return false;
+  const sg = sigilId || ((typeof activeSigil === 'function') ? activeSigil().id : null);
+  return list.includes(sg);
+}
+// 지금 각인 기준의 실제 MP·쿨다운. 화면과 시전이 같은 값을 써야 한다.
+function activeMpCost(id) {
+  const d = activeDef(id); if (!d) return 0;
+  return activeFitsSigil(id) ? Math.max(1, Math.round(d.mp * ACTIVE_FIT_MP)) : d.mp;
+}
+function activeCooldown(id) {
+  const d = activeDef(id); if (!d) return 0;
+  return activeFitsSigil(id) ? Math.round(d.cd * ACTIVE_FIT_CD * 10) / 10 : d.cd;
+}
 function activeLaneTag(lane) {
   return lane === 'top' ? '\ud83c\udff0 \uc0c1\ub2e8' : lane === 'both' ? '\u2195\ufe0f \uc591\ucabd' : '\u2694\ufe0f \ud558\ub2e8';
 }
@@ -517,7 +586,7 @@ function normalizeHeroGear(saved, legacyEquipped) {
 // ── 👑 각인 해금 ─────────────────────────────────────────────────────────────
 // 각인은 지금까지 공짜였다 — 셋 다 처음부터 열려 있으니 고르는 데 값이 없었다.
 // 보석으로 열게 하면 심연에서 모은 보석이 "다음 영웅"이라는 목표가 된다.
-const SIGIL_UNLOCK_COST = { blade:0, warden:15, sorcerer:25 };
+const SIGIL_UNLOCK_COST = { blade:0, warden:15, sorcerer:25, ranger:35 };
 function sigilUnlocked(gs, id) {
   if ((SIGIL_UNLOCK_COST[id] || 0) === 0) return true;
   return (gs.unlockedSigils || []).includes(id);
@@ -542,7 +611,8 @@ function castHeroActive(gs, id, opts) {
   if (!def || !gs.hero || gs.hero.dead) return false;
   const cds = gs.hero.activeCd || (gs.hero.activeCd = {});
   if ((cds[id] || 0) > 0) return false;
-  if ((gs.hero.mp || 0) < def.mp) return false;
+  const mpCost = activeMpCost(id);
+  if ((gs.hero.mp || 0) < mpCost) return false;
 
   const lv   = HERO_LEVELS[gs.hero.level];
   const atk  = Math.round((lv.atk + BONUSES.heroAtk) * BONUSES.heroStatMult
@@ -628,8 +698,8 @@ function castHeroActive(gs, id, opts) {
   }
 
   if (!ok) return false;
-  gs.hero.mp = Math.max(0, gs.hero.mp - def.mp);
-  cds[id] = def.cd * (BONUSES.heroSkillCdMult || 1);
+  gs.hero.mp = Math.max(0, gs.hero.mp - mpCost);
+  cds[id] = activeCooldown(id) * (BONUSES.heroSkillCdMult || 1);
   if (typeof spawnFloaty === 'function') {
     const at = def.lane === 'top' ? { x: CW/2, y: DEFENSE_H/2 } : arenaCenter();
     spawnFloaty(`${def.icon} ${msg}`, at.x, at.y, '#c4b5fd');
@@ -657,6 +727,6 @@ function updateHeroActives(gs, dt) {
 // 지금 이 스킬을 쓸 수 있나 — 버튼 상태 표시에 쓴다
 function activeReady(gs, id) {
   const def = activeDef(id); if (!def || !gs.hero || gs.hero.dead) return false;
-  return ((gs.hero.activeCd || {})[id] || 0) <= 0 && (gs.hero.mp || 0) >= def.mp;
+  return ((gs.hero.activeCd || {})[id] || 0) <= 0 && (gs.hero.mp || 0) >= activeMpCost(id);
 }
 function activeCdLeft(gs, id) { return (gs.hero && gs.hero.activeCd ? gs.hero.activeCd[id] : 0) || 0; }

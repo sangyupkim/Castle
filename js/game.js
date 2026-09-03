@@ -17,6 +17,10 @@ function resize() {
   // 최소 DPR 2 강제: PC(DPR=1)에서도 2배 고해상도 렌더링으로 텍스트 선명도 확보
   const dpr = Math.max(2, window.devicePixelRatio || 1);
   const vp  = getViewport();
+  // 세로를 기기 비율에 맞춰 다시 잡는다. 바뀌면 아레나 바닥을 다시 구워야 한다 —
+  // 예전 높이로 구운 캔버스를 그대로 쓰면 바닥이 새 경계와 어긋난다.
+  if (applyViewportHeight(vp.w, vp.h) && typeof invalidateArenaFloor === 'function')
+    invalidateArenaFloor();
   const s   = Math.min(vp.w / CW, vp.h / CH);
   canvas.width  = Math.round(CW * dpr);
   canvas.height = Math.round(CH * dpr);
@@ -76,6 +80,8 @@ let _skillLevels   = {};   // 스킬 노드 id → 레벨(0~10)
 let _forge         = { cores:{}, best:5, mastery:0, plus:{} };  // (옛 세이브 호환)
 let _camp          = { levels:{}, tries:0, breaks:0 };          // 🔥 캠프 단련 (보석·영구)
 let _cardMeta      = { levels:{}, bans:[] };                    // 🎴 패 강화 (보석·영구)
+let _relics        = { owned:[], equipped:[] };                 // 🏺 보스 유물 (영구)
+let _achievements  = { claimed:[] };                            // 🏅 업적 — 받은 것만 적어둔다
 let _charms        = [];   // 🎴 보관 중인 일회용 부적
 let _charmSlots    = [null, null];
 let _ascension     = 0;    // ♾️ 승천 단계
@@ -129,7 +135,11 @@ function newState() {
     briefScroll: 0,
     lobbyScroll: 0,     // 캠프 기록 탭 스크롤
     wallRepairs:0,      // 이번 런에서 성벽을 몇 번 보수했는지 (비용 체증)
+    bossPick:'random',  // 👹 보스를 어디서 맞이할지 (준비 화면에서 고른다)
+    runCardsOpen:false, // 🃏 이번 판 카드 보기 화면이 열려 있는가
+    runCardsScroll:0,
     runGameSec:0,       // 이 판의 게임 내 경과 시간(초) — 배속과 무관하다
+    runGems:{},         // 이 판에서 즉시 받은 보석 (현상수배·정예·관문·보스)
     runWallStart:0,     // 이 판을 시작한 실제 시각 — 랭킹 개연성 검사에 쓴다
     rerolls:0,          // 이번 런에서 강화 카드를 몇 번 리롤했는지 (골드 비용 체증)
     freeRerolls:0,      // 🎴패에서 산 공짜 리롤 — 층마다 다시 채워진다
@@ -161,8 +171,10 @@ function newState() {
          buildingScroll:null, pageScroll:null, briefScroll:null, lobbyScroll:null, pickScroll:null,
          pauseResumeBtn:null, pauseGiveUpBtn:null,
          backupExportBtn:null, backupImportBtn:null, backupMsg:null,
-         tutReplayBtn:null, tutResetTipBtn:null, guideReplayBtn:null, campBtns:[], campGroupBtns:[], cardMetaBtns:[], cardCatBtns:[], cardBanBtns:[], cardBackBtn:null,
-         rankSubmitBtn:null, rankBoardBtns:[], rankReloadBtn:null, bgmToggleBtn:null, sfxToggleBtn:null,
+         tutReplayBtn:null, achBtns:[], achClaimAllBtn:null, tutResetTipBtn:null, guideReplayBtn:null, campBtns:[], campGroupBtns:[], relicBtns:[], relicSellBtns:[], cardMetaBtns:[], cardCatBtns:[], cardBanBtns:[], cardBackBtn:null,
+         rankSubmitBtn:null, rankBoardBtns:[], rankReloadBtn:null,
+         pauseCardsBtn:null, runCardsCloseBtn:null, runCardsScroll:null, towerPromoteBtn:null, forgeAutoBtns:[],
+         bossPickBtns:[], bgmToggleBtn:null, sfxToggleBtn:null,
          tutSkipBtn:null, tutBackBtn:null, sigilCards:[] },
     // 영구 데이터 참조
     get soulStones()    { return _soulStones; },
@@ -179,6 +191,10 @@ function newState() {
     set camp(v)  { _camp = v; },
     get cardMeta()  { return _cardMeta; },
     set cardMeta(v) { _cardMeta = v; },
+    get relics()  { return _relics; },
+    set relics(v) { _relics = v; },
+    get achievements()  { return _achievements; },
+    set achievements(v) { _achievements = v; },
     get charms()  { return _charms; },
     set charms(v) { _charms = v; },
     get charmSlots()  { return _charmSlots; },
@@ -229,6 +245,15 @@ let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적�
   _forge          = sv.forge      || { cores:{}, best:5, mastery:0, plus:{} };
   _camp           = sv.camp       || { levels:{}, tries:0, breaks:0 };
   if (!_camp.levels) _camp.levels = {};
+  _achievements   = (sv.achievements && typeof sv.achievements === 'object')
+                    ? sv.achievements : { claimed:[] };
+  if (!Array.isArray(_achievements.claimed)) _achievements.claimed = [];
+  // 지금 표에 없는 업적 id는 버린다 — 표가 바뀌어도 세이브가 안 깨지게
+  _achievements.claimed = _achievements.claimed.filter(
+    id => typeof achDef === 'function' && achDef(id));
+  _relics         = sv.relics     || { owned:[], equipped:[] };
+  if (!Array.isArray(_relics.owned))    _relics.owned = [];
+  if (!Array.isArray(_relics.equipped)) _relics.equipped = [];
   _cardMeta       = sv.cardMeta   || { levels:{}, bans:[] };
   if (!_cardMeta.levels) _cardMeta.levels = {};
   if (!Array.isArray(_cardMeta.bans)) _cardMeta.bans = [];
@@ -291,6 +316,15 @@ let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적�
 
   gs.innOffers = sv.innOffers || [];
 
+  // 🃏 이번 판에 고른 카드 — 아래 reapplyAllBonuses가 이 배열을 읽어 효과를 다시 얹는다.
+  // 정의에 없는 id(카드표가 바뀐 옛 세이브)는 버린다.
+  gs.activeUpgrades = (sv.activeUpgrades || [])
+    .filter(id => UPGRADE_CARDS.some(c => c.id === id));
+  // 이어한 판의 시간은 이어서 센다 — 0으로 돌아가면 랭킹 개연성 검사에 걸린다
+  gs.runGameSec   = sv.runGameSec || 0;
+  gs.runGems      = (sv.runGems && typeof sv.runGems === 'object') ? sv.runGems : {};
+  gs.runWallStart = Date.now() - (sv.runWallMs || 0);
+
   // ── 판에 세워둔 것 복원 ──
   // 경로는 층에 따라 정해지므로 wm.init()이 THE_PATH를 맞춘 뒤에 타워를 올려야 하는데,
   // 반대로 타워가 먼저 있어야 경로 변경 시 이설 대상이 된다. init 전에 세운다.
@@ -302,6 +336,10 @@ let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적�
     tw.level    = Math.max(1, Math.min(TOWER_MAX_LEVEL, t.level || 1));
     // ★5 분기 — 지금 정의에 없는 id면 버린다 (분기표가 바뀌어도 세이브가 안 깨지게)
     tw.branch   = branchDef(t.typeId, t.branch) ? t.branch : null;
+    // ✦ ★6 능력 — 지금 표에 없는 id는 버린다 (표가 바뀌어도 세이브가 안 깨지게)
+    tw.perks    = Array.isArray(t.perks)
+      ? t.perks.filter(id => typeof towerPerkDef === 'function' && towerPerkDef(id))
+      : [];
     tw.invested = t.invested || tw.invested;
     tw.kills    = t.kills || 0;
     tw.damageDealt = t.damageDealt || 0;
@@ -461,6 +499,9 @@ window.addEventListener('wheel', e=>{
 
 // 지금 화면에서 스크롤되는 세로 영역 하나 (키보드용)
 function activeScrollRegion() {
+  // 카드 보기가 열려 있으면 그게 유일한 스크롤 대상이다 — 뒤 화면을 밀면 안 된다
+  if (gs.runCardsOpen && gs.ui.runCardsScroll && gs.ui.runCardsScroll.max > 0)
+    return gs.ui.runCardsScroll;
   for (const r of [gs.ui.buildingScroll, gs.ui.pageScroll, gs.ui.briefScroll, gs.ui.lobbyScroll])
     if (r && r.max > 0) return r;
   return null;
@@ -468,7 +509,8 @@ function activeScrollRegion() {
 function nudgeScroll(dy) {
   const r = activeScrollRegion(); if (!r) return false;
   const v = x => Math.max(0, Math.min(r.max, x + dy));
-  if      (r === gs.ui.briefScroll) gs.briefScroll = v(gs.briefScroll||0);
+  if      (r === gs.ui.runCardsScroll) gs.runCardsScroll = v(gs.runCardsScroll||0);
+  else if (r === gs.ui.briefScroll) gs.briefScroll = v(gs.briefScroll||0);
   else if (r === gs.ui.lobbyScroll) gs.lobbyScroll = v(gs.lobbyScroll||0);
   else                              gs.town.scroll = v(gs.town.scroll||0);
   return true;
@@ -627,6 +669,12 @@ function tap({x,y}) {
   // 기지 함락 — 결과 화면으로. 스킬 트리는 로비에 있으므로 여기서 열지 않는다.
   if (gs.gameOver) { showResult(); return; }
 
+  // 🃏 카드 보기가 열려 있으면 닫기만 받는다 — 뒤 화면이 눌리면 안 된다
+  if (gs.runCardsOpen) {
+    if (hitTest(x,y,gs.ui.runCardsCloseBtn||{})) { gs.runCardsOpen = false; SFX.click(); }
+    return;
+  }
+
   // 일시정지 중에는 재개 / 포기만 받는다.
   // 한 판이 10~30분이라 중간에 접어야 할 때가 있고, 초반에 망한 판을 끝까지
   // 붙들고 있을 이유도 없다. 여기까지 번 보석은 그대로 정산된다.
@@ -635,6 +683,9 @@ function tap({x,y}) {
       if (_giveUpArmed) { _giveUpArmed=false; _paused=false; gs.gaveUp=true; showResult(); }
       else { _giveUpArmed=true; SFX.denied(); }
       return;
+    }
+    if (hitTest(x,y,gs.ui.pauseCardsBtn||{})) {
+      gs.runCardsOpen = true; gs.runCardsScroll = 0; SFX.click(); return;
     }
     if (hitTest(x,y,gs.ui.pauseResumeBtn||{})) { _giveUpArmed=false; togglePause(); return; }
     _giveUpArmed=false;
@@ -828,7 +879,9 @@ let _lastUiScope = null;
 function uiScopeKey() {
   const L = gs.lobby || {}, t = gs.town || {};
   if (gs.page === 'lobby') {
-    return `lobby|${L.tab}|${L.tab === 'skill' ? (L.skillTree||'') : ''}|${L.tab === 'camp' ? (L.campGroup||'') : ''}|${L.tab === 'card' ? (L.cardCat||'-') : ''}`;
+    return `lobby|${L.tab}|${L.tab === 'skill' ? (L.skillTree||'') : ''}|${L.tab === 'camp' ? ((L.campGroup||'') + (L.campGroup === 'relic'
+        ? '|' + relicState(gs).equipped.join(',') + '|' + relicState(gs).owned.length : '')) : ''}|${L.tab === 'card' ? (L.cardCat||'-') : ''}|${
+      L.tab === 'record' ? achState(gs).claimed.length : ''}`;
   }
   if (gs.page === 'town') {
     return `town|${t.screen||'main'}|${t.tab||''}|${t.heroView?'hero':''}|${t.forgeTab||''}|${t.shopTab||''}`;
@@ -913,6 +966,17 @@ function handleLobbyTap(x, y) {
       if (hitTest(x,ry,b)) {   // 낀 것을 다시 누르면 뺀다
         setCharmSlot(gs, b.idx, null); SFX.click(); SaveManager.save(gs); return;
       }
+    }
+    // 💰 팔기가 먼저다 — 카드 위에 얹힌 버튼이라 카드 판정보다 앞서야 한다
+    for (const c of gs.ui.charmSellBtns||[]) {
+      if (!hitTest(x,ry,c)) continue;
+      const e = charmEntry(gs, c.uid);
+      const nm = e ? (charmDef(e.charmId)||{}).name : '부적';
+      const v = sellCharm(gs, c.uid);
+      if (v > 0) { SFX.levelUp(); SaveManager.save(gs);
+                   spawnFloaty(`💎 +${v} — ${nm} 판매`, CW/2, 300, COLORS.gem); }
+      else { SFX.denied(); spawnFloaty('낀 부적은 못 팝니다', x, y, '#ef4444'); }
+      return;
     }
     for (const c of gs.ui.charmCards||[]) {
       if (hitTest(x,ry,c)) {
@@ -1003,6 +1067,25 @@ function handleLobbyTap(x, y) {
     for (const g of gs.ui.campGroupBtns||[]) {
       if (hitTest(x,ry,g)) { L.campGroup = g.id; gs.lobbyScroll = 0; SFX.click(); return; }
     }
+    // 🏺 유물 — 끼우기/빼기와 겹친 것 팔기
+    for (const b of gs.ui.relicBtns||[]) {
+      if (!hitTest(x,ry,b)) continue;
+      if (toggleRelic(gs, b.id)) {
+        reapplyAllBonuses(gs); SaveManager.save(gs); SFX.click();
+        const d = relicDef(b.id);
+        spawnFloaty(relicEquipped(gs, b.id) ? `${d.icon} ${d.name} 장착` : `${d.icon} 해제`,
+                    CW/2, 300, relicEquipped(gs, b.id) ? '#fbbf24' : '#94a3b8');
+      } else { spawnFloaty('칸이 찼습니다', x, y, '#ef4444'); SFX.denied(); }
+      return;
+    }
+    for (const b of gs.ui.relicSellBtns||[]) {
+      if (!hitTest(x,ry,b)) continue;
+      const v = sellRelic(gs, b.id);
+      if (v > 0) { SaveManager.save(gs); SFX.levelUp();
+                   spawnFloaty(`💎 +${v}`, CW/2, 300, COLORS.gem); }
+      else { SFX.denied(); }
+      return;
+    }
     for (const b of gs.ui.campBtns||[]) {
       if (!hitTest(x,ry,b)) continue;
       const r = campTemper(gs, b.id);
@@ -1087,6 +1170,24 @@ function handleLobbyTap(x, y) {
     // 본문은 스크롤된 채 그려지지만 버튼 좌표는 스크롤 이전 값으로 기록된다.
     // 탭 좌표를 같은 기준으로 옮겨서 견준다.
     const ry = y + (gs.lobbyScroll || 0);
+    // 🏅 업적 — 한꺼번에 받기가 먼저
+    if (hitTest(x,ry,gs.ui.achClaimAllBtn||{})) {
+      const r = claimAllAch(gs);
+      if (r.n) { SaveManager.save(gs); SFX.levelUp();
+                 spawnFloaty(`🏅 ${r.n}개 달성 · 💎 +${r.gem}`, CW/2, 300, COLORS.gem);
+                 FX.burst(CW/2, 300, '#fbbf24', 18, 26); }
+      else SFX.denied();
+      return;
+    }
+    for (const b of gs.ui.achBtns||[]) {
+      if (!hitTest(x,ry,b)) continue;
+      const a = achDef(b.id);
+      const v = claimAch(gs, b.id);
+      if (v) { SaveManager.save(gs); SFX.levelUp();
+               spawnFloaty(`${a.icon} ${a.name} · 💎 +${v}`, CW/2, 300, COLORS.gem); }
+      else SFX.denied();
+      return;
+    }
     if (hitTest(x,ry,gs.ui.backupExportBtn||{})) { exportSaveCode(); return; }
     if (hitTest(x,ry,gs.ui.backupImportBtn||{})) { importSaveCode(); return; }
     if (hitTest(x,ry,gs.ui.tutReplayBtn||{}))    { replayTutorial(); return; }
@@ -1191,6 +1292,8 @@ function resetAllProgress() {
   _forge = { cores:{}, best:5, mastery:0, plus:{} };
   _camp  = { levels:{}, tries:0, breaks:0 };
   _cardMeta = { levels:{}, bans:[] };
+  _relics = { owned:[], equipped:[] };
+  _achievements = { claimed:[] };
   _charms = []; _charmSlots = [null, null]; _ascension = 0; _heroPlacePref = 'none';
   _trainSkipped = false;
   _unlocked = [];
@@ -1252,6 +1355,7 @@ function startRun(mode, nightmare) {
   gs.runBestAtStart = (gs.stats && gs.stats.bestEndless) || 0;
   gs.runGameSec   = 0;
   gs.runWallStart = Date.now();
+  gs.runGems      = {};        // 판 도중에 바로 받은 보석 — 정산 화면에 같이 적는다
   applyPathVariant(0);
   gs.pathChanged = null;
   refreshInnOffers(gs);
@@ -1348,6 +1452,17 @@ function handleHeroDetailTap(x,y) {
     return;
   }
   // 보관함 · 보유 스킬 — 탭하면 고른다 (같은 것을 다시 탭하면 취소)
+  // 💰 판매가 먼저다 — 카드 위에 얹힌 버튼이라 카드 판정보다 앞서야 한다
+  for (const c of gs.ui.invSellBtns||[]) {
+    if (!hitTest(x,y,c)) continue;
+    const item = equipDef((invEntry(gs, c.uid)||{}).itemId);
+    const v = sellGear(gs, c.uid);
+    if (v > 0) {
+      t.pick = null; SFX.levelUp(); SaveManager.save(gs);
+      spawnFloaty(`💰 +${v} — ${item ? item.name : '장비'} 판매`, CW/2, 300, COLORS.gold);
+    } else { SFX.denied(); spawnFloaty('낀 장비는 못 팝니다', x, y, '#ef4444'); }
+    return;
+  }
   for (const c of gs.ui.invCards||[]) {
     if (!hitTest(x,y,c)) continue;
     t.pick = (t.pick && t.pick.kind==='item' && t.pick.uid===c.uid) ? null : {kind:'item', uid:c.uid};
@@ -1412,12 +1527,26 @@ function handleForgeTap(x, y) {
   for (const b of gs.ui.forgeGearBtns||[]) {
     if (hitTest(x,y,b)) {
       const cost = slotPlusCost(gs, b.slot);
-      if (upgradeSlotPlus(gs, b.slot)) {
-        SFX.upgrade(); SaveManager.save(gs);
-        say(`🔨 ${slotDef(b.slot).name} +${slotPlus(gs,b.slot)}`, '#fbbf24');
-      } else { SFX.denied(); say(`💎 ${cost} 부족`, '#ef4444'); }
+      const r = upgradeSlotPlus(gs, b.slot);
+      if (!r) { SFX.denied(); say(`💰 ${cost} 부족`, '#ef4444'); return true; }
+      SaveManager.save(gs);
+      const nm = slotDef(b.slot).name;
+      if (r.ok) { SFX.upgrade(); say(`🔨 ${nm} +${r.after} 성공!`, '#fbbf24'); }
+      else if (r.fail === 'down') { SFX.denied(); FX.shake(5,0.35);
+        say(`🔨 ${nm} 실패 — +${r.before} → +${r.after}`, '#ef4444'); }
+      else { SFX.denied(); say(`🔨 ${nm} 실패 — +${r.after} 그대로`, '#94a3b8'); }
       return true;
     }
+  }
+  for (const b of gs.ui.forgeAutoBtns||[]) {
+    if (!hitTest(x,y,b)) continue;
+    const r = autoForgeCore(gs, b.star);
+    SaveManager.save(gs);
+    if (r.got) { SFX.levelUp();
+      say(`🔁 ★${r.goal} 완성 — ★5 ${r.bought}개 · 합성 ${r.fused}번 · 💰${r.spent}`, '#a3e635'); }
+    else { SFX.denied(); FX.shake(4,0.3);
+      say(`🔁 ★${r.goal} 실패 — 골드가 떨어졌습니다 (💰${r.spent} 씀)`, '#f59e0b'); }
+    return true;
   }
   if (hitTest(x,y,gs.ui.forgeCoreBtn||{})) {
     if (buyForgeCore(gs)) { SFX.upgrade(); SaveManager.save(gs); say('★5 심을 사들였습니다', '#60a5fa'); }
@@ -1442,6 +1571,16 @@ function handleForgeTap(x, y) {
     else      { SFX.denied(); FX.shake(5,0.35); say(`🎲 실패 — 숙련도 ${r.before} → ${r.after}`, '#ef4444'); }
     return true;
   }
+  if (hitTest(x,y,gs.ui.forgeTemperAutoBtn||{})) {
+    const r = temperAuto(gs);
+    if (!r || !r.rolls) { SFX.denied(); say(`💰 ${temperCost(gs)} 부족`, '#ef4444'); return true; }
+    SaveManager.save(gs);
+    if (r.reached) { SFX.levelUp();
+      say(`🔁 ${r.before} → ${r.after}단 · ${r.rolls}번 굴려 💰${r.spent}`, '#a3e635'); }
+    else { SFX.denied(); FX.shake(4,0.3);
+      say(`🔁 ${r.before} → ${r.after}단 · 골드가 떨어졌습니다 (💰${r.spent})`, '#f59e0b'); }
+    return true;
+  }
   return false;
 }
 
@@ -1450,6 +1589,14 @@ function handleTownTap(x,y) {
 
   // Back to battle page
   if (hitTest(x,y,gs.ui.townPageBackBtn||{})) { gs.page='battle'; return; }
+
+  // 👹 보스를 어디서 맞이할지 — 출전 전에만 고를 수 있다
+  {
+    const ry = y + (t.scroll || 0);
+    for (const b of gs.ui.bossPickBtns||[]) {
+      if (hitTest(x,ry,b)) { gs.bossPick = b.id; SFX.click(); return; }
+    }
+  }
 
 // Building sub-screen
   if (t.screen!=='main') {
@@ -1516,6 +1663,7 @@ function handleTownTap(x,y) {
   // Towers tab
   if (t.tab==='towers') {
     if (hitTest(x,y,gs.ui.towerUpgradeBtn||{})) { upgradeSelectedTower(x,y); return; }
+    if (hitTest(x,y,gs.ui.towerPromoteBtn||{})) { promoteSelectedTower(x,y); return; }
     if (hitTest(x,y,gs.ui.towerMoveBtn||{}))    { beginTowerMove();          return; }
     if (hitTest(x,y,gs.ui.towerRemoveBtn||{}))  { sellSelectedTower(x,y);    return; }
     // ★5 분기 — 세 갈래 중 하나
@@ -1689,6 +1837,33 @@ function buildTowerAt(c, r, fx, fy) {
   FX.ring(ctr.x, ctr.y, TOWER_TYPES[typeId].color, 8);
   SFX.build();
   return true;
+}
+
+// 🔥 ★5 위로는 심을 태워 한 기씩 올린다 — 심 하나에 타워 하나.
+function promoteSelectedTower(x, y) {
+  const ta = gs.ui.towerAction;
+  if (!ta) return;
+  const tower = gs.towers.find(tw => tw.col === ta.col && tw.row === ta.row);
+  if (!tower) { gs.ui.towerAction = null; return; }
+  const need = (tower.level || 1) + 1;
+  const res = promoteTowerWithCore(gs, tower);
+  if (!res) {
+    spawnFloaty(`★${need} 심이 없습니다`, x, y, '#ef4444'); SFX.denied(); return;
+  }
+  const ctr = cellCenter(tower.col, tower.row);
+  // ✦ 능력이 붙었으면 그것이 승급의 알맹이다 — 별보다 먼저 읽히게 띄운다
+  if (res !== true) {
+    spawnFloaty(`✦ ${res.icon} ${res.name}`, x, y - 16, '#c4b5fd');
+    spawnFloaty(`★${tower.level} 승급`, x, y, '#fbbf24');
+    if (typeof addLog === 'function')
+      addLog(gs.battle, `✦ ${TOWER_TYPES[tower.typeId].name} ★${tower.level} — ${res.icon} ${res.name}: ${res.desc}`, '#c4b5fd');
+    FX.ring(ctr.x, ctr.y, '#c4b5fd', 18);
+  } else {
+    spawnFloaty(`★${tower.level} 승급!`, x, y, '#fbbf24');
+  }
+  FX.ring(ctr.x, ctr.y, '#fbbf24', 12);
+  SFX.upgrade();
+  SaveManager.save(gs);
 }
 
 function upgradeSelectedTower(x, y) {
@@ -1868,6 +2043,12 @@ function onDefenseKill(e, byHero) {
   // 죽은 적은 그 프레임 안에서 gs.defenseEnemies에서 걸러져 나간다 —
   // 다음 프레임에는 찾을 것이 없어 클리어가 영영 안 떴다.
   if (e.isBoss && !gs.bossDefeated) markBossDefeated();
+  // 👹 보스전 종료 — 상단 보스를 잡았다. 유물이 여기서 떨어진다.
+  if ((e.isBoss || e.isMidBoss) && typeof bossActive === 'function' && bossActive(gs)
+      && gs.boss.side === 'top') {
+    grantBossReward(gs);
+    endBossFight(gs, true);
+  }
   // 상단은 막는 곳이지 버는 곳이 아니다 — 현상수배만 값을 그대로 받는다
   const scale = e.isBounty ? 1 : DEFENSE_GOLD_SCALE;
   _defGoldFrac += (e.reward || 1) * BONUSES.defenseGoldMult * scale;
@@ -1878,6 +2059,7 @@ function onDefenseKill(e, byHero) {
   if (e.gems > 0) {
     gs.soulStones += e.gems;
     gs.stats.totalGems = (gs.stats.totalGems || 0) + e.gems;
+    if (typeof addRunGems === 'function') addRunGems(gs, 'bounty', e.gems);
     gs.stats.bountyKills = (gs.stats.bountyKills || 0) + 1;
     spawnFloaty(`💎 +${e.gems}`, e.x, e.y - 30, '#a78bfa');
     addLog(gs.battle, `💰 현상수배 처치! 보석 +${e.gems}`, '#a78bfa');
@@ -1939,6 +2121,9 @@ function updateCastleGuns(dt) {
 function updateHeroDefense(dt) {
   const hero = gs.hero;
   if (hero.placement !== 'defense' || hero.dead) return;
+  // 🌀 추방 — 기믹이 걸린 동안 영웅은 전투에서 빠진다. 상단의 핵심 화력이
+  // 10초 사라지므로 그 사이를 타워만으로 버텨야 한다.
+  if (typeof bossEffect === 'function' && bossEffect(gs, 'nohero')) return;
   const lv = HERO_LEVELS[hero.level];
 
   // 지정한 지점으로 이동 — 상단에도 포지셔닝이 생긴다
@@ -2119,6 +2304,17 @@ function update(dt) {
   for (const e of gs.defenseEnemies) {
     if (e.reached&&!e._counted) {
       e._counted=true;
+      // 👹 보스가 정해진 바퀴를 다 돌고 성에 닿았다 — 막지 못했으므로 거기서 끝난다.
+      // 성벽을 조금 깎고 넘어가는 적과는 다르다.
+      if ((e.isBoss || e.isMidBoss) && typeof bossActive === 'function' && bossActive(gs)
+          && gs.boss.side === 'top') {
+        endBossFight(gs, false);
+        gs.baseHP = 0; gs.gameOver = true;
+        addLog(gs.battle, '💀 보스가 성문을 부쉈습니다', '#ef4444');
+        if (typeof SFX !== 'undefined') SFX.lose();
+        bankRunResult();
+        return;
+      }
       const dmg = Math.max(1, Math.round(e.dmg * baseDamageMult()));
       gs.baseHP=Math.max(0,gs.baseHP-dmg);
       spawnFloaty(`-${dmg}HP`,CW/2,DEFENSE_H-25,'#ef4444');
@@ -2130,6 +2326,9 @@ function update(dt) {
   }
 
   // 기지 재생
+  if (BONUSES.baseRegenPct > 0) {
+    gs.baseHP = Math.min(baseHpMax(), gs.baseHP + baseHpMax() * BONUSES.baseRegenPct * dt);
+  }
   if (BONUSES.baseRegen > 0) {
     gs.baseHP = Math.min(baseHpMax(), gs.baseHP + BONUSES.baseRegen * dt);
   }
@@ -2261,6 +2460,9 @@ function bankRunResult() {
     baseHP:   Math.ceil(gs.baseHP),
     gems:     bd.total,
     rows:     bd.rows,
+    // 판 도중에 이미 지갑에 들어간 보석 — 정산 총합과는 별개로 같이 적는다
+    already:      bd.already || [],
+    alreadyTotal: bd.alreadyTotal || 0,
     mult:     bd.mult,
     gaveUp:   !!gs.gaveUp,
     newBest:  wasBest,
@@ -2323,6 +2525,11 @@ function frame(ts) {
     renderResult(ctx,gs);
   } else if (gs.page==='town') {
     renderTownPage(ctx,gs);
+  } else if (typeof bossActive === 'function' && bossActive(gs)) {
+    // 👹 보스전 — 한쪽 전선만 쓴다. 안 쓰는 쪽은 아예 그리지 않고,
+    // 쓰는 쪽이 화면 세로를 다 가져간다. 반씩 보다가 보스를 놓치지 않게.
+    renderBossLane(ctx, gs);
+    FX.draw(ctx);
   } else {
     renderDefense(ctx,gs);
     renderUIBar(ctx,gs,wm);
@@ -2330,13 +2537,23 @@ function frame(ts) {
     FX.draw(ctx);
   }
   ctx.restore();
+  if (typeof bossActive === 'function' && bossActive(gs)
+      && gs.page!=='lobby' && gs.page!=='result' && gs.page!=='town') {
+    renderBossHud(ctx, gs);
+  }
 
   // 런 종료·갈림길 오버레이 — 전투/마을 위에 덮는다.
   // (로비 개편 때 이 호출이 빠져 게임오버 화면이 보이지 않았다)
   if (gs.page!=='lobby' && gs.page!=='result') renderHUD(ctx,gs);
   if (gs.upgradePick.active && gs.page==='battle') renderUpgradePick(ctx,gs);
   drawFloaties(ctx);
-  if (_paused && !_titleScreen && !tut.active && gs.page!=='lobby' && gs.page!=='result') renderPauseOverlay(ctx);
+  if (_paused && !_titleScreen && !tut.active && gs.page!=='lobby' && gs.page!=='result') {
+    renderPauseOverlay(ctx);
+    // 🃏 카드 보기는 일시정지 위에 얹는다 — 판을 멈춘 채로 훑어보는 화면이다
+    if (gs.runCardsOpen) renderRunCardsOverlay(ctx);
+  } else if (gs.runCardsOpen) {
+    gs.runCardsOpen = false;      // 일시정지가 풀렸으면 같이 닫는다
+  }
   renderTutorial(ctx,tut);
   // 안내는 튜토리얼 글이 떠 있지 않을 때만 — 둘이 겹치면 무엇을 보라는지 알 수 없다
   if (!tut.active) renderGuide(ctx,gs);

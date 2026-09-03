@@ -7,8 +7,18 @@ function createDefaultBonuses() {
     towerDmg: 0, towerDmgMult: 1.0, towerSpdMult: 1.0, towerRangeMult: 1.0,
     towerCostDiscount: 0, towerSplash: false, towerPierce: 0, towerSlow: 0,
     overloadEternal: false,   // ✦영구 기관 — 과부하가 풀리지 않는다
+    cardHandBonus: 0,         // 🔮 유물 — 카드 선택지가 늘어난다
     // 유닛
     unitAtk: 0, unitHp: 0, unitDef: 0, unitAtkMult: 1.0, unitHpMult: 1.0,
+    // ── 깊이를 타는 값들 ──
+    // 정액 강화는 층이 깊어지면 없는 것과 같아진다. 30층 몹이 300으로 때리는데
+    // 방어 +24는 8%고, 60층에서는 1%다. 영구 성장이 초반에만 보이고 본편에서
+    // 사라지면 "무엇을 올려도 똑같다"가 된다. 그래서 비율로 세는 칸을 따로 뒀다.
+    unitDefPct: 0,      // 아군이 받는 피해 감소 (합산, 상한 있음)
+    killHealPct: 0,     // 처치 시 최대 HP의 이 비율만큼 회복
+    heroRegenPct: 0,    // 영웅 최대 HP의 이 비율/초
+    baseRegenPct: 0,    // 기지 최대 HP의 이 비율/초
+    towerPiercePct: 0,  // 적 방어를 이 비율만큼 무시
     hireCostDiscount: 0, hireCostPct: 0, maxSlotBonus: 0,
     killHeal: 0, comboChance: 0, critChance: 0,
     healBonus: 0, shieldBonus: 0, mpRegenBonus: 0, heroMpMax: 0, restHealBonus: 0,
@@ -26,7 +36,7 @@ function createDefaultBonuses() {
     // 장비·스킬이 얹는 영웅 전용 값 (각인 배율과 곱해서 쓴다)
     heroHpFlat: 0, heroSpdMult: 1.0, heroRangeMult: 1.0, heroSkillMult: 1.0,
     heroSkillCdMult: 1.0,
-    heroExpMult: 1.0, heroInstantRevive: false,
+    heroExpMult: 1.0, heroInstantRevive: false, heroPierceRanged: false,
     heroStartExp: 0, heroReviveReduction: 0, heroStatMult: 1.0,
     // 각인 — 영웅에게만 걸리는 배율. heroStatMult와 곱해서 쓴다.
     sigilHeroAtkMult: 1.0, sigilHeroHpMult: 1.0, sigilHeroSpdMult: 1.0,
@@ -253,9 +263,13 @@ const UPGRADE_CARDS = [
   { id:'c_deep',    name:'갱도 개방',     desc:'처치 골드 +120%',       bane:'몬스터 능력 +35%',
     grade:'epic', icon:'⛏️', cat:'cave',
     apply: b => { b.mobGoldMult += 1.20; b.mobStatMult += 0.35; } },
-  { id:'c_swarm',   name:'벌집 건드리기', desc:'보석 +60% · 정예 등장 +30%', bane:'아레나 스폰 간격 -35%',
+  // 보석 +60%는 에픽 한 장이 전설(엘도라도 +50%)을 넘어서는 값이었다. 보석은
+  // 영구 성장 전부를 사는 화폐라 한 판의 카드 한 장이 다음 판들의 출발선을 옮긴다 —
+  // 그 크기가 '이번 판을 어떻게 풀까'가 아니라 '이 카드가 떴나'로 판을 가른다.
+  // 에픽다운 폭(+25%)으로 낮추고, 대신 그 자리에서 바로 벌리는 쪽(정예)을 키웠다.
+  { id:'c_swarm',   name:'벌집 건드리기', desc:'보석 +25% · 정예 등장 +40%', bane:'아레나 스폰 간격 -35%',
     grade:'epic', icon:'🐝', cat:'cave',
-    apply: b => { b.gemMult *= 1.60; b.eliteChance += 0.30; b.pactSpawnMult *= 0.65; } },
+    apply: b => { b.gemMult *= 1.25; b.eliteChance += 0.40; b.pactSpawnMult *= 0.65; } },
   // ✦ 전설
   { id:'c_eldorado',name:'엘도라도',      desc:'처치 보상 ×2 · 층당 보석 +50%', grade:'legend', icon:'🌟', cat:'cave',
     apply: b => { b.battleGoldMult *= 2.0; b.defenseGoldMult *= 2.0; b.gemMult *= 1.50; } },
@@ -349,7 +363,7 @@ const SKILL_TREES = {
       { id:'tw_s5', name:'저격 조준', icon:'👁️', cost:2, row:2, col:0,
         desc:v=>`타워 사거리 +${skpct(v*0.035)}`,      apply:(b,v)=>{ b.towerRangeMult *= 1 + v*0.035; } },
       { id:'tw_s6', name:'관통탄',    icon:'🔩', cost:2, row:2, col:1,
-        desc:v=>`적 방어 무시 +${Math.round(v)}`,    apply:(b,v)=>{ b.towerPierce += Math.round(v); } },
+        desc:v=>`적 방어 ${skpct(v*0.03)} 무시`,     apply:(b,v)=>{ b.towerPiercePct += v*0.03; } },
       { id:'tw_s7', name:'연사 기계', icon:'⚙️', cost:2, row:2, col:2,
         desc:v=>`타워 공격속도 +${skpct(v*0.05)}`,     apply:(b,v)=>{ b.towerSpdMult *= 1 + v*0.05; } },
       { id:'tw_s8', name:'폭발 화살', icon:'💥', cost:3, row:3, col:0,
@@ -364,11 +378,11 @@ const SKILL_TREES = {
     name: '병력', icon: '⚔️', color: '#f97316',
     skills: [
       { id:'un_s1', name:'기초 훈련', icon:'⚔️', cost:1, row:0, col:1,
-        desc:v=>`아군 공격력 +${Math.round(v*2)}`,   apply:(b,v)=>{ b.unitAtk += v*2; } },
+        desc:v=>`아군 공격력 +${skpct(v*0.05)}`,      apply:(b,v)=>{ b.unitAtkMult *= 1 + v*0.05; } },
       { id:'un_s2', name:'체력 단련', icon:'💪', cost:1, row:1, col:0,
-        desc:v=>`아군 HP +${Math.round(v*10)}`,       apply:(b,v)=>{ b.unitHp += v*10; } },
+        desc:v=>`아군 HP +${skpct(v*0.05)}`,          apply:(b,v)=>{ b.unitHpMult *= 1 + v*0.05; } },
       { id:'un_s3', name:'방어 훈련', icon:'🛡️', cost:1, row:1, col:1,
-        desc:v=>`아군 방어력 +${Math.round(v)}`,      apply:(b,v)=>{ b.unitDef += Math.round(v); } },
+        desc:v=>`받는 피해 -${skpct(v*0.02)}`,        apply:(b,v)=>{ b.unitDefPct += v*0.02; } },
       { id:'un_s4', name:'속공',      icon:'🌀', cost:1, row:1, col:2,
         desc:v=>`아군 공격속도 +${skpct(v*0.03)}`,      apply:(b,v)=>{ b.unitAtkSpdMult *= 1 + v*0.03; } },
       { id:'un_s5', name:'급소 교본', icon:'💥', cost:2, row:2, col:0,
@@ -376,10 +390,10 @@ const SKILL_TREES = {
       { id:'un_s6', name:'연계 공격', icon:'🔗', cost:2, row:2, col:1,
         desc:v=>`추가 타격 확률 +${skpct(v*0.025)}`,    apply:(b,v)=>{ b.comboChance += v*0.025; } },
       { id:'un_s7', name:'전장 치유', icon:'💚', cost:2, row:2, col:2,
-        desc:v=>`처치 시 아군 회복 +${(v*0.8).toFixed(1)}`, apply:(b,v)=>{ b.killHeal += v*0.8; } },
+        desc:v=>`처치 시 최대 HP의 ${skpct(v*0.006)} 회복`, apply:(b,v)=>{ b.killHealPct += v*0.006; } },
       { id:'un_s8', name:'정예 부대', icon:'🔥', cost:3, row:3, col:0,
-        desc:v=>`아군 공격력 +${Math.round(v*3)} · HP +${Math.round(v*14)}`,
-        apply:(b,v)=>{ b.unitAtk += v*3; b.unitHp += v*14; } },
+        desc:v=>`아군 공격력 +${skpct(v*0.06)} · HP +${skpct(v*0.07)}`,
+        apply:(b,v)=>{ b.unitAtkMult *= 1 + v*0.06; b.unitHpMult *= 1 + v*0.07; } },
       { id:'un_s9', name:'대열 확장', icon:'➕', cost:3, row:3, col:1, maxLv:4,
         desc:v=>`편성 슬롯 +${Math.round(v)}`,        apply:(b,v)=>{ b.maxSlotBonus += Math.round(v); } },
     ]
@@ -389,15 +403,15 @@ const SKILL_TREES = {
     name: '영웅', icon: '👑', color: '#f59e0b',
     skills: [
       { id:'hr_s1', name:'영웅 훈련', icon:'⚔️', cost:1, row:0, col:1,
-        desc:v=>`영웅 공격력 +${Math.round(v*3)}`,    apply:(b,v)=>{ b.heroAtk += v*3; } },
+        desc:v=>`영웅 공격력 +${skpct(v*0.05)}`,      apply:(b,v)=>{ b.sigilHeroAtkMult *= 1 + v*0.05; } },
       { id:'hr_s2', name:'투사',      icon:'🗡️', cost:1, row:1, col:0,
         desc:v=>`영웅 전체 능력 +${skpct(v*0.03)}`,     apply:(b,v)=>{ b.heroStatMult *= 1 + v*0.03; } },
       { id:'hr_s3', name:'재생',      icon:'💚', cost:1, row:1, col:1,
-        desc:v=>`영웅 재생 +${(v*0.5).toFixed(1)}/s`,   apply:(b,v)=>{ b.heroRegen += v*0.5; } },
+        desc:v=>`영웅 재생 최대 HP의 ${skpct(v*0.004)}/s`, apply:(b,v)=>{ b.heroRegenPct += v*0.004; } },
       { id:'hr_s4', name:'경험 축적', icon:'📖', cost:1, row:1, col:2,
         desc:v=>`영웅 EXP +${skpct(v*0.08)}`,           apply:(b,v)=>{ b.heroExpMult *= 1 + v*0.08; } },
       { id:'hr_s5', name:'지휘 오라', icon:'🎖️', cost:2, row:2, col:0,
-        desc:v=>`아군 방어 오라 +${Math.round(v)}`,    apply:(b,v)=>{ b.heroAura += Math.round(v); } },
+        desc:v=>`부대가 받는 피해 -${skpct(v*0.015)}`,  apply:(b,v)=>{ b.unitDefPct += v*0.015; } },
       { id:'hr_s6', name:'각인 증폭', icon:'✨', cost:2, row:2, col:1,
         desc:v=>`영웅 스킬 피해 +${skpct(v*0.05)}`,      apply:(b,v)=>{ b.heroSkillMult *= 1 + v*0.05; } },
       { id:'hr_s7', name:'질풍',      icon:'🌀', cost:2, row:2, col:2,
@@ -417,11 +431,11 @@ const SKILL_TREES = {
     name: '기지', icon: '🏰', color: '#60a5fa',
     skills: [
       { id:'bs_s1', name:'성벽 증축', icon:'🏰', cost:1, row:0, col:1,
-        desc:v=>`기지 최대 HP +${Math.round(v*12)}`,  apply:(b,v)=>{ b.baseHpMax += v*12; } },
+        desc:v=>`기지 최대 HP +${skpct(v*0.05)}`,     apply:(b,v)=>{ b.baseHpMax += BASE_HP_MAX * v*0.05; } },
       { id:'bs_s2', name:'철갑',      icon:'🛡️', cost:1, row:1, col:0, maxLv:8,
         desc:v=>`기지 피해 -${skpct(v*0.04)}`,          apply:(b,v)=>{ b.baseDefPct += v*0.04; } },
       { id:'bs_s3', name:'자가 수복', icon:'🔧', cost:1, row:1, col:1,
-        desc:v=>`기지 재생 +${(v*0.15).toFixed(1)}/s`, apply:(b,v)=>{ b.baseRegen += v*0.15; } },
+        desc:v=>`기지 재생 최대 HP의 ${skpct(v*0.0012)}/s`, apply:(b,v)=>{ b.baseRegenPct += v*0.0012; } },
       { id:'bs_s4', name:'보급 창고', icon:'📦', cost:1, row:1, col:2,
         desc:v=>`시작 골드 +${Math.round(v*8)}`,       apply:(b,v)=>{ b.startGoldBonus += v*8; } },
       { id:'bs_s5', name:'황금 광맥', icon:'💰', cost:2, row:2, col:0,
@@ -432,8 +446,8 @@ const SKILL_TREES = {
         desc:v=>`고용비 -${Math.round(v)} · 타워 건설비 -${Math.round(v*0.5)}`,
         apply:(b,v)=>{ b.hireCostDiscount += Math.round(v); b.towerCostDiscount += Math.round(v*0.5); } },
       { id:'bs_s8', name:'난공불락', icon:'🏯', cost:3, row:3, col:0,
-        desc:v=>`기지 최대 HP +${Math.round(v*18)} · 재생 +${(v*0.2).toFixed(1)}/s`,
-        apply:(b,v)=>{ b.baseHpMax += v*18; b.baseRegen += v*0.2; } },
+        desc:v=>`기지 최대 HP +${skpct(v*0.07)} · 재생 ${skpct(v*0.0016)}/s`,
+        apply:(b,v)=>{ b.baseHpMax += BASE_HP_MAX * v*0.07; b.baseRegenPct += v*0.0016; } },
       { id:'bs_s9', name:'전시 경제', icon:'🏦', cost:3, row:3, col:1,
         desc:v=>`전투 골드 +${skpct(v*0.06)} · 시작 골드 +${Math.round(v*10)}`,
         apply:(b,v)=>{ b.battleGoldMult *= 1 + v*0.06; b.startGoldBonus += v*10; } },
@@ -593,10 +607,18 @@ function applyUpgradeCard(card, gs) {
 }
 
 // 편성 슬롯 — 네 군데에서 제각기 계산하고 있었고 그중 둘만 층 이벤트를 반영했다
+// ⚔️ 병영 레벨 두 단마다 편성 칸 하나. 기본 4칸에서 Lv.10이면 +5.
+// 보석 트랙 하나로만 늘리던 시절엔 값이 가팔라 대부분 6칸에서 멈췄고,
+// 판이 깊어져도 편성 화면이 그대로였다.
+function barracksSlotBonus(gs) {
+  const lv = (typeof townBuildingLevel === 'function') ? townBuildingLevel(gs, 'barracks') : 0;
+  return Math.floor(lv / 2);
+}
 function recalcMaxSlots(gs) {
   if (!gs || !gs.battle) return;
+  const base = 4 + barracksSlotBonus(gs) + BONUSES.maxSlotBonus;
   gs.battle.maxSlots = Math.max(1,
-    Math.floor((4 + BONUSES.maxSlotBonus) * (BONUSES.pactSlotMult || 1)) + fev('slotBonus', 0));
+    Math.floor(base * (BONUSES.pactSlotMult || 1)) + fev('slotBonus', 0));
 }
 
 // 슬롯이 줄었는데 이미 그보다 많이 데리고 있으면 넘치는 만큼 돌려보낸다.
@@ -613,7 +635,8 @@ function releaseOverCapUnits(gs) {
   // 나중에 뽑은 것부터 — 층 이벤트를 보고 추가로 뽑았을 쪽이다
   for (let i = team.length - 1; i >= 0 && over > 0; i--) {
     if (!isNormal(team[i])) continue;
-    refund += hireCost(team[i].typeId);
+    // 값이 오르는 체계라 '지금 그 종류의 마지막 한 명' 값으로 돌려준다 (전액 환불)
+    refund += hireCostAt(team[i].typeId, hireCountOf(gs.battle, team[i].typeId) - 1);
     team.splice(i, 1);
     over--; freed++;
   }
@@ -637,6 +660,31 @@ function applyRunUpgrades(gs) {
     if (c.persist)      c.persist(BONUSES);
     else if (!c.once)   c.apply(BONUSES, gs);
   }
+}
+
+// ─── 판 도중에 이미 받은 보석 ────────────────────────────────────────────────
+// 현상수배·소환 정예·관문·보스 보상은 잡는 그 자리에서 바로 들어온다.
+// 그런데 결과 화면의 '💎 보석 정산'에는 층·처치·케이브만 적혀 있었다 —
+// 30보석짜리 현상수배를 세 마리 잡고 나왔는데 정산에 8이라고 적혀 있으면
+// 받은 것을 안 준 것으로 읽는다. 실제로 빠진 적은 없고, **보이지 않았을 뿐이다.**
+// 그래서 판 도중 수입을 따로 세어 두고 정산 화면에 '이미 받음'으로 같이 적는다.
+const RUN_GEM_KINDS = {
+  bounty: { label:'💰 현상수배', note:'잡는 즉시 받았습니다' },
+  elite:  { label:'⚔️ 소환 정예', note:'잡는 즉시 받았습니다' },
+  gate:   { label:'🏁 관문 최초 돌파', note:'넘는 즉시 받았습니다' },
+  boss:   { label:'👹 보스 처치', note:'잡는 즉시 받았습니다' },
+};
+function runGemState(gs) {
+  if (!gs.runGems) gs.runGems = {};
+  return gs.runGems;
+}
+function addRunGems(gs, kind, n) {
+  if (!(n > 0)) return;
+  const r = runGemState(gs);
+  r[kind] = (r[kind] || 0) + n;
+}
+function runGemsTotal(gs) {
+  return Object.values(runGemState(gs)).reduce((a, x) => a + x, 0);
 }
 
 // ─── 보석 정산 ────────────────────────────────────────────────────────────────
@@ -695,7 +743,8 @@ function soulStoneBreakdown(gs) {
     const start   = gs.runBestAtStart || 0;
     if (cleared <= 0) {
       rows.push({ label:'돌파한 층 없음', value:0, note:'한 층이라도 넘어야 정산이 있습니다' });
-      return { rows, mult, gaveUp:!!gs.gaveUp, total: 0 };
+      return { rows, mult, gaveUp:!!gs.gaveUp, total: 0,
+               already: runGemRows(gs), alreadyTotal: runGemsTotal(gs) };
     }
     // 새 깊이와 되짚은 층을 갈라 보여준다 — 어디서 벌었는지가 보여야 다음 판이 달라진다.
     // 층 적립은 소수로 쌓이고 총합에서 한 번만 내림하므로, 나눠 적을 때도 합이 총합과 맞아야 한다.
@@ -724,11 +773,24 @@ function soulStoneBreakdown(gs) {
       rows.push({ label:'새로 돌파한 층', value:newDepthGems(cleared, start),
                   note:`${start}층 → ${cleared}층 · ${cleared-start}개 층` });
     }
-    return { rows, mult, gaveUp:!!gs.gaveUp, total: calcSoulStones(gs) };
+    return { rows, mult, gaveUp:!!gs.gaveUp, total: calcSoulStones(gs),
+             already: runGemRows(gs), alreadyTotal: runGemsTotal(gs) };
   }
 
   rows.push({ label: gs.stageCleared ? '훈련 완주' : '훈련 중단',
               value: gs.stageCleared ? TRAINING_CLEAR_GEMS : TRAINING_QUIT_GEMS,
               note: '훈련은 익히는 곳입니다 — 보석은 심연에서 법니다' });
-  return { rows, mult, gaveUp:!!gs.gaveUp, total: calcSoulStones(gs) };
+  return { rows, mult, gaveUp:!!gs.gaveUp, total: calcSoulStones(gs),
+           already: runGemRows(gs), alreadyTotal: runGemsTotal(gs) };
+}
+
+// 판 도중에 이미 받은 보석을 정산 화면용 줄로 만든다.
+// 정산 총합(total)과는 별개다 — 이미 지갑에 들어간 값이라 다시 더하면 두 번 준다.
+function runGemRows(gs) {
+  const r = runGemState(gs), out = [];
+  for (const k of Object.keys(RUN_GEM_KINDS)) {
+    if (!(r[k] > 0)) continue;
+    out.push({ label: RUN_GEM_KINDS[k].label, value: r[k], note: RUN_GEM_KINDS[k].note });
+  }
+  return out;
 }

@@ -101,6 +101,8 @@ function makeArenaMob(typeId, waveIndex, killCount, _unusedCaveLevel, eliteBonus
     x: 0, y: 0, vx: 0, vy: 0,
     target: null, dead: false, deadTimer: 0,
     flashTimer: 0, flashColor: '#fff',
+    // 🛡 원거리 저항 — 템플릿에 있으면 그대로 들고 간다
+    rangedResist: t.rangedResist || 0,
     slowUntil: 0, dashCd: 3 + Math.random() * 2, dashing: 0
   };
 }
@@ -212,6 +214,8 @@ function fireSurge(gs) {
 function updateArenaSpawn(gs, dt) {
   const a = gs.arena, b = gs.battle;
   if (b.phase !== 'fighting') return;
+  // 👹 보스 층은 한쪽 전선만 쓴다 — 상단 보스면 여기는 한 마리도 안 나온다
+  if (typeof laneInUse === 'function' && !laneInUse(gs, 'bottom')) return;
   // 스폰 시간이 끝나면 더 나오지 않는다 — 남은 것을 정리하면 웨이브가 끝난다
   if (typeof wm !== 'undefined' && wm && wm.timer <= 0) return;
 
@@ -268,6 +272,10 @@ function updateArena(gs, dt) {
   a.mobs = a.mobs.filter(m => !m.dead || m.deadTimer < 0.5);
 
   // 영웅 재생
+  if (BONUSES.heroRegenPct > 0) {
+    const h = gs.battle.ourTeam.find(u => u.isHero && !u.dead);
+    if (h) h.hp = Math.min(h.maxHp, h.hp + h.maxHp * BONUSES.heroRegenPct * dt);
+  }
   if (BONUSES.heroRegen > 0) {
     const h = allies.find(u => u.isHero);
     if (h) h.hp = Math.min(h.maxHp, h.hp + BONUSES.heroRegen * dt);
@@ -304,13 +312,17 @@ function updateAlly(gs, u, mobs, allies, dt) {
   }
 
   // 목표: 사거리 안에서 가장 가까운 적
+  // 🌀 추방 — 영웅만 10초 동안 아무것도 못 한다
+  if (u.isHero && typeof bossEffect === 'function' && bossEffect(gs, 'nohero')) return;
   const inRange = pickAttackTarget(mobs, u, u.range);
   u.target = inRange;
 
   // 공격
   u.atkCd -= dt;
   if (inRange && u.atkCd <= 0) {
-    u.atkCd = u.atkPeriod / ((BONUSES.unitAtkSpdMult || 1) * arenaBuff(gs, 'haste'));   // 💨 질풍
+    // 🕸 점착 — 보스 기믹이 걸린 동안은 공격이 느려진다
+    const gSlowAtk = (typeof bossEffect === 'function' && bossEffect(gs, 'slowatk')) ? 0.5 : 1;
+    u.atkCd = u.atkPeriod / ((BONUSES.unitAtkSpdMult || 1) * arenaBuff(gs, 'haste') * gSlowAtk);
     allyAttack(gs, u, inRange);
   } else if (u.atkCd <= 0) {
     u.atkCd = 0;
@@ -327,7 +339,8 @@ function updateAlly(gs, u, mobs, allies, dt) {
   // 이동 — 수렁 위에서는 느려진다
   applyTerrainTick(gs, u, dt, true);
   if (u.dead) return;
-  const spd = u.moveSpd * terrainSpeedMult(gs.arena.terrain, u)
+  const gSlowMove = (typeof bossEffect === 'function' && bossEffect(gs, 'slowmove')) ? 0.5 : 1;
+  const spd = u.moveSpd * gSlowMove * terrainSpeedMult(gs.arena.terrain, u)
             * (isHidden(u) ? ROGUE_STEALTH_SPD : 1);
 
   // 🗡️ 탐욕 — 점찍은 드랍이 아직 살아 있으면 그쪽이 우선이다.
@@ -425,7 +438,7 @@ function allyAttack(gs, u, target) {
     target.pendingDmg = (target.pendingDmg || 0) + dmg;
     gs.arena.shots.push({
       x: u.x, y: u.y, tx: target.x, ty: target.y, target,
-      dmg, color: crit ? '#f43f5e' : u.color, spd: 420, fromAlly: true, life: 1.2
+      dmg, color: crit ? '#f43f5e' : u.color, spd: 420, fromAlly: true, life: 1.2, shooter: u
     });
   } else {
     hurtMob(gs, target, dmg, crit ? '#f43f5e' : '#fbbf24');
@@ -509,7 +522,7 @@ function allySkill(gs, u, mobs, allies) {
       t.pendingDmg = (t.pendingDmg || 0) + dmg;
       a.shots.push({
         x: u.x, y: u.y, tx: t.x, ty: t.y, target: t,
-        dmg, color: u.skillColor, spd: 520, fromAlly: true, life: 1.2, delay: i * 0.08
+        dmg, color: u.skillColor, spd: 520, fromAlly: true, life: 1.2, delay: i * 0.08, shooter: u
       });
     });
     if (typeof SFX !== 'undefined') SFX.skill();
@@ -640,7 +653,7 @@ function updateShots(gs, dt) {
 
     if (d < 8 || s.life <= 0) {
       if (t && !t.dead && d < 16) {
-        if (s.fromAlly) { t.pendingDmg = Math.max(0, (t.pendingDmg||0) - s.dmg); hurtMob(gs, t, s.dmg, s.color); }
+        if (s.fromAlly) { t.pendingDmg = Math.max(0, (t.pendingDmg||0) - s.dmg); hurtMob(gs, t, s.dmg, s.color, true, s.shooter); }
         else            hurtAlly(gs, t, s.dmg, s.color);
       } else if (t && s.fromAlly) {
         t.pendingDmg = Math.max(0, (t.pendingDmg||0) - s.dmg);
@@ -795,6 +808,28 @@ function spawnMidBossMob(gs, tier) {
   return m;
 }
 
+// 👹 하단 레이드 보스 — 아레나를 통째로 쓰는 한 마리.
+// 중간보스와 달리 **가까이 붙어 때리지 않는다.** 위쪽에 자리를 잡고 서서
+// 바닥에 장판을 예고했다 터뜨린다(boss.js). 그래서 스펙이 모자라도 비켜서면 버틴다.
+function spawnRaidBoss(gs, tier, kind) {
+  const a = gs.arena;
+  const m = spawnMidBossMob(gs, tier);
+  if (!m) return null;
+  m.isRaidBoss = true;
+  if (kind === 'lord') {
+    m.name  = '👹 마왕';
+    m.maxHp = Math.round(m.maxHp * 2.6);
+    m.hp    = m.maxHp;
+    m.atk   = Math.round(m.atk * 1.3);
+  }
+  // 위쪽 한가운데에 자리를 잡고 거의 움직이지 않는다 — 쫓아다니는 싸움이 아니다
+  m.x = ARENA_X + ARENA_W / 2;
+  m.y = ARENA_Y + Math.min(70, ARENA_H * 0.16);
+  m.moveSpd = (m.moveSpd || 40) * 0.18;
+  m.radius  = Math.round(m.radius * 1.25);
+  return m;
+}
+
 // 값나가는 드랍 하나를 처치 지점 바깥에 떨군다.
 // 발밑에 두면 제자리를 지키는 자동 모드가 그냥 주워버려 "가지러 간다"가 성립하지 않는다.
 function spawnSpecialDrop(gs, m, baseGold) {
@@ -838,19 +873,45 @@ function arenaBuff(gs, kind) {
 }
 
 // ─── 피해 ────────────────────────────────────────────────────────────────────
-function hurtMob(gs, m, dmg, color) {
+function hurtMob(gs, m, dmg, color, fromRanged, fromShooter) {
   if (m.dead) return;
-  m.hp -= dmg;
+  // 🏹 반사막 — 보스가 원거리 공격을 받지 않는다. 붙어서 때리라는 뜻이고,
+  // 장판을 피하면서 붙어야 하니 그 10초가 실제로 어려운 구간이 된다.
+  if (fromRanged && (m.isRaidBoss || m.isMidBoss)
+      && typeof bossEffect === 'function' && bossEffect(gs, 'noranged')) {
+    addFloaty(gs.battle, '🏹 튕김', m.x, m.y - m.radius, '#94a3b8');
+    return;
+  }
+  // 🛡 방패병 — 날아오는 것만 막는다. 붙어서 때리면 그대로 아프다.
+  // 궁수 한 종류로 칸을 다 채우는 것이 늘 정답이던 것을 되돌리는 자리다.
+  let real = dmg;
+  // 🏹 신궁은 방패를 뚫는다 — 원거리인데도 통하는 갈래가 하나는 있어야
+  // 방패병이 '원거리 금지'가 아니라 '원거리를 고르게 하는 적'이 된다
+  const shieldPierced = !!BONUSES.heroPierceRanged && fromShooter && fromShooter.isHero;
+  if (fromRanged && m.rangedResist > 0 && !shieldPierced) {
+    real = Math.max(1, Math.round(dmg * (1 - m.rangedResist)));
+    if (Math.random() < 0.3) addFloaty(gs.battle, '🛡', m.x, m.y - m.radius - 8, '#38bdf8');
+  }
+  m.hp -= real;
   m.flashTimer = 0.18; m.flashColor = color;
-  addFloaty(gs.battle, `-${dmg}`, m.x, m.y - m.radius, color);
+  addFloaty(gs.battle, `-${real}`, m.x, m.y - m.radius, color);
   if (typeof FX !== 'undefined') FX.burst(m.x, m.y, color, 2, 6);
   if (m.hp > 0) return;
 
   m.dead = true; m.hp = 0; m.deadTimer = 0; m.pendingDmg = 0;
+  // 👹 하단 레이드 보스를 잡았다 — 여기서 보스전이 끝나고 유물이 떨어진다
+  if ((m.isRaidBoss || m.isMidBoss) && typeof bossActive === 'function' && bossActive(gs)
+      && gs.boss.side === 'bottom') {
+    if (typeof grantBossReward === 'function') grantBossReward(gs);
+    endBossFight(gs, true);
+    if (m.isRaidBoss && !gs.bossDefeated && typeof markBossDefeated === 'function'
+        && gs.boss.kind === 'lord') markBossDefeated();
+  }
   // 소환 정예 — 잡아야만 보석이 들어온다
   if (m.gems > 0) {
     gs.soulStones += m.gems;
     gs.stats.totalGems = (gs.stats.totalGems || 0) + m.gems;
+    if (typeof addRunGems === 'function') addRunGems(gs, 'elite', m.gems);
     gs.stats.eliteKills = (gs.stats.eliteKills || 0) + 1;
     addFloaty(gs.battle, `💎 +${m.gems}`, m.x, m.y - 30, '#a78bfa');
     addLog(gs.battle, `⚔️ 소환 정예 처치! 보석 +${m.gems}`, '#a78bfa');
@@ -883,6 +944,10 @@ function hurtMob(gs, m, dmg, color) {
     if (typeof FX !== 'undefined') { FX.ring(m.x, m.y, '#fbbf24', 22); FX.shake(5, 0.3); }
   }
   // 처치 회복도 전반적으로 눌렀다 — 잡기만 하면 차오르면 자연 회복을 없앤 뜻이 없다
+  if (BONUSES.killHealPct > 0) {
+    for (const u of gs.battle.ourTeam)
+      if (!u.dead) u.hp = Math.min(u.maxHp, u.hp + u.maxHp * BONUSES.killHealPct);
+  }
   if (BONUSES.killHeal > 0) {
     for (const u of gs.battle.ourTeam) {
       if (!u.dead) u.hp = Math.min(u.maxHp, u.hp + BONUSES.killHeal);
@@ -940,7 +1005,11 @@ function applyDeathAffixes(gs, m) {
 function hurtAlly(gs, u, dmg, color) {
   if (u.dead) return;
   if (isHidden(u)) return;   // 🗡️ 은신 중에는 맞지 않는다
-  let remain = Math.max(1, Math.round(dmg * arenaBuff(gs, 'guard')));   // 🛡️ 수호
+  // 비율 방어 — 정액 방어(def)가 뺄셈으로 먼저 걸리고, 남은 피해에 이 비율이 곱해진다.
+  // 상한을 두는 이유는 기지 피해 감소와 같다: 100%에 닿으면 그 뒤로는 아무것도
+  // 위험하지 않아서 판이 끝난다.
+  const dpct = Math.min(UNIT_DEF_PCT_CAP, Math.max(0, BONUSES.unitDefPct || 0));
+  let remain = Math.max(1, Math.round(dmg * arenaBuff(gs, 'guard') * (1 - dpct)));   // 🛡️ 수호
   if (dmg <= 0) remain = 0;
   if (u.shield > 0) {
     const absorbed = Math.min(u.shield, remain);

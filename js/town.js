@@ -66,6 +66,12 @@ function levelUpUpgradeReq(def, level) {
   return Math.ceil(buildingBuyableAt(def, level) * LEVELUP_UPGRADE_RATIO);
 }
 
+// 건물의 화면상 레벨(Lv.1..Lv.10). 내부 level은 0-based다.
+function townBuildingLevel(gs, id) {
+  const b = gs.town && gs.town.buildings && gs.town.buildings[id];
+  return (b && b.built) ? ((b.level || 0) + 1) : 0;
+}
+
 // 🏰 성채 레벨이 정하는 다른 건물의 레벨 상한
 function castleLevel(gs) {
   const c = gs.town && gs.town.buildings && gs.town.buildings.castle;
@@ -160,8 +166,13 @@ const TOWN_BUILDINGS = [
         desc:v=>`용병 고용비 -${Math.round(v)}`,             apply:(b,v)=>{ b.hireCostDiscount += Math.round(v); } },
       { id:'u_crit', name:'급소 교본',  icon:'🎯', unlockLv:4, cost:51, costMult:1.2, step:0.018, growth:0.0267, maxLv:24,
         desc:v=>`치명타 확률 +${pct(v)}`,                    apply:(b,v)=>{ b.critChance += v; } },
-      { id:'u_slot', name:'병력 증원',  icon:'➕', unlockLv:5, cost:90, costMult:1.423, step:1,    growth:0,    maxLv:4,
-        desc:v=>`편성 슬롯 +${Math.round(v)}`,               apply:(b,v)=>{ b.maxSlotBonus += Math.round(v); } },
+      // ➕ 편성 슬롯은 이제 '보석으로 사는 트랙'이 아니라 **병영 레벨 그 자체**다.
+      // 예전에는 Lv.5에 열려 90보석부터 ×1.423씩 네 번 — 마지막 한 칸이 260보석이라
+      // 대부분 두 칸에서 멈췄고, 편성 화면은 판 내내 같은 모양이었다.
+      // 건물을 올리면 칸이 늘어난다는 규칙 하나로 바꾸면 무엇을 올릴지가 분명해진다.
+      { id:'u_slot', name:'병력 증원',  icon:'➕', unlockLv:2, cost:60, costMult:1.24, step:1,    growth:0,    maxLv:2,
+        desc:v=>`편성 슬롯 +${Math.round(v)} (병영 레벨에 더해집니다)`,
+        apply:(b,v)=>{ b.maxSlotBonus += Math.round(v); } },
       { id:'u_regen',name:'야전 의무',  icon:'🩹', unlockLv:3, cost:46, costMult:1.2, step:0.0018, growth:0.02, maxLv:24,
         desc:v=>`전투 이탈 회복 +${pct(v)}/s`,               apply:(b,v)=>{ b.regenBonus += v; } },
       { id:'u_combo',name:'연계 훈련',  icon:'🔗', unlockLv:6, cost:76, costMult:1.212, step:0.015, growth:0.02, maxLv:24,
@@ -220,8 +231,11 @@ const TOWN_BUILDINGS = [
         desc:v=>`특수 용병 등장 확률 +${pct(v)}`,            apply:(b,v)=>{ b.specialChance += v; } },
       { id:'i_fame', name:'명성',          icon:'📜', unlockLv:1, cost:45, costMult:1.192, step:0.048, growth:0.0333,
         desc:v=>`특수 용병 능력치 +${pct(v)}`,               apply:(b,v)=>{ b.specialUnitMult += v; } },
-      { id:'i_slot', name:'별관 증축',     icon:'🚪', unlockLv:2, cost:82, costMult:1.404, step:1,    growth:0,    maxLv:4,
-        desc:v=>`특수 용병 슬롯 +${Math.round(v)}`,          apply:(b,v)=>{ b.specialSlotBonus += Math.round(v); } },
+      // 🚪 특수 용병 슬롯도 같은 이유로 여관 레벨에 딸렸다. 이 트랙은 그 위에
+      // 얹는 한두 칸만 남긴다 — 82보석에서 ×1.404씩 네 번은 아무도 끝까지 못 샀다.
+      { id:'i_slot', name:'별관 증축',     icon:'🚪', unlockLv:2, cost:55, costMult:1.24, step:1,    growth:0,    maxLv:2,
+        desc:v=>`특수 용병 슬롯 +${Math.round(v)} (여관 레벨에 더해집니다)`,
+        apply:(b,v)=>{ b.specialSlotBonus += Math.round(v); } },
       { id:'i_stock',name:'보급 계약',   icon:'📦', unlockLv:3, cost:44, costMult:1.2, step:8, growth:0.04,
         desc:v=>`매 층 시작 골드 +${Math.round(v)}`,          apply:(b,v)=>{ b.startGoldBonus += Math.round(v); } },
       { id:'i_gold', name:'단골 손님',   icon:'💰', unlockLv:5, cost:66, costMult:1.212, step:0.024, growth:0.0267, maxLv:24,
@@ -380,11 +394,19 @@ function createTown() {
 function refreshHeroShop(gs) {
   // 이미 가진 물건은 매대에서 빼둔다 — 같은 검이 세 자루 쌓이면 매대가 벌이 된다
   const owned = new Set((heroGear(gs).inventory || []).map(e => e.itemId));
-  const pool = HERO_EQUIPMENT_POOL.filter(e => !owned.has(e.id));
+  // 등급마다 열리는 상점 레벨이 다르다. 전부 균등하게 뽑던 시절에는 전설이
+  // 첫 웨이브 매대에 뜨거나 (넣었다면) 영영 안 뜨거나 둘 중 하나였다 —
+  // 건물을 올리는 것이 매대를 바꾸는 일이 되어야 상점 레벨에 뜻이 생긴다.
+  const shopLv = townBuildingLevel(gs, 'heroShop');
+  const pool = HERO_EQUIPMENT_POOL.filter(e =>
+    !owned.has(e.id) && shopLv >= (GRADE_SHOP_LEVEL[e.grade] || 1));
   const picked=[], avail=[...pool];
   while (picked.length<3 && avail.length>0) {
-    const i=Math.floor(Math.random()*avail.length);
-    picked.push(avail.splice(i,1)[0]);
+    // 등급 가중치로 뽑는다 — 전설이 흔해지면 전설이 아니다
+    const wSum = avail.reduce((a,e) => a + (GRADE_WEIGHT[e.grade] || 10), 0);
+    let roll = Math.random() * wSum, i = 0;
+    for (; i < avail.length; i++) { roll -= (GRADE_WEIGHT[avail[i].grade] || 10); if (roll <= 0) break; }
+    picked.push(avail.splice(Math.min(i, avail.length-1), 1)[0]);
   }
   gs.town.shopItems = picked;
   if (skillShopOpen(gs)) refreshSkillOffers(gs);
@@ -500,6 +522,7 @@ function reapplyAllBonuses(gs) {
   applyForge(gs);         // ⚒️ 대장간 담금질 숙련도
   applyAscend(gs);        // ♾️ 승천 — 끝나지 않는 보석 사용처
   applyCharms(gs);        // 🎴 이번 판에 들고 온 부적
+  if (typeof applyRelics === 'function') applyRelics(gs);   // 🏺 보스에서 얻은 유물
   // 각인은 마지막에 — 스킬 트리와 마을 강화 위에 얹힌다
   const sg = (typeof activeSigil === 'function') ? activeSigil() : null;
   if (sg && sg.apply) sg.apply(BONUSES);
