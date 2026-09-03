@@ -874,6 +874,24 @@ const ENEMY_TYPES = {
                armor:8, color:'#dc2626', radius:26, isBoss:true }
 };
 const ENEMY_CELL_SPD = CELL_W;
+
+// 격자가 7줄 → 8줄이 된 만큼 상단 적 체력을 되올린다.
+//
+// "한 줄 늘었으니 1/7 = +14%"가 직관이지만, 재 보니 그렇지 않았다.
+// 늘어난 여덟 칸은 전부 기지 앞 마지막 줄이고, 타워 사거리로 덮이는 경로 칸
+// 수를 세어 보면 **좋은 자리부터 짓는 한 이득이 거의 없다.**
+//
+//   타워 6기(초반)   경로 변형 4종 전부 +0.0%   ← 새 칸이 기존 상위 6칸을 못 이긴다
+//   타워 10기        +0.8 ~ +2.8%
+//   타워 16기        +1.1 ~ +2.7%
+//   타워 24기        +2.6 ~ +3.4%
+//   판을 다 채우면   +5.9 ~ +13.0%             ← 골드가 남아도는 심층에서만
+//
+// 여기에 경로가 한 칸 길어져 사정권에 머무는 시간이 +3.4~4.0% 붙는다.
+// 실제로 겪는 이득은 초반 +4%, 중반 +5~7%, 심층에서 조금 더다.
+// 그래서 +6%로 잡았다. 14%를 얹으면 보정이 아니라 상향이 된다.
+const GRID_ROW_HP_COMP = 1.06;
+
 // 웨이브가 오를수록 상단 적도 강해진다
 const DEF_WAVE_HP_SCALE    = 0.22;
 const DEF_WAVE_ARMOR_EVERY = 5;
@@ -2133,7 +2151,7 @@ const BOUNTY_SPAWN_DELAY   = 8;      // 웨이브 시작 후 등장까지(초)
 function bountyCharges(waveIndex) { return Math.floor((waveIndex || 0) / 3) + 1; }
 function bountyHp(n, waveIndex) {
   return Math.round(ENEMY_TYPES.bounty.hp * (1 + (n || 0) * BOUNTY_HP_ESCALATION)
-                    * (1 + (waveIndex || 0) * DEF_WAVE_HP_SCALE));
+                    * (1 + (waveIndex || 0) * DEF_WAVE_HP_SCALE) * GRID_ROW_HP_COMP);
 }
 // 보석 획득 경로가 상단 현상수배 + 하단 정예 둘이 됐다.
 // 둘 다 예전 값을 그대로 주면 보석이 두 배로 들어오므로, 한 마리당 값을 낮춘다.

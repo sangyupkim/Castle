@@ -158,6 +158,8 @@ function makeDefenseEnemy(typeId, waveIndex, opts) {
   const mods  = endlessMods(w);
   const scale = (mods ? endlessStatMult(w) * (mods.hpBonus || 1)
                       : (1 + w * DEF_WAVE_HP_SCALE))
+              // 격자가 8줄이 되면서 수비가 유리해진 만큼 되올린다 (constants.js 주석 참고)
+              * GRID_ROW_HP_COMP
               * (BONUSES.pactDefHpMult || 1) * fev('hpMult', 1)
               // ♾️ 무한 — 층마다 한 겹씩 더 무거워진다. 악몽 10과 같은 층에서
               // 시작해 갈수록 벌어지므로, 무한이 언제나 가장 어려운 갈래로 남는다.
