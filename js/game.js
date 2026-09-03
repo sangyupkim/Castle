@@ -674,6 +674,11 @@ function tap({x,y}) {
   // 방금 화면 배치가 바뀌었으면 이 탭은 흘려보낸다
   if (tapsLocked()) return;
 
+  // ✋ 기믹 파훼 — 예고 중인 기믹이 있고 보스를 눌렀으면 여기서 끝난다.
+  // 다른 무엇보다 먼저 본다. 창이 1~2초뿐이라 다른 조작에 밀리면 못 누른다.
+  // 과녁 밖을 눌렀으면 false를 돌려주므로 평소 조작을 막지 않는다.
+  if (typeof tryBossParry === 'function' && tryBossParry(gs, x, y)) return;
+
   // 훈련 완주 — 무한이 열린다
   if (gs.stageCleared && !gs.gameOver) { showResult(); return; }
   // 기지 함락 — 결과 화면으로. 스킬 트리는 로비에 있으므로 여기서 열지 않는다.
@@ -2550,6 +2555,9 @@ function frame(ts) {
   if (typeof bossActive === 'function' && bossActive(gs)
       && gs.page!=='lobby' && gs.page!=='result' && gs.page!=='town') {
     renderBossHud(ctx, gs);
+    // ✋ 파훼 과녁은 HUD 위에 그린다 — 상단 보스는 경로 시작점이 HUD 밑이라
+    // 먼저 그리면 눌러야 할 과녁이 HUD에 가려진다.
+    if (typeof renderBossParry === 'function') renderBossParry(ctx, gs);
   }
 
   // 런 종료·갈림길 오버레이 — 전투/마을 위에 덮는다.
@@ -2573,6 +2581,11 @@ function frame(ts) {
   // 🧭 시킨 일을 해냈는지 매 프레임 본다. 확인 버튼이 없으므로 이게 유일한 진행 수단이다.
   if (!_titleScreen && !tut.active) { try { guide.update(gs, dt); } catch (e) {} }
 
+  // 👹 기믹 예고 창은 **실시간**으로 센다. 아래 배속 루프 안에서 세면
+  // 10배속에서 창이 1/10로 줄어 사람이 누를 수 없다.
+  if (!_paused && !tut.active && !_titleScreen && typeof bossParryTick === 'function') {
+    try { bossParryTick(gs, dt); } catch (e) {}
+  }
   if ((_paused || tut.active) && !_titleScreen && !_fadingOut) {
     FX.update(dt); updateFloaties(dt);
   } else {

@@ -33,6 +33,27 @@ const RAID_TIME_LIMIT   = 150;   // 이 안에 못 잡으면 패배
 const MIDRAID_TIME_LIMIT = 60;
 const RAID_FIELD_WARN   = 1.1;   // 장판이 터지기까지 예고되는 시간(초)
 
+// ── 파훼 ─────────────────────────────────────────────────────────────────────
+// 기믹이 즉발이면 보스전은 '무작위로 벌을 받는 시간'이 된다. 특히 💥붕괴는
+// 나올 때마다 타워를 서너 기씩 지우는데, 열 줄짜리 마왕전에서 네 번 이상 나올 확률이
+// 12.3%였다 — 여덟 판에 한 번은 플레이어가 뭘 하든 타워가 남지 않았다.
+//
+// 그래서 기믹은 **예고하고 나서** 터진다. 그 사이에 보스를 때리면(터치하면) 무효가 된다.
+// 손이 개입할 수 있으면 같은 기믹도 '벌'이 아니라 '반응해야 할 순간'이 된다.
+//
+// 창은 **실시간**으로 센다. 게임은 최대 10배속으로 도는데 게임시간으로 재면
+// 10배속에서 1.8초짜리 창이 0.18초가 되어 사람이 누를 수 없다.
+const PARRY_SEC_MAX  = 1.9;   // 첫 줄이 깨질 때 주는 시간(실시간 초)
+const PARRY_SEC_MIN  = 1.15;  // 마지막 줄에서도 이 아래로는 안 줄인다
+const PARRY_RADIUS   = 46;    // 보스 주변 이 반경을 누르면 파훼 (넉넉하게 — 손가락이다)
+
+// 남은 줄 수에 따라 창이 조금씩 짧아진다 — 뒤로 갈수록 조여야 긴장이 유지된다
+function parryWindowFor(gs) {
+  const b = bossState(gs);
+  const frac = b.bars > 1 ? Math.min(1, b.broken / b.bars) : 0;
+  return PARRY_SEC_MAX - (PARRY_SEC_MAX - PARRY_SEC_MIN) * frac;
+}
+
 // ─── 기믹 ────────────────────────────────────────────────────────────────────
 // dur이 0이면 즉발(그 자리에서 한 번 일어나고 끝), 아니면 그 초만큼 지속된다.
 // side는 이 기믹이 어느 전선에서 뜻이 있는가.
@@ -142,6 +163,9 @@ function beginBossFight(gs, waveIndex, kind, pick) {
              : (side === 'top' ? MIDBOSS_SECS : MIDRAID_TIME_LIMIT);
   b.effects  = {};
   b.log      = null;
+  b.parry    = null;   // 지금 예고 중인 기믹 (없으면 null)
+  b.bag      = [];     // 기믹 뽑기 주머니 — 중복 없이 돈다
+  b.parried  = 0;      // 이번 판에 막아낸 수 (결과 화면에 적는다)
   b.fields   = [];
   b.fieldTimer = 1.6;
   b.defeated = false;
@@ -170,6 +194,7 @@ function endBossFight(gs, won) {
   b.failed   = !won;
   b.fields   = [];
   b.effects  = {};
+  b.parry    = null;
   // 아레나를 원래 자리로 되돌린다 — 안 되돌리면 다음 층이 어긋난 채로 시작한다
   if (typeof applyArenaBounds === 'function') applyArenaBounds(false);
   if (typeof invalidateArenaFloor === 'function') invalidateArenaFloor();
@@ -183,15 +208,103 @@ function bossCheckBars(gs, hp, maxHp) {
   const want = Math.min(b.bars, Math.floor((1 - hp / maxHp) * b.bars));
   while (b.broken < want) {
     b.broken++;
-    bossFireGimmick(gs);
+    bossQueueGimmick(gs);
   }
 }
 
-function bossFireGimmick(gs) {
+// ─── 기믹 뽑기 — 중복 없이 ───────────────────────────────────────────────────
+// 매번 무작위로 고르면 💥붕괴가 연달아 나올 수 있다. 주머니에서 하나씩 꺼내 쓰고
+// 다 떨어지면 새로 채운다. 다섯 종류를 열 줄에 걸쳐 쓰면 각 기믹이 정확히 두 번씩 —
+// "운이 나빠서 졌다"가 생기지 않는다.
+function bossDrawGimmick(gs) {
   const b = bossState(gs);
-  const pool = bossGimmicksFor(b.side === 'top' ? 'top' : 'bottom');
-  if (!pool.length) return;
-  const g = pool[Math.floor(Math.random() * pool.length)];
+  const side = b.side === 'top' ? 'top' : 'bottom';
+  if (!b.bag || !b.bag.length) {
+    const pool = bossGimmicksFor(side).slice();
+    // 섞는다
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const t = pool[i]; pool[i] = pool[j]; pool[j] = t;
+    }
+    b.bag = pool;
+  }
+  return b.bag.shift() || null;
+}
+
+// ─── 예고 ────────────────────────────────────────────────────────────────────
+// 기믹을 바로 터뜨리지 않고 창을 연다. 창이 닫힐 때까지 안 누르면 그때 터진다.
+function bossQueueGimmick(gs) {
+  const b = bossState(gs);
+  const g = bossDrawGimmick(gs);
+  if (!g) return;
+  // 이미 예고 중인 것이 있으면 그건 그대로 터뜨린다 — 창이 겹쳐 쌓이면 못 읽는다
+  if (b.parry) bossFireGimmick(gs, b.parry.g);
+  const w = parryWindowFor(gs);
+  b.parry = { g, left: w, total: w };
+  if (typeof SFX !== 'undefined') SFX.denied();
+  if (typeof addLog === 'function' && gs.battle)
+    addLog(gs.battle, `⚠️ ${g.icon} ${g.name} — 보스를 눌러 막으세요!`, '#facc15');
+}
+
+// 예고 창을 **실시간**으로 센다. 배속이 몇이든 사람이 누를 시간은 같아야 한다.
+// 그래서 update()가 아니라 프레임 루프에서 한 번만 부른다.
+function bossParryTick(gs, dtReal) {
+  const b = bossState(gs);
+  if (!b.active || !b.parry) return;
+  b.parry.left -= dtReal;
+  if (b.parry.left <= 0) {
+    const g = b.parry.g;
+    b.parry = null;
+    bossFireGimmick(gs, g);
+  }
+}
+
+// 지금 예고 중인 기믹의 과녁이 어디인가 — 보스 위다.
+// "보스를 때려서 끊는다"로 읽혀야 화면 어딘가의 단추를 찾지 않는다.
+function bossParryTarget(gs) {
+  const b = bossState(gs);
+  if (!b.active || !b.parry) return null;
+  const m = b.side === 'top'
+    ? bossFindTop(gs)
+    : (gs.arena && gs.arena.mobs || []).find(x => (x.isRaidBoss || x.isMidBoss) && !x.dead);
+  if (!m) return null;
+  // 과녁을 화면 안으로 물린다. 상단 보스는 경로 시작점이 보스 HUD 밑이라
+  // 그대로 두면 과녁이 HUD에 잘려 '누를 수 없는 과녁'이 된다.
+  //
+  // 중요한 것은 **보이는 자리와 눌러야 하는 자리가 같아야** 한다는 것이다.
+  // 그리기만 물리고 판정은 원래 자리에 두면, 보이는 데를 눌렀는데 안 막힌다.
+  // 그래서 여기서 한 번만 물리고 그리기·판정이 이 값을 같이 쓴다.
+  const pad = PARRY_RADIUS + 6;
+  const x = Math.max(pad, Math.min(CW - pad, m.x));
+  const y = Math.max(BOSS_HUD_H + pad, Math.min(CH - ARENA_CTRL_H - pad, m.y));
+  return { x, y, r: PARRY_RADIUS, left: b.parry.left, total: b.parry.total, g: b.parry.g,
+           // 보스가 과녁 밖에 있으면 선으로 이어 준다 — 무엇을 막는 건지 알아야 한다
+           bx: m.x, by: m.y, offset: Math.hypot(x - m.x, y - m.y) > 2 };
+}
+
+// 눌렀다 — 과녁 안이면 막아낸다. 밖이면 아무 일도 안 일어난다(다른 조작을 막지 않는다).
+function tryBossParry(gs, x, y) {
+  const t = bossParryTarget(gs);
+  if (!t) return false;
+  if (Math.hypot(x - t.x, y - t.y) > t.r) return false;
+  const b = bossState(gs);
+  const g = b.parry.g;
+  b.parry = null;
+  b.parried = (b.parried || 0) + 1;
+  b.log = { icon:'✋', name:'파훼', desc:`${g.icon} ${g.name}을 막아냈습니다`, until: 2.4 };
+  if (typeof FX  !== 'undefined') { FX.ring(t.x, t.y, '#22c55e', 30); FX.burst(t.x, t.y, '#86efac', 14, 22); }
+  if (typeof SFX !== 'undefined') SFX.levelUp();
+  if (typeof spawnFloaty === 'function') spawnFloaty('✋ 파훼!', t.x, t.y - 24, '#86efac');
+  if (typeof addLog === 'function' && gs.battle)
+    addLog(gs.battle, `✋ 파훼 — ${g.icon} ${g.name}을 막아냈습니다`, '#22c55e');
+  return true;
+}
+
+// 실제로 터뜨린다. 예고 창이 닫혔을 때만 불린다.
+function bossFireGimmick(gs, given) {
+  const b = bossState(gs);
+  const g = given || bossDrawGimmick(gs);
+  if (!g) return;
   let extra = '';
   if (g.fire) {
     const boss = bossFindTop(gs);
