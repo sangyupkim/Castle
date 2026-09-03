@@ -893,8 +893,20 @@ let   ARENA_H = BATTLE_H - ARENA_STATUS_H - ARENA_CTRL_H;   // 기준 높이에�
 // 아레나 경계를 다시 잡는다. raid=true면 상단이 없다고 보고 위쪽까지 쓴다.
 // 보스전이 끝나면 raid=false로 다시 불러 원래 자리로 되돌린다.
 const BOSS_HUD_H = 54;
+// 지금 아레나가 '레이드 배치'인가. 이 모듈이 직접 들고 있는다.
+//
+// 예전에는 applyViewportHeight가 gs.boss를 들여다봐서 판단했다. 그런데 resize()는
+// game.js의 `let gs = newState()`보다 **먼저** 돈다. let으로 선언된 이름은 초기화 전
+// 구간(TDZ)에서 `typeof`조차 예외를 던지므로, `typeof gs !== 'undefined'` 가드가
+// 아무것도 막지 못했다 — 스크립트가 그 자리에서 죽어 화면이 통째로 검게 나왔다.
+// 게다가 화면이 정확히 480×800이면 위쪽에서 먼저 빠져나가 안 터진다. 그래서
+// 개발 해상도에서만 멀쩡하고 실제 폰에서는 전부 죽었다.
+//
+// 아래 모듈이 위 모듈의 전역을 읽으면 로드 순서에 묶인다. 제 상태는 제가 든다.
+let _arenaRaidMode = false;
 function applyArenaBounds(raid) {
-  const top = raid ? (BOSS_HUD_H + ARENA_STATUS_H) : (BATTLE_Y + ARENA_STATUS_H);
+  _arenaRaidMode = !!raid;
+  const top = _arenaRaidMode ? (BOSS_HUD_H + ARENA_STATUS_H) : (BATTLE_Y + ARENA_STATUS_H);
   ARENA_Y = top;
   ARENA_H = CH - ARENA_CTRL_H - top;
   return ARENA_H;
@@ -906,10 +918,8 @@ function applyViewportHeight(vpW, vpH) {
   if (next === CH) return false;
   CH        = next;
   BATTLE_H  = CH - BATTLE_Y;
-  // 보스 레이드 중이면 그 배치를 유지한 채로 다시 잰다
-  const raid = (typeof gs !== 'undefined' && gs && gs.boss
-                && gs.boss.active && gs.boss.side === 'bottom');
-  applyArenaBounds(!!raid);
+  // 레이드 중이면 그 배치를 유지한 채로 다시 잰다
+  applyArenaBounds(_arenaRaidMode);
   return true;
 }
 
