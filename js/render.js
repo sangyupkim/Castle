@@ -3410,7 +3410,8 @@ function renderSigilPicker(ctx, gs, y) {
   ctx.textAlign='left';
   y += 18;
 
-  const cw = (CW-32)/3, ch = 74;
+  const nSg = HERO_SIGILS.length;
+  const cw = (CW-24-(nSg-1)*4)/nSg, ch = 74;
   HERO_SIGILS.forEach((sg, i) => {
     const cx = 12 + i*(cw+4);
     const on = sg.id === cur.id;
@@ -4935,7 +4936,7 @@ function renderHeroShopScreen(ctx, gs) {
       ctx.font='18px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.fillStyle='#e2e8f0';
       ctx.fillText(d.icon,12,sy+ih/2);
       ctx.fillStyle=gc; ctx.font='bold 10px sans-serif';
-      ctx.fillText(`${d.name}   ${activeLaneTag(d.lane)} · 💧${d.mp} · ${d.cd}s`, 32, sy+ih/2-11);
+      ctx.fillText(`${d.name}   ${activeLaneTag(d.lane)} · 💧${activeMpCost(d.id)} · ${activeCooldown(d.id)}s` + (activeFitsSigil(d.id) ? '  ✦정합' : ''), 32, sy+ih/2-11);
       ctx.fillStyle='#cbd5e1'; ctx.font='bold 9px sans-serif';
       ctx.fillText(d.desc, 32, sy+ih/2+2);
       ctx.fillStyle='#475569'; ctx.font='8px sans-serif';
@@ -5223,7 +5224,7 @@ function renderHeroDetail(ctx, gs, startY) {
   const prev = heroPickPreview(gs);
   let y = startY;
 
-  gs.ui.heroBackBtn = null; gs.ui.equipSlotBtns = []; gs.ui.invCards = [];
+  gs.ui.heroBackBtn = null; gs.ui.equipSlotBtns = []; gs.ui.invCards = []; gs.ui.invSellBtns = [];
   gs.ui.skillSlotBtns = []; gs.ui.skillCards = []; gs.ui.heroPickBtn = null;
   gs.ui.activeSlotBtns = [];
 
@@ -5401,7 +5402,7 @@ function renderHeroDetail(ctx, gs, startY) {
       ctx.fillStyle='#e2e8f0'; ctx.font='15px sans-serif'; ctx.fillText(def.icon,sx+acW/2,y+4);
       ctx.fillStyle=gc; ctx.font='bold 9px sans-serif'; ctx.fillText(def.name,sx+acW/2,y+23);
       ctx.fillStyle='#5b6b80'; ctx.font='bold 7px sans-serif';
-      ctx.fillText(`\ud83d\udca7${def.mp} \u00b7 ${def.cd}\ucd08 \u00b7 ${activeLaneTag(def.lane)}`,sx+acW/2,y+35);
+      ctx.fillText(`\ud83d\udca7${activeMpCost(def.id)} \u00b7 ${activeCooldown(def.id)}\ucd08 \u00b7 ${activeLaneTag(def.lane)}`,sx+acW/2,y+35);
       gs.ui.activeSlotBtns.push({x:sx,y,w:acW,h:acH,idx:i,id:def.id});
     } else {
       ctx.fillStyle='#334155'; ctx.font='14px sans-serif'; ctx.fillText('\uff0b',sx+acW/2,y+9);
@@ -5477,7 +5478,7 @@ function renderHeroDetail(ctx, gs, startY) {
   ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillText(`🎒 보관함 ${g.inventory.length}개`,6,y);
   ctx.textAlign='right'; ctx.fillStyle='#475569'; ctx.font='bold 8px sans-serif';
-  ctx.fillText('탭해서 고르고 → 칸에 장착', CW-6, y+1);
+  ctx.fillText('탭해서 고르고 → 칸에 장착 · 고른 것은 팔 수 있습니다', CW-6, y+1);
   ctx.textAlign='left'; y += 13;
   if (!g.inventory.length) {
     uiPanel(ctx, 6,y,CW-12,26,4, '#0a0f1a', '#1a2130', 1);
@@ -5500,6 +5501,15 @@ function renderHeroDetail(ctx, gs, startY) {
       ctx.fillStyle= on?'#22c55e':'#475569'; ctx.font='bold 8px sans-serif';
       ctx.fillText(on?'장착 중':GRADE_NAME[item.grade]||'',cx+cw/2,cy+44);
       gs.ui.invCards.push({x:cx,y:cy,w:cw,h:chh,uid:e.uid});
+      // 💰 판매 — 고른 것에만 버튼이 뜬다. 늘 띄우면 실수로 눌러 물건이 사라진다.
+      if (picked && !on) {
+        const sbw=cw-8, sbh=16, sbx=cx+4, sby=cy+chh-sbh-3;
+        uiPanel(ctx, sbx,sby,sbw,sbh,3, '#1a0b12', '#f43f5e', 1);
+        ctx.fillStyle='#fda4af'; ctx.font='bold 8px sans-serif'; ctx.textBaseline='middle';
+        ctx.fillText(`💰 ${gearSellValue(gs, e.uid)}`, cx+cw/2, sby+sbh/2);
+        ctx.textBaseline='top';
+        gs.ui.invSellBtns.push({x:sbx,y:sby,w:sbw,h:sbh,uid:e.uid});
+      }
     });
     y += Math.ceil(g.inventory.length/cols)*(chh+6) + 4;
   }
@@ -5510,7 +5520,7 @@ function renderHeroDetail(ctx, gs, startY) {
 function renderTownPageArmy(ctx, gs, startY) {
   // 영웅 정보를 누르면 같은 탭 안에서 상세 화면으로 갈아탄다
   if (gs.town.heroView) { renderHeroDetail(ctx, gs, startY); return; }
-  gs.ui.heroBackBtn = null; gs.ui.equipSlotBtns = []; gs.ui.invCards = [];
+  gs.ui.heroBackBtn = null; gs.ui.equipSlotBtns = []; gs.ui.invCards = []; gs.ui.invSellBtns = [];
   gs.ui.skillSlotBtns = []; gs.ui.skillCards = []; gs.ui.heroPickBtn = null;
   const {battle,hero}=gs;
   const lv=HERO_LEVELS[hero.level];

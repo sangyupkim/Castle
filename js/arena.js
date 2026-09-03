@@ -438,7 +438,7 @@ function allyAttack(gs, u, target) {
     target.pendingDmg = (target.pendingDmg || 0) + dmg;
     gs.arena.shots.push({
       x: u.x, y: u.y, tx: target.x, ty: target.y, target,
-      dmg, color: crit ? '#f43f5e' : u.color, spd: 420, fromAlly: true, life: 1.2
+      dmg, color: crit ? '#f43f5e' : u.color, spd: 420, fromAlly: true, life: 1.2, shooter: u
     });
   } else {
     hurtMob(gs, target, dmg, crit ? '#f43f5e' : '#fbbf24');
@@ -522,7 +522,7 @@ function allySkill(gs, u, mobs, allies) {
       t.pendingDmg = (t.pendingDmg || 0) + dmg;
       a.shots.push({
         x: u.x, y: u.y, tx: t.x, ty: t.y, target: t,
-        dmg, color: u.skillColor, spd: 520, fromAlly: true, life: 1.2, delay: i * 0.08
+        dmg, color: u.skillColor, spd: 520, fromAlly: true, life: 1.2, delay: i * 0.08, shooter: u
       });
     });
     if (typeof SFX !== 'undefined') SFX.skill();
@@ -653,7 +653,7 @@ function updateShots(gs, dt) {
 
     if (d < 8 || s.life <= 0) {
       if (t && !t.dead && d < 16) {
-        if (s.fromAlly) { t.pendingDmg = Math.max(0, (t.pendingDmg||0) - s.dmg); hurtMob(gs, t, s.dmg, s.color, true); }
+        if (s.fromAlly) { t.pendingDmg = Math.max(0, (t.pendingDmg||0) - s.dmg); hurtMob(gs, t, s.dmg, s.color, true, s.shooter); }
         else            hurtAlly(gs, t, s.dmg, s.color);
       } else if (t && s.fromAlly) {
         t.pendingDmg = Math.max(0, (t.pendingDmg||0) - s.dmg);
@@ -873,7 +873,7 @@ function arenaBuff(gs, kind) {
 }
 
 // ─── 피해 ────────────────────────────────────────────────────────────────────
-function hurtMob(gs, m, dmg, color, fromRanged) {
+function hurtMob(gs, m, dmg, color, fromRanged, fromShooter) {
   if (m.dead) return;
   // 🏹 반사막 — 보스가 원거리 공격을 받지 않는다. 붙어서 때리라는 뜻이고,
   // 장판을 피하면서 붙어야 하니 그 10초가 실제로 어려운 구간이 된다.
@@ -885,7 +885,10 @@ function hurtMob(gs, m, dmg, color, fromRanged) {
   // 🛡 방패병 — 날아오는 것만 막는다. 붙어서 때리면 그대로 아프다.
   // 궁수 한 종류로 칸을 다 채우는 것이 늘 정답이던 것을 되돌리는 자리다.
   let real = dmg;
-  if (fromRanged && m.rangedResist > 0) {
+  // 🏹 신궁은 방패를 뚫는다 — 원거리인데도 통하는 갈래가 하나는 있어야
+  // 방패병이 '원거리 금지'가 아니라 '원거리를 고르게 하는 적'이 된다
+  const shieldPierced = !!BONUSES.heroPierceRanged && fromShooter && fromShooter.isHero;
+  if (fromRanged && m.rangedResist > 0 && !shieldPierced) {
     real = Math.max(1, Math.round(dmg * (1 - m.rangedResist)));
     if (Math.random() < 0.3) addFloaty(gs.battle, '🛡', m.x, m.y - m.radius - 8, '#38bdf8');
   }

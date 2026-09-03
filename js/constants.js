@@ -1210,6 +1210,19 @@ const HERO_SIGILS = [
             desc:'가장 넓은 범위 · 맞은 적은 둔화' },
     passive:'영웅 사거리 +40% · 스킬 피해 +25%',
     apply:b=>{ b.sigilHeroRangeMult *= 1.40; b.sigilSkillMult *= 1.25; } },
+
+  // 🏹 신궁 — 술사와 같은 원거리지만 성격이 반대다.
+  // 술사는 한 방을 넓게 터뜨리고, 신궁은 여러 발을 빠르게 꽂는다.
+  // 방패병이 원거리를 반으로 깎는 판에서 '원거리인데도 뚫는' 갈래를 하나 둔다 —
+  // 그래서 관통(방어 무시)이 이 각인의 몫이다.
+  { id:'ranger', name:'신궁', icon:'🏹', color:'#4ade80',
+    tagline:'멀리서, 빠르게, 여러 발',
+    ranged:true,
+    skill:{ name:'연사', kind:'volley', cd:5.5, radius:0, mult:1.5, color:'#86efac',
+            hits:4, desc:'사거리 안 넷에게 연달아 쏜다' },
+    passive:'영웅 사거리 +90% · 공격속도 +25% · 원거리 저항 무시',
+    apply:b=>{ b.sigilHeroRangeMult *= 1.90; b.sigilHeroSpdMult *= 1.25;
+               b.heroPierceRanged = true; } },
 ];
 const DEFAULT_SIGIL = 'blade';
 

@@ -394,11 +394,19 @@ function createTown() {
 function refreshHeroShop(gs) {
   // 이미 가진 물건은 매대에서 빼둔다 — 같은 검이 세 자루 쌓이면 매대가 벌이 된다
   const owned = new Set((heroGear(gs).inventory || []).map(e => e.itemId));
-  const pool = HERO_EQUIPMENT_POOL.filter(e => !owned.has(e.id));
+  // 등급마다 열리는 상점 레벨이 다르다. 전부 균등하게 뽑던 시절에는 전설이
+  // 첫 웨이브 매대에 뜨거나 (넣었다면) 영영 안 뜨거나 둘 중 하나였다 —
+  // 건물을 올리는 것이 매대를 바꾸는 일이 되어야 상점 레벨에 뜻이 생긴다.
+  const shopLv = townBuildingLevel(gs, 'heroShop');
+  const pool = HERO_EQUIPMENT_POOL.filter(e =>
+    !owned.has(e.id) && shopLv >= (GRADE_SHOP_LEVEL[e.grade] || 1));
   const picked=[], avail=[...pool];
   while (picked.length<3 && avail.length>0) {
-    const i=Math.floor(Math.random()*avail.length);
-    picked.push(avail.splice(i,1)[0]);
+    // 등급 가중치로 뽑는다 — 전설이 흔해지면 전설이 아니다
+    const wSum = avail.reduce((a,e) => a + (GRADE_WEIGHT[e.grade] || 10), 0);
+    let roll = Math.random() * wSum, i = 0;
+    for (; i < avail.length; i++) { roll -= (GRADE_WEIGHT[avail[i].grade] || 10); if (roll <= 0) break; }
+    picked.push(avail.splice(Math.min(i, avail.length-1), 1)[0]);
   }
   gs.town.shopItems = picked;
   if (skillShopOpen(gs)) refreshSkillOffers(gs);

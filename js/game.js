@@ -1412,6 +1412,17 @@ function handleHeroDetailTap(x,y) {
     return;
   }
   // 보관함 · 보유 스킬 — 탭하면 고른다 (같은 것을 다시 탭하면 취소)
+  // 💰 판매가 먼저다 — 카드 위에 얹힌 버튼이라 카드 판정보다 앞서야 한다
+  for (const c of gs.ui.invSellBtns||[]) {
+    if (!hitTest(x,y,c)) continue;
+    const item = equipDef((invEntry(gs, c.uid)||{}).itemId);
+    const v = sellGear(gs, c.uid);
+    if (v > 0) {
+      t.pick = null; SFX.levelUp(); SaveManager.save(gs);
+      spawnFloaty(`💰 +${v} — ${item ? item.name : '장비'} 판매`, CW/2, 300, COLORS.gold);
+    } else { SFX.denied(); spawnFloaty('낀 장비는 못 팝니다', x, y, '#ef4444'); }
+    return;
+  }
   for (const c of gs.ui.invCards||[]) {
     if (!hitTest(x,y,c)) continue;
     t.pick = (t.pick && t.pick.kind==='item' && t.pick.uid===c.uid) ? null : {kind:'item', uid:c.uid};

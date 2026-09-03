@@ -97,9 +97,10 @@ function makeHeroUnit(hero) {
     hp:Math.min(hp, Math.max(1, hero.hp)), maxHp:hp, atk, def, shield:0,
     atkPeriod:A.atkPeriod / (BONUSES.sigilHeroSpdMult * BONUSES.heroSpdMult), atkCd:0,
     range:A.range * BONUSES.sigilHeroRangeMult * BONUSES.heroRangeMult, moveSpd:A.moveSpd, radius:bodyRadius(A.radius),
-    ranged:false, isTank:false,
+    // 🏹 신궁은 붙지 않는다 — 각인이 원거리를 선언하면 평타도 날아간다
+    ranged:!!sg.ranged, isTank:false,
     skillName:sk.name, skillKind:sk.kind, skillCd:sk.cd, skillCdLeft:sk.cd,
-    skillRadius:sk.radius, skillHits:1, skillColor:sk.color,
+    skillRadius:sk.radius, skillHits:sk.hits || 1, skillColor:sk.color,
     skillAtk:Math.floor(atk * sk.mult * BONUSES.sigilSkillMult * BONUSES.heroSkillMult),
     healAmt:0,
     // 🛡 수호자의 함성은 최대 HP에 비례한다 — 단단할수록 부대를 더 감싼다
