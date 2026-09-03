@@ -28,6 +28,18 @@ const FORGE_PLUS_STEP = 0.08;        // 한 단계마다 그 칸 장비 스탯 +
 // 보석에서 골드로 옮기며 값의 자릿수를 골드 경제에 맞췄다 (보석 1 ≒ 골드 9쯤)
 const FORGE_GOLD_SCALE = 9;
 
+// 🔨 연마는 확정이었다. 값을 내면 무조건 +1 — 그래서 대장간에 들를 이유가
+// "골드가 남았나"뿐이었고, 세 갈래 중 하나가 결정이 아니라 지출이었다.
+// 이제 굴린다. 다만 담금질(체크포인트로 회귀)과 같은 모양이면 두 갈래가
+// 한 갈래가 되므로 **다르게 아프게** 만든다 —
+//   +1~+3  안전 구간. 100%로 오른다. 여기까지는 늘 닿는다.
+//   +4~+6  실패하면 그대로. 골드만 잃는다.
+//   +7~+10 실패하면 한 단 내려간다. 단, +5 아래로는 안 떨어진다.
+// 파괴는 없다. 한 판짜리 장비에 붙는 강화라 통째로 잃는 벌은 너무 무겁다.
+const FORGE_PLUS_SAFE   = 3;   // 여기까지는 무조건 성공
+const FORGE_PLUS_FLOOR  = 5;   // 실패해도 여기 아래로는 안 내려간다
+const FORGE_PLUS_RISK   = 6;   // 이 단수를 넘어서면 실패가 하락이 된다
+
 function slotPlus(gs, slotId) { return (forgeState(gs).plus || {})[slotId] || 0; }
 function slotPlusCost(gs, slotId) {
   const p = slotPlus(gs, slotId);
@@ -36,14 +48,31 @@ function slotPlusCost(gs, slotId) {
   const base = (slotId === 'acc1' || slotId === 'acc2') ? 2 : 3;
   return Math.max(1, Math.round(base * (p + 1) * 1.15) * FORGE_GOLD_SCALE);
 }
+// 다음 한 단의 성공 확률
+function slotPlusOdds(gs, slotId) {
+  const p = slotPlus(gs, slotId);
+  if (p < FORGE_PLUS_SAFE) return 1;
+  // +3에서 82%로 시작해 한 단마다 9%p씩. +9 → +10이 37%.
+  return Math.max(0.30, 0.82 - (p - FORGE_PLUS_SAFE) * 0.09 + (BONUSES.fuseLuck || 0));
+}
+// 실패했을 때 무슨 일이 나는가 — 'keep'(그대로) | 'down'(한 단 하락)
+function slotPlusFailKind(gs, slotId) {
+  return slotPlus(gs, slotId) >= FORGE_PLUS_RISK ? 'down' : 'keep';
+}
+// 한 번 굴린다. { ok, before, after, cost, fail } 또는 null(불가)
 function upgradeSlotPlus(gs, slotId) {
   const cost = slotPlusCost(gs, slotId);
-  if (cost == null || (gs.gold || 0) < cost) return false;
+  if (cost == null || (gs.gold || 0) < cost) return null;
   const f = forgeState(gs);
+  const before = slotPlus(gs, slotId);
+  const odds   = slotPlusOdds(gs, slotId);
+  const kind   = slotPlusFailKind(gs, slotId);
   gs.gold -= cost;
-  f.plus[slotId] = slotPlus(gs, slotId) + 1;
+  const win = Math.random() < odds;
+  if (win) f.plus[slotId] = before + 1;
+  else if (kind === 'down') f.plus[slotId] = Math.max(FORGE_PLUS_FLOOR, before - 1);
   reapplyAllBonuses(gs);
-  return true;
+  return { ok:win, before, after:slotPlus(gs, slotId), cost, fail: win ? null : kind };
 }
 // 그 칸에 낀 장비가 실제로 받는 배율
 function slotPlusMult(gs, slotId) {

@@ -4321,9 +4321,12 @@ function _renderForgeGear(ctx, gs, y) {
   ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillStyle='#94a3b8'; ctx.font='9px sans-serif';
   ctx.fillText('이번 판 동안 그 칸에 낀 장비가 그만큼 강해집니다 — 판이 끝나면 사라집니다', 10, y);
+  y += 13;
+  ctx.fillStyle='#64748b'; ctx.font='9px sans-serif';
+  ctx.fillText(`+${FORGE_PLUS_SAFE}까지는 무조건 성공 · +${FORGE_PLUS_RISK}부터는 실패하면 한 단 내려갑니다 (+${FORGE_PLUS_FLOOR} 아래로는 안 떨어짐)`, 10, y);
   y += 16;
   gs.ui.forgeGearBtns=[];
-  const rowH=44, gap=5;
+  const rowH=50, gap=5;
   for (const sl of EQUIP_SLOTS) {
     const p = slotPlus(gs, sl.id), cost = slotPlusCost(gs, sl.id);
     const can = cost != null && gs.gold >= cost;
@@ -4334,7 +4337,18 @@ function _renderForgeGear(ctx, gs, y) {
     ctx.font='bold 11px sans-serif'; ctx.fillStyle = p>0?'#fdba74':'#cbd5e1';
     ctx.fillText(sl.name, 40, y+rowH/2-8);
     ctx.font='9px sans-serif'; ctx.fillStyle='#64748b';
-    ctx.fillText(`+${p} · 이 칸 장비 능력 ${Math.round((slotPlusMult(gs,sl.id)-1)*100)}% 증가`, 40, y+rowH/2+8);
+    ctx.fillText(`+${p} · 이 칸 장비 능력 ${Math.round((slotPlusMult(gs,sl.id)-1)*100)}% 증가`, 40, y+rowH/2+4);
+    // 굴리기 전에 확률과 실패했을 때 무슨 일이 나는지를 적는다
+    if (cost != null) {
+      const odds = slotPlusOdds(gs, sl.id), kind = slotPlusFailKind(gs, sl.id);
+      ctx.font='bold 8px sans-serif';
+      if (odds >= 1) { ctx.fillStyle='#86efac'; ctx.fillText('안전 구간 — 무조건 성공', 40, y+rowH/2+16); }
+      else {
+        ctx.fillStyle = kind === 'down' ? '#f87171' : '#94a3b8';
+        ctx.fillText(`성공 ${Math.round(odds*100)}%  ·  실패하면 ${kind === 'down' ? '한 단 하락' : '그대로'}`,
+                     40, y+rowH/2+16);
+      }
+    }
     // 버튼
     const bw=92,bh=28,bx=CW-16-bw,by=y+(rowH-bh)/2;
     roundRect(ctx,bx,by,bw,bh,5);
@@ -4346,7 +4360,9 @@ function _renderForgeGear(ctx, gs, y) {
       ctx.fillStyle=can?'#2a1a05':'#12161f'; ctx.fill();
       ctx.strokeStyle=can?'#f59e0b':'#293040'; ctx.stroke();
       ctx.fillStyle=can?'#fbbf24':'#475569'; ctx.font='bold 10px sans-serif'; ctx.textAlign='center';
-      ctx.fillText(`💰 ${cost} → +${p+1}`, bx+bw/2, by+bh/2);
+      ctx.fillText(`🔨 💰${cost}`, bx+bw/2, by+bh/2-6);
+      ctx.font='bold 8px sans-serif';
+      ctx.fillText(`+${p} → +${p+1}`, bx+bw/2, by+bh/2+8);
       gs.ui.forgeGearBtns.push({x:bx,y:by,w:bw,h:bh,slot:sl.id});
     }
     y += rowH+gap;

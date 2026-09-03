@@ -1472,10 +1472,14 @@ function handleForgeTap(x, y) {
   for (const b of gs.ui.forgeGearBtns||[]) {
     if (hitTest(x,y,b)) {
       const cost = slotPlusCost(gs, b.slot);
-      if (upgradeSlotPlus(gs, b.slot)) {
-        SFX.upgrade(); SaveManager.save(gs);
-        say(`🔨 ${slotDef(b.slot).name} +${slotPlus(gs,b.slot)}`, '#fbbf24');
-      } else { SFX.denied(); say(`💎 ${cost} 부족`, '#ef4444'); }
+      const r = upgradeSlotPlus(gs, b.slot);
+      if (!r) { SFX.denied(); say(`💰 ${cost} 부족`, '#ef4444'); return true; }
+      SaveManager.save(gs);
+      const nm = slotDef(b.slot).name;
+      if (r.ok) { SFX.upgrade(); say(`🔨 ${nm} +${r.after} 성공!`, '#fbbf24'); }
+      else if (r.fail === 'down') { SFX.denied(); FX.shake(5,0.35);
+        say(`🔨 ${nm} 실패 — +${r.before} → +${r.after}`, '#ef4444'); }
+      else { SFX.denied(); say(`🔨 ${nm} 실패 — +${r.after} 그대로`, '#94a3b8'); }
       return true;
     }
   }
