@@ -2950,9 +2950,18 @@ function wrapLinesFirstNarrow(ctx, text, firstW, restW) {
 // 한 프레임이면 딱 맞아떨어지고 그 뒤로는 움직이지 않는다.
 const SORTIE_GAPS = 6;
 let _sortieGap = 10;
+// 남은 픽셀이 이보다 적으면 손대지 않는다 — **떨림을 막는 죽은 구간**.
+//
+// 이 되먹임에는 반올림이 끼어 있다(간격은 정수 픽셀로 그린다). 그래서
+// 고정점이 정수가 아니면 영영 수렴하지 않고 두 값을 오간다:
+//   g ← g + K − round(g)   ·   K=12.5 이면 12.5 → 13 → 12.5 → 13 …
+// 간격 여섯 개가 매 프레임 1px씩 함께 움직이니, 화면 전체가 덜덜 떠는 것으로
+// 보인다. 한 칸(1px)도 못 채울 조정은 아예 하지 않으면 그 순환이 끊긴다.
+const SORTIE_GAP_DEADBAND = SORTIE_GAPS;   // 간격당 1px 미만이면 무시
 function fitSortieGap() {
   const room  = CH - LOBBY_SORTIE_H - 10;
   const slack = room - _lobbyBottom;
+  if (Math.abs(slack) < SORTIE_GAP_DEADBAND) return;
   _sortieGap = Math.max(10, Math.min(34, _sortieGap + slack / SORTIE_GAPS));
 }
 

@@ -115,10 +115,11 @@ function createGuide() {
     active: false,
     step: 0,
     held: 0,          // 이 단계를 띄운 시간 (hold용)
+    _scrollHint: false,  // 지금 '밀어서 찾으세요' 안내가 떠 있나 (히스테리시스용)
 
     start() {
       if (this.seen()) { this.active = false; return; }
-      this.active = true; this.step = 0; this.held = 0;
+      this.active = true; this.step = 0; this.held = 0; this._scrollHint = false;
     },
     seen() {
       try { return localStorage.getItem(GUIDE_KEY) === '1'; } catch (e) { return true; }
@@ -182,14 +183,32 @@ function createGuide() {
       if (rect && !(rect.w > 0 && rect.h > 0)) rect = null;
 
       // 4) 짚을 것이 스크롤 밖으로 밀려 있으면 밀어 보라고 말한다.
+      //
+      // 들어가는 문턱과 나오는 문턱을 다르게 둔다(히스테리시스).
+      // 예전에는 둘 다 12px이라, 대상이 경계에 딱 걸치면 프레임마다
+      // 안내가 떴다 사라졌다를 반복했다 — PC에서 화면이 덜덜 떠는 것으로 보였다.
+      // 안내가 뜨면 rect가 미세하게 움직이고, 움직이면 조건이 뒤집히고,
+      // 뒤집히면 안내가 사라져 rect가 되돌아온다. 그 되먹임이 매 프레임 돌았다.
+      //
+      // 한 번 뜨면 **넉넉히 안쪽에 들어올 때까지** 안 사라진다.
       if (rect && gs.page === 'town') {
-        const below = rect.y > CH - 12;
-        const above = rect.y + rect.h < GUIDE_TOWN_TOP + 12;
+        const wasOut = !!this._scrollHint;
+        const enterB = rect.y > CH - 12;
+        const enterA = rect.y + rect.h < GUIDE_TOWN_TOP + 12;
+        // 나오는 문턱은 훨씬 안쪽이다 — 경계에서 떨지 않게
+        const stillB = rect.y > CH - 76;
+        const stillA = rect.y + rect.h < GUIDE_TOWN_TOP + 76;
+        const below  = wasOut ? stillB : enterB;
+        const above  = wasOut ? stillA : enterA;
         if (below || above) {
+          this._scrollHint = true;
           return { step:s, rect:null, detour:true,
                    title:_guideStr(s.title, gs),
                    text:`${below ? '▼ 화면을 위로 밀어' : '▲ 화면을 아래로 밀어'} 아래 항목을 찾으세요.\n${_guideStr(s.text, gs).split('\n')[0]}` };
         }
+        this._scrollHint = false;
+      } else {
+        this._scrollHint = false;
       }
       return { step:s, rect, detour:false,
                title:_guideStr(s.title, gs), text:_guideStr(s.text, gs) };
