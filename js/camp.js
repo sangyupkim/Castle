@@ -142,6 +142,10 @@ const CAMP_GROUPS = [
   { id:'branch',  icon:'🌟', short:'분기', label:'타워 분기', color:'#a78bfa' },
   { id:'unit',    icon:'⚔️', short:'용병', label:'용병',      color:'#f97316' },
   { id:'special', icon:'🏨', short:'특수', label:'특수 용병', color:'#f43f5e' },
+  // 🏺 유물은 굴려서 올리는 것이 아니라 보스에게서 얻어 **끼우는** 것이다.
+  // 단련과 성격이 다르지만 "판을 넘어 남는 것을 손보는 자리"라는 점은 같아서
+  // 탭을 새로 파지 않고 같은 화면의 한 무리로 뒀다.
+  { id:'relic',   icon:'🏺', short:'유물', label:'유물',      color:'#fbbf24' },
 ];
 
 function campState(gs) {

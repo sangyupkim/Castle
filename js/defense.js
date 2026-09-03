@@ -208,9 +208,11 @@ function spawnMidBoss(gsp, waveIndex) {
   e.color  = '#f43f5e';
   e.radius = Math.round((e.radius || 14) * 1.7);
   e.spd    = (e.spd || 1) * 0.72;          // 느리고 무겁다
-  e.armor  = Math.round((e.armor || 0) + 4 + tier * 0.10);
+  e.armor  = Math.round((e.armor || 0) + 6 + tier * 0.16);
   e.dmg    = Math.round((e.dmg || 1) * 3);  // 놓치면 성벽이 크게 깎인다
-  e.spawnDelay = 6;                         // 잡몹이 먼저, 보스는 조금 뒤에
+  // 예전에는 잡몹이 먼저 오고 보스가 6초 뒤에 왔다. 지금은 중간보스 층도
+  // 한쪽 전선만 쓰므로 잡몹 자체가 없다 — 기다릴 이유가 사라져서 0으로 뒀다.
+  e.spawnDelay = 0;
   // 잡으면 보석 — 하단 중간보스와 같은 값을 준다. 어느 쪽에 나오든 값은 같아야
   // "이번엔 상단이라 손해"가 되지 않는다.
   e.gems = Math.round((2 + Math.floor(tier / 20)) * (BONUSES.summonRewardMult || 1));

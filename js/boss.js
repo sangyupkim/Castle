@@ -20,8 +20,13 @@ const BOSS_BARS      = 10;   // 마왕 — 열 줄. 한 줄마다 기믹.
 const MIDBOSS_BARS   = 5;    // 중간보스 — 다섯 줄
 
 // ── 상단: 몇 바퀴를 돌면 성으로 가는가 ───────────────────────────────────────
+// 마왕은 '열 바퀴 안에 잡아라'다 — 못 잡으면 성에 닿고 판이 끝난다.
+// 중간보스는 규칙이 다르다. **60초를 버티며 계속 돈다.** 그동안 못 잡으면
+// 성으로 간다. 바퀴가 아니라 시계를 보게 만든 것은, 중간보스가 마왕의
+// 축소판이 아니라 '한 번 숨을 참는 구간'이었으면 해서다.
 const BOSS_LAPS      = 10;
 const MIDBOSS_SECS   = 60;   // 중간보스는 바퀴가 아니라 60초
+const MIDBOSS_LAP_CAP = 99;  // 시간으로 끝나므로 바퀴로는 안 끝낸다
 
 // ── 하단 레이드 ──────────────────────────────────────────────────────────────
 const RAID_TIME_LIMIT   = 150;   // 이 안에 못 잡으면 패배
@@ -130,8 +135,11 @@ function beginBossFight(gs, waveIndex, kind, pick) {
   b.bars     = kind === 'lord' ? BOSS_BARS : MIDBOSS_BARS;
   b.broken   = 0;
   b.laps     = 0;
-  b.lapsMax  = BOSS_LAPS;
-  b.timeLeft = kind === 'lord' ? RAID_TIME_LIMIT : MIDRAID_TIME_LIMIT;
+  b.lapsMax  = kind === 'lord' ? BOSS_LAPS : MIDBOSS_LAP_CAP;
+  // 마왕 상단만 시계를 안 쓴다 — 거긴 바퀴가 시계 노릇을 한다
+  b.timed    = !(kind === 'lord' && side === 'top');
+  b.timeLeft = kind === 'lord' ? RAID_TIME_LIMIT
+             : (side === 'top' ? MIDBOSS_SECS : MIDRAID_TIME_LIMIT);
   b.effects  = {};
   b.log      = null;
   b.fields   = [];
@@ -236,7 +244,11 @@ function bossUpdateFields(gs, dt) {
   if (!b.active || b.side !== 'bottom') return;
 
   // 주기적으로 새 장판. 체력이 깎일수록 촘촘해진다.
-  const pace = Math.max(0.9, 2.6 - b.broken * 0.18);
+  // 중간보스의 장판은 '가끔'이다. 마왕과 같은 밀도로 깔면 60초짜리 구간이
+  // 마왕전보다 손이 더 바빠진다.
+  const pace = b.kind === 'lord'
+    ? Math.max(0.9, 2.6 - b.broken * 0.18)
+    : Math.max(2.4, 4.6 - b.broken * 0.30);
   b.fieldTimer -= dt;
   if (b.fieldTimer <= 0) {
     b.fieldTimer = pace;
@@ -282,11 +294,14 @@ function bossUpdate(gs, dt) {
 
   if (b.side === 'bottom') {
     bossUpdateFields(gs, dt);
-    b.timeLeft -= dt;
-    if (b.timeLeft <= 0) b.failed = true;
     // 전멸해도 패배
     const alive = (gs.battle?.ourTeam || []).some(u => !u.dead);
     if (!alive) b.failed = true;
+  }
+  // 시계를 쓰는 판(마왕 하단 · 중간보스 양쪽)은 여기서 센다
+  if (b.timed) {
+    b.timeLeft -= dt;
+    if (b.timeLeft <= 0) b.failed = true;
   }
 }
 
@@ -313,7 +328,7 @@ function heroHpShort(v) {
 function bossBarText(gs) {
   const b = bossState(gs);
   if (!b.active) return '';
-  return b.side === 'top'
+  return (b.side === 'top' && !b.timed)
     ? `${b.laps}/${b.lapsMax}바퀴`
     : `${Math.max(0, Math.ceil(b.timeLeft))}초`;
 }

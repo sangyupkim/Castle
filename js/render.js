@@ -2941,12 +2941,16 @@ function renderLobbyCamp(ctx, gs) {
   y += 2;
 
   // ── 무리 고르기 ──
-  const gw = (CW - 16 - 4*4) / 5, gh = 30;
+  const nG = CAMP_GROUPS.length;
+  const gw = (CW - 16 - (nG-1)*3) / nG, gh = 30;
   CAMP_GROUPS.forEach((g, i) => {
-    const gx = 8 + i*(gw+4);
+    const gx = 8 + i*(gw+3);
     const on = L.campGroup === g.id;
-    const lvs = campTracks().filter(t => t.group === g.id)
-                            .reduce((a2,t) => a2 + campLevel(gs, t.id), 0);
+    // 유물은 단수가 아니라 '끼운 개수'를 센다
+    const lvs = g.id === 'relic'
+      ? relicState(gs).equipped.length
+      : campTracks().filter(t => t.group === g.id)
+                    .reduce((a2,t) => a2 + campLevel(gs, t.id), 0);
     uiPanel(ctx, gx, y, gw, gh, 5, on ? '#1e1408' : '#0b1220', on ? g.color : '#1e293b', on ? 2 : 1);
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.font='12px sans-serif'; ctx.fillStyle = on ? '#e2e8f0' : '#475569';
@@ -2957,6 +2961,8 @@ function renderLobbyCamp(ctx, gs) {
   });
   ctx.textAlign='left'; ctx.textBaseline='top';
   y += gh + 10;
+
+  if (L.campGroup === 'relic') { _renderCampRelics(ctx, gs, y); return; }
 
   const rows = campTracks().filter(t => t.group === L.campGroup);
   for (const tr of rows) {
@@ -3049,6 +3055,125 @@ function renderLobbyCamp(ctx, gs) {
     : L.campGroup === 'branch'
       ? '🌟 분기 단련은 그 타워 종류의 단련 위에 곱해집니다 — 둘 다 올릴수록 세집니다.'
       : '보석은 캠프에서만 씁니다 — 여기서 올린 것은 판이 끝나도 남습니다.', 14, y+2);
+  _lobbyBottom = y + 20;
+}
+
+// ── 🏺 유물 — 보스에게서 얻어 끼운다 ────────────────────────────────────────
+// 단련과 달리 값을 내고 굴리는 것이 없다. 여기서 하는 일은 두 가지뿐이다 —
+// 가진 것 중 세 개를 고르고, 남는 것을 판다. 그래서 화면도 줄 하나에 다 담는다.
+// 안 가진 유물도 흐리게 같이 보여 준다. 무엇이 더 있는지 모르면 보스를 잡을
+// 이유가 "보상이 나오니까"에서 멈추고, 무엇을 노리는 재미가 생기지 않는다.
+const RELIC_RARITY_NAME  = { 1:'평범', 2:'귀함', 3:'전설' };
+const RELIC_RARITY_COLOR = { 1:'#94a3b8', 2:'#a78bfa', 3:'#fbbf24' };
+
+function _renderCampRelics(ctx, gs, y) {
+  gs.ui.relicBtns = []; gs.ui.relicSellBtns = [];
+  const st = relicState(gs);
+  const full = st.equipped.length >= RELIC_SLOTS;
+
+  // ── 낀 칸 ──
+  const sw = (CW - 16 - 2*6) / RELIC_SLOTS, sh = 52;
+  for (let i = 0; i < RELIC_SLOTS; i++) {
+    const sx = 8 + i*(sw+6);
+    const id = st.equipped[i];
+    const d  = id ? relicDef(id) : null;
+    uiPanel(ctx, sx, y, sw, sh, 6, d ? '#1a1608' : '#0b1220',
+            d ? (RELIC_RARITY_COLOR[d.rarity] || '#fbbf24') : '#1e293b', d ? 2 : 1);
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    if (d) {
+      ctx.font='18px sans-serif'; ctx.fillStyle='#e2e8f0';
+      ctx.fillText(d.icon, sx+sw/2, y+18);
+      ctx.font='bold 8px sans-serif'; ctx.fillStyle=RELIC_RARITY_COLOR[d.rarity]||'#fbbf24';
+      ctx.fillText(d.name, sx+sw/2, y+37);
+    } else {
+      ctx.font='16px sans-serif'; ctx.fillStyle='#1e293b';
+      ctx.fillText('◇', sx+sw/2, y+20);
+      ctx.font='8px sans-serif'; ctx.fillStyle='#334155';
+      ctx.fillText('빈 칸', sx+sw/2, y+37);
+    }
+  }
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  y += sh + 8;
+
+  ctx.fillStyle='#64748b'; ctx.font='9px sans-serif';
+  ctx.fillText(`보스를 잡으면 하나씩 나옵니다 · ${RELIC_SLOTS}칸까지 낍니다 · 겹친 것은 팝니다`, 14, y);
+  y += 15;
+
+  // ── 목록 ──
+  const owned = RELICS.filter(r => relicOwnedCount(gs, r.id) > 0);
+  const locked= RELICS.filter(r => relicOwnedCount(gs, r.id) === 0);
+
+  if (!owned.length) {
+    uiPanel(ctx, 8, y, CW-16, 40, 7, '#0b1220', '#1e293b', 1);
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle='#475569'; ctx.font='bold 10px sans-serif';
+    ctx.fillText('아직 유물이 없습니다 — 10층마다 오는 보스를 잡으세요', CW/2, y+20);
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    y += 46;
+  }
+
+  const row = (r, have) => {
+    const on   = relicEquipped(gs, r.id);
+    const rowH = 44;
+    const col  = RELIC_RARITY_COLOR[r.rarity] || '#94a3b8';
+    uiPanel(ctx, 8, y, CW-16, rowH, 7,
+            on ? '#1a1608' : (have ? '#0b1220' : '#080d16'),
+            on ? col : (have ? '#1e293b' : '#131c2b'), on ? 2 : 1);
+    ctx.globalAlpha = have ? 1 : 0.42;
+
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.font='16px sans-serif'; ctx.fillStyle='#e2e8f0';
+    ctx.fillText(r.icon, 16, y+16);
+    ctx.font='bold 10px sans-serif'; ctx.fillStyle = have ? col : '#475569';
+    ctx.fillText(r.name, 38, y+13);
+    ctx.font='8px sans-serif'; ctx.fillStyle='#64748b';
+    ctx.fillText(`${RELIC_RARITY_NAME[r.rarity]} · ${r.desc}`, 38, y+29);
+    if (have > 1) {
+      ctx.textAlign='left'; ctx.font='bold 8px sans-serif'; ctx.fillStyle='#fbbf24';
+      ctx.fillText(`×${have}`, 38 + ctx.measureText(r.name).width + 42, y+13);
+    }
+
+    if (have) {
+      // 끼우기 / 빼기
+      const bw=50, bh=22, bx=CW-16-bw-4, by=y+11;
+      const can = on || !full;
+      uiPanel(ctx, bx, by, bw, bh, 5,
+              on ? '#3f2d0a' : (can ? '#0f2a1a' : '#0b1220'),
+              on ? '#fbbf24' : (can ? '#22c55e' : '#1e293b'), 1.5);
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.font='bold 9px sans-serif';
+      ctx.fillStyle = on ? '#fbbf24' : (can ? '#22c55e' : '#334155');
+      ctx.fillText(on ? '빼기' : (can ? '끼우기' : '칸 참'), bx+bw/2, by+bh/2);
+      if (can) gs.ui.relicBtns.push({ x:bx, y:by, w:bw, h:bh, id:r.id });
+
+      // 겹친 것 팔기 — 마지막 하나는 못 판다
+      if (have > 1) {
+        const sbw=44, sbx=bx-sbw-5;
+        uiPanel(ctx, sbx, by, sbw, bh, 5, '#1a0b12', '#f43f5e', 1.5);
+        ctx.fillStyle='#fda4af'; ctx.font='bold 8px sans-serif';
+        ctx.fillText(`💎${relicSellValue(r.id)}`, sbx+sbw/2, by+bh/2);
+        gs.ui.relicSellBtns.push({ x:sbx, y:by, w:sbw, h:bh, id:r.id });
+      }
+    } else {
+      ctx.textAlign='right'; ctx.textBaseline='middle';
+      ctx.fillStyle='#334155'; ctx.font='bold 9px sans-serif';
+      ctx.fillText('미획득', CW-18, y+22);
+    }
+    ctx.globalAlpha = 1;
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    y += rowH + 5;
+  };
+
+  for (const r of owned) row(r, relicOwnedCount(gs, r.id));
+  if (locked.length) {
+    ctx.fillStyle='#334155'; ctx.font='bold 9px sans-serif';
+    ctx.fillText(`아직 못 본 유물 ${locked.length}종`, 14, y+2);
+    y += 16;
+    for (const r of locked) row(r, 0);
+  }
+
+  ctx.fillStyle='#334155'; ctx.font='9px sans-serif';
+  ctx.fillText('🏺 유물은 판이 끝나도 남습니다 — 낀 것만 효과가 붙습니다.', 14, y+2);
   _lobbyBottom = y + 20;
 }
 

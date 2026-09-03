@@ -169,7 +169,7 @@ function newState() {
          buildingScroll:null, pageScroll:null, briefScroll:null, lobbyScroll:null, pickScroll:null,
          pauseResumeBtn:null, pauseGiveUpBtn:null,
          backupExportBtn:null, backupImportBtn:null, backupMsg:null,
-         tutReplayBtn:null, tutResetTipBtn:null, guideReplayBtn:null, campBtns:[], campGroupBtns:[], cardMetaBtns:[], cardCatBtns:[], cardBanBtns:[], cardBackBtn:null,
+         tutReplayBtn:null, tutResetTipBtn:null, guideReplayBtn:null, campBtns:[], campGroupBtns:[], relicBtns:[], relicSellBtns:[], cardMetaBtns:[], cardCatBtns:[], cardBanBtns:[], cardBackBtn:null,
          rankSubmitBtn:null, rankBoardBtns:[], rankReloadBtn:null,
          pauseCardsBtn:null, runCardsCloseBtn:null, runCardsScroll:null, towerPromoteBtn:null,
          bossPickBtns:[], bgmToggleBtn:null, sfxToggleBtn:null,
@@ -864,7 +864,8 @@ let _lastUiScope = null;
 function uiScopeKey() {
   const L = gs.lobby || {}, t = gs.town || {};
   if (gs.page === 'lobby') {
-    return `lobby|${L.tab}|${L.tab === 'skill' ? (L.skillTree||'') : ''}|${L.tab === 'camp' ? (L.campGroup||'') : ''}|${L.tab === 'card' ? (L.cardCat||'-') : ''}`;
+    return `lobby|${L.tab}|${L.tab === 'skill' ? (L.skillTree||'') : ''}|${L.tab === 'camp' ? ((L.campGroup||'') + (L.campGroup === 'relic'
+        ? '|' + relicState(gs).equipped.join(',') + '|' + relicState(gs).owned.length : '')) : ''}|${L.tab === 'card' ? (L.cardCat||'-') : ''}`;
   }
   if (gs.page === 'town') {
     return `town|${t.screen||'main'}|${t.tab||''}|${t.heroView?'hero':''}|${t.forgeTab||''}|${t.shopTab||''}`;
@@ -1038,6 +1039,25 @@ function handleLobbyTap(x, y) {
     const ry = y + (gs.lobbyScroll || 0);
     for (const g of gs.ui.campGroupBtns||[]) {
       if (hitTest(x,ry,g)) { L.campGroup = g.id; gs.lobbyScroll = 0; SFX.click(); return; }
+    }
+    // 🏺 유물 — 끼우기/빼기와 겹친 것 팔기
+    for (const b of gs.ui.relicBtns||[]) {
+      if (!hitTest(x,ry,b)) continue;
+      if (toggleRelic(gs, b.id)) {
+        reapplyAllBonuses(gs); SaveManager.save(gs); SFX.click();
+        const d = relicDef(b.id);
+        spawnFloaty(relicEquipped(gs, b.id) ? `${d.icon} ${d.name} 장착` : `${d.icon} 해제`,
+                    CW/2, 300, relicEquipped(gs, b.id) ? '#fbbf24' : '#94a3b8');
+      } else { spawnFloaty('칸이 찼습니다', x, y, '#ef4444'); SFX.denied(); }
+      return;
+    }
+    for (const b of gs.ui.relicSellBtns||[]) {
+      if (!hitTest(x,ry,b)) continue;
+      const v = sellRelic(gs, b.id);
+      if (v > 0) { SaveManager.save(gs); SFX.levelUp();
+                   spawnFloaty(`💎 +${v}`, CW/2, 300, COLORS.gem); }
+      else { SFX.denied(); }
+      return;
     }
     for (const b of gs.ui.campBtns||[]) {
       if (!hitTest(x,ry,b)) continue;
