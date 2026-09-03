@@ -47,6 +47,7 @@ const SaveManager = {
       activeUpgrades: (gs.activeUpgrades || []).slice(),
       // 🏆 랭킹 개연성 검사용 — 이어했다고 시간이 0으로 돌아가면 안 된다
       runGameSec:  Math.round(gs.runGameSec || 0),
+      runGems:     gs.runGems ? Object.assign({}, gs.runGems) : {},
       runWallMs:   gs.runWallStart ? (Date.now() - gs.runWallStart) : 0,
       totalGoldEarned: gs.battle ? gs.battle.totalGoldEarned : 0,
       townBuildings: JSON.parse(JSON.stringify(gs.town?.buildings || {})),

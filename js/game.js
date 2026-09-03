@@ -138,6 +138,7 @@ function newState() {
     runCardsOpen:false, // 🃏 이번 판 카드 보기 화면이 열려 있는가
     runCardsScroll:0,
     runGameSec:0,       // 이 판의 게임 내 경과 시간(초) — 배속과 무관하다
+    runGems:{},         // 이 판에서 즉시 받은 보석 (현상수배·정예·관문·보스)
     runWallStart:0,     // 이 판을 시작한 실제 시각 — 랭킹 개연성 검사에 쓴다
     rerolls:0,          // 이번 런에서 강화 카드를 몇 번 리롤했는지 (골드 비용 체증)
     freeRerolls:0,      // 🎴패에서 산 공짜 리롤 — 층마다 다시 채워진다
@@ -312,6 +313,7 @@ let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적�
     .filter(id => UPGRADE_CARDS.some(c => c.id === id));
   // 이어한 판의 시간은 이어서 센다 — 0으로 돌아가면 랭킹 개연성 검사에 걸린다
   gs.runGameSec   = sv.runGameSec || 0;
+  gs.runGems      = (sv.runGems && typeof sv.runGems === 'object') ? sv.runGems : {};
   gs.runWallStart = Date.now() - (sv.runWallMs || 0);
 
   // ── 판에 세워둔 것 복원 ──
@@ -1309,6 +1311,7 @@ function startRun(mode, nightmare) {
   gs.runBestAtStart = (gs.stats && gs.stats.bestEndless) || 0;
   gs.runGameSec   = 0;
   gs.runWallStart = Date.now();
+  gs.runGems      = {};        // 판 도중에 바로 받은 보석 — 정산 화면에 같이 적는다
   applyPathVariant(0);
   gs.pathChanged = null;
   refreshInnOffers(gs);
@@ -1967,6 +1970,7 @@ function onDefenseKill(e, byHero) {
   if (e.gems > 0) {
     gs.soulStones += e.gems;
     gs.stats.totalGems = (gs.stats.totalGems || 0) + e.gems;
+    if (typeof addRunGems === 'function') addRunGems(gs, 'bounty', e.gems);
     gs.stats.bountyKills = (gs.stats.bountyKills || 0) + 1;
     spawnFloaty(`💎 +${e.gems}`, e.x, e.y - 30, '#a78bfa');
     addLog(gs.battle, `💰 현상수배 처치! 보석 +${e.gems}`, '#a78bfa');
@@ -2364,6 +2368,9 @@ function bankRunResult() {
     baseHP:   Math.ceil(gs.baseHP),
     gems:     bd.total,
     rows:     bd.rows,
+    // 판 도중에 이미 지갑에 들어간 보석 — 정산 총합과는 별개로 같이 적는다
+    already:      bd.already || [],
+    alreadyTotal: bd.alreadyTotal || 0,
     mult:     bd.mult,
     gaveUp:   !!gs.gaveUp,
     newBest:  wasBest,

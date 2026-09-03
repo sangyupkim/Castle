@@ -413,6 +413,7 @@ function grantBossReward(gs) {
   const gems = Math.round((b.kind === 'lord' ? 60 : 18) * mult);
   gs.soulStones = (gs.soulStones || 0) + gems;
   gs.stats.totalGems = (gs.stats.totalGems || 0) + gems;
+  if (typeof addRunGems === 'function') addRunGems(gs, 'boss', gems);
   b.reward = { relic: got.id, gems, mult };
 
   if (typeof addLog === 'function' && gs.battle)

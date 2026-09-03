@@ -3980,7 +3980,10 @@ function renderResult(ctx, gs) {
   y += 48;
 
   // 보석 정산 내역
-  const boxH = 40 + r.rows.length*20 + (r.mult > 1 ? 22 : 0) + (r.gaveUp ? 22 : 0);
+  // 판 도중에 이미 받은 보석도 같은 상자에 적는다 — 안 적으면 "안 줬다"로 읽힌다
+  const already = r.already || [];
+  const boxH = 40 + r.rows.length*20 + (r.mult > 1 ? 22 : 0) + (r.gaveUp ? 22 : 0)
+             + (already.length ? already.length*20 + 18 : 0);
   uiPanel(ctx, 20,y,CW-40,boxH,8, '#0d1220', '#3b2a5c', 1.5);
   ctx.textAlign='left';
   ctx.fillStyle='#a78bfa'; ctx.font='bold 11px sans-serif';
@@ -4010,6 +4013,24 @@ function renderResult(ctx, gs) {
     ctx.fillText('끝까지 버텼다면 전액', 130, ry+1);
     ctx.fillStyle='#f59e0b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='right';
     ctx.fillText(`×${GIVE_UP_GEM_MULT.toFixed(2)}`, CW-32, ry);
+    ry += 22;
+  }
+  if (already.length) {
+    ctx.textAlign='left';
+    ctx.strokeStyle='#241a3d'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(32, ry-4); ctx.lineTo(CW-32, ry-4); ctx.stroke();
+    ctx.fillStyle='#7c6aa8'; ctx.font='bold 9px sans-serif';
+    ctx.fillText(`판 도중에 이미 받은 보석 (합계 +${r.alreadyTotal||0} · 위 정산과 별개)`, 32, ry+4);
+    ry += 18;
+    for (const row of already) {
+      ctx.fillStyle='#64748b'; ctx.font='10px sans-serif'; ctx.textAlign='left';
+      ctx.fillText(row.label, 32, ry);
+      ctx.fillStyle='#334155'; ctx.font='9px sans-serif';
+      ctx.fillText(row.note, 130, ry+1);
+      ctx.fillStyle='#7c6aa8'; ctx.font='bold 10px sans-serif'; ctx.textAlign='right';
+      ctx.fillText(`+${row.value}`, CW-32, ry);
+      ry += 20;
+    }
   }
   y += boxH + 14;
 
@@ -5470,7 +5491,7 @@ function renderTownPageArmy(ctx, gs, startY) {
     const col=i%cols, row=Math.floor(i/cols);
     const cx=6+col*(cardW+6), cy2=y+row*(cardH+6);
     const unlocked = ut.special ? true : isUnlocked(id);
-    const cost=hireCost(id), canAff=unlocked&&gs.gold>=cost;
+    const cost=hireCost(id, gs.battle), canAff=unlocked&&gs.gold>=cost;
     uiPanel(ctx, cx,cy2,cardW,cardH,6, canAff?'#1e293b':'#111827', canAff?ut.color:'#374151', 1.5);
     // 잠긴 것도 회색으로 보여준다 — 무엇을 목표로 삼을지 알 수 있도록
     ctx.globalAlpha=unlocked?(canAff?1:0.55):0.32;

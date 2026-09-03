@@ -895,6 +895,7 @@ function hurtMob(gs, m, dmg, color, fromRanged) {
   if (m.gems > 0) {
     gs.soulStones += m.gems;
     gs.stats.totalGems = (gs.stats.totalGems || 0) + m.gems;
+    if (typeof addRunGems === 'function') addRunGems(gs, 'elite', m.gems);
     gs.stats.eliteKills = (gs.stats.eliteKills || 0) + 1;
     addFloaty(gs.battle, `💎 +${m.gems}`, m.x, m.y - 30, '#a78bfa');
     addLog(gs.battle, `⚔️ 소환 정예 처치! 보석 +${m.gems}`, '#a78bfa');

@@ -129,15 +129,39 @@ function createBattle() {
 }
 
 // ─── 고용 / 해고 ─────────────────────────────────────────────────────────────
-function hireCost(typeId) {
-  return Math.max(1, Math.round(UNIT_TYPES[typeId].cost * (1 - Math.min(0.75, BONUSES.hireCostPct || 0)))
+// 같은 용병을 더 뽑을수록 값이 오른다. 정액이던 시절에는 골드가 모이는 순간
+// **가장 센 용병 하나로 칸을 다 채우는 것**이 늘 정답이었다 — 고를 것이 없으면
+// 편성은 결정이 아니라 절차가 된다. 종류마다 따로 오르므로, 값이 오른 쪽 대신
+// 아직 싼 다른 종류를 섞는 선택지가 생긴다.
+const HIRE_STEP     = 1.34;   // 같은 종류 한 명 늘 때마다 이만큼
+const HIRE_STEP_CAP = 6;      // 이 이상은 안 오른다 (칸을 다 채워도 계산이 터지지 않게)
+
+function hireCountOf(battle, typeId) {
+  if (!battle || !Array.isArray(battle.ourTeam)) return 0;
+  return battle.ourTeam.filter(u => !u.isHero && u.typeId === typeId).length;
+}
+
+// n번째(0부터)로 뽑는 그 종류의 값
+function hireCostAt(typeId, n) {
+  const t = UNIT_TYPES[typeId];
+  if (!t) return 1;
+  // 특수 용병은 여관에 뜬 그 자리를 사는 것이라 '더 뽑을수록'이 성립하지 않는다
+  const step = t.special ? 1
+    : Math.pow(HIRE_STEP, Math.min(HIRE_STEP_CAP, Math.max(0, n | 0)));
+  const base = t.cost * step;
+  return Math.max(1, Math.round(base * (1 - Math.min(0.75, BONUSES.hireCostPct || 0)))
                      - BONUSES.hireCostDiscount);
+}
+
+// battle을 넘기면 지금 편성 기준의 '다음 한 명' 값. 안 넘기면 첫 명 값.
+function hireCost(typeId, battle) {
+  return hireCostAt(typeId, hireCountOf(battle, typeId));
 }
 
 function hireUnit(battle, typeId, gold) {
   const t = UNIT_TYPES[typeId];
   if (!t) return gold;
-  const cost = hireCost(typeId);
+  const cost = hireCost(typeId, battle);
   if (gold < cost) return gold;
 
   if (t.special) {
@@ -162,7 +186,9 @@ function fireUnit(battle, idx) {
   if (idx < 0 || idx >= battle.ourTeam.length) return 0;
   const u = battle.ourTeam[idx];
   if (u.isHero) return 0;
-  const refund = Math.floor(hireCost(u.typeId) / 2);
+  // 값이 오르는 만큼, 돌려받는 것도 **방금 낸 그 값**의 절반이어야 한다.
+  // 늘 첫 명 값으로 돌려주면 비싸게 뽑고 싸게 무르는 구멍이 된다.
+  const refund = Math.floor(hireCostAt(u.typeId, hireCountOf(battle, u.typeId) - 1) / 2);
   battle.ourTeam.splice(idx, 1);
   return refund;
 }

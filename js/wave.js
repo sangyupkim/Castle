@@ -427,6 +427,7 @@ function createWaveManager() {
             const bonus = ENDLESS_GATE_BONUS + Math.floor(et / 10) * ENDLESS_GATE_BONUS_STEP;
             gs.soulStones += bonus;
             gs.stats.totalGems = (gs.stats.totalGems || 0) + bonus;
+            if (typeof addRunGems === 'function') addRunGems(gs, 'gate', bonus);
             addLog(gs.battle, `🏁 ${et}층 관문 최초 돌파! 보석 +${bonus}`, '#a78bfa');
             spawnFloaty(`🏁 ${et}층 돌파 · 💎+${bonus}`, CW/2, DEFENSE_H/2, '#a78bfa');
           }

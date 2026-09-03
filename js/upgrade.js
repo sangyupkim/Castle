@@ -614,7 +614,8 @@ function releaseOverCapUnits(gs) {
   // 나중에 뽑은 것부터 — 층 이벤트를 보고 추가로 뽑았을 쪽이다
   for (let i = team.length - 1; i >= 0 && over > 0; i--) {
     if (!isNormal(team[i])) continue;
-    refund += hireCost(team[i].typeId);
+    // 값이 오르는 체계라 '지금 그 종류의 마지막 한 명' 값으로 돌려준다 (전액 환불)
+    refund += hireCostAt(team[i].typeId, hireCountOf(gs.battle, team[i].typeId) - 1);
     team.splice(i, 1);
     over--; freed++;
   }
@@ -638,6 +639,31 @@ function applyRunUpgrades(gs) {
     if (c.persist)      c.persist(BONUSES);
     else if (!c.once)   c.apply(BONUSES, gs);
   }
+}
+
+// ─── 판 도중에 이미 받은 보석 ────────────────────────────────────────────────
+// 현상수배·소환 정예·관문·보스 보상은 잡는 그 자리에서 바로 들어온다.
+// 그런데 결과 화면의 '💎 보석 정산'에는 층·처치·케이브만 적혀 있었다 —
+// 30보석짜리 현상수배를 세 마리 잡고 나왔는데 정산에 8이라고 적혀 있으면
+// 받은 것을 안 준 것으로 읽는다. 실제로 빠진 적은 없고, **보이지 않았을 뿐이다.**
+// 그래서 판 도중 수입을 따로 세어 두고 정산 화면에 '이미 받음'으로 같이 적는다.
+const RUN_GEM_KINDS = {
+  bounty: { label:'💰 현상수배', note:'잡는 즉시 받았습니다' },
+  elite:  { label:'⚔️ 소환 정예', note:'잡는 즉시 받았습니다' },
+  gate:   { label:'🏁 관문 최초 돌파', note:'넘는 즉시 받았습니다' },
+  boss:   { label:'👹 보스 처치', note:'잡는 즉시 받았습니다' },
+};
+function runGemState(gs) {
+  if (!gs.runGems) gs.runGems = {};
+  return gs.runGems;
+}
+function addRunGems(gs, kind, n) {
+  if (!(n > 0)) return;
+  const r = runGemState(gs);
+  r[kind] = (r[kind] || 0) + n;
+}
+function runGemsTotal(gs) {
+  return Object.values(runGemState(gs)).reduce((a, x) => a + x, 0);
 }
 
 // ─── 보석 정산 ────────────────────────────────────────────────────────────────
@@ -696,7 +722,8 @@ function soulStoneBreakdown(gs) {
     const start   = gs.runBestAtStart || 0;
     if (cleared <= 0) {
       rows.push({ label:'돌파한 층 없음', value:0, note:'한 층이라도 넘어야 정산이 있습니다' });
-      return { rows, mult, gaveUp:!!gs.gaveUp, total: 0 };
+      return { rows, mult, gaveUp:!!gs.gaveUp, total: 0,
+               already: runGemRows(gs), alreadyTotal: runGemsTotal(gs) };
     }
     // 새 깊이와 되짚은 층을 갈라 보여준다 — 어디서 벌었는지가 보여야 다음 판이 달라진다.
     // 층 적립은 소수로 쌓이고 총합에서 한 번만 내림하므로, 나눠 적을 때도 합이 총합과 맞아야 한다.
@@ -725,11 +752,24 @@ function soulStoneBreakdown(gs) {
       rows.push({ label:'새로 돌파한 층', value:newDepthGems(cleared, start),
                   note:`${start}층 → ${cleared}층 · ${cleared-start}개 층` });
     }
-    return { rows, mult, gaveUp:!!gs.gaveUp, total: calcSoulStones(gs) };
+    return { rows, mult, gaveUp:!!gs.gaveUp, total: calcSoulStones(gs),
+             already: runGemRows(gs), alreadyTotal: runGemsTotal(gs) };
   }
 
   rows.push({ label: gs.stageCleared ? '훈련 완주' : '훈련 중단',
               value: gs.stageCleared ? TRAINING_CLEAR_GEMS : TRAINING_QUIT_GEMS,
               note: '훈련은 익히는 곳입니다 — 보석은 심연에서 법니다' });
-  return { rows, mult, gaveUp:!!gs.gaveUp, total: calcSoulStones(gs) };
+  return { rows, mult, gaveUp:!!gs.gaveUp, total: calcSoulStones(gs),
+           already: runGemRows(gs), alreadyTotal: runGemsTotal(gs) };
+}
+
+// 판 도중에 이미 받은 보석을 정산 화면용 줄로 만든다.
+// 정산 총합(total)과는 별개다 — 이미 지갑에 들어간 값이라 다시 더하면 두 번 준다.
+function runGemRows(gs) {
+  const r = runGemState(gs), out = [];
+  for (const k of Object.keys(RUN_GEM_KINDS)) {
+    if (!(r[k] > 0)) continue;
+    out.push({ label: RUN_GEM_KINDS[k].label, value: r[k], note: RUN_GEM_KINDS[k].note });
+  }
+  return out;
 }
