@@ -3,7 +3,7 @@
 // ─── Canvas ───────────────────────────────────────────────────────────────────
 const canvas = document.getElementById('gameCanvas');
 const ctx    = canvas.getContext('2d');
-let _scale   = 1;
+let _scale   = 0;   // 0 = 아직 안 잼 — resize()가 첫 호출에서 반드시 CSS를 넣도록
 
 function getViewport() {
   // visualViewport가 있으면 사용 (모바일 브라우저 주소창 제외한 실제 높이)
@@ -26,13 +26,27 @@ function resize() {
   const vp = getViewport();
   // 논리 해상도는 480×928 고정이다(constants.js 참고). 화면이 그보다 길거나
   // 납작하면 남는 쪽에 여백이 생긴다 — 놀이터 크기를 기기가 정하지 않게.
-  const s = Math.min(vp.w / CW, vp.h / CH);
-  canvas.width  = Math.round(CW * RENDER_DPR);
-  canvas.height = Math.round(CH * RENDER_DPR);
-  canvas.style.width  = `${CW * s}px`;
-  canvas.style.height = `${CH * s}px`;
-  ctx.setTransform(RENDER_DPR, 0, 0, RENDER_DPR, 0, 0);
-  _scale = s;
+  const s  = Math.min(vp.w / CW, vp.h / CH);
+  const bw = Math.round(CW * RENDER_DPR);
+  const bh = Math.round(CH * RENDER_DPR);
+
+  // canvas.width에 **같은 값을 다시 넣어도** 브라우저는 백버퍼를 새로 잡고
+  // 화면을 지운다. 그런데 이 함수는 window.resize와 visualViewport.resize에
+  // 모두 물려 있고, 안드로이드 설치 앱(PWA)에서는 오버스크롤·시스템 바 때문에
+  // 이 이벤트가 손가락을 움직이는 내내 쏟아진다. 그때마다 960×1856 버퍼를
+  // 다시 잡으면 프레임이 끊긴다 — 브라우저에서는 멀쩡한데 설치 앱만
+  // 렉이 걸리던 이유의 나머지 절반이다. 값이 바뀔 때만 손댄다.
+  if (canvas.width !== bw || canvas.height !== bh) {
+    canvas.width  = bw;
+    canvas.height = bh;
+    ctx.setTransform(RENDER_DPR, 0, 0, RENDER_DPR, 0, 0);
+  }
+  // CSS 크기는 다시 넣어도 공짜지만, 굳이 레이아웃을 흔들 이유는 없다
+  if (_scale !== s) {
+    canvas.style.width  = `${CW * s}px`;
+    canvas.style.height = `${CH * s}px`;
+    _scale = s;
+  }
 }
 window.addEventListener('resize', resize);
 if (window.visualViewport) {
