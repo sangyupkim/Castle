@@ -94,7 +94,10 @@ function towerStats(t) {
              * (BONUSES.pactTowerDmgMult || 1) * fev('towerDmgMult', 1)),
     spd:   tpl.spd   * m.spd   * (bm.spd || 1) * BONUSES.towerSpdMult
              * campTowerMult(t.typeId, 'spd') * campBranchMult(st_branchId(br), 'spd')
-             * (overloaded ? OVERLOAD_SPD_MULT : 1),
+             * (overloaded ? OVERLOAD_SPD_MULT : 1)
+             // 🌫 중간보스의 흐림 — 잠깐 굼떠진다. 부수는 게 아니라 무르게 하는 정도다.
+             * ((typeof midBossDulled === 'function' && typeof gs !== 'undefined'
+                 && midBossDulled(gs)) ? 0.75 : 1),
     range: sealed ? 0 : tpl.range * m.range * (bm.range || 1) * BONUSES.towerRangeMult
              * campTowerMult(t.typeId, 'range') * fev('towerRangeMult', 1),
     slow:        Math.min(0.85, baseSlow + (BONUSES.towerSlow || 0)),
@@ -262,7 +265,9 @@ function defDamage(enemy, dmg, pierceArmor, affinity, pierce) {
   // 관통은 두 겹이다. 비율(towerPiercePct)이 먼저 방어력을 깎고, 그 뒤에 정액이 빠진다.
   // 정액만 있던 시절엔 60층 몹 방어력이 세 자리라 '방어 12 무시'가 사실상 0이었다.
   const pct   = Math.min(0.90, Math.max(0, BONUSES.towerPiercePct || 0));
-  const armor = Math.max(0, (enemy.armor || 0) * (1 - pct) - (pierce || 0));
+  // 🪨 중간보스의 단단해짐 — 잠깐 방어가 두꺼워진다
+  const hard  = (enemy.hardenUntil || 0) > 0 ? 1.6 : 1;
+  const armor = Math.max(0, (enemy.armor || 0) * hard * (1 - pct) - (pierce || 0));
   return Math.max(1, Math.round(base - armor));
 }
 
@@ -299,12 +304,17 @@ function updateDefenseEnemies(enemies, dt) {
     // 시간차를 두고 들어오는 적 (지금은 쓰지 않지만 배관은 남긴다)
     if (e.spawnDelay > 0) { e.spawnDelay = Math.max(0, e.spawnDelay - dt); continue; }
     if (e.hitFlash > 0) e.hitFlash = Math.max(0, e.hitFlash - dt);
+    // 🐲 중간보스가 건 것들 — 시간이 지나면 풀린다
+    if (e.rallyUntil  > 0) e.rallyUntil  = Math.max(0, e.rallyUntil  - dt);
+    if (e.hardenUntil > 0) e.hardenUntil = Math.max(0, e.hardenUntil - dt);
     // 🧪 부식 — 장판을 벗어나면 곧 풀린다 (장판이 매 프레임 다시 채워 준다)
     if (e.corrodeUntil > 0) { e.corrodeUntil = Math.max(0, e.corrodeUntil - dt); if (!e.corrodeUntil) e.corrodeAmt = 0; }
     // 🌱 재생 — 꾸준히 깎지 못하면 원점으로 돌아간다. 단발 화력보다 지속 화력을 요구한다.
     if (e.regen > 0 && e.hp < e.maxHp) e.hp = Math.min(e.maxHp, e.hp + e.maxHp * e.regen * dt);
 
     let mult = 1;
+    // 📣 포효 — 중간보스가 북돋운 잡몹이 잠깐 빨라진다
+    if (e.rallyUntil > 0) mult *= 1.35;
     // 💨 질주 — 보스만 빨라진다
     if ((e.isBoss || e.isMidBoss) && typeof bossEffect === 'function' && bossEffect(gs, 'haste'))
       mult *= 1.6;

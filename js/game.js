@@ -2283,6 +2283,10 @@ function _startFadeOut() {
 
 // ─── 업데이트 ─────────────────────────────────────────────────────────────────
 function update(dt) {
+  // 🐲 중간보스 — 보스전이 아니라 층 위에 얹힌 한 마리. 배속을 그대로 탄다.
+  if (typeof midBossUpdate === 'function' && gs.inRun) {
+    try { midBossUpdate(gs, dt); } catch (e) {}
+  }
   // 타이틀 페이드아웃
   if (_fadingOut) {
     _titleAlpha = Math.max(0, _titleAlpha - dt * 1.8);
@@ -2549,6 +2553,11 @@ function frame(ts) {
     renderDefense(ctx,gs);
     renderUIBar(ctx,gs,wm);
     renderBattle(ctx,gs);
+    // 🐲 하단 중간보스가 깐 장판 — 보스전이 아니어도 그려야 피할 수 있다
+    if (typeof midBossActive === 'function' && midBossActive(gs)
+        && gs.mid.side === 'arena' && typeof renderBossFields === 'function') {
+      renderBossFields(ctx, gs);
+    }
     FX.draw(ctx);
   }
   ctx.restore();
@@ -2558,6 +2567,11 @@ function frame(ts) {
     // ✋ 파훼 과녁은 HUD 위에 그린다 — 상단 보스는 경로 시작점이 HUD 밑이라
     // 먼저 그리면 눌러야 할 과녁이 HUD에 가려진다.
     if (typeof renderBossParry === 'function') renderBossParry(ctx, gs);
+  }
+  // 🐲 중간보스 띠 — 보스전이 아닐 때만. 화면을 밀지 않고 위에 얇게 덮는다.
+  if (typeof renderMidBossHud === 'function'
+      && gs.page!=='lobby' && gs.page!=='result' && gs.page!=='town') {
+    renderMidBossHud(ctx, gs);
   }
 
   // 런 종료·갈림길 오버레이 — 전투/마을 위에 덮는다.
