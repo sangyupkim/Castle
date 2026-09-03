@@ -101,6 +101,8 @@ function makeArenaMob(typeId, waveIndex, killCount, _unusedCaveLevel, eliteBonus
     x: 0, y: 0, vx: 0, vy: 0,
     target: null, dead: false, deadTimer: 0,
     flashTimer: 0, flashColor: '#fff',
+    // 🛡 원거리 저항 — 템플릿에 있으면 그대로 들고 간다
+    rangedResist: t.rangedResist || 0,
     slowUntil: 0, dashCd: 3 + Math.random() * 2, dashing: 0
   };
 }
@@ -880,9 +882,16 @@ function hurtMob(gs, m, dmg, color, fromRanged) {
     addFloaty(gs.battle, '🏹 튕김', m.x, m.y - m.radius, '#94a3b8');
     return;
   }
-  m.hp -= dmg;
+  // 🛡 방패병 — 날아오는 것만 막는다. 붙어서 때리면 그대로 아프다.
+  // 궁수 한 종류로 칸을 다 채우는 것이 늘 정답이던 것을 되돌리는 자리다.
+  let real = dmg;
+  if (fromRanged && m.rangedResist > 0) {
+    real = Math.max(1, Math.round(dmg * (1 - m.rangedResist)));
+    if (Math.random() < 0.3) addFloaty(gs.battle, '🛡', m.x, m.y - m.radius - 8, '#38bdf8');
+  }
+  m.hp -= real;
   m.flashTimer = 0.18; m.flashColor = color;
-  addFloaty(gs.battle, `-${dmg}`, m.x, m.y - m.radius, color);
+  addFloaty(gs.battle, `-${real}`, m.x, m.y - m.radius, color);
   if (typeof FX !== 'undefined') FX.burst(m.x, m.y, color, 2, 6);
   if (m.hp > 0) return;
 

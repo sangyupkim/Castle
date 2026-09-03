@@ -3764,6 +3764,11 @@ function renderLobbyRecord(ctx, gs) {
       ctx.fillText(t.name, mx+mw/2, my+28);
       ctx.font='7px sans-serif'; ctx.fillStyle='#475569';
       ctx.fillText(`HP${t.hp} ATK${t.atk}`, mx+mw/2, my+37);
+      // 🛡 원거리 저항은 숫자만 봐서는 안 보이는 성질이라 따로 적는다
+      if (t.rangedResist > 0) {
+        ctx.font='bold 7px sans-serif'; ctx.fillStyle='#38bdf8';
+        ctx.fillText(`🛡원거리 −${Math.round(t.rangedResist*100)}%`, mx+mw/2, my+18);
+      }
     } else {
       ctx.font='16px sans-serif'; ctx.fillStyle='#1e293b';
       ctx.fillText('?', mx+mw/2, my+9);
