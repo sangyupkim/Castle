@@ -39,10 +39,10 @@ const EQUIP_STATS = {
   regen: { name:'재생',     icon:'💚', pct:false, apply:(b,v)=>{ b.heroRegen  += v; }, unit:'/s' },
   aspd:  { name:'공격속도', icon:'🌀', pct:true,  apply:(b,v)=>{ b.heroSpdMult   *= 1+v; } },
   range: { name:'사거리',   icon:'🎯', pct:true,  apply:(b,v)=>{ b.heroRangeMult *= 1+v; } },
-  skill: { name:'스킬 피해',icon:'✨', pct:true,  apply:(b,v)=>{ b.heroSkillMult *= 1+v; } },
+  skill: { name:'스킬 피해',icon:'✨', pct:true,  apply:(b,v)=>{ pctAdd(b, 'heroSkillMult', v); } },
   crit:  { name:'치명타',   icon:'💥', pct:true,  apply:(b,v)=>{ b.critChance += v; } },
-  gold:  { name:'획득 골드',icon:'💰', pct:true,  apply:(b,v)=>{ b.battleGoldMult *= 1+v; } },
-  exp:   { name:'획득 EXP', icon:'📖', pct:true,  apply:(b,v)=>{ b.heroExpMult    *= 1+v; } },
+  gold:  { name:'획득 골드',icon:'💰', pct:true,  apply:(b,v)=>{ pctAdd(b, 'battleGoldMult', v); } },
+  exp:   { name:'획득 EXP', icon:'📖', pct:true,  apply:(b,v)=>{ pctAdd(b, 'heroExpMult', v); } },
 };
 const STAT_ORDER = ['atk','hp','def','regen','aspd','range','skill','crit','gold','exp'];
 

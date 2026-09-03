@@ -331,8 +331,8 @@ function applyForge(gs) {
   if (f.mastery > 0) {
     const steps = Math.floor(f.mastery / TEMPER_CHECKPOINT);
     const m = 1 + f.mastery * TEMPER_GAIN + steps * TEMPER_STEP_BONUS;
-    BONUSES.towerDmgMult *= m;
-    BONUSES.unitAtkMult  *= m;
+    pctAdd(BONUSES, 'towerDmgMult', (m) - 1);
+    pctAdd(BONUSES, 'unitAtkMult', (m) - 1);
   }
 }
 // 지금 숙련도가 주는 배율 — 화면에 그대로 적는다
@@ -357,31 +357,31 @@ const CHARM_SLOTS     = 2;
 const CHARM_POOL = [
   // 흔함
   { id:'ch_gold',   name:'행상인의 주머니', icon:'💰', grade:'common', w:26,
-    desc:'이번 판 전투 골드 +40%',        apply:b=>{ b.battleGoldMult *= 1.4; } },
+    desc:'이번 판 전투 골드 +40%',        apply:b=>{ pctAdd(b, 'battleGoldMult', 0.4); } },
   { id:'ch_start',  name:'선발대 보급',     icon:'📦', grade:'common', w:24,
     desc:'매 층 시작 골드 +60',           apply:b=>{ b.startGoldBonus += 60; } },
   { id:'ch_wall',   name:'회벽 한 통',      icon:'🧱', grade:'common', w:24,
     desc:'기지 최대 HP +30%',             apply:b=>{ b.baseHpMax += Math.round(BASE_HP_MAX * 0.3); } },
   { id:'ch_swift',  name:'바람의 깃털',     icon:'🪶', grade:'common', w:22,
-    desc:'아군 공격속도 +25%',            apply:b=>{ b.unitAtkSpdMult *= 1.25; } },
+    desc:'아군 공격속도 +25%',            apply:b=>{ pctAdd(b, 'unitAtkSpdMult', 0.25); } },
   // 희귀
   { id:'ch_tower',  name:'벼려진 촉',       icon:'🏹', grade:'rare',   w:14,
-    desc:'타워 공격력 +35%',              apply:b=>{ b.towerDmgMult *= 1.35; } },
+    desc:'타워 공격력 +35%',              apply:b=>{ pctAdd(b, 'towerDmgMult', 0.35); } },
   { id:'ch_unit',   name:'전열의 맹세',     icon:'⚔️', grade:'rare',   w:14,
-    desc:'아군 공격력 +35%',              apply:b=>{ b.unitAtkMult *= 1.35; } },
+    desc:'아군 공격력 +35%',              apply:b=>{ pctAdd(b, 'unitAtkMult', 0.35); } },
   { id:'ch_slot',   name:'모병 영장',       icon:'➕', grade:'rare',   w:11,
     desc:'편성 슬롯 +2',                  apply:b=>{ b.maxSlotBonus += 2; } },
   { id:'ch_pierce', name:'파쇄의 인장',     icon:'🔩', grade:'rare',   w:12,
     desc:'타워가 적 방어 12 무시',        apply:b=>{ b.towerPierce += 12; } },
   { id:'ch_gem',    name:'보석 감정서',     icon:'💎', grade:'rare',   w:10,
-    desc:'이번 판 층당 보석 +50%',        apply:b=>{ b.gemMult *= 1.5; } },
+    desc:'이번 판 층당 보석 +50%',        apply:b=>{ pctAdd(b, 'gemMult', 0.5); } },
   // 영웅
   { id:'ch_hero',   name:'왕의 인장',       icon:'👑', grade:'epic',   w:6,
-    desc:'영웅 전체 능력 +50%',           apply:b=>{ b.heroStatMult *= 1.5; } },
+    desc:'영웅 전체 능력 +50%',           apply:b=>{ pctAdd(b, 'heroStatMult', 0.5); } },
   { id:'ch_frost',  name:'서리 결정',       icon:'❄️', grade:'epic',   w:6,
     desc:'모든 타워에 감속 35%',          apply:b=>{ b.towerSlow += 0.35; } },
   { id:'ch_weak',   name:'저주받은 뼈',     icon:'🦴', grade:'epic',   w:5,
-    desc:'모든 적 HP -25%',               apply:b=>{ b.mobHpMult *= 0.75; } },
+    desc:'모든 적 HP -25%',               apply:b=>{ pctAdd(b, 'mobHpMult', -0.25); } },
   { id:'ch_undying',name:'불사조 깃털',     icon:'🔥', grade:'epic',   w:5,
     desc:'아군 최초 사망 시 HP 1 생존 · 영웅 즉시 부활',
     apply:b=>{ b.undying = true; b.heroInstantRevive = true; } },

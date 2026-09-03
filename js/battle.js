@@ -45,7 +45,12 @@ function applyUnitStats(u, hpRatio) {
   u.atk       = Math.round((t.atk + BONUSES.unitAtk) * (BONUSES.unitAtkMult || 1) * sp * cAtk);
   // 방어력은 0 아래로 내려가지 않는다 — ★영웅 카드의 대가(방어 -5 등)가 겹치면
   // 음수가 되어 '맞을수록 튼튼해지는' 식으로 뒤집힐 수 있다.
-  u.def       = Math.max(0, Math.round((t.def + BONUSES.unitDef + BONUSES.heroAura) * sp * cDef));
+  // 방어력에는 특수 배율(sp)을 곱하지 않는다.
+  // HP·공격력·방어력 셋에 같은 배율을 다 걸면 체감 성능이 배율의 세제곱처럼
+  // 벌어진다 — 특수 용병이 '더 좋은 병종'이 아니라 '다른 병종을 무의미하게
+  // 만드는 것'이 된다. 특수 용병의 단단함은 원래 높은 기본 방어력(성기사 19 대
+  // 검사 6)으로 충분히 드러난다.
+  u.def       = Math.max(0, Math.round((t.def + BONUSES.unitDef + BONUSES.heroAura) * cDef));
   u.skillAtk  = t.skillAtk  ? Math.round((t.skillAtk + BONUSES.unitAtk) * sp * cAtk) : 0;
   u.healAmt   = t.healAmt   ? t.healAmt   + BONUSES.healBonus   : 0;
   u.shieldAmt = t.shieldAmt ? t.shieldAmt + BONUSES.shieldBonus : 0;

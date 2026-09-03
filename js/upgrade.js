@@ -63,10 +63,68 @@ function createDefaultBonuses() {
   };
 }
 
+// ─── 퍼센트 강화는 더해서 쌓는다 ─────────────────────────────────────────────
+// 예전에는 어디서든 `b.towerDmgMult *= 1.20` 이었다. 출처가 하나면 맞는 식인데,
+// 이 게임은 카드·마을·스킬트리·대장간·유물·부적·각인이 **전부 같은 칸을 곱한다.**
+// 곱셈은 출처가 늘어날 때마다 지수로 뛴다:
+//
+//   같은 카드 30장 = 1.20^30 = 배 237   (더하면 1+30x0.20 = 배 7)
+//   영구 강화 만렙만으로 타워 공격력 배 75, 카드까지 얹으면 배 17,815
+//
+// 그래서 후반에 수치가 통째로 무너졌다. 퍼센트가 언제나 절대값을 이기고,
+// 퍼센트끼리도 겹칠수록 기하급수로 벌어진다.
+//
+// 이제 퍼센트는 한 칸에 **더해서** 모았다가 마지막에 한 번만 곱한다.
+// 그러면 "+20%"가 어디서 왔든 정직하게 20%p다. 덤으로 초반/후반의 관계가
+// 뒤집힌다 — 화살탑 기본 공격력이 3.4일 때 정액 +3은 +88%지만 카드 +20%는
+// +0.68이다. 별을 올려 기본값을 키운 뒤에야 퍼센트가 정액을 넘어선다.
+// 초반에는 절대값, 후반에는 퍼센트가 이 구조에서 저절로 나온다.
+//
+// min/max는 그 칸이 넘지 못하는 선이다. 쿨다운처럼 0에 닿으면 게임이
+// 성립하지 않는 값에만 둔다.
+const PCT_STACKED = {
+  towerDmgMult:    {}, towerSpdMult:  {}, towerRangeMult:  {},
+  unitAtkMult:     {}, unitHpMult:    {}, unitAtkSpdMult:  {},
+  heroStatMult:    {}, heroSkillMult: {}, heroExpMult:     {},
+  gemMult:         {}, battleGoldMult:{}, defenseGoldMult: {},
+  // 특수 용병 배율에 천장을 둔다. 이 값은 광전사·성기사·명사수 셋에게만
+  // 붙는데, 여관의 ♾️ 무한 트랙이 상한 없이 밀어 올려서 만렙 x9.8까지 갔다.
+  // 특수 용병은 '더 좋은 병종'이지 '다른 병종을 무의미하게 만드는 것'이 아니다.
+  specialUnitMult: { max: 2.2 },
+  mobHpMult:       {}, mobAtkMult:      {},
+  summonRewardMult:{}, overloadCdMult:{ min: 0.35 },
+  // 스킬 쿨다운 — 0.35 아래로는 안 내려간다.
+  // 쿨감이 곱으로 쌓이던 시절에는 24초짜리 성벽 결계가 1초까지 줄어서
+  // 무적을 끊기지 않게 유지할 수 있었다. 스킬을 '가끔 쓰는 것'으로 만드는
+  // 장치가 쿨다운 하나뿐이라, 여기만은 반드시 바닥이 있어야 한다.
+  heroSkillCdMult: { min: 0.35 },
+};
+
+// 퍼센트 한 조각을 더한다. v는 비율(0.20 = +20%).
+function pctAdd(b, key, v) {
+  if (!v) return;
+  if (!b._pct) b._pct = Object.create(null);
+  b._pct[key] = (b._pct[key] || 0) + v;
+}
+// 모아 둔 퍼센트를 실제 배율에 한 번만 얹는다. reapplyAllBonuses 끝에서 부른다.
+function foldPctStacks(b) {
+  const acc = b._pct;
+  if (!acc) return;
+  for (const k in acc) {
+    const lim = PCT_STACKED[k] || {};
+    let m = (b[k] === undefined ? 1 : b[k]) * (1 + acc[k]);
+    if (!(m > 0)) m = 0;
+    if (lim.min !== undefined) m = Math.max(lim.min, m);
+    if (lim.max !== undefined) m = Math.min(lim.max, m);
+    b[k] = m;
+  }
+  b._pct = null;
+}
+
 // 현재 실행 중인 보너스 (전역 참조)
 let BONUSES = createDefaultBonuses();
 
-function resetBonuses() { BONUSES = createDefaultBonuses(); }
+function resetBonuses() { BONUSES = createDefaultBonuses(); BONUSES._pct = null; }
 
 // ─── 강화 카드 정의 ────────────────────────────────────────────────────────────
 // 정액 수치 카드는 대부분 배율로 바꿨다. 화살탑 기본 공격력이 2라 "+3"이
@@ -96,62 +154,62 @@ const CARD_GRADE_WEIGHT = { common:58, rare:27, epic:12, legend:3 };
 const UPGRADE_CARDS = [
   // ══ 🏹 타워 ═══════════════════════════════════════════════════════════════
   { id:'t_dmg1',    name:'날카로운 화살', desc:'타워 공격력 +20%',      grade:'common', icon:'🏹', cat:'tower',
-    apply: b => { b.towerDmgMult *= 1.20; } },
+    apply: b => { pctAdd(b, 'towerDmgMult', 0.2); } },
   { id:'t_spd1',    name:'빠른 발사',     desc:'타워 공격속도 +20%',    grade:'common', icon:'🏹', cat:'tower',
-    apply: b => { b.towerSpdMult *= 1.20; } },
+    apply: b => { pctAdd(b, 'towerSpdMult', 0.2); } },
   { id:'t_range1',  name:'긴 사거리',     desc:'타워 사거리 +15%',      grade:'common', icon:'🏹', cat:'tower',
-    apply: b => { b.towerRangeMult *= 1.15; } },
+    apply: b => { pctAdd(b, 'towerRangeMult', 0.15); } },
   { id:'t_cheap',   name:'규격 부품',     desc:'타워 건설비 -3',        grade:'common', icon:'🏭', cat:'tower',
     apply: b => { b.towerCostDiscount += 3; } },
   { id:'t_scrap',   name:'분해 공학',     desc:'타워 판매가 +40%',      grade:'common', icon:'🔧', cat:'tower',
     apply: b => { b.towerSellBonus += 0.40; } },
   { id:'t_dmg2',    name:'강철 화살',     desc:'타워 공격력 +45%',      grade:'rare',   icon:'🏹', cat:'tower',
-    apply: b => { b.towerDmgMult *= 1.45; } },
+    apply: b => { pctAdd(b, 'towerDmgMult', 0.45); } },
   { id:'t_spd2',    name:'속사 장치',     desc:'타워 공격속도 +50%',    grade:'rare',   icon:'🏹', cat:'tower',
-    apply: b => { b.towerSpdMult *= 1.50; } },
+    apply: b => { pctAdd(b, 'towerSpdMult', 0.5); } },
   { id:'t_range2',  name:'저격 망원경',   desc:'타워 사거리 +30%',      grade:'rare',   icon:'🏹', cat:'tower',
-    apply: b => { b.towerRangeMult *= 1.30; } },
+    apply: b => { pctAdd(b, 'towerRangeMult', 0.3); } },
   { id:'t_pierce',  name:'관통 탄심',     desc:'타워가 적 방어 5 무시', grade:'rare',   icon:'🔩', cat:'tower',
     apply: b => { b.towerPierce += 5; } },
   { id:'t_frost',   name:'서리 코팅',     desc:'모든 타워에 감속 15%',  grade:'rare',   icon:'❄️', cat:'tower',
     apply: b => { b.towerSlow += 0.15; } },
   { id:'t_overdrive',name:'과부하 개조',  desc:'과부하 쿨다운 -40%',    grade:'rare',   icon:'⚡', cat:'tower',
-    apply: b => { b.overloadCdMult *= 0.60; } },
+    apply: b => { pctAdd(b, 'overloadCdMult', -0.4); } },
   { id:'t_castle',  name:'최후 포대',     desc:'성채 공격력 +12 · 사거리 +25%', grade:'rare', icon:'🏯', cat:'tower',
     apply: b => { b.castleAtk += 12; b.castleRange += 0.25; } },
   // ★ 영웅 — 양날
   { id:'t_focus',   name:'집중 포화',     desc:'타워 공격력 +90%',      bane:'사거리 -25%',
     grade:'epic', icon:'🎯', cat:'tower',
-    apply: b => { b.towerDmgMult *= 1.90; b.towerRangeMult *= 0.75; } },
+    apply: b => { pctAdd(b, 'towerDmgMult', 0.9); pctAdd(b, 'towerRangeMult', -0.25); } },
   { id:'t_thunder', name:'천둥 화살',     desc:'타워 피격 시 주변 범위 피해', bane:'타워 공격속도 -20%',
     grade:'epic', icon:'⚡', cat:'tower',
-    apply: b => { b.towerSplash = true; b.towerSpdMult *= 0.80; } },
+    apply: b => { b.towerSplash = true; pctAdd(b, 'towerSpdMult', -0.2); } },
   { id:'t_scope',   name:'초장거리 조준', desc:'타워 사거리 +65%',      bane:'공격속도 -30%',
     grade:'epic', icon:'🔭', cat:'tower',
-    apply: b => { b.towerRangeMult *= 1.65; b.towerSpdMult *= 0.70; } },
+    apply: b => { pctAdd(b, 'towerRangeMult', 0.65); pctAdd(b, 'towerSpdMult', -0.3); } },
   { id:'t_burnout', name:'과열 코어',     desc:'타워 공격속도 +80%',    bane:'공격력 -25%',
     grade:'epic', icon:'🔥', cat:'tower',
-    apply: b => { b.towerSpdMult *= 1.80; b.towerDmgMult *= 0.75; } },
+    apply: b => { pctAdd(b, 'towerSpdMult', 0.8); pctAdd(b, 'towerDmgMult', -0.25); } },
   { id:'t_glasscan',name:'유리 대포',     desc:'타워 공격력 +120%',     bane:'기지 최대 HP -30%',
     grade:'epic', icon:'💥', cat:'tower',
-    apply: b => { b.towerDmgMult *= 2.20; b.pactBaseHpMult *= 0.70; } },
+    apply: b => { pctAdd(b, 'towerDmgMult', 1.2); b.pactBaseHpMult *= 0.70; } },
   // ✦ 전설
   { id:'t_absolute',name:'절대영도',      desc:'모든 타워 감속 45% · 공격력 +40%', grade:'legend', icon:'🧊', cat:'tower',
-    apply: b => { b.towerSlow += 0.45; b.towerDmgMult *= 1.40; } },
+    apply: b => { b.towerSlow += 0.45; pctAdd(b, 'towerDmgMult', 0.4); } },
   { id:'t_eternal', name:'영구 기관',     desc:'과부하가 끝나지 않는다', grade:'legend', icon:'♾️', cat:'tower',
     apply: b => { b.overloadEternal = true; } },
   { id:'t_volley',  name:'일제 사격',     desc:'타워 공격력 +100% · 공속 +40%', grade:'legend', icon:'🌠', cat:'tower',
-    apply: b => { b.towerDmgMult *= 2.00; b.towerSpdMult *= 1.40; } },
+    apply: b => { pctAdd(b, 'towerDmgMult', 1.0); pctAdd(b, 'towerSpdMult', 0.4); } },
 
   // ══ ⚔️ 유닛 ═══════════════════════════════════════════════════════════════
   { id:'u_atk1',    name:'훈련 강화',     desc:'아군 공격력 +12%',      grade:'common', icon:'⚔️', cat:'unit',
-    apply: b => { b.unitAtkMult *= 1.12; } },
+    apply: b => { pctAdd(b, 'unitAtkMult', 0.12); } },
   { id:'u_def1',    name:'철벽 방어',     desc:'아군 방어력 +3',        grade:'common', icon:'🛡️', cat:'unit',
     apply: b => { b.unitDef += 3; } },
   { id:'u_hp1',     name:'강인한 체력',   desc:'아군 HP +15%',          grade:'common', icon:'💪', cat:'unit',
-    apply: b => { b.unitHpMult *= 1.15; } },
+    apply: b => { pctAdd(b, 'unitHpMult', 0.15); } },
   { id:'u_aspd1',   name:'날렵한 손놀림', desc:'아군 공격속도 +15%',    grade:'common', icon:'🌀', cat:'unit',
-    apply: b => { b.unitAtkSpdMult *= 1.15; } },
+    apply: b => { pctAdd(b, 'unitAtkSpdMult', 0.15); } },
   { id:'u_regen1',  name:'응급 처치',     desc:'전투 이탈 시 초당 최대 HP 0.8% 회복', grade:'common', icon:'🩹', cat:'unit',
     apply: b => { b.regenBonus += 0.008; } },
   { id:'u_cheap',   name:'징집령',        desc:'병력 고용비 -20%',      grade:'common', icon:'📜', cat:'unit',
@@ -167,19 +225,19 @@ const UPGRADE_CARDS = [
   { id:'u_slot',    name:'용병 모집',     desc:'병력 슬롯 +1',          grade:'rare',   icon:'⚔️', cat:'unit',
     apply: b => { b.maxSlotBonus += 1; } },
   { id:'u_inn',     name:'소문난 주점',   desc:'특수 용병 등장 +25% · 능력 +15%', grade:'rare', icon:'🍺', cat:'unit',
-    apply: b => { b.specialChance += 0.25; b.specialUnitMult *= 1.15; } },
+    apply: b => { b.specialChance += 0.25; pctAdd(b, 'specialUnitMult', 0.15); } },
   { id:'u_rest',    name:'야영 기술',     desc:'웨이브 후 회복 +40%',   grade:'rare',   icon:'🏕', cat:'unit',
     apply: b => { b.restHealBonus += 0.40; } },
   // ★ 영웅 — 양날
   { id:'u_glass',   name:'결사대',        desc:'아군 공격력 +80%',      bane:'아군 HP -30%',
     grade:'epic', icon:'🗡️', cat:'unit',
-    apply: b => { b.unitAtkMult *= 1.80; b.unitHpMult *= 0.70; } },
+    apply: b => { pctAdd(b, 'unitAtkMult', 0.8); pctAdd(b, 'unitHpMult', -0.3); } },
   { id:'u_turtle',  name:'거북 대형',     desc:'아군 HP +90% · 방어 +6', bane:'아군 공격속도 -35%',
     grade:'epic', icon:'🐢', cat:'unit',
-    apply: b => { b.unitHpMult *= 1.90; b.unitDef += 6; b.unitAtkSpdMult *= 0.65; } },
+    apply: b => { pctAdd(b, 'unitHpMult', 0.9); b.unitDef += 6; pctAdd(b, 'unitAtkSpdMult', -0.35); } },
   { id:'u_frenzy',  name:'광란의 북',     desc:'아군 공격속도 +70%',    bane:'아군 방어력 -5 · 휴식 회복 -50%',
     grade:'epic', icon:'🥁', cat:'unit',
-    apply: b => { b.unitAtkSpdMult *= 1.70; b.unitDef -= 5; b.restHealBonus -= 0.50; } },
+    apply: b => { pctAdd(b, 'unitAtkSpdMult', 0.7); b.unitDef -= 5; b.restHealBonus -= 0.50; } },
   { id:'u_merc',    name:'용병 계약',     desc:'병력 슬롯 +2',          bane:'고용비 +60%',
     grade:'epic', icon:'📃', cat:'unit',
     apply: b => { b.maxSlotBonus += 2; b.hireCostPct -= 0.60; } },
@@ -187,11 +245,11 @@ const UPGRADE_CARDS = [
   { id:'u_undying', name:'불굴의 의지',   desc:'아군이 처음 쓰러질 때 HP 1로 버틴다', grade:'legend', icon:'✨', cat:'unit',
     apply: b => { b.undying = true; } },
   { id:'u_legion',  name:'군단 편성',     desc:'병력 슬롯 +2 · 아군 전체 능력 +25%', grade:'legend', icon:'🎖️', cat:'unit',
-    apply: b => { b.maxSlotBonus += 2; b.unitAtkMult *= 1.25; b.unitHpMult *= 1.25; } },
+    apply: b => { b.maxSlotBonus += 2; pctAdd(b, 'unitAtkMult', 0.25); pctAdd(b, 'unitHpMult', 0.25); } },
 
   // ══ 👑 영웅 ═══════════════════════════════════════════════════════════════
   { id:'h_all1',    name:'용기의 기운',   desc:'영웅 전체 능력 +8%',    grade:'common', icon:'👑', cat:'hero',
-    apply: b => { b.heroStatMult *= 1.08; } },
+    apply: b => { pctAdd(b, 'heroStatMult', 0.08); } },
   { id:'h_regen',   name:'회복의 기운',   desc:'영웅 HP 초당 +1.2 재생', grade:'common', icon:'👑', cat:'hero',
     apply: b => { b.heroRegen += 1.2; } },
   { id:'h_mp',      name:'맑은 정신',     desc:'영웅 MP 회복 +40%',     grade:'common', icon:'💧', cat:'hero',
@@ -199,17 +257,17 @@ const UPGRADE_CARDS = [
   { id:'h_aura',    name:'영웅의 오라',   desc:'아군 전체 방어력 +3',   grade:'rare',   icon:'👑', cat:'hero',
     apply: b => { b.heroAura += 3; } },
   { id:'h_exp',     name:'급성장',        desc:'영웅 EXP +100%',        grade:'rare',   icon:'👑', cat:'hero',
-    apply: b => { b.heroExpMult *= 2.0; } },
+    apply: b => { pctAdd(b, 'heroExpMult', 1.0); } },
   { id:'h_sigil',   name:'각인 공명',     desc:'영웅 스킬 피해 +50%',   grade:'rare',   icon:'✨', cat:'hero',
-    apply: b => { b.heroSkillMult *= 1.5; } },
+    apply: b => { pctAdd(b, 'heroSkillMult', 0.5); } },
   { id:'h_cd',      name:'전투 직감',     desc:'영웅 스킬 쿨다운 -30%', grade:'rare',   icon:'⏱', cat:'hero',
-    apply: b => { b.heroSkillCdMult *= 0.70; } },
+    apply: b => { pctAdd(b, 'heroSkillCdMult', -0.3); } },
   { id:'h_range',   name:'매의 눈',       desc:'영웅 사거리 +35%',      grade:'rare',   icon:'🦅', cat:'hero',
     apply: b => { b.heroRangeMult *= 1.35; } },
   // ★ 영웅 — 양날
   { id:'h_duel',    name:'결투가',        desc:'영웅 전체 능력 +45%',   bane:'아군 병력 능력 -15%',
     grade:'epic', icon:'⚔️', cat:'hero',
-    apply: b => { b.heroStatMult *= 1.45; b.unitAtkMult *= 0.85; b.unitHpMult *= 0.85; } },
+    apply: b => { pctAdd(b, 'heroStatMult', 0.45); pctAdd(b, 'unitAtkMult', -0.15); pctAdd(b, 'unitHpMult', -0.15); } },
   { id:'h_martyr',  name:'순교자',        desc:'영웅 공격력 +100%',     bane:'영웅 최대 HP -35%',
     grade:'epic', icon:'🕯', cat:'hero',
     apply: b => { b.sigilHeroAtkMult *= 2.00; b.sigilHeroHpMult *= 0.65; } },
@@ -220,7 +278,7 @@ const UPGRADE_CARDS = [
   { id:'h_immortal',name:'불사의 영웅',   desc:'전사해도 결장 없이 즉시 돌아온다', grade:'legend', icon:'👑', cat:'hero',
     apply: b => { b.heroInstantRevive = true; } },
   { id:'h_avatar',  name:'신의 강림',     desc:'영웅 모든 스탯 +45%',   grade:'legend', icon:'🌟', cat:'hero',
-    apply: b => { b.heroStatMult *= 1.45; } },
+    apply: b => { pctAdd(b, 'heroStatMult', 0.45); } },
 
   // ══ 🏰 기지 ═══════════════════════════════════════════════════════════════
   { id:'b_heal',    name:'성벽 보수',     desc:'기지 HP 30% 회복',      grade:'common', icon:'🏰', cat:'base',
@@ -239,26 +297,26 @@ const UPGRADE_CARDS = [
     apply: b => { b.baseDefPct += 0.35; b.baseHpMax += BASE_HP_MAX*0.40; b.towerCostDiscount -= 5; } },
   { id:'b_siege',   name:'배수의 진',     desc:'타워·아군 공격력 +50%', bane:'기지 최대 HP 절반',
     grade:'epic', icon:'⚱️', cat:'base',
-    apply: b => { b.towerDmgMult *= 1.50; b.unitAtkMult *= 1.50; b.pactBaseHpMult *= 0.50; } },
+    apply: b => { pctAdd(b, 'towerDmgMult', 0.5); pctAdd(b, 'unitAtkMult', 0.5); b.pactBaseHpMult *= 0.50; } },
   // ✦ 전설
   { id:'b_bastion', name:'불멸의 성채',   desc:'기지 최대HP +80% · 재생 +3/s · 피해 -20%', grade:'legend', icon:'🛡️', cat:'base',
     apply: b => { b.baseHpMax += BASE_HP_MAX*0.80; b.baseRegen += 3; b.baseDefPct += 0.20; } },
 
   // ══ 🗿 케이브 ═════════════════════════════════════════════════════════════
   { id:'c_gold1',   name:'풍부한 광맥',   desc:'전투 골드 +25%',        grade:'common', icon:'💰', cat:'cave',
-    apply: b => { b.battleGoldMult *= 1.25; } },
+    apply: b => { pctAdd(b, 'battleGoldMult', 0.25); } },
   { id:'c_weak',    name:'약한 몹',       desc:'몬스터 HP -15%',        grade:'common', icon:'🗿', cat:'cave',
-    apply: b => { b.mobHpMult *= 0.85; } },
+    apply: b => { pctAdd(b, 'mobHpMult', -0.15); } },
   { id:'c_drop',    name:'부산물',        desc:'특수 드랍 확률 +12%',   grade:'common', icon:'🎁', cat:'cave',
     apply: b => { b.dropChance += 0.12; } },
   { id:'c_rush',    name:'몬스터 러시',   desc:'스폰 빠르고 골드 +30%', grade:'rare',   icon:'🗿', cat:'cave',
-    apply: b => { b.spawnSpeedMult *= 1.3; b.battleGoldMult *= 1.3; } },
+    apply: b => { b.spawnSpeedMult *= 1.3; pctAdd(b, 'battleGoldMult', 0.3); } },
   { id:'c_elite',   name:'정예 사냥터',   desc:'정예 등장 +20% · 골드 +40%', grade:'rare', icon:'⚔️', cat:'cave',
-    apply: b => { b.eliteChance += 0.20; b.battleGoldMult *= 1.40; } },
+    apply: b => { b.eliteChance += 0.20; pctAdd(b, 'battleGoldMult', 0.4); } },
   { id:'c_gem',     name:'보석 광맥',     desc:'이 판의 층당 보석 +30%', grade:'rare',  icon:'💎', cat:'cave',
-    apply: b => { b.gemMult *= 1.30; } },
+    apply: b => { pctAdd(b, 'gemMult', 0.3); } },
   { id:'c_hunt',    name:'사냥 허가',     desc:'정예 소환 기회 +1 · 소환 보상 +40%', grade:'rare', icon:'🏹', cat:'cave',
-    apply: b => { b.eliteChargeBonus += 1; b.summonRewardMult *= 1.40; } },
+    apply: b => { b.eliteChargeBonus += 1; pctAdd(b, 'summonRewardMult', 0.4); } },
   // ★ 영웅 — 양날
   { id:'c_deep',    name:'갱도 개방',     desc:'처치 골드 +120%',       bane:'몬스터 능력 +35%',
     grade:'epic', icon:'⛏️', cat:'cave',
@@ -269,27 +327,27 @@ const UPGRADE_CARDS = [
   // 에픽다운 폭(+25%)으로 낮추고, 대신 그 자리에서 바로 벌리는 쪽(정예)을 키웠다.
   { id:'c_swarm',   name:'벌집 건드리기', desc:'보석 +25% · 정예 등장 +40%', bane:'아레나 스폰 간격 -35%',
     grade:'epic', icon:'🐝', cat:'cave',
-    apply: b => { b.gemMult *= 1.25; b.eliteChance += 0.40; b.pactSpawnMult *= 0.65; } },
+    apply: b => { pctAdd(b, 'gemMult', 0.25); b.eliteChance += 0.40; b.pactSpawnMult *= 0.65; } },
   // ✦ 전설
   { id:'c_eldorado',name:'엘도라도',      desc:'처치 보상 ×2 · 층당 보석 +50%', grade:'legend', icon:'🌟', cat:'cave',
-    apply: b => { b.battleGoldMult *= 2.0; b.defenseGoldMult *= 2.0; b.gemMult *= 1.50; } },
+    apply: b => { pctAdd(b, 'battleGoldMult', 1.0); pctAdd(b, 'defenseGoldMult', 1.0); pctAdd(b, 'gemMult', 0.5); } },
 
   // ══ 💰 자원 ═══════════════════════════════════════════════════════════════
   { id:'r_hire',    name:'무기 할인',     desc:'병력 고용비용 -25%',    grade:'common', icon:'💰', cat:'resource',
     apply: b => { b.hireCostPct += 0.25; } },
   { id:'r_interest',name:'전시 이자',     desc:'전투 골드 +15% · 시작 골드 +25', grade:'common', icon:'🏦', cat:'resource',
-    apply: b => { b.battleGoldMult *= 1.15; b.startGoldBonus += 25; } },
+    apply: b => { pctAdd(b, 'battleGoldMult', 0.15); b.startGoldBonus += 25; } },
   { id:'r_stock',   name:'선불 보급',     desc:'매 층 시작 골드 +40',   grade:'rare',   icon:'📦', cat:'resource',
     apply: b => { b.startGoldBonus += 40; } },
   { id:'r_toll',    name:'통행료',        desc:'상단 처치 골드 +80%',   grade:'rare',   icon:'🪙', cat:'resource',
-    apply: b => { b.defenseGoldMult *= 1.80; } },
+    apply: b => { pctAdd(b, 'defenseGoldMult', 0.8); } },
   // ★ 영웅 — 양날
   { id:'r_usury',   name:'고리대금',      desc:'시작 골드 +150',        bane:'전투 골드 -35%',
     grade:'epic', icon:'💸', cat:'resource',
-    apply: b => { b.startGoldBonus += 150; b.battleGoldMult *= 0.65; } },
+    apply: b => { b.startGoldBonus += 150; pctAdd(b, 'battleGoldMult', -0.35); } },
   { id:'r_gamble',  name:'도박꾼의 눈',   desc:'전투 골드 +90%',        bane:'시작 골드 -60',
     grade:'epic', icon:'🎲', cat:'resource',
-    apply: b => { b.battleGoldMult *= 1.90; b.startGoldBonus -= 60; } },
+    apply: b => { pctAdd(b, 'battleGoldMult', 0.9); b.startGoldBonus -= 60; } },
 ];
 
 
@@ -351,26 +409,26 @@ const SKILL_TREES = {
     name: '타워', icon: '🏹', color: '#22c55e',
     skills: [
       { id:'tw_s1', name:'정밀 조준', icon:'🎯', cost:1, row:0, col:1,
-        desc:v=>`타워 공격력 +${skpct(v*0.05)}`,      apply:(b,v)=>{ b.towerDmgMult *= 1 + v*0.05; } },
+        desc:v=>`타워 공격력 +${skpct(v*0.05)}`,      apply:(b,v)=>{ pctAdd(b, 'towerDmgMult', v*0.05); } },
       // 정액 공격력은 뺐다. 화살탑 기본 공격력이 2라 정액 +20이 붙는 순간
       // 타워 종류도 레벨도 의미를 잃는다. 대신 모든 타워에 감속을 얹는다.
       { id:'tw_s2', name:'얼음 도금', icon:'❄️', cost:1, row:1, col:0,
         desc:v=>`모든 타워에 감속 ${skpct(v*0.025)}`, apply:(b,v)=>{ b.towerSlow += v*0.025; } },
       { id:'tw_s3', name:'속사',      icon:'⚡', cost:1, row:1, col:1,
-        desc:v=>`타워 공격속도 +${skpct(v*0.04)}`,     apply:(b,v)=>{ b.towerSpdMult *= 1 + v*0.04; } },
+        desc:v=>`타워 공격속도 +${skpct(v*0.04)}`,     apply:(b,v)=>{ pctAdd(b, 'towerSpdMult', v*0.04); } },
       { id:'tw_s4', name:'요새화',    icon:'🏗️', cost:1, row:1, col:2,
         desc:v=>`타워 건설비 -${Math.round(v)}`,     apply:(b,v)=>{ b.towerCostDiscount += Math.round(v); } },
       { id:'tw_s5', name:'저격 조준', icon:'👁️', cost:2, row:2, col:0,
-        desc:v=>`타워 사거리 +${skpct(v*0.035)}`,      apply:(b,v)=>{ b.towerRangeMult *= 1 + v*0.035; } },
+        desc:v=>`타워 사거리 +${skpct(v*0.035)}`,      apply:(b,v)=>{ pctAdd(b, 'towerRangeMult', v*0.035); } },
       { id:'tw_s6', name:'관통탄',    icon:'🔩', cost:2, row:2, col:1,
         desc:v=>`적 방어 ${skpct(v*0.03)} 무시`,     apply:(b,v)=>{ b.towerPiercePct += v*0.03; } },
       { id:'tw_s7', name:'연사 기계', icon:'⚙️', cost:2, row:2, col:2,
-        desc:v=>`타워 공격속도 +${skpct(v*0.05)}`,     apply:(b,v)=>{ b.towerSpdMult *= 1 + v*0.05; } },
+        desc:v=>`타워 공격속도 +${skpct(v*0.05)}`,     apply:(b,v)=>{ pctAdd(b, 'towerSpdMult', v*0.05); } },
       { id:'tw_s8', name:'폭발 화살', icon:'💥', cost:3, row:3, col:0,
-        desc:v=>`범위 피해 · 공격력 +${skpct(v*0.04)}`, apply:(b,v)=>{ b.towerSplash = true; b.towerDmgMult *= 1 + v*0.04; } },
+        desc:v=>`범위 피해 · 공격력 +${skpct(v*0.04)}`, apply:(b,v)=>{ b.towerSplash = true; pctAdd(b, 'towerDmgMult', v*0.04); } },
       { id:'tw_s9', name:'타워 숙련', icon:'🌟', cost:3, row:3, col:1,
         desc:v=>`공격력 +${skpct(v*0.05)} · 공속 +${skpct(v*0.03)}`,
-        apply:(b,v)=>{ b.towerDmgMult *= 1 + v*0.05; b.towerSpdMult *= 1 + v*0.03; } },
+        apply:(b,v)=>{ pctAdd(b, 'towerDmgMult', v*0.05); pctAdd(b, 'towerSpdMult', v*0.03); } },
     ]
   },
 
@@ -378,13 +436,13 @@ const SKILL_TREES = {
     name: '병력', icon: '⚔️', color: '#f97316',
     skills: [
       { id:'un_s1', name:'기초 훈련', icon:'⚔️', cost:1, row:0, col:1,
-        desc:v=>`아군 공격력 +${skpct(v*0.05)}`,      apply:(b,v)=>{ b.unitAtkMult *= 1 + v*0.05; } },
+        desc:v=>`아군 공격력 +${skpct(v*0.05)}`,      apply:(b,v)=>{ pctAdd(b, 'unitAtkMult', v*0.05); } },
       { id:'un_s2', name:'체력 단련', icon:'💪', cost:1, row:1, col:0,
-        desc:v=>`아군 HP +${skpct(v*0.05)}`,          apply:(b,v)=>{ b.unitHpMult *= 1 + v*0.05; } },
+        desc:v=>`아군 HP +${skpct(v*0.05)}`,          apply:(b,v)=>{ pctAdd(b, 'unitHpMult', v*0.05); } },
       { id:'un_s3', name:'방어 훈련', icon:'🛡️', cost:1, row:1, col:1,
         desc:v=>`받는 피해 -${skpct(v*0.02)}`,        apply:(b,v)=>{ b.unitDefPct += v*0.02; } },
       { id:'un_s4', name:'속공',      icon:'🌀', cost:1, row:1, col:2,
-        desc:v=>`아군 공격속도 +${skpct(v*0.03)}`,      apply:(b,v)=>{ b.unitAtkSpdMult *= 1 + v*0.03; } },
+        desc:v=>`아군 공격속도 +${skpct(v*0.03)}`,      apply:(b,v)=>{ pctAdd(b, 'unitAtkSpdMult', v*0.03); } },
       { id:'un_s5', name:'급소 교본', icon:'💥', cost:2, row:2, col:0,
         desc:v=>`치명타 확률 +${skpct(v*0.02)}`,        apply:(b,v)=>{ b.critChance += v*0.02; } },
       { id:'un_s6', name:'연계 공격', icon:'🔗', cost:2, row:2, col:1,
@@ -393,7 +451,7 @@ const SKILL_TREES = {
         desc:v=>`처치 시 최대 HP의 ${skpct(v*0.006)} 회복`, apply:(b,v)=>{ b.killHealPct += v*0.006; } },
       { id:'un_s8', name:'정예 부대', icon:'🔥', cost:3, row:3, col:0,
         desc:v=>`아군 공격력 +${skpct(v*0.06)} · HP +${skpct(v*0.07)}`,
-        apply:(b,v)=>{ b.unitAtkMult *= 1 + v*0.06; b.unitHpMult *= 1 + v*0.07; } },
+        apply:(b,v)=>{ pctAdd(b, 'unitAtkMult', v*0.06); pctAdd(b, 'unitHpMult', v*0.07); } },
       { id:'un_s9', name:'대열 확장', icon:'➕', cost:3, row:3, col:1, maxLv:4,
         desc:v=>`편성 슬롯 +${Math.round(v)}`,        apply:(b,v)=>{ b.maxSlotBonus += Math.round(v); } },
     ]
@@ -405,22 +463,22 @@ const SKILL_TREES = {
       { id:'hr_s1', name:'영웅 훈련', icon:'⚔️', cost:1, row:0, col:1,
         desc:v=>`영웅 공격력 +${skpct(v*0.05)}`,      apply:(b,v)=>{ b.sigilHeroAtkMult *= 1 + v*0.05; } },
       { id:'hr_s2', name:'투사',      icon:'🗡️', cost:1, row:1, col:0,
-        desc:v=>`영웅 전체 능력 +${skpct(v*0.03)}`,     apply:(b,v)=>{ b.heroStatMult *= 1 + v*0.03; } },
+        desc:v=>`영웅 전체 능력 +${skpct(v*0.03)}`,     apply:(b,v)=>{ pctAdd(b, 'heroStatMult', v*0.03); } },
       { id:'hr_s3', name:'재생',      icon:'💚', cost:1, row:1, col:1,
         desc:v=>`영웅 재생 최대 HP의 ${skpct(v*0.004)}/s`, apply:(b,v)=>{ b.heroRegenPct += v*0.004; } },
       { id:'hr_s4', name:'경험 축적', icon:'📖', cost:1, row:1, col:2,
-        desc:v=>`영웅 EXP +${skpct(v*0.08)}`,           apply:(b,v)=>{ b.heroExpMult *= 1 + v*0.08; } },
+        desc:v=>`영웅 EXP +${skpct(v*0.08)}`,           apply:(b,v)=>{ pctAdd(b, 'heroExpMult', v*0.08); } },
       { id:'hr_s5', name:'지휘 오라', icon:'🎖️', cost:2, row:2, col:0,
         desc:v=>`부대가 받는 피해 -${skpct(v*0.015)}`,  apply:(b,v)=>{ b.unitDefPct += v*0.015; } },
       { id:'hr_s6', name:'각인 증폭', icon:'✨', cost:2, row:2, col:1,
-        desc:v=>`영웅 스킬 피해 +${skpct(v*0.05)}`,      apply:(b,v)=>{ b.heroSkillMult *= 1 + v*0.05; } },
+        desc:v=>`영웅 스킬 피해 +${skpct(v*0.05)}`,      apply:(b,v)=>{ pctAdd(b, 'heroSkillMult', v*0.05); } },
       { id:'hr_s7', name:'질풍',      icon:'🌀', cost:2, row:2, col:2,
         desc:v=>`영웅 공격속도 +${skpct(v*0.03)}`,       apply:(b,v)=>{ b.heroSpdMult *= 1 + v*0.03; } },
       { id:'hr_s8', name:'불굴',      icon:'🔮', cost:3, row:3, col:0, maxLv:5,
         desc:v=>v>=5 ? '전사해도 결장 없음' : `복귀 HP +${Math.round(v*8)}%p`,
         apply:(b,v)=>{ b.heroReviveReduction += v; if (v>=5) b.heroInstantRevive = true; } },
       { id:'hr_s9', name:'영웅 전설', icon:'🌟', cost:3, row:3, col:1,
-        desc:v=>`영웅 전체 능력 +${skpct(v*0.04)}`,      apply:(b,v)=>{ b.heroStatMult *= 1 + v*0.04; } },
+        desc:v=>`영웅 전체 능력 +${skpct(v*0.04)}`,      apply:(b,v)=>{ pctAdd(b, 'heroStatMult', v*0.04); } },
       { id:'hr_s10', name:'마력 순환', icon:'💧', cost:2, row:3, col:2,
         desc:v=>`최대 MP +${skpct(v*0.06)} · MP 회복 +${skpct(v*0.05)}`,
         apply:(b,v)=>{ b.heroMpMax += v*0.06; b.mpRegenBonus += v*0.05; } },
@@ -439,7 +497,7 @@ const SKILL_TREES = {
       { id:'bs_s4', name:'보급 창고', icon:'📦', cost:1, row:1, col:2,
         desc:v=>`시작 골드 +${Math.round(v*8)}`,       apply:(b,v)=>{ b.startGoldBonus += v*8; } },
       { id:'bs_s5', name:'황금 광맥', icon:'💰', cost:2, row:2, col:0,
-        desc:v=>`전투 골드 +${skpct(v*0.05)}`,           apply:(b,v)=>{ b.battleGoldMult *= 1 + v*0.05; } },
+        desc:v=>`전투 골드 +${skpct(v*0.05)}`,           apply:(b,v)=>{ pctAdd(b, 'battleGoldMult', v*0.05); } },
       { id:'bs_s6', name:'교대 근무', icon:'🛏️', cost:2, row:2, col:1,
         desc:v=>`웨이브 후 회복 +${skpct(v*0.03)}`,      apply:(b,v)=>{ b.restHealBonus += v*0.03; } },
       { id:'bs_s7', name:'상단 계약', icon:'🤝', cost:2, row:2, col:2,
@@ -450,7 +508,7 @@ const SKILL_TREES = {
         apply:(b,v)=>{ b.baseHpMax += BASE_HP_MAX * v*0.07; b.baseRegenPct += v*0.0016; } },
       { id:'bs_s9', name:'전시 경제', icon:'🏦', cost:3, row:3, col:1,
         desc:v=>`전투 골드 +${skpct(v*0.06)} · 시작 골드 +${Math.round(v*10)}`,
-        apply:(b,v)=>{ b.battleGoldMult *= 1 + v*0.06; b.startGoldBonus += v*10; } },
+        apply:(b,v)=>{ pctAdd(b, 'battleGoldMult', v*0.06); b.startGoldBonus += v*10; } },
     ]
   },
 
@@ -459,25 +517,25 @@ const SKILL_TREES = {
     name: '심연', icon: '🌊', color: '#a78bfa',
     skills: [
       { id:'ab_s1', name:'심연 적응', icon:'🌊', cost:1, row:0, col:1,
-        desc:v=>`적 체력 -${skpct(v*0.015)}`,           apply:(b,v)=>{ b.mobHpMult *= 1 - Math.min(0.30, v*0.015); } },
+        desc:v=>`적 체력 -${skpct(v*0.015)}`,           apply:(b,v)=>{ pctAdd(b, 'mobHpMult', -(Math.min(0.30, v*0.015))); } },
       { id:'ab_s2', name:'보석 감식', icon:'💎', cost:1, row:1, col:0,
-        desc:v=>`층당 보석 +${skpct(v*0.04)}`,           apply:(b,v)=>{ b.gemMult *= 1 + v*0.04; } },
+        desc:v=>`층당 보석 +${skpct(v*0.04)}`,           apply:(b,v)=>{ pctAdd(b, 'gemMult', v*0.04); } },
       { id:'ab_s3', name:'현상금 사냥', icon:'🎯', cost:1, row:1, col:1,
-        desc:v=>`소환 보상 +${skpct(v*0.06)}`,           apply:(b,v)=>{ b.summonRewardMult *= 1 + v*0.06; } },
+        desc:v=>`소환 보상 +${skpct(v*0.06)}`,           apply:(b,v)=>{ pctAdd(b, 'summonRewardMult', v*0.06); } },
       { id:'ab_s4', name:'등불',      icon:'🏮', cost:1, row:1, col:2,
         desc:v=>`불리한 층 이벤트 완화 ${skpct(v*0.05)}`, apply:(b,v)=>{ b.eventSoften += v*0.05; } },
       { id:'ab_s5', name:'과부하 회로', icon:'⚡', cost:2, row:2, col:0,
-        desc:v=>`과부하 쿨다운 -${skpct(v*0.05)}`,        apply:(b,v)=>{ b.overloadCdMult *= 1 - Math.min(0.6, v*0.05); } },
+        desc:v=>`과부하 쿨다운 -${skpct(v*0.05)}`,        apply:(b,v)=>{ pctAdd(b, 'overloadCdMult', -(Math.min(0.6, v*0.05))); } },
       { id:'ab_s6', name:'정예 사냥', icon:'⚔️', cost:2, row:2, col:1,
         desc:v=>`정예 등장 +${skpct(v*0.015)} · 보상 +${skpct(v*0.04)}`,
-        apply:(b,v)=>{ b.eliteChance += v*0.015; b.summonRewardMult *= 1 + v*0.04; } },
+        apply:(b,v)=>{ b.eliteChance += v*0.015; pctAdd(b, 'summonRewardMult', v*0.04); } },
       { id:'ab_s7', name:'드랍 감지', icon:'🔎', cost:2, row:2, col:2,
         desc:v=>`특수 드랍 확률 +${skpct(v*0.012)}`,      apply:(b,v)=>{ b.dropChance += v*0.012; } },
       { id:'ab_s8', name:'심층 내성', icon:'🌑', cost:3, row:3, col:0,
         desc:v=>`적 이동속도 -${skpct(v*0.02)}`,          apply:(b,v)=>{ b.pactEnemySpdMult *= 1 - Math.min(0.35, v*0.02); } },
       { id:'ab_s9', name:'심연의 부름', icon:'🌟', cost:3, row:3, col:1,
         desc:v=>`층당 보석 +${skpct(v*0.05)} · 적 체력 -${skpct(v*0.01)}`,
-        apply:(b,v)=>{ b.gemMult *= 1 + v*0.05; b.mobHpMult *= 1 - Math.min(0.20, v*0.01); } },
+        apply:(b,v)=>{ pctAdd(b, 'gemMult', v*0.05); pctAdd(b, 'mobHpMult', -(Math.min(0.20, v*0.01))); } },
     ]
   }
 };

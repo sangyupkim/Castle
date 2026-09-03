@@ -639,7 +639,7 @@ const PACT_DEFS = [
     apply:b=>{ b.pactEnemySpdMult *= 1.35; } },
   { id:'pc_swarm', name:'굶주린 무리', icon:'🌑', gem:0.22, tier:1,
     desc:'아레나 스폰 간격 −30% · 몹 HP ×1.5',
-    apply:b=>{ b.pactSpawnMult *= 0.70; b.mobHpMult *= 1.5; } },
+    apply:b=>{ b.pactSpawnMult *= 0.70; pctAdd(b, 'mobHpMult', 0.5); } },
 
   // ── 나를 약하게 ──
   { id:'pc_wall',  name:'얇은 성벽',   icon:'🧱', gem:0.24, tier:2,
@@ -658,7 +658,7 @@ const PACT_DEFS = [
   // ── 경제를 조이기 ──
   { id:'pc_purse', name:'빈 주머니',   icon:'👛', gem:0.20, tier:3,
     desc:'모든 골드 획득 −40%',
-    apply:b=>{ b.battleGoldMult *= 0.6; b.defenseGoldMult *= 0.6; } },
+    apply:b=>{ pctAdd(b, 'battleGoldMult', -0.4); pctAdd(b, 'defenseGoldMult', -0.4); } },
   { id:'pc_rest',  name:'짧은 휴식',   icon:'😴', gem:0.12, tier:3,
     desc:'웨이브 후 회복 없음 · 전투 이탈 회복 절반',
     apply:b=>{ b.restHealBonus -= 1; b.pactRegenMult *= 0.5; } },

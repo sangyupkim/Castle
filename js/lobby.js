@@ -316,8 +316,8 @@ function buyAscend(gs) {
 function applyAscend(gs) {
   const n = ascendLevel(gs);
   if (n <= 0) return;
-  BONUSES.towerDmgMult *= 1 + n * ASCEND_DMG;
-  BONUSES.unitAtkMult  *= 1 + n * ASCEND_DMG;
-  BONUSES.unitHpMult   *= 1 + n * ASCEND_HP;
+  pctAdd(BONUSES, 'towerDmgMult', n * ASCEND_DMG);
+  pctAdd(BONUSES, 'unitAtkMult', n * ASCEND_DMG);
+  pctAdd(BONUSES, 'unitHpMult', n * ASCEND_HP);
   BONUSES.baseHpMax    += Math.round(BASE_HP_MAX * n * ASCEND_HP);
 }
