@@ -45,7 +45,12 @@ const CASTLE_LEAD = 1;
 function trackCapAt(tr, level) {
   const hard = trackMax(tr);
   if (hard === Infinity) return Infinity;   // ♾ 트랙은 최고 레벨 전용이라 따로 안 막는다
-  return Math.min(hard, TRACK_CAP_BASE + (level || 0) * TRACK_CAP_PER_LV);
+  const lv = level || 0;
+  // perLevel 트랙 — 해금 레벨부터 **한 단에 딱 하나씩**만 열린다.
+  // 편성 칸은 하나 늘 때마다 판이 통째로 달라져서, 한 레벨에서 몰아 살 수 있으면
+  // 그 자리에서 병영을 더 올릴 이유가 사라진다. 레벨을 올려야 다음 칸이 나온다.
+  if (tr.perLevel) return Math.max(0, Math.min(hard, lv - (tr.unlockLv || 0) + 1));
+  return Math.min(hard, TRACK_CAP_BASE + lv * TRACK_CAP_PER_LV);
 }
 // 그 건물에서 지금까지 산 강화 총 횟수
 function buildingUpgradeCount(bs) {
@@ -166,11 +171,14 @@ const TOWN_BUILDINGS = [
         desc:v=>`용병 고용비 -${Math.round(v)}`,             apply:(b,v)=>{ b.hireCostDiscount += Math.round(v); } },
       { id:'u_crit', name:'급소 교본',  icon:'🎯', unlockLv:4, cost:51, costMult:1.2, step:0.018, growth:0.0267, maxLv:24,
         desc:v=>`치명타 확률 +${pct(v)}`,                    apply:(b,v)=>{ b.critChance += v; } },
-      // ➕ 편성 슬롯은 이제 '보석으로 사는 트랙'이 아니라 **병영 레벨 그 자체**다.
-      // 예전에는 Lv.5에 열려 90보석부터 ×1.423씩 네 번 — 마지막 한 칸이 260보석이라
-      // 대부분 두 칸에서 멈췄고, 편성 화면은 판 내내 같은 모양이었다.
-      // 건물을 올리면 칸이 늘어난다는 규칙 하나로 바꾸면 무엇을 올릴지가 분명해진다.
-      { id:'u_slot', name:'병력 증원',  icon:'➕', unlockLv:2, cost:60, costMult:1.24, step:1,    growth:0,    maxLv:2,
+      // ➕ 편성 슬롯. 병영 레벨 자체도 두 단마다 한 칸을 주고(barracksSlotBonus),
+      // 이 트랙이 그 위에 얹는다.
+      //
+      // Lv.3에 열려 두 칸을 한꺼번에 살 수 있던 것을 Lv.5~8에 한 칸씩으로 미뤘다.
+      // 셋째 층에 벌써 편성 칸을 살 수 있으면 병영에서 할 일이 그것뿐이 되고,
+      // 두 칸을 그 자리에서 다 사고 나면 병영을 더 올릴 이유도 같이 사라진다.
+      // perLevel이 한 단에 하나씩만 내주므로, 칸을 원하면 병영을 올려야 한다.
+      { id:'u_slot', name:'병력 증원',  icon:'➕', unlockLv:4, cost:60, costMult:1.24, step:1,    growth:0,    maxLv:4, perLevel:true,
         desc:v=>`편성 슬롯 +${Math.round(v)} (병영 레벨에 더해집니다)`,
         apply:(b,v)=>{ b.maxSlotBonus += Math.round(v); } },
       { id:'u_regen',name:'야전 의무',  icon:'🩹', unlockLv:3, cost:46, costMult:1.2, step:0.0018, growth:0.02, maxLv:24,
