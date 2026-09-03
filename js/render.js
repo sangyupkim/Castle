@@ -863,10 +863,131 @@ function renderPauseOverlay(ctx) {
     ? `정산 💎${gaveUpGems}  —  끝까지 버티면 ${Math.round((1-GIVE_UP_GEM_MULT)*100)}% 더`
     : '정산 💎0  —  한 층이라도 넘어야 보석이 남습니다', CW/2, y+bh/2+11);
   gs.ui.pauseGiveUpBtn = {x:bx,y:y,w:bw,h:bh};
-  y += bh + 18;
+  y += bh + 12;
+
+  // 🃏 이번 판에 고른 카드 — 서른 번 넘게 고르고 나면 내가 뭘 쌓았는지 잊는다.
+  const n = (gs.activeUpgrades || []).length;
+  const cbh = 34;
+  uiPanel(ctx, bx, y, bw, cbh, 8, n ? '#0a1e3c' : '#12161f', n ? '#60a5fa' : '#2a3140', n ? 1.5 : 1);
+  ctx.fillStyle = n ? '#93c5fd' : '#475569'; ctx.font='bold 12px sans-serif';
+  ctx.fillText(n ? `🃏 고른 카드 ${n}장 보기` : '🃏 아직 고른 카드가 없습니다', CW/2, y+cbh/2);
+  gs.ui.pauseCardsBtn = n ? {x:bx,y:y,w:bw,h:cbh} : null;
+  y += cbh + 16;
 
   ctx.fillStyle='#334155'; ctx.font='11px sans-serif';
   ctx.fillText('P 키 또는 ⏸ 버튼으로도 재개됩니다', CW/2, y);
+}
+
+// ─── 🃏 이번 판에 고른 카드 ──────────────────────────────────────────────────
+// 요약(등급·분류별 몇 장)을 먼저 보여주고 그 아래 전체 목록을 둔다.
+// 한 판에 서른 장 넘게 쌓이므로 목록만으로는 "내가 뭘 하고 있었지"가 안 읽힌다.
+function renderRunCardsOverlay(ctx) {
+  ctx.fillStyle='rgba(3,6,12,0.94)'; ctx.fillRect(0,0,CW,CH);
+  gs.ui.runCardsCloseBtn = null;
+  gs.ui.runCardsScroll   = null;
+
+  const taken = (gs.activeUpgrades || [])
+    .map(id => UPGRADE_CARDS.find(c => c.id === id)).filter(Boolean);
+
+  // 같은 카드를 여러 번 집었으면 묶는다
+  const counted = [];
+  for (const c of taken) {
+    const hit = counted.find(e => e.card.id === c.id);
+    if (hit) hit.n++; else counted.push({ card:c, n:1 });
+  }
+  counted.sort((a, b) => CARD_GRADES.indexOf(b.card.grade) - CARD_GRADES.indexOf(a.card.grade)
+                       || b.n - a.n);
+
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  let y = 22 - (gs.runCardsScroll || 0);
+
+  ctx.fillStyle='#e2e8f0'; ctx.font='bold 17px sans-serif';
+  ctx.fillText('🃏 이번 판에 고른 카드', 16, y);
+  ctx.textAlign='right'; ctx.fillStyle='#475569'; ctx.font='bold 11px sans-serif';
+  ctx.fillText(`${taken.length}장 · ${counted.length}종`, CW-16, y+4);
+  ctx.textAlign='left';
+  y += 30;
+
+  // ── 요약: 등급별 ──
+  const byGrade = {}; for (const g of CARD_GRADES) byGrade[g] = 0;
+  for (const e of counted) byGrade[e.card.grade] = (byGrade[e.card.grade] || 0) + e.n;
+  const gw = (CW - 32 - 3*6) / 4;
+  CARD_GRADES.forEach((g, i) => {
+    const gx = 16 + i*(gw+6);
+    uiPanel(ctx, gx, y, gw, 44, 6, CARD_GRADE_BG[g], CARD_GRADE_COLOR[g], byGrade[g] ? 1.5 : 1);
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle = byGrade[g] ? CARD_GRADE_COLOR[g] : '#334155';
+    ctx.font='bold 16px sans-serif';
+    ctx.fillText(`${byGrade[g]}`, gx+gw/2, y+16);
+    ctx.font='bold 8px sans-serif';
+    ctx.fillText(CARD_GRADE_LABEL[g], gx+gw/2, y+33);
+  });
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  y += 54;
+
+  // ── 요약: 분류별 ──
+  const cats = { tower:'🏹 타워', unit:'🛡️ 유닛', hero:'👑 영웅',
+                 base:'🏰 기지', cave:'🗿 케이브', resource:'💰 자원' };
+  const byCat = {};
+  for (const e of counted) byCat[e.card.cat] = (byCat[e.card.cat] || 0) + e.n;
+  ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif';
+  let cx2 = 16;
+  for (const [k, label] of Object.entries(cats)) {
+    const v = byCat[k] || 0;
+    const t = `${label} ${v}`;
+    ctx.fillStyle = v ? '#94a3b8' : '#293548';
+    ctx.fillText(t, cx2, y);
+    cx2 += ctx.measureText(t).width + 12;
+    if (cx2 > CW - 70) { cx2 = 16; y += 14; }
+  }
+  y += 22;
+
+  // ── 전체 목록 ──
+  ctx.fillStyle='#334155'; ctx.font='bold 10px sans-serif';
+  ctx.fillText('전체 목록', 16, y);
+  y += 16;
+
+  const rowH = 40;
+  for (const e of counted) {
+    const c = e.card, gc = CARD_GRADE_COLOR[c.grade] || '#94a3b8';
+    uiPanel(ctx, 12, y, CW-24, rowH, 5, CARD_GRADE_BG[c.grade] || '#0b1220', gc, 1);
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.font='15px sans-serif'; ctx.fillStyle='#e2e8f0';
+    ctx.fillText(c.icon, 20, y+13);
+    ctx.font='bold 11px sans-serif'; ctx.fillStyle=gc;
+    const nm = c.name + (e.n > 1 ? `  ×${e.n}` : '');
+    ctx.fillText(nm, 44, y+12);
+    ctx.font='8px sans-serif'; ctx.fillStyle='#8595ab';
+    ctx.fillText(c.desc, 44, y+27);
+    if (c.bane) {
+      ctx.fillStyle='#f87171'; ctx.font='8px sans-serif';
+      ctx.fillText(`▼ ${c.bane}`, 44 + ctx.measureText(c.desc).width + 10, y+27);
+    }
+    ctx.textAlign='right';
+    ctx.fillStyle=gc; ctx.font='bold 8px sans-serif';
+    ctx.fillText(CARD_GRADE_LABEL[c.grade] || '', CW-20, y+12);
+    ctx.textAlign='left';
+    y += rowH + 5;
+  }
+  if (!counted.length) {
+    ctx.fillStyle='#334155'; ctx.font='11px sans-serif';
+    ctx.fillText('아직 없습니다 — 층을 넘길 때마다 한 장씩 고릅니다.', 16, y);
+    y += 20;
+  }
+
+  const bottom = y + (gs.runCardsScroll || 0);
+  gs.ui.runCardsScroll = { x:0, y:0, w:CW, h:CH, max: Math.max(0, bottom + 70 - CH) };
+  gs.runCardsScroll = Math.max(0, Math.min(gs.ui.runCardsScroll.max, gs.runCardsScroll || 0));
+
+  // 닫기 — 스크롤과 무관하게 아래에 고정
+  const cbw=180, cbh=42, cbx=(CW-cbw)/2, cby=CH-58;
+  ctx.fillStyle='rgba(3,6,12,0.95)'; ctx.fillRect(0, cby-12, CW, CH-cby+12);
+  uiPanel(ctx, cbx, cby, cbw, cbh, 9, '#1e293b', '#94a3b8', 1.5);
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillStyle='#e2e8f0'; ctx.font='bold 14px sans-serif';
+  ctx.fillText('닫기', CW/2, cby+cbh/2);
+  gs.ui.runCardsCloseBtn = {x:cbx,y:cby,w:cbw,h:cbh};
+  ctx.textAlign='left'; ctx.textBaseline='top';
 }
 
 // ─── UI Bar ──────────────────────────────────────────────────────────────────

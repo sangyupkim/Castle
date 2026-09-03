@@ -133,6 +133,8 @@ function newState() {
     briefScroll: 0,
     lobbyScroll: 0,     // 캠프 기록 탭 스크롤
     wallRepairs:0,      // 이번 런에서 성벽을 몇 번 보수했는지 (비용 체증)
+    runCardsOpen:false, // 🃏 이번 판 카드 보기 화면이 열려 있는가
+    runCardsScroll:0,
     runGameSec:0,       // 이 판의 게임 내 경과 시간(초) — 배속과 무관하다
     runWallStart:0,     // 이 판을 시작한 실제 시각 — 랭킹 개연성 검사에 쓴다
     rerolls:0,          // 이번 런에서 강화 카드를 몇 번 리롤했는지 (골드 비용 체증)
@@ -166,7 +168,8 @@ function newState() {
          pauseResumeBtn:null, pauseGiveUpBtn:null,
          backupExportBtn:null, backupImportBtn:null, backupMsg:null,
          tutReplayBtn:null, tutResetTipBtn:null, guideReplayBtn:null, campBtns:[], campGroupBtns:[], cardMetaBtns:[], cardCatBtns:[], cardBanBtns:[], cardBackBtn:null,
-         rankSubmitBtn:null, rankBoardBtns:[], rankReloadBtn:null, bgmToggleBtn:null, sfxToggleBtn:null,
+         rankSubmitBtn:null, rankBoardBtns:[], rankReloadBtn:null,
+         pauseCardsBtn:null, runCardsCloseBtn:null, runCardsScroll:null, bgmToggleBtn:null, sfxToggleBtn:null,
          tutSkipBtn:null, tutBackBtn:null, sigilCards:[] },
     // 영구 데이터 참조
     get soulStones()    { return _soulStones; },
@@ -294,6 +297,14 @@ let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적�
   if (sv.inRun && sv.townForge) gs.town.forge = sv.townForge;
 
   gs.innOffers = sv.innOffers || [];
+
+  // 🃏 이번 판에 고른 카드 — 아래 reapplyAllBonuses가 이 배열을 읽어 효과를 다시 얹는다.
+  // 정의에 없는 id(카드표가 바뀐 옛 세이브)는 버린다.
+  gs.activeUpgrades = (sv.activeUpgrades || [])
+    .filter(id => UPGRADE_CARDS.some(c => c.id === id));
+  // 이어한 판의 시간은 이어서 센다 — 0으로 돌아가면 랭킹 개연성 검사에 걸린다
+  gs.runGameSec   = sv.runGameSec || 0;
+  gs.runWallStart = Date.now() - (sv.runWallMs || 0);
 
   // ── 판에 세워둔 것 복원 ──
   // 경로는 층에 따라 정해지므로 wm.init()이 THE_PATH를 맞춘 뒤에 타워를 올려야 하는데,
@@ -465,6 +476,9 @@ window.addEventListener('wheel', e=>{
 
 // 지금 화면에서 스크롤되는 세로 영역 하나 (키보드용)
 function activeScrollRegion() {
+  // 카드 보기가 열려 있으면 그게 유일한 스크롤 대상이다 — 뒤 화면을 밀면 안 된다
+  if (gs.runCardsOpen && gs.ui.runCardsScroll && gs.ui.runCardsScroll.max > 0)
+    return gs.ui.runCardsScroll;
   for (const r of [gs.ui.buildingScroll, gs.ui.pageScroll, gs.ui.briefScroll, gs.ui.lobbyScroll])
     if (r && r.max > 0) return r;
   return null;
@@ -472,7 +486,8 @@ function activeScrollRegion() {
 function nudgeScroll(dy) {
   const r = activeScrollRegion(); if (!r) return false;
   const v = x => Math.max(0, Math.min(r.max, x + dy));
-  if      (r === gs.ui.briefScroll) gs.briefScroll = v(gs.briefScroll||0);
+  if      (r === gs.ui.runCardsScroll) gs.runCardsScroll = v(gs.runCardsScroll||0);
+  else if (r === gs.ui.briefScroll) gs.briefScroll = v(gs.briefScroll||0);
   else if (r === gs.ui.lobbyScroll) gs.lobbyScroll = v(gs.lobbyScroll||0);
   else                              gs.town.scroll = v(gs.town.scroll||0);
   return true;
@@ -631,6 +646,12 @@ function tap({x,y}) {
   // 기지 함락 — 결과 화면으로. 스킬 트리는 로비에 있으므로 여기서 열지 않는다.
   if (gs.gameOver) { showResult(); return; }
 
+  // 🃏 카드 보기가 열려 있으면 닫기만 받는다 — 뒤 화면이 눌리면 안 된다
+  if (gs.runCardsOpen) {
+    if (hitTest(x,y,gs.ui.runCardsCloseBtn||{})) { gs.runCardsOpen = false; SFX.click(); }
+    return;
+  }
+
   // 일시정지 중에는 재개 / 포기만 받는다.
   // 한 판이 10~30분이라 중간에 접어야 할 때가 있고, 초반에 망한 판을 끝까지
   // 붙들고 있을 이유도 없다. 여기까지 번 보석은 그대로 정산된다.
@@ -639,6 +660,9 @@ function tap({x,y}) {
       if (_giveUpArmed) { _giveUpArmed=false; _paused=false; gs.gaveUp=true; showResult(); }
       else { _giveUpArmed=true; SFX.denied(); }
       return;
+    }
+    if (hitTest(x,y,gs.ui.pauseCardsBtn||{})) {
+      gs.runCardsOpen = true; gs.runCardsScroll = 0; SFX.click(); return;
     }
     if (hitTest(x,y,gs.ui.pauseResumeBtn||{})) { _giveUpArmed=false; togglePause(); return; }
     _giveUpArmed=false;
@@ -2340,7 +2364,13 @@ function frame(ts) {
   if (gs.page!=='lobby' && gs.page!=='result') renderHUD(ctx,gs);
   if (gs.upgradePick.active && gs.page==='battle') renderUpgradePick(ctx,gs);
   drawFloaties(ctx);
-  if (_paused && !_titleScreen && !tut.active && gs.page!=='lobby' && gs.page!=='result') renderPauseOverlay(ctx);
+  if (_paused && !_titleScreen && !tut.active && gs.page!=='lobby' && gs.page!=='result') {
+    renderPauseOverlay(ctx);
+    // 🃏 카드 보기는 일시정지 위에 얹는다 — 판을 멈춘 채로 훑어보는 화면이다
+    if (gs.runCardsOpen) renderRunCardsOverlay(ctx);
+  } else if (gs.runCardsOpen) {
+    gs.runCardsOpen = false;      // 일시정지가 풀렸으면 같이 닫는다
+  }
   renderTutorial(ctx,tut);
   // 안내는 튜토리얼 글이 떠 있지 않을 때만 — 둘이 겹치면 무엇을 보라는지 알 수 없다
   if (!tut.active) renderGuide(ctx,gs);
