@@ -762,7 +762,11 @@ function tap({x,y}) {
       if (!free && gs.gold < cost) { spawnFloaty('골드 부족!',x,y,'#ef4444'); SFX.denied(); return; }
       if (free) { gs.freeRerolls--; spawnFloaty('🎲 공짜 리롤', x, y, '#4ade80'); }
       else gs.gold -= cost;
-      gs.rerolls++;
+      // 값이 오르는 것은 **돈을 낸 횟수**만이다.
+      // 예전에는 공짜 리롤도 이 수를 올려서, 캠프에서 산 공짜 3회를 쓰고 나면
+      // 그다음 유료 리롤이 22가 아니라 90부터 시작했다 —
+      // 공짜를 쓸수록 손해가 되니 사둔 것을 안 쓰게 된다.
+      if (!free) gs.rerolls++;
       // 장수는 그대로 다시 뽑는다 — 🎲풍요(5장) 층에서 리롤했더니 3장으로
       // 줄어드는 버그가 있었다. 돈을 내고 이벤트 혜택을 잃는 셈이었다.
       gs.upgradePick.cards = rollUpgradeCards(gs.activeUpgrades,

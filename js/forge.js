@@ -296,10 +296,16 @@ function temperForge(gs) {
 }
 
 // 🔁 자동 담금질 — 한 번씩 누르는 것이 손가락 운동이 되지 않게.
-// 다음 체크포인트까지, 혹은 골드가 떨어질 때까지 알아서 굴린다.
-// 체크포인트에서 멈추는 이유는 그 너머가 '잃을 수 있는 구간'이기 때문이다 —
-// 안전한 데까지만 자동으로 밀어 주고, 걸고 굴리는 결정은 손에 남긴다.
-const TEMPER_AUTO_MAX_ROLLS = 90;    // 한 번 눌러서 도는 최대 굴림 수
+// 다음 체크포인트까지, 혹은 **첫 실패까지** 알아서 굴린다.
+//
+// 예전에는 실패해도 90번까지 계속 굴렸다. 실패하면 체크포인트로 되돌아가고
+// 거기서 또 굴리므로, 확률이 얼마든 90번이면 거의 반드시 다음 체크포인트에
+// 닿는다 — "담금질은 실패가 없다"는 보고가 정확히 이것이었다.
+// 90번을 대신 눌러 주면 그건 굴림이 아니라 시간이고, 골드가 남아도는
+// 후반에는 시간조차 아니다.
+//
+// 실패하면 멈춘다. 손가락 운동은 없애되, 걸고 굴리는 것은 굴림으로 남긴다.
+const TEMPER_AUTO_MAX_ROLLS = 12;    // 한 번 눌러서 도는 최대 굴림 수
 function temperAuto(gs) {
   const f = forgeState(gs);
   const start = f.mastery;
@@ -312,7 +318,7 @@ function temperAuto(gs) {
     const r = temperForge(gs);
     if (!r) break;
     rolls++; spent += r.cost;
-    if (!r.ok) fails++;
+    if (!r.ok) { fails++; break; }   // ← 실패하면 거기서 멈춘다
   }
   return { rolls, spent, fails, before:start, after:f.mastery,
            reached: f.mastery >= target, target };
