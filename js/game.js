@@ -56,6 +56,8 @@ setTimeout(() => {
 }, 8000);
 let _titleScreen = true;  // 앱 시작 시 타이틀 화면 표시
 let _resetArmed  = false; // 리셋 버튼 1차 확인 상태
+// 📋 업데이트 소식 — 타이틀 위에 덮는 문서. 판이 시작되기 전에만 연다.
+let _patchOpen   = false;
 let _resetArmedAt = 0;
 // 🌳 스킬 초기화도 되돌릴 수 없다 — 같은 두 번 누르기 규칙을 쓴다
 let _skillResetArmed = false, _skillResetArmedAt = 0;
@@ -134,6 +136,7 @@ function newState() {
     activeUpgrades: [],
     briefScroll: 0,
     lobbyScroll: 0,     // 캠프 기록 탭 스크롤
+    patchScroll: 0,     // 📋 업데이트 소식 스크롤
     wallRepairs:0,      // 이번 런에서 성벽을 몇 번 보수했는지 (비용 체증)
     bossPick:'random',  // 👹 보스를 어디서 맞이할지 (준비 화면에서 고른다)
     runCardsOpen:false, // 🃏 이번 판 카드 보기 화면이 열려 있는가
@@ -170,6 +173,7 @@ function newState() {
          unboundedBtn:null, nightmareBtns:[],
          buildingScroll:null, pageScroll:null, briefScroll:null, lobbyScroll:null, pickScroll:null,
          pauseResumeBtn:null, pauseGiveUpBtn:null,
+         titlePatchBtn:null, patchCloseBtn:null,
          backupExportBtn:null, backupImportBtn:null, backupMsg:null,
          tutReplayBtn:null, achBtns:[], achClaimAllBtn:null, tutResetTipBtn:null, guideReplayBtn:null, campBtns:[], campGroupBtns:[], relicBtns:[], relicSellBtns:[], cardMetaBtns:[], cardCatBtns:[], cardBanBtns:[], cardBackBtn:null,
          rankSubmitBtn:null, rankBoardBtns:[], rankReloadBtn:null,
@@ -422,6 +426,10 @@ let _drag = null;      // { y0, scroll0, region }
 let _didDrag = false;
 
 function scrollRegionAt(p) {
+  // 📋 소식이 열려 있으면 화면 전체가 그 문서다 — 다른 영역은 보지 않는다
+  if (_patchOpen && _titleScreen && typeof patchScrollMax === 'function') {
+    return { x:0, y:46, w:CW, h:CH-46, max: patchScrollMax(), kind:'patch' };
+  }
   // 건물 상세 · 마을 탭 본문 · 전투 준비 화면이 각각 스크롤된다.
   // 강화 카드 띠(pickScroll)만 가로로 민다 — axis:'x'로 구분한다.
   for (const r of [gs.ui.pickScroll, gs.ui.buildingScroll, gs.ui.pageScroll, gs.ui.briefScroll, gs.ui.lobbyScroll]) {
@@ -441,10 +449,12 @@ function beginDrag(p) {
   _pressAt = { x: p.x, y: p.y };
   const r = scrollRegionAt(p);
   _drag = r ? { y0: p.y, x0: p.x, max: r.max, axis: r.axis === 'x' ? 'x' : 'y',
-                kind: r === gs.ui.pickScroll  ? 'pick'
+                kind: r.kind === 'patch'      ? 'patch'
+                    : r === gs.ui.pickScroll  ? 'pick'
                     : r === gs.ui.briefScroll ? 'brief'
                     : r === gs.ui.lobbyScroll ? 'lobby' : 'town',
-                scroll0: r === gs.ui.pickScroll  ? (gs.pickScroll||0)
+                scroll0: r.kind === 'patch'      ? (gs.patchScroll||0)
+                       : r === gs.ui.pickScroll  ? (gs.pickScroll||0)
                        : r === gs.ui.briefScroll ? (gs.briefScroll||0)
                        : r === gs.ui.lobbyScroll ? (gs.lobbyScroll||0)
                        : (gs.town.scroll||0) } : null;
@@ -459,7 +469,8 @@ function moveDrag(p) {
   const d = _drag.axis === 'x' ? (p.x - _drag.x0) : (p.y - _drag.y0);
   if (!_didDrag) return;
   const v = Math.max(0, Math.min(_drag.max, _drag.scroll0 - d));
-  if      (_drag.kind === 'pick')  gs.pickScroll  = v;
+  if      (_drag.kind === 'patch') gs.patchScroll = v;
+  else if (_drag.kind === 'pick')  gs.pickScroll  = v;
   else if (_drag.kind === 'brief') gs.briefScroll = v;
   else if (_drag.kind === 'lobby') gs.lobbyScroll = v;
   else                             gs.town.scroll = v;
@@ -501,7 +512,8 @@ window.addEventListener('wheel', e=>{
   if (!r) return;
   e.preventDefault();
   // 가로 띠는 세로 휠로도 밀리게 한다 — 마우스에 가로 휠이 없는 쪽이 흔하다
-  if      (r === gs.ui.pickScroll)  gs.pickScroll  = Math.max(0, Math.min(r.max, (gs.pickScroll||0) + (e.deltaX || e.deltaY)));
+  if      (r.kind === 'patch')      gs.patchScroll = Math.max(0, Math.min(r.max, (gs.patchScroll||0) + e.deltaY));
+  else if (r === gs.ui.pickScroll)  gs.pickScroll  = Math.max(0, Math.min(r.max, (gs.pickScroll||0) + (e.deltaX || e.deltaY)));
   else if (r === gs.ui.briefScroll) gs.briefScroll = Math.max(0, Math.min(r.max, (gs.briefScroll||0) + e.deltaY));
   else if (r === gs.ui.lobbyScroll) gs.lobbyScroll = Math.max(0, Math.min(r.max, (gs.lobbyScroll||0) + e.deltaY));
   else                              gs.town.scroll = Math.max(0, Math.min(r.max, (gs.town.scroll||0) + e.deltaY));
@@ -629,6 +641,21 @@ function tap({x,y}) {
   if (_titleScreen) {
     SFX.unlock();
     try { BGM.play('camp'); } catch (e) {}
+    // 📋 소식이 열려 있으면 닫기 말고는 아무것도 안 먹는다 —
+    // 뒤의 '화면 아무 데나 탭하면 시작'이 살아 있으면 읽다가 판이 시작된다.
+    if (_patchOpen) {
+      if (hitTest(x, y, gs.ui.patchCloseBtn || {})) {
+        _patchOpen = false;
+        const pn = (typeof patchLatest === 'function') ? patchLatest() : null;
+        if (pn && typeof markPatchRead === 'function') markPatchRead(pn.ver);
+        SFX.click();
+      }
+      return;
+    }
+    if (hitTest(x, y, gs.ui.titlePatchBtn || {})) {
+      _patchOpen = true; gs.patchScroll = 0; _resetArmed = false; SFX.click();
+      return;
+    }
     // 리셋은 두 번 눌러야 실행된다 — 실수로 세이브를 날리지 않도록
     if (hitTest(x, y, gs.ui.titleResetBtn || {})) {
       if (_resetArmed && (Date.now() - _resetArmedAt < 5000)) {
@@ -2590,6 +2617,9 @@ function frame(ts) {
   // 안내는 튜토리얼 글이 떠 있지 않을 때만 — 둘이 겹치면 무엇을 보라는지 알 수 없다
   if (!tut.active) renderGuide(ctx,gs);
   if (_titleScreen || _fadingOut) renderTitleScreen(ctx, _titleAlpha);
+  if (_titleScreen && _patchOpen && typeof renderPatchNotes === 'function') {
+    renderPatchNotes(ctx, gs);
+  }
   // 배경음 — 화면과 상황에 맞는 곡으로. 같은 곡이면 아무 일도 하지 않는다.
   if (!_titleScreen) { try { BGM.sync(gs, wm); } catch (e) {} }
   // 🧭 시킨 일을 해냈는지 매 프레임 본다. 확인 버튼이 없으므로 이게 유일한 진행 수단이다.
