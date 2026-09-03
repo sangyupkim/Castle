@@ -990,6 +990,130 @@ function renderRunCardsOverlay(ctx) {
   ctx.textAlign='left'; ctx.textBaseline='top';
 }
 
+// ─── 👹 보스전 화면 ──────────────────────────────────────────────────────────
+// 쓰는 전선 하나만 그린다. 상단 보스면 격자만, 하단 레이드면 아레나만.
+// 안 쓰는 쪽은 몹이 한 마리도 안 나오므로 그릴 것도 없다.
+function renderBossLane(ctx, gs) {
+  const b = gs.boss;
+  ctx.fillStyle = '#07040a'; ctx.fillRect(0, 0, CW, CH);
+  if (b.side === 'top') {
+    renderDefense(ctx, gs);
+    renderUIBar(ctx, gs, wm);
+    // 아레나가 있던 자리는 보스전 안내로 채운다
+    const y0 = BATTLE_Y + 10;
+    ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.fillStyle='#7f1d1d'; ctx.font='bold 13px sans-serif';
+    ctx.fillText('👹 상단 보스전', CW/2, y0 + 16);
+    ctx.fillStyle='#64748b'; ctx.font='11px sans-serif';
+    ctx.fillText('이번 층은 아래쪽에 적이 나오지 않습니다', CW/2, y0 + 38);
+    ctx.fillStyle='#475569'; ctx.font='10px sans-serif';
+    ctx.fillText(`경로를 ${b.lapsMax}바퀴 도는 동안 잡아야 합니다`, CW/2, y0 + 58);
+    ctx.fillText('다 돌면 그대로 성으로 갑니다', CW/2, y0 + 74);
+    ctx.textAlign='left'; ctx.textBaseline='top';
+  } else {
+    // 아레나는 이미 ARENA_Y/H가 넓어져 있다 — 평소 그리기를 그대로 쓴다
+    renderBattle(ctx, gs);
+    renderBossFields(ctx, gs);
+  }
+}
+
+// ─── 👹 보스 HUD ─────────────────────────────────────────────────────────────
+// 화면 맨 위에 붙는 한 덩어리. 보스 체력(줄로 나뉜)·남은 바퀴/시간·영웅 체력·
+// 방금 터진 기믹을 여기서 다 읽을 수 있어야 한다.
+function renderBossHud(ctx, gs) {
+  if (typeof bossActive !== 'function' || !bossActive(gs)) return 0;
+  const b = gs.boss;
+  const m = b.side === 'top'
+    ? (gs.defenseEnemies || []).find(e => (e.isBoss || e.isMidBoss) && !e.dead && !e.reached)
+    : (gs.arena?.mobs || []).find(e => (e.isRaidBoss || e.isMidBoss) && !e.dead);
+
+  const H = 54;
+  ctx.fillStyle = 'rgba(8,4,10,0.92)'; ctx.fillRect(0, 0, CW, H);
+  ctx.strokeStyle = '#7f1d1d'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, H-0.5); ctx.lineTo(CW, H-0.5); ctx.stroke();
+
+  ctx.textAlign='left'; ctx.textBaseline='middle';
+  ctx.fillStyle='#fca5a5'; ctx.font='bold 11px sans-serif';
+  ctx.fillText(m ? (m.name || '보스') : '보스', 10, 13);
+
+  // 남은 바퀴 또는 시간
+  ctx.textAlign='right';
+  ctx.fillStyle = '#fbbf24'; ctx.font='bold 11px sans-serif';
+  ctx.fillText(bossBarText(gs), CW-10, 13);
+
+  // 체력 — 줄로 나눈다. 깎인 줄은 어둡게, 지금 줄만 밝게.
+  const bx=10, bw=CW-20, by=22, bh=10;
+  ctx.fillStyle='#1a0a0a'; ctx.fillRect(bx, by, bw, bh);
+  if (m && m.maxHp > 0) {
+    const frac = Math.max(0, m.hp / m.maxHp);
+    ctx.fillStyle='#dc2626'; ctx.fillRect(bx, by, bw * frac, bh);
+  }
+  // 줄 경계
+  ctx.fillStyle='rgba(8,4,10,0.85)';
+  for (let i=1;i<b.bars;i++) ctx.fillRect(bx + bw*(i/b.bars) - 1, by, 2, bh);
+  ctx.strokeStyle='#7f1d1d'; ctx.lineWidth=1; ctx.strokeRect(bx+0.5, by+0.5, bw-1, bh-1);
+
+  // 영웅 체력 — 만 단위가 넘으면 1000x10 꼴로 줄여 적는다
+  const hero = gs.hero;
+  ctx.textAlign='left'; ctx.textBaseline='middle';
+  if (hero && !hero.dead) {
+    const mx = (typeof heroMaxHp === 'function') ? heroMaxHp() : (hero.maxHp || 1);
+    const hf = Math.max(0, Math.min(1, (hero.hp || 0) / Math.max(1, mx)));
+    const hx=10, hy=38, hw=150, hh=8;
+    ctx.fillStyle='#0b1220'; ctx.fillRect(hx, hy, hw, hh);
+    ctx.fillStyle = hf > 0.35 ? '#22c55e' : '#ef4444';
+    ctx.fillRect(hx, hy, hw*hf, hh);
+    ctx.strokeStyle='#334155'; ctx.strokeRect(hx+0.5, hy+0.5, hw-1, hh-1);
+    ctx.fillStyle='#e2e8f0'; ctx.font='bold 9px sans-serif';
+    ctx.fillText(`👑 ${heroHpShort(hero.hp)} / ${heroHpShort(mx)}`, hx+hw+8, hy+hh/2);
+  } else {
+    ctx.fillStyle='#7f1d1d'; ctx.font='bold 9px sans-serif';
+    ctx.fillText('👑 영웅 쓰러짐', 10, 42);
+  }
+  // 🌀 추방 중이면 그 사실을 영웅 줄 옆에 붙인다
+  if (typeof bossEffect === 'function' && bossEffect(gs, 'nohero')) {
+    ctx.textAlign='right'; ctx.fillStyle='#a78bfa'; ctx.font='bold 9px sans-serif';
+    ctx.fillText('🌀 영웅 추방 중', CW-10, 42);
+  }
+
+  // 방금 터진 기믹 — 큰 글씨로 잠깐
+  if (b.log) {
+    const a = Math.min(1, b.log.until / 1.2);
+    ctx.globalAlpha = a;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    const ly = H + 26;
+    ctx.fillStyle='rgba(20,4,8,0.92)'; ctx.fillRect(0, ly-18, CW, 38);
+    ctx.fillStyle='#f43f5e'; ctx.font='bold 14px sans-serif';
+    ctx.fillText(`${b.log.icon} ${b.log.name}`, CW/2, ly-4);
+    ctx.fillStyle='#fca5a5'; ctx.font='bold 9px sans-serif';
+    ctx.fillText(b.log.desc, CW/2, ly+11);
+    ctx.globalAlpha = 1;
+  }
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  return H;
+}
+
+// 하단 레이드 장판 — 예고는 테두리만, 터질 때 꽉 찬 원
+function renderBossFields(ctx, gs) {
+  if (typeof bossActive !== 'function' || !bossActive(gs)) return;
+  const b = gs.boss;
+  if (b.side !== 'bottom') return;
+  for (const f of b.fields) {
+    if (f.warn > 0) {
+      const t = 1 - f.warn / RAID_FIELD_WARN;
+      ctx.strokeStyle = `rgba(244,63,94,${0.35 + t*0.5})`;
+      ctx.lineWidth = 2 + t*2;
+      ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI*2); ctx.stroke();
+      ctx.fillStyle = `rgba(244,63,94,${0.08 + t*0.16})`;
+      ctx.beginPath(); ctx.arc(f.x, f.y, f.r*t, 0, Math.PI*2); ctx.fill();
+    } else {
+      ctx.fillStyle = `rgba(244,63,94,${Math.max(0, f.life/0.55)*0.45})`;
+      ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI*2); ctx.fill();
+    }
+  }
+  ctx.lineWidth = 1;
+}
+
 // ─── UI Bar ──────────────────────────────────────────────────────────────────
 function renderUIBar(ctx, gs, wm) {
   ctx.fillStyle=COLORS.uiBar; ctx.fillRect(0,UIBAR_Y,CW,UIBAR_H);
@@ -5413,18 +5537,41 @@ function renderTownPageArmy(ctx, gs, startY) {
   // ── 🐲 중간보스 예고 ─────────────────────────────────────────────────────
   // 출전 버튼 바로 위에 둔다. 영웅을 위로 보낼지 아래로 보낼지가 이 한 줄에
   // 달려 있으므로, 배치 버튼과 출전 버튼 사이가 이 정보의 자리다.
+  // 👹 보스 층이면 **어디서 싸울지 고른다.** 이번 층은 고른 쪽 하나만 쓰고
+  // 반대쪽에는 적이 한 마리도 나오지 않는다. 무작위는 어느 쪽이 될지 모르는
+  // 대신 보상이 좋다 — 준비한 판을 쓰는 안전함과 맞바꾸는 자리다.
+  gs.ui.bossPickBtns = [];
   {
-    const mTier = endlessTier(gs.wave);
-    if (gs.mode === 'endless' && isMidBossTier(mTier)) {
-      const up = midBossSide(mTier) === 'defense';
-      uiPanel(ctx, 6, y, CW-12, 34, 6, up ? '#2a1208' : '#1a0a24', up ? '#f97316' : '#a855f7', 2);
+    const bKind = (typeof bossKindFor === 'function') ? bossKindFor(gs, gs.wave) : null;
+    if (bKind) {
+      const isLord = bKind === 'lord';
+      const title  = isLord ? '👹 마왕' : `🐲 ${midBossName(endlessTier(gs.wave))}`;
+      uiPanel(ctx, 6, y, CW-12, 78, 6, '#1a0510', '#dc2626', 2);
       ctx.textAlign='left'; ctx.textBaseline='middle';
-      ctx.fillStyle = up ? '#fb923c' : '#c084fc'; ctx.font='bold 11px sans-serif';
-      ctx.fillText(`🐲 ${midBossName(mTier)}`, 14, y+12);
+      ctx.fillStyle='#fca5a5'; ctx.font='bold 12px sans-serif';
+      ctx.fillText(title, 14, y+14);
       ctx.fillStyle='#94a3b8'; ctx.font='bold 9px sans-serif';
-      ctx.fillText(up ? '상단 타워라인에 나타납니다 — 타워와 과부하를 준비하세요'
-                      : '하단 아레나에 나타납니다 — 부대와 영웅을 아래로', 14, y+25);
-      y += 40;
+      ctx.fillText('어디서 맞이할지 고르세요 — 반대쪽에는 적이 나오지 않습니다', 14, y+29);
+
+      const opts = [
+        { id:'top',    label:'🗼 상단',  sub:'타워로'  , color:'#f97316' },
+        { id:'bottom', label:'⚔️ 하단',  sub:'부대로'  , color:'#a855f7' },
+        { id:'random', label:'🎲 무작위', sub:`보상 ×${BOSS_RANDOM_REWARD}`, color:'#fbbf24' },
+      ];
+      const ow = (CW - 24 - 8) / 3, oh = 30, oy = y + 42;
+      opts.forEach((o, i) => {
+        const ox = 12 + i * (ow + 4);
+        const on = (gs.bossPick || 'random') === o.id;
+        uiPanel(ctx, ox, oy, ow, oh, 5, on ? '#2a1206' : '#0b1220', on ? o.color : '#2a3140', on ? 2 : 1);
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillStyle = on ? o.color : '#64748b'; ctx.font='bold 10px sans-serif';
+        ctx.fillText(o.label, ox+ow/2, oy+11);
+        ctx.fillStyle = on ? '#94a3b8' : '#334155'; ctx.font='bold 8px sans-serif';
+        ctx.fillText(o.sub, ox+ow/2, oy+22);
+        gs.ui.bossPickBtns.push({ x:ox, y:oy, w:ow, h:oh, id:o.id });
+      });
+      ctx.textAlign='left'; ctx.textBaseline='middle';
+      y += 84;
     }
   }
 

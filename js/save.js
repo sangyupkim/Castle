@@ -80,6 +80,7 @@ const SaveManager = {
       townForge:      gs.town?.forge ? JSON.parse(JSON.stringify(gs.town.forge)) : null,
       camp:           gs.camp ? JSON.parse(JSON.stringify(gs.camp)) : null,
       cardMeta:       gs.cardMeta ? JSON.parse(JSON.stringify(gs.cardMeta)) : null,
+      relics:         gs.relics ? JSON.parse(JSON.stringify(gs.relics)) : null,
       charms:         gs.charms ? JSON.parse(JSON.stringify(gs.charms)) : [],
       charmSlots:     gs.charmSlots ? gs.charmSlots.slice() : [null, null],
       ascension:      gs.ascension || 0,

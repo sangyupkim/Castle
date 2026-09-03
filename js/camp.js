@@ -343,7 +343,7 @@ function toggleCardBan(gs, id) {
 
 // ── 뽑기에 쓰이는 값 ──
 // 한 번에 보여줄 장수 (층 이벤트 🎲풍요가 더 크면 그쪽을 쓴다)
-function cardHandSize(gs)   { return 3 + cardMetaLevel(gs, 'hand'); }
+function cardHandSize(gs)   { return 3 + cardMetaLevel(gs, 'hand') + (BONUSES.cardHandBonus || 0); }
 // 층마다 주어지는 공짜 리롤
 function cardFreeRerolls(gs){ return cardMetaLevel(gs, 'reroll'); }
 // 등급별 가중치 — 감정안은 희귀 이상 전체를, 예감은 전설만 밀어 올린다

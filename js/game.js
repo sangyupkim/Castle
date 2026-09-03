@@ -80,6 +80,7 @@ let _skillLevels   = {};   // 스킬 노드 id → 레벨(0~10)
 let _forge         = { cores:{}, best:5, mastery:0, plus:{} };  // (옛 세이브 호환)
 let _camp          = { levels:{}, tries:0, breaks:0 };          // 🔥 캠프 단련 (보석·영구)
 let _cardMeta      = { levels:{}, bans:[] };                    // 🎴 패 강화 (보석·영구)
+let _relics        = { owned:[], equipped:[] };                 // 🏺 보스 유물 (영구)
 let _charms        = [];   // 🎴 보관 중인 일회용 부적
 let _charmSlots    = [null, null];
 let _ascension     = 0;    // ♾️ 승천 단계
@@ -133,6 +134,7 @@ function newState() {
     briefScroll: 0,
     lobbyScroll: 0,     // 캠프 기록 탭 스크롤
     wallRepairs:0,      // 이번 런에서 성벽을 몇 번 보수했는지 (비용 체증)
+    bossPick:'random',  // 👹 보스를 어디서 맞이할지 (준비 화면에서 고른다)
     runCardsOpen:false, // 🃏 이번 판 카드 보기 화면이 열려 있는가
     runCardsScroll:0,
     runGameSec:0,       // 이 판의 게임 내 경과 시간(초) — 배속과 무관하다
@@ -169,7 +171,8 @@ function newState() {
          backupExportBtn:null, backupImportBtn:null, backupMsg:null,
          tutReplayBtn:null, tutResetTipBtn:null, guideReplayBtn:null, campBtns:[], campGroupBtns:[], cardMetaBtns:[], cardCatBtns:[], cardBanBtns:[], cardBackBtn:null,
          rankSubmitBtn:null, rankBoardBtns:[], rankReloadBtn:null,
-         pauseCardsBtn:null, runCardsCloseBtn:null, runCardsScroll:null, towerPromoteBtn:null, bgmToggleBtn:null, sfxToggleBtn:null,
+         pauseCardsBtn:null, runCardsCloseBtn:null, runCardsScroll:null, towerPromoteBtn:null,
+         bossPickBtns:[], bgmToggleBtn:null, sfxToggleBtn:null,
          tutSkipBtn:null, tutBackBtn:null, sigilCards:[] },
     // 영구 데이터 참조
     get soulStones()    { return _soulStones; },
@@ -186,6 +189,8 @@ function newState() {
     set camp(v)  { _camp = v; },
     get cardMeta()  { return _cardMeta; },
     set cardMeta(v) { _cardMeta = v; },
+    get relics()  { return _relics; },
+    set relics(v) { _relics = v; },
     get charms()  { return _charms; },
     set charms(v) { _charms = v; },
     get charmSlots()  { return _charmSlots; },
@@ -236,6 +241,9 @@ let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적�
   _forge          = sv.forge      || { cores:{}, best:5, mastery:0, plus:{} };
   _camp           = sv.camp       || { levels:{}, tries:0, breaks:0 };
   if (!_camp.levels) _camp.levels = {};
+  _relics         = sv.relics     || { owned:[], equipped:[] };
+  if (!Array.isArray(_relics.owned))    _relics.owned = [];
+  if (!Array.isArray(_relics.equipped)) _relics.equipped = [];
   _cardMeta       = sv.cardMeta   || { levels:{}, bans:[] };
   if (!_cardMeta.levels) _cardMeta.levels = {};
   if (!Array.isArray(_cardMeta.bans)) _cardMeta.bans = [];
@@ -1219,6 +1227,7 @@ function resetAllProgress() {
   _forge = { cores:{}, best:5, mastery:0, plus:{} };
   _camp  = { levels:{}, tries:0, breaks:0 };
   _cardMeta = { levels:{}, bans:[] };
+  _relics = { owned:[], equipped:[] };
   _charms = []; _charmSlots = [null, null]; _ascension = 0; _heroPlacePref = 'none';
   _trainSkipped = false;
   _unlocked = [];
@@ -1478,6 +1487,14 @@ function handleTownTap(x,y) {
 
   // Back to battle page
   if (hitTest(x,y,gs.ui.townPageBackBtn||{})) { gs.page='battle'; return; }
+
+  // 👹 보스를 어디서 맞이할지 — 출전 전에만 고를 수 있다
+  {
+    const ry = y + (t.scroll || 0);
+    for (const b of gs.ui.bossPickBtns||[]) {
+      if (hitTest(x,ry,b)) { gs.bossPick = b.id; SFX.click(); return; }
+    }
+  }
 
 // Building sub-screen
   if (t.screen!=='main') {
@@ -1914,6 +1931,12 @@ function onDefenseKill(e, byHero) {
   // 죽은 적은 그 프레임 안에서 gs.defenseEnemies에서 걸러져 나간다 —
   // 다음 프레임에는 찾을 것이 없어 클리어가 영영 안 떴다.
   if (e.isBoss && !gs.bossDefeated) markBossDefeated();
+  // 👹 보스전 종료 — 상단 보스를 잡았다. 유물이 여기서 떨어진다.
+  if ((e.isBoss || e.isMidBoss) && typeof bossActive === 'function' && bossActive(gs)
+      && gs.boss.side === 'top') {
+    grantBossReward(gs);
+    endBossFight(gs, true);
+  }
   // 상단은 막는 곳이지 버는 곳이 아니다 — 현상수배만 값을 그대로 받는다
   const scale = e.isBounty ? 1 : DEFENSE_GOLD_SCALE;
   _defGoldFrac += (e.reward || 1) * BONUSES.defenseGoldMult * scale;
@@ -1985,6 +2008,9 @@ function updateCastleGuns(dt) {
 function updateHeroDefense(dt) {
   const hero = gs.hero;
   if (hero.placement !== 'defense' || hero.dead) return;
+  // 🌀 추방 — 기믹이 걸린 동안 영웅은 전투에서 빠진다. 상단의 핵심 화력이
+  // 10초 사라지므로 그 사이를 타워만으로 버텨야 한다.
+  if (typeof bossEffect === 'function' && bossEffect(gs, 'nohero')) return;
   const lv = HERO_LEVELS[hero.level];
 
   // 지정한 지점으로 이동 — 상단에도 포지셔닝이 생긴다
@@ -2165,6 +2191,17 @@ function update(dt) {
   for (const e of gs.defenseEnemies) {
     if (e.reached&&!e._counted) {
       e._counted=true;
+      // 👹 보스가 정해진 바퀴를 다 돌고 성에 닿았다 — 막지 못했으므로 거기서 끝난다.
+      // 성벽을 조금 깎고 넘어가는 적과는 다르다.
+      if ((e.isBoss || e.isMidBoss) && typeof bossActive === 'function' && bossActive(gs)
+          && gs.boss.side === 'top') {
+        endBossFight(gs, false);
+        gs.baseHP = 0; gs.gameOver = true;
+        addLog(gs.battle, '💀 보스가 성문을 부쉈습니다', '#ef4444');
+        if (typeof SFX !== 'undefined') SFX.lose();
+        bankRunResult();
+        return;
+      }
       const dmg = Math.max(1, Math.round(e.dmg * baseDamageMult()));
       gs.baseHP=Math.max(0,gs.baseHP-dmg);
       spawnFloaty(`-${dmg}HP`,CW/2,DEFENSE_H-25,'#ef4444');
@@ -2369,6 +2406,11 @@ function frame(ts) {
     renderResult(ctx,gs);
   } else if (gs.page==='town') {
     renderTownPage(ctx,gs);
+  } else if (typeof bossActive === 'function' && bossActive(gs)) {
+    // 👹 보스전 — 한쪽 전선만 쓴다. 안 쓰는 쪽은 아예 그리지 않고,
+    // 쓰는 쪽이 화면 세로를 다 가져간다. 반씩 보다가 보스를 놓치지 않게.
+    renderBossLane(ctx, gs);
+    FX.draw(ctx);
   } else {
     renderDefense(ctx,gs);
     renderUIBar(ctx,gs,wm);
@@ -2376,6 +2418,10 @@ function frame(ts) {
     FX.draw(ctx);
   }
   ctx.restore();
+  if (typeof bossActive === 'function' && bossActive(gs)
+      && gs.page!=='lobby' && gs.page!=='result' && gs.page!=='town') {
+    renderBossHud(ctx, gs);
+  }
 
   // 런 종료·갈림길 오버레이 — 전투/마을 위에 덮는다.
   // (로비 개편 때 이 호출이 빠져 게임오버 화면이 보이지 않았다)

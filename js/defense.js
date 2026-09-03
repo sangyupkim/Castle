@@ -239,8 +239,21 @@ function defDamage(enemy, dmg, pierceArmor, affinity, pierce) {
   return Math.max(1, Math.round(base - armor));
 }
 
+// 👹 기믹이 이 적에게 걸려 있나 — 보스 본인에게만 적용된다.
+// 잡몹까지 면역이 되면 그건 기믹이 아니라 그냥 층이 하나 더 어려워지는 것이다.
+function bossImmune(e, id) {
+  return !!(e && (e.isBoss || e.isMidBoss) && typeof bossEffect === 'function'
+            && typeof gs !== 'undefined' && bossEffect(gs, id));
+}
+
 function hurtDefenseEnemy(e, dmg, pierceArmor, onKill, affinity, pierce) {
   if (e.dead || e.reached) return 0;
+  // 🛡 경화 — 대형 특화(상성 1.2 이상) 공격이 통하지 않는다
+  if (bossImmune(e, 'antibig') && (affinity === undefined ? 1 : affinity) >= 1.2) {
+    if (typeof spawnFloaty === 'function' && Math.random() < 0.2)
+      spawnFloaty('🛡 무효', e.x, e.y - 18, '#94a3b8');
+    return 0;
+  }
   const real = defDamage(e, dmg, pierceArmor, affinity, pierce);
   e.hp -= real;
   e.hitFlash = 0.12;
@@ -265,6 +278,9 @@ function updateDefenseEnemies(enemies, dt) {
     if (e.regen > 0 && e.hp < e.maxHp) e.hp = Math.min(e.maxHp, e.hp + e.maxHp * e.regen * dt);
 
     let mult = 1;
+    // 💨 질주 — 보스만 빨라진다
+    if ((e.isBoss || e.isMidBoss) && typeof bossEffect === 'function' && bossEffect(gs, 'haste'))
+      mult *= 1.6;
     if (e.slowTimer > 0) {
       e.slowTimer = Math.max(0, e.slowTimer - dt);
       mult = 1 - e.slowFactor;
@@ -276,7 +292,21 @@ function updateDefenseEnemies(enemies, dt) {
       mult *= HERO_BLOCK_SLOW;
     }
 
-    if (e.wpIdx >= e.path.length - 1) { e.reached = true; continue; }
+    if (e.wpIdx >= e.path.length - 1) {
+      // 👹 보스는 끝에 닿아도 바로 성으로 박지 않는다 — 정해진 바퀴를 다 돌아야 한다.
+      // 그 안에 못 잡으면 그때 성으로 간다. 못 막으면 클리어가 안 되는 구조다.
+      if ((e.isBoss || e.isMidBoss) && typeof bossLapDone === 'function'
+          && typeof bossActive === 'function' && bossActive(gs) && gs.boss.side === 'top') {
+        const done = bossLapDone(gs);
+        if (!done) {                      // 다시 출발점으로 — 한 바퀴 더
+          e.wpIdx = 0;
+          const s0 = cellCenter(e.path[0][0], e.path[0][1]);
+          e.x = s0.x; e.y = s0.y;
+          continue;
+        }
+      }
+      e.reached = true; continue;
+    }
 
     const next = cellCenter(e.path[e.wpIdx + 1][0], e.path[e.wpIdx + 1][1]);
     const dx = next.x - e.x, dy = next.y - e.y;
@@ -493,8 +523,10 @@ function updateProjectiles(projectiles, onKill, dt) {
     }
     // 🔋 과충전 — 감전. 스턴 전용 필드를 새로 만들지 않고 아주 센 감속으로 낸다.
     if (p.stunChance > 0 && !tgt.dead && Math.random() < p.stunChance) {
-      tgt.slowFactor = Math.max(tgt.slowFactor, 0.95);
-      tgt.slowTimer  = Math.max(tgt.slowTimer, p.stunDur);
+      if (!bossImmune(tgt, 'unslow')) {
+        tgt.slowFactor = Math.max(tgt.slowFactor, 0.95);
+        tgt.slowTimer  = Math.max(tgt.slowTimer, p.stunDur);
+      }
       if (typeof FX !== 'undefined') FX.ring(tgt.x, tgt.y, '#facc15', 10);
     }
     // 상성이 갈리는 순간을 눈에 보이게 — 왜 안 죽는지 알아야 배치를 바꾼다
@@ -526,7 +558,7 @@ function updateProjectiles(projectiles, onKill, dt) {
       }
     }
 
-    if (p.slow > 0) {
+    if (p.slow > 0 && !bossImmune(tgt, 'unslow')) {
       tgt.slowFactor = Math.max(tgt.slowFactor, p.slow);
       tgt.slowTimer  = Math.max(tgt.slowTimer, p.slowDur);
     }
@@ -541,7 +573,7 @@ function updateProjectiles(projectiles, onKill, dt) {
           if (p.owner) p.owner.damageDealt += d;
           // 🌨️ 눈보라 — 감속을 들고 있는 발사체는 범위에도 감속을 남긴다.
           // 이게 없으면 "착탄 범위 감속"이 그냥 범위 피해였다.
-          if (p.slow > 0) {
+          if (p.slow > 0 && !bossImmune(e, 'unslow')) {
             e.slowFactor = Math.max(e.slowFactor, p.slow);
             e.slowTimer  = Math.max(e.slowTimer, p.slowDur);
           }

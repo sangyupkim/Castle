@@ -500,6 +500,7 @@ function reapplyAllBonuses(gs) {
   applyForge(gs);         // ⚒️ 대장간 담금질 숙련도
   applyAscend(gs);        // ♾️ 승천 — 끝나지 않는 보석 사용처
   applyCharms(gs);        // 🎴 이번 판에 들고 온 부적
+  if (typeof applyRelics === 'function') applyRelics(gs);   // 🏺 보스에서 얻은 유물
   // 각인은 마지막에 — 스킬 트리와 마을 강화 위에 얹힌다
   const sg = (typeof activeSigil === 'function') ? activeSigil() : null;
   if (sg && sg.apply) sg.apply(BONUSES);

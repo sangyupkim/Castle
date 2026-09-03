@@ -82,18 +82,24 @@ function createWaveManager() {
         extraMult: spawnMult / Math.max(0.01, density)
       });
 
-      // 👹 100층 — 마왕. 잡몹 대신 한 마리만 오고, 그 한 마리가 곧 결승선이다.
+      // 👹 보스 층 — 마왕이든 중간보스든 **한쪽 전선만** 쓴다.
+      // 어디서 싸울지는 준비 화면에서 고른 값(gs.bossPick)이 정하고,
+      // '무작위'를 골랐으면 여기서 굴린다(보상 우대).
       this.bossPhase = 0;
-      if (isBossFloor(gs, this.waveIndex)) {
-        this.defenseQueues = [];       // 일반 스폰은 없다
-        spawnDemonLord(gs, this.waveIndex);
-      } else if (isMidBossFloor(gs, this.waveIndex)) {
-        // 🐲 10층마다 중간보스 — 상단이냐 하단이냐는 층이 정하고, 미리 예고돼 있다.
-        // 마왕과 달리 잡몹 스폰을 막지 않는다. 평소의 층 위에 벽이 하나 얹히는 것.
-        const tier = endlessTier(this.waveIndex);
-        this.midBossSide = midBossSide(tier);
-        if (this.midBossSide === 'defense') spawnMidBoss(gs, this.waveIndex);
-        else this.midBossPending = tier;     // 하단은 아레나가 열린 뒤에 넣는다
+      const bkind = bossKindFor(gs, this.waveIndex);
+      if (bkind) {
+        const b = beginBossFight(gs, this.waveIndex, bkind, gs.bossPick || 'random');
+        this.midBossSide = b.side === 'top' ? 'defense' : 'arena';
+        if (b.side === 'top') {
+          this.defenseQueues = [];     // 잡몹 없이 보스 한 마리만
+          if (bkind === 'lord') spawnDemonLord(gs, this.waveIndex);
+          else                  spawnMidBoss(gs, this.waveIndex);
+        } else {
+          // 하단이면 격자에는 한 마리도 안 온다
+          this.defenseQueues = [];
+          this.midBossPending = endlessTier(this.waveIndex);
+          this.midBossKind    = bkind;
+        }
       }
 
       // 예약해둔 현상수배는 웨이브 시작 조금 뒤에 등장한다
@@ -105,7 +111,7 @@ function createWaveManager() {
       startFighting(gs.battle);
       startArena(gs, this.waveIndex);
       if (this.midBossPending) {
-        spawnMidBossMob(gs, this.midBossPending);
+        spawnRaidBoss(gs, this.midBossPending, this.midBossKind || 'mid');
         this.midBossPending = null;
       }
       if (typeof SFX !== 'undefined') SFX.waveStart();
@@ -114,6 +120,16 @@ function createWaveManager() {
     // 👹 마왕 진행 — 페이즈 전환만. 처치 판정은 onDefenseKill이 죽는 순간에 한다
     // (죽은 적은 그 프레임에 배열에서 걸러지므로 여기서 '찾아' 판정할 수 없다).
     updateBoss(gs, dt) {
+      // 👹 보스전 공통 — 기믹 지속시간·하단 장판·제한시간
+      if (typeof bossUpdate === 'function') bossUpdate(gs, dt);
+      // 체력 줄이 깎일 때마다 기믹. 상단·하단 어느 쪽이든 같은 규칙으로 센다.
+      if (typeof bossCheckBars === 'function' && bossActive(gs)) {
+        const b = gs.boss;
+        const m = b.side === 'top'
+          ? (gs.defenseEnemies || []).find(e => (e.isBoss || e.isMidBoss) && !e.dead && !e.reached)
+          : (gs.arena?.mobs || []).find(e => (e.isRaidBoss || e.isMidBoss) && !e.dead);
+        if (m) bossCheckBars(gs, m.hp, m.maxHp);
+      }
       if (gs.bossDefeated) return;
       const boss = (gs.defenseEnemies || []).find(e => e.isBoss && !e.dead && !e.reached);
       if (!boss) return;
@@ -206,10 +222,20 @@ function createWaveManager() {
         }
       }
 
-      // 👹 마왕 — 체력이 한 토막씩 깎일 때마다 호위를 부른다.
-      // 한 번 세운 배치로 끝까지 가지 못하게 하려는 것이다.
-      if (isBossFloor(gs, this.waveIndex)) {
+      // 👹 보스 — 마왕이든 중간보스든 여기서 돈다. 예전에는 마왕 층에서만 불렀는데
+      // 이제 중간보스도 기믹·장판·제한시간을 쓰므로 보스전이면 언제나 돌아야 한다.
+      if (bossActive(gs) || isBossFloor(gs, this.waveIndex)) {
         this.updateBoss(gs, dt);
+        // 하단 레이드는 전멸하거나 제한시간을 넘기면 그 자리에서 진다.
+        // 상단처럼 "성벽이 깎여 언젠가 끝나는" 구조가 아니라서 끝을 따로 그어야 한다.
+        if (gs.boss && gs.boss.failed && !gs.gameOver) {
+          endBossFight(gs, false);
+          gs.gameOver = true;
+          addLog(gs.battle, '💀 레이드 실패 — 보스를 막지 못했습니다', '#ef4444');
+          if (typeof SFX !== 'undefined') SFX.lose();
+          bankRunResult();
+          return;
+        }
         // 마왕을 잡으면 그 층은 거기서 끝난다. 100층의 목적은 마왕이지 시간 때우기가 아니다 —
         // 잡고 나서 남은 40초를 아레나만 돌게 하면 최종전이 최종전으로 안 읽힌다.
         if (gs.bossDefeated) {

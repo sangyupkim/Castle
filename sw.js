@@ -17,7 +17,7 @@ const CACHE = 'dual-frontier-' + (self.GAME_VERSION || 'dev');
 const SHELL = [
   '.', 'index.html', 'manifest.webmanifest',
   'assets/images/manifest.js', 'js/version.js', 'js/constants.js', 'js/sprites.js', 'js/audio.js', 'js/fx.js', 'js/upgrade.js', 'js/hero.js', 'js/forge.js', 'js/camp.js', 'js/town.js',
-  'js/save.js', 'js/rank.js', 'js/lobby.js', 'js/defense.js', 'js/battle.js', 'js/arena.js',
+  'js/save.js', 'js/rank.js', 'js/lobby.js', 'js/boss.js', 'js/defense.js', 'js/battle.js', 'js/arena.js',
   'js/formation.js', 'js/wave.js', 'js/tutorial.js', 'js/guide.js', 'js/render.js', 'js/game.js',
   'assets/images/mainpage.png',
   'assets/images/icon-192.png', 'assets/images/icon-512.png', 'assets/images/icon-maskable-512.png',

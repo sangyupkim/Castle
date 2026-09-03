@@ -7,6 +7,7 @@ function createDefaultBonuses() {
     towerDmg: 0, towerDmgMult: 1.0, towerSpdMult: 1.0, towerRangeMult: 1.0,
     towerCostDiscount: 0, towerSplash: false, towerPierce: 0, towerSlow: 0,
     overloadEternal: false,   // ✦영구 기관 — 과부하가 풀리지 않는다
+    cardHandBonus: 0,         // 🔮 유물 — 카드 선택지가 늘어난다
     // 유닛
     unitAtk: 0, unitHp: 0, unitDef: 0, unitAtkMult: 1.0, unitHpMult: 1.0,
     hireCostDiscount: 0, hireCostPct: 0, maxSlotBonus: 0,

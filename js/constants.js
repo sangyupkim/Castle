@@ -881,20 +881,35 @@ const ARENA_CTRL_H   = 40;
 // 준비 화면 위쪽 ⏸·배속·🔊 전용 띠. 브리핑 본문은 이 아래에서 시작한다.
 const BRIEF_CTRL_H   = 38;
 const ARENA_X = 0;
-const ARENA_Y = BATTLE_Y + ARENA_STATUS_H;
+// 👹 하단 레이드에서는 상단 라인을 통째로 치우고 아레나가 화면을 다 가져간다.
+// 그래서 이 둘은 고정이 아니다 — applyArenaBounds()가 다시 잡는다.
+let   ARENA_Y = BATTLE_Y + ARENA_STATUS_H;
 const ARENA_W = CW;
 let   ARENA_H = BATTLE_H - ARENA_STATUS_H - ARENA_CTRL_H;   // 기준 높이에서 330
 
 // 화면 비율에 맞춰 세로를 다시 잡는다. 폭(480)에 맞춰 늘렸을 때 세로로 몇이 필요한지
 // 계산하고, 그 값을 상하한 안에 가둔다. 파생값 둘도 여기서 같이 고쳐야 한다 —
 // 한 군데서만 고치면 아레나 바닥과 실제 경계가 어긋난다.
+// 아레나 경계를 다시 잡는다. raid=true면 상단이 없다고 보고 위쪽까지 쓴다.
+// 보스전이 끝나면 raid=false로 다시 불러 원래 자리로 되돌린다.
+const BOSS_HUD_H = 54;
+function applyArenaBounds(raid) {
+  const top = raid ? (BOSS_HUD_H + ARENA_STATUS_H) : (BATTLE_Y + ARENA_STATUS_H);
+  ARENA_Y = top;
+  ARENA_H = CH - ARENA_CTRL_H - top;
+  return ARENA_H;
+}
+
 function applyViewportHeight(vpW, vpH) {
   const want = (vpW > 0 && vpH > 0) ? Math.round(CW * (vpH / vpW)) : CH_BASE;
   const next = Math.max(CH_MIN, Math.min(CH_MAX, want));
   if (next === CH) return false;
   CH        = next;
   BATTLE_H  = CH - BATTLE_Y;
-  ARENA_H   = BATTLE_H - ARENA_STATUS_H - ARENA_CTRL_H;
+  // 보스 레이드 중이면 그 배치를 유지한 채로 다시 잰다
+  const raid = (typeof gs !== 'undefined' && gs && gs.boss
+                && gs.boss.active && gs.boss.side === 'bottom');
+  applyArenaBounds(!!raid);
   return true;
 }
 

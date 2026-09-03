@@ -212,6 +212,8 @@ function fireSurge(gs) {
 function updateArenaSpawn(gs, dt) {
   const a = gs.arena, b = gs.battle;
   if (b.phase !== 'fighting') return;
+  // 👹 보스 층은 한쪽 전선만 쓴다 — 상단 보스면 여기는 한 마리도 안 나온다
+  if (typeof laneInUse === 'function' && !laneInUse(gs, 'bottom')) return;
   // 스폰 시간이 끝나면 더 나오지 않는다 — 남은 것을 정리하면 웨이브가 끝난다
   if (typeof wm !== 'undefined' && wm && wm.timer <= 0) return;
 
@@ -304,13 +306,17 @@ function updateAlly(gs, u, mobs, allies, dt) {
   }
 
   // 목표: 사거리 안에서 가장 가까운 적
+  // 🌀 추방 — 영웅만 10초 동안 아무것도 못 한다
+  if (u.isHero && typeof bossEffect === 'function' && bossEffect(gs, 'nohero')) return;
   const inRange = pickAttackTarget(mobs, u, u.range);
   u.target = inRange;
 
   // 공격
   u.atkCd -= dt;
   if (inRange && u.atkCd <= 0) {
-    u.atkCd = u.atkPeriod / ((BONUSES.unitAtkSpdMult || 1) * arenaBuff(gs, 'haste'));   // 💨 질풍
+    // 🕸 점착 — 보스 기믹이 걸린 동안은 공격이 느려진다
+    const gSlowAtk = (typeof bossEffect === 'function' && bossEffect(gs, 'slowatk')) ? 0.5 : 1;
+    u.atkCd = u.atkPeriod / ((BONUSES.unitAtkSpdMult || 1) * arenaBuff(gs, 'haste') * gSlowAtk);
     allyAttack(gs, u, inRange);
   } else if (u.atkCd <= 0) {
     u.atkCd = 0;
@@ -327,7 +333,8 @@ function updateAlly(gs, u, mobs, allies, dt) {
   // 이동 — 수렁 위에서는 느려진다
   applyTerrainTick(gs, u, dt, true);
   if (u.dead) return;
-  const spd = u.moveSpd * terrainSpeedMult(gs.arena.terrain, u)
+  const gSlowMove = (typeof bossEffect === 'function' && bossEffect(gs, 'slowmove')) ? 0.5 : 1;
+  const spd = u.moveSpd * gSlowMove * terrainSpeedMult(gs.arena.terrain, u)
             * (isHidden(u) ? ROGUE_STEALTH_SPD : 1);
 
   // 🗡️ 탐욕 — 점찍은 드랍이 아직 살아 있으면 그쪽이 우선이다.
@@ -640,7 +647,7 @@ function updateShots(gs, dt) {
 
     if (d < 8 || s.life <= 0) {
       if (t && !t.dead && d < 16) {
-        if (s.fromAlly) { t.pendingDmg = Math.max(0, (t.pendingDmg||0) - s.dmg); hurtMob(gs, t, s.dmg, s.color); }
+        if (s.fromAlly) { t.pendingDmg = Math.max(0, (t.pendingDmg||0) - s.dmg); hurtMob(gs, t, s.dmg, s.color, true); }
         else            hurtAlly(gs, t, s.dmg, s.color);
       } else if (t && s.fromAlly) {
         t.pendingDmg = Math.max(0, (t.pendingDmg||0) - s.dmg);
@@ -795,6 +802,28 @@ function spawnMidBossMob(gs, tier) {
   return m;
 }
 
+// 👹 하단 레이드 보스 — 아레나를 통째로 쓰는 한 마리.
+// 중간보스와 달리 **가까이 붙어 때리지 않는다.** 위쪽에 자리를 잡고 서서
+// 바닥에 장판을 예고했다 터뜨린다(boss.js). 그래서 스펙이 모자라도 비켜서면 버틴다.
+function spawnRaidBoss(gs, tier, kind) {
+  const a = gs.arena;
+  const m = spawnMidBossMob(gs, tier);
+  if (!m) return null;
+  m.isRaidBoss = true;
+  if (kind === 'lord') {
+    m.name  = '👹 마왕';
+    m.maxHp = Math.round(m.maxHp * 2.6);
+    m.hp    = m.maxHp;
+    m.atk   = Math.round(m.atk * 1.3);
+  }
+  // 위쪽 한가운데에 자리를 잡고 거의 움직이지 않는다 — 쫓아다니는 싸움이 아니다
+  m.x = ARENA_X + ARENA_W / 2;
+  m.y = ARENA_Y + Math.min(70, ARENA_H * 0.16);
+  m.moveSpd = (m.moveSpd || 40) * 0.18;
+  m.radius  = Math.round(m.radius * 1.25);
+  return m;
+}
+
 // 값나가는 드랍 하나를 처치 지점 바깥에 떨군다.
 // 발밑에 두면 제자리를 지키는 자동 모드가 그냥 주워버려 "가지러 간다"가 성립하지 않는다.
 function spawnSpecialDrop(gs, m, baseGold) {
@@ -838,8 +867,15 @@ function arenaBuff(gs, kind) {
 }
 
 // ─── 피해 ────────────────────────────────────────────────────────────────────
-function hurtMob(gs, m, dmg, color) {
+function hurtMob(gs, m, dmg, color, fromRanged) {
   if (m.dead) return;
+  // 🏹 반사막 — 보스가 원거리 공격을 받지 않는다. 붙어서 때리라는 뜻이고,
+  // 장판을 피하면서 붙어야 하니 그 10초가 실제로 어려운 구간이 된다.
+  if (fromRanged && (m.isRaidBoss || m.isMidBoss)
+      && typeof bossEffect === 'function' && bossEffect(gs, 'noranged')) {
+    addFloaty(gs.battle, '🏹 튕김', m.x, m.y - m.radius, '#94a3b8');
+    return;
+  }
   m.hp -= dmg;
   m.flashTimer = 0.18; m.flashColor = color;
   addFloaty(gs.battle, `-${dmg}`, m.x, m.y - m.radius, color);
@@ -847,6 +883,14 @@ function hurtMob(gs, m, dmg, color) {
   if (m.hp > 0) return;
 
   m.dead = true; m.hp = 0; m.deadTimer = 0; m.pendingDmg = 0;
+  // 👹 하단 레이드 보스를 잡았다 — 여기서 보스전이 끝나고 유물이 떨어진다
+  if ((m.isRaidBoss || m.isMidBoss) && typeof bossActive === 'function' && bossActive(gs)
+      && gs.boss.side === 'bottom') {
+    if (typeof grantBossReward === 'function') grantBossReward(gs);
+    endBossFight(gs, true);
+    if (m.isRaidBoss && !gs.bossDefeated && typeof markBossDefeated === 'function'
+        && gs.boss.kind === 'lord') markBossDefeated();
+  }
   // 소환 정예 — 잡아야만 보석이 들어온다
   if (m.gems > 0) {
     gs.soulStones += m.gems;
