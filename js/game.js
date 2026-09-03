@@ -13,20 +13,25 @@ function getViewport() {
   return { w: window.innerWidth, h: window.innerHeight };
 }
 
+// 렌더 배율(DPR). **2로 고정한다** — 위아래 양쪽으로.
+//
+// 아래로: PC(DPR 1)에서도 2배로 그려야 글씨가 뭉개지지 않는다.
+// 위로: 여기에 상한이 없던 게 설치 앱(PWA) 프레임 드랍의 절반이었다.
+// 요즘 폰은 DPR이 3이라 480×928을 1440×2784 = 401만 픽셀로 칠한다.
+// 2로 자르면 960×1856 = 178만 — 매 프레임 칠하는 양이 **2.2배 줄어든다**.
+// 480 논리폭짜리 2D 캔버스에서 3배와 2배의 차이는 눈으로 거의 안 보인다.
+const RENDER_DPR = 2;
+
 function resize() {
-  // 최소 DPR 2 강제: PC(DPR=1)에서도 2배 고해상도 렌더링으로 텍스트 선명도 확보
-  const dpr = Math.max(2, window.devicePixelRatio || 1);
-  const vp  = getViewport();
-  // 세로를 기기 비율에 맞춰 다시 잡는다. 바뀌면 아레나 바닥을 다시 구워야 한다 —
-  // 예전 높이로 구운 캔버스를 그대로 쓰면 바닥이 새 경계와 어긋난다.
-  if (applyViewportHeight(vp.w, vp.h) && typeof invalidateArenaFloor === 'function')
-    invalidateArenaFloor();
-  const s   = Math.min(vp.w / CW, vp.h / CH);
-  canvas.width  = Math.round(CW * dpr);
-  canvas.height = Math.round(CH * dpr);
+  const vp = getViewport();
+  // 논리 해상도는 480×928 고정이다(constants.js 참고). 화면이 그보다 길거나
+  // 납작하면 남는 쪽에 여백이 생긴다 — 놀이터 크기를 기기가 정하지 않게.
+  const s = Math.min(vp.w / CW, vp.h / CH);
+  canvas.width  = Math.round(CW * RENDER_DPR);
+  canvas.height = Math.round(CH * RENDER_DPR);
   canvas.style.width  = `${CW * s}px`;
   canvas.style.height = `${CH * s}px`;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.setTransform(RENDER_DPR, 0, 0, RENDER_DPR, 0, 0);
   _scale = s;
 }
 window.addEventListener('resize', resize);
@@ -2147,7 +2152,7 @@ function updateCastleGuns(dt) {
   if (atk <= 0) return;
   gs.castleCd = Math.max(0, (gs.castleCd || 0) - dt);
   if (gs.castleCd > 0) return;
-  const base = cellCenter(4, 6);
+  const base = cellCenter(CASTLE_C, CASTLE_R);
   const best = pickTarget(gs.defenseEnemies, base, castleRange(), 'nearest');
   if (!best) return;
   gs.castleCd = 1 / Math.max(0.05, castleSpd());
@@ -2406,7 +2411,7 @@ let _chargeFrac = 0;
 function updateChargers(dt) {
   const list = gs.chargers;
   if (!list || !list.length) return;
-  const base = cellCenter(4, 6);
+  const base = cellCenter(CASTLE_C, CASTLE_R);
   for (const c of list) {
     if (c.dead) continue;
     if (c.delay > 0) { c.delay -= dt; continue; }

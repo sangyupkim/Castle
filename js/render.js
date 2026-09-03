@@ -349,7 +349,7 @@ function renderDefense(ctx, gs) {
 
   // 🏰 최후 저지선 — 성채가 쏠 수 있으면 그 사거리를 옅게 보여준다
   if (castleAtk() > 0) {
-    const bc = cellCenter(4, 6);
+    const bc = cellCenter(CASTLE_C, CASTLE_R);
     ctx.beginPath(); ctx.arc(bc.x, bc.y, castleRange(), 0, Math.PI*2);
     ctx.strokeStyle = 'rgba(250,204,21,0.20)'; ctx.lineWidth = 1;
     ctx.setLineDash([4,4]); ctx.stroke(); ctx.setLineDash([]);
@@ -485,7 +485,7 @@ function renderDefense(ctx, gs) {
 
   // 🧱 성벽 결계 — 걸려 있는 동안은 기지가 무적이다. 그 사실이 보여야 한다.
   if ((gs.baseWardUntil || 0) > 0) {
-    const bc = cellCenter(4, 6);
+    const bc = cellCenter(CASTLE_C, CASTLE_R);
     ctx.beginPath(); ctx.arc(bc.x, bc.y, CELL_W * 0.85, 0, Math.PI*2);
     ctx.strokeStyle = 'rgba(56,189,248,0.75)'; ctx.lineWidth = 2.5; ctx.stroke();
     ctx.fillStyle = 'rgba(56,189,248,0.12)'; ctx.fill();
@@ -2879,7 +2879,23 @@ function wrapLinesFirstNarrow(ctx, text, firstW, restW) {
   return out;
 }
 
+// 출격 탭은 패널 여섯 장이 위에서부터 흐르는데, 화면 세로를 928로 못 박고 나니
+// 마지막 패널과 아래 출격 버튼 사이가 240px 가까이 휑하게 비었다.
+// 남는 만큼을 패널 사이 간격에 똑같이 나눠 준다.
+//
+// 지난 프레임에 잰 바닥(_lobbyBottom)을 쓰므로 한 프레임 늦게 맞는다. 대신
+// 관계가 선형이라 — 간격을 slack/6씩 벌리면 바닥이 정확히 slack만큼 내려간다 —
+// 한 프레임이면 딱 맞아떨어지고 그 뒤로는 움직이지 않는다.
+const SORTIE_GAPS = 6;
+let _sortieGap = 10;
+function fitSortieGap() {
+  const room  = CH - LOBBY_SORTIE_H - 10;
+  const slack = room - _lobbyBottom;
+  _sortieGap = Math.max(10, Math.min(34, _sortieGap + slack / SORTIE_GAPS));
+}
+
 function renderLobbySortie(ctx, gs) {
+  const gap = Math.round(_sortieGap);
   let y = LOBBY_BODY_Y + 12;
   ctx.textAlign='left'; ctx.textBaseline='top';
 
@@ -2935,7 +2951,7 @@ function renderLobbySortie(ctx, gs) {
     gs.ui.trainSkipBtn = { x:skx, y:sky, w:skw, h:skh };
     ctx.textAlign='left'; ctx.textBaseline='top';
   }
-  y += rh + 10;
+  y += rh + gap;
 
   // ── 🌑 악몽 사다리 ──────────────────────────────────────────────────────
   // 심연이 끝이 없던 시절에는 목표가 없었다. 100층에 결승선을 긋고, 그 뒤로
@@ -2976,7 +2992,7 @@ function renderLobbySortie(ctx, gs) {
   ctx.textAlign='right'; ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif';
   ctx.fillText(`${tws.length}/${TOWER_ORDER.length} · ${uns.length}/${UNIT_ORDER.length}`, CW-18, y+9);
   ctx.textAlign='left';
-  y += th + 10;
+  y += th + gap;
 
   // 적용 중인 스킬
   const sp = skillProgress(gs);
@@ -3011,11 +3027,11 @@ function renderLobbySortie(ctx, gs) {
   // 진행 바
   ctx.fillStyle='#1e293b'; ctx.fillRect(18, y+46, CW-36, 5);
   ctx.fillStyle='#a78bfa'; ctx.fillRect(18, y+46, (CW-36)*(sp.total ? sp.owned/sp.total : 0), 5);
-  y += sh + 10;
+  y += sh + gap;
 
   // 🎴 부적 — 출전 전에 끼우는 일회용. 보석이 계속 들어오는 게임이라
   // 저축을 다시 목적으로 만들려면 확실한 소모처가 하나 있어야 한다.
-  y = _renderCharmBar(ctx, gs, y);
+  y = _renderCharmBar(ctx, gs, y) + (gap - 10);
 
   // 서약
   const pacts = PACT_DEFS.filter(p => isPactOn(p.id));
@@ -3038,12 +3054,12 @@ function renderLobbySortie(ctx, gs) {
     ctx.fillStyle='#475569'; ctx.font='10px sans-serif';
     ctx.fillText('없음 — 🔓 해금 탭에서 난이도를 올리고 보석을 더 받을 수 있습니다', 18, y+30);
   }
-  y += ph + 10;
+  y += ph + gap;
 
   // 진행 상황
   ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif';
   ctx.fillText(`관문 ${(gs.clearedGates||[]).length}개 돌파 · 누적 처치 ${gs.stats.totalKills||0} · 누적 보석 ${gs.stats.totalGems||0}`, 14, y);
-  y += 22;
+  y += 12 + gap;
 
   // 다음 목표 — 보석을 어디에 쓰면 좋을지 한 줄로 짚어준다
   const nextUnlock = UNLOCK_DEFS.find(u => !isUnlocked(u.id));
@@ -3078,6 +3094,7 @@ function renderLobbySortie(ctx, gs) {
   ctx.fillStyle='#475569'; ctx.font='9px sans-serif';
   ctx.fillText(`이번 하강 예상 보석 배율 ×${pactGemMult().toFixed(2)}`, 18, gy);
   _lobbyBottom = gy + 20;
+  fitSortieGap();
 }
 
 // ── 🌳 스킬 ─────────────────────────────────────────────────────────────────

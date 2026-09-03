@@ -1092,7 +1092,7 @@ function launchCharge(gs, total, why) {
   // 마릿수는 남은 몹과 피해량 둘 다를 본다. 아레나가 비어 있어도 값을 치렀다면
   // 그만큼은 달려드는 것이 보여야 하고, 40HP가 한 마리로 들어오면 읽히지 않는다.
   const n = Math.max(1, Math.min(CHARGE_MAX_SHOWN, Math.max(live.length, Math.ceil(total / 6))));
-  const base = cellCenter(4, 6);                    // 기지 칸
+  const base = cellCenter(CASTLE_C, CASTLE_R);                    // 기지 칸
   gs.chargers = gs.chargers || [];
 
   // 피해를 마릿수로 쪼갠다. 나머지는 앞쪽 몇에게 하나씩 더 얹어 총합을 정확히 맞춘다.
