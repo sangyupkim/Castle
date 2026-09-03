@@ -6,7 +6,7 @@
 // 스킬은 각인 하나가 전부였다.
 //
 // 여기서 바꾸는 것은 셋이다.
-//  1. 장비는 정해진 칸(무기·투구·갑옷·각반·신발·악세 ×2)에만 들어간다.
+//  1. 장비는 정해진 칸(무기·투구·갑옷·장갑·신발·악세 ×2)에만 들어간다.
 //     사면 인벤토리로 가고, 장착은 출전준비에서 직접 한다.
 //  2. 스킬은 상점을 키워야 팔리고, 하나하나 굴림값이 달라서 같은 스킬도 같지 않다.
 //     영웅 레벨이 오르면 낄 수 있는 칸이 늘어난다.
@@ -17,7 +17,7 @@ const EQUIP_SLOTS = [
   { id:'weapon', name:'무기',   icon:'⚔️', accepts:'weapon' },
   { id:'helmet', name:'투구',   icon:'⛑️', accepts:'helmet' },
   { id:'armor',  name:'갑옷',   icon:'🥋', accepts:'armor'  },
-  { id:'pants',  name:'각반',   icon:'👖', accepts:'pants'  },
+  { id:'pants',  name:'장갑',   icon:'🧤', accepts:'pants'  },
   { id:'boots',  name:'신발',   icon:'👟', accepts:'boots'  },
   { id:'acc1',   name:'악세 1', icon:'💍', accepts:'acc'    },
   { id:'acc2',   name:'악세 2', icon:'📿', accepts:'acc'    },
@@ -68,50 +68,57 @@ function applyStatBlock(b, stats, mult) {
 const GRADE_COLOR = { common:'#94a3b8', rare:'#60a5fa', epic:'#a78bfa', legend:'#fbbf24' };
 const GRADE_NAME  = { common:'일반', rare:'희귀', epic:'영웅', legend:'전설' };
 
+// sprite — 🎒 아이콘 그림 키. 없으면 icon(이모지)으로 떨어진다.
+// 이모지는 기기마다 그림이 달라서(안드로이드·iOS·PC가 제각각) 픽셀 아트인
+// 나머지 화면과 따로 놀았다. Kyrise 아이콘 팩으로 27개를 전부 갈았다.
+//
+// 이름 몇 개는 그림에 맞춰 바꿨다. 팩에 없는 물건(왕관·망토·각반)을 억지로
+// 비슷한 그림으로 때우면 아이콘과 이름이 서로 다른 말을 하게 된다.
+// 능력치와 id는 그대로라 저장된 장비도 그대로 남는다.
 const HERO_EQUIPMENT_POOL = [
   // 무기 — 공격력이 본체
-  { id:'w_iron',    name:'강철 검',       icon:'⚔️', slot:'weapon', grade:'common', cost:30,  stats:{atk:8} },
-  { id:'w_silver',  name:'은빛 검',       icon:'🗡️', slot:'weapon', grade:'rare',   cost:60,  stats:{atk:18, aspd:0.08} },
-  { id:'w_staff',   name:'마법사 지팡이', icon:'🪄', slot:'weapon', grade:'rare',   cost:65,  stats:{atk:12, skill:0.20, range:0.15} },
-  { id:'w_dragon',  name:'용살자',        icon:'🐉', slot:'weapon', grade:'epic',   cost:130, stats:{atk:34, crit:0.08} },
+  { id:'w_iron',    name:'강철 검',       icon:'⚔️', sprite:'item.w_iron',    slot:'weapon', grade:'common', cost:30,  stats:{atk:8} },
+  { id:'w_silver',  name:'은빛 검',       icon:'🗡️', sprite:'item.w_silver',  slot:'weapon', grade:'rare',   cost:60,  stats:{atk:18, aspd:0.08} },
+  { id:'w_staff',   name:'마법사 지팡이', icon:'🪄', sprite:'item.w_staff',   slot:'weapon', grade:'rare',   cost:65,  stats:{atk:12, skill:0.20, range:0.15} },
+  { id:'w_dragon',  name:'용살자',        icon:'🐉', sprite:'item.w_dragon',  slot:'weapon', grade:'epic',   cost:130, stats:{atk:34, crit:0.08} },
 
   // 투구 — 체력과 시야
-  { id:'h_leather', name:'가죽 두건',     icon:'🧢', slot:'helmet', grade:'common', cost:22,  stats:{hp:18} },
-  { id:'h_warrior', name:'전사의 투구',   icon:'⛑️', slot:'helmet', grade:'rare',   cost:48,  stats:{hp:40, def:3} },
-  { id:'h_crown',   name:'왕관',          icon:'👑', slot:'helmet', grade:'epic',   cost:120, stats:{hp:70, exp:0.15} },
+  { id:'h_leather', name:'가죽 두건',     icon:'🧢', sprite:'item.h_leather', slot:'helmet', grade:'common', cost:22,  stats:{hp:18} },
+  { id:'h_warrior', name:'전사의 투구',   icon:'⛑️', sprite:'item.h_warrior', slot:'helmet', grade:'rare',   cost:48,  stats:{hp:40, def:3} },
+  { id:'h_crown',   name:'용의 투구',     icon:'👑', sprite:'item.h_crown',   slot:'helmet', grade:'epic',   cost:120, stats:{hp:70, exp:0.15} },
 
   // 갑옷 — 방어의 중심
-  { id:'a_chain',   name:'사슬 갑옷',     icon:'🥋', slot:'armor',  grade:'common', cost:34,  stats:{def:4, hp:20} },
-  { id:'a_plate',   name:'판금 갑옷',     icon:'🛡️', slot:'armor',  grade:'rare',   cost:70,  stats:{def:9, hp:50} },
-  { id:'a_shadow',  name:'그림자 망토',   icon:'🦸', slot:'armor',  grade:'epic',   cost:140, stats:{def:12, hp:80, aspd:0.10} },
+  { id:'a_chain',   name:'사슬 갑옷',     icon:'🥋', sprite:'item.a_chain',   slot:'armor',  grade:'common', cost:34,  stats:{def:4, hp:20} },
+  { id:'a_plate',   name:'판금 갑옷',     icon:'🛡️', sprite:'item.a_plate',   slot:'armor',  grade:'rare',   cost:70,  stats:{def:9, hp:50} },
+  { id:'a_shadow',  name:'그림자 갑주',   icon:'🦸', sprite:'item.a_shadow',  slot:'armor',  grade:'epic',   cost:140, stats:{def:12, hp:80, aspd:0.10} },
 
-  // 각반 — 체력 · 재생
-  { id:'p_cloth',   name:'천 각반',       icon:'👖', slot:'pants',  grade:'common', cost:20,  stats:{hp:16} },
-  { id:'p_guard',   name:'수호의 각반',   icon:'🩳', slot:'pants',  grade:'rare',   cost:46,  stats:{hp:36, regen:1} },
-  { id:'p_titan',   name:'거인의 각반',   icon:'🦿', slot:'pants',  grade:'epic',   cost:112, stats:{hp:66, def:6, regen:1.5} },
+  // 장갑 — 체력 · 재생
+  { id:'p_cloth',   name:'천 장갑',       icon:'🧤', sprite:'item.p_cloth',   slot:'pants',  grade:'common', cost:20,  stats:{hp:16} },
+  { id:'p_guard',   name:'수호의 장갑',   icon:'🧤', sprite:'item.p_guard',   slot:'pants',  grade:'rare',   cost:46,  stats:{hp:36, regen:1} },
+  { id:'p_titan',   name:'거인의 장갑',   icon:'🧤', sprite:'item.p_titan',   slot:'pants',  grade:'epic',   cost:112, stats:{hp:66, def:6, regen:1.5} },
 
   // 신발 — 공속 · 사거리
-  { id:'b_swift',   name:'신속의 장화',   icon:'👟', slot:'boots',  grade:'common', cost:28,  stats:{aspd:0.08} },
-  { id:'b_wind',    name:'질풍화',        icon:'🥾', slot:'boots',  grade:'rare',   cost:56,  stats:{aspd:0.16, range:0.10} },
-  { id:'b_sky',     name:'천공의 신발',   icon:'🩰', slot:'boots',  grade:'epic',   cost:124, stats:{aspd:0.26, range:0.20, hp:24} },
+  { id:'b_swift',   name:'신속의 장화',   icon:'👟', sprite:'item.b_swift',   slot:'boots',  grade:'common', cost:28,  stats:{aspd:0.08} },
+  { id:'b_wind',    name:'질풍화',        icon:'🥾', sprite:'item.b_wind',    slot:'boots',  grade:'rare',   cost:56,  stats:{aspd:0.16, range:0.10} },
+  { id:'b_sky',     name:'천공의 신발',   icon:'🩰', sprite:'item.b_sky',     slot:'boots',  grade:'epic',   cost:124, stats:{aspd:0.26, range:0.20, hp:24} },
 
   // 악세 — 잡다한 배율
-  { id:'c_ringhp',  name:'생명의 반지',   icon:'💍', slot:'acc',    grade:'common', cost:26,  stats:{regen:1.5} },
-  { id:'c_ringgold',name:'황금 반지',     icon:'🪙', slot:'acc',    grade:'common', cost:32,  stats:{gold:0.18} },
-  { id:'c_amulet',  name:'힘의 부적',     icon:'🔮', slot:'acc',    grade:'rare',   cost:52,  stats:{atk:11, crit:0.05} },
-  { id:'c_cross',   name:'성스러운 십자가',icon:'✝️',slot:'acc',    grade:'rare',   cost:58,  stats:{hp:34, regen:2} },
-  { id:'c_tome',    name:'현자의 서',     icon:'📕', slot:'acc',    grade:'epic',   cost:118, stats:{skill:0.30, exp:0.20} },
+  { id:'c_ringhp',  name:'생명의 반지',   icon:'💍', sprite:'item.c_ringhp',  slot:'acc',    grade:'common', cost:26,  stats:{regen:1.5} },
+  { id:'c_ringgold',name:'황금 반지',     icon:'🪙', sprite:'item.c_ringgold',slot:'acc',    grade:'common', cost:32,  stats:{gold:0.18} },
+  { id:'c_amulet',  name:'힘의 부적',     icon:'🔮', sprite:'item.c_amulet',  slot:'acc',    grade:'rare',   cost:52,  stats:{atk:11, crit:0.05} },
+  { id:'c_cross',   name:'성스러운 십자가',icon:'✝️',sprite:'item.c_cross',   slot:'acc',    grade:'rare',   cost:58,  stats:{hp:34, regen:2} },
+  { id:'c_tome',    name:'현자의 서',     icon:'📕', sprite:'item.c_tome',    slot:'acc',    grade:'epic',   cost:118, stats:{skill:0.30, exp:0.20} },
 
   // ── ✦ 전설 ──
   // 등급 표(GRADE_NAME)에는 전설이 있는데 물건이 하나도 없었다. 영웅 상점을
   // 끝까지 올려도 살 것이 영웅 등급에서 멈추니, 건물을 올릴 이유가 중간에 끊겼다.
   // 한 부위에 하나씩. 값은 영웅의 두 배쯤이고, 상점 레벨이 높아야 매대에 오른다.
-  { id:'w_worldend',name:'세계의 끝',     icon:'🌑', slot:'weapon', grade:'legend', cost:290, stats:{atk:62, crit:0.14, aspd:0.10} },
-  { id:'h_halo',    name:'성좌의 고리',   icon:'💫', slot:'helmet', grade:'legend', cost:260, stats:{hp:130, def:7, exp:0.30} },
-  { id:'a_aegis',   name:'불멸의 흉갑',   icon:'🜲', slot:'armor',  grade:'legend', cost:300, stats:{def:22, hp:150, regen:2.5} },
-  { id:'p_stride',  name:'천리보',        icon:'🌀', slot:'pants',  grade:'legend', cost:250, stats:{hp:120, def:11, aspd:0.14} },
-  { id:'b_void',    name:'공허의 발자국', icon:'🕳', slot:'boots',  grade:'legend', cost:270, stats:{aspd:0.42, range:0.35, hp:50} },
-  { id:'c_eye',     name:'심연의 눈',     icon:'👁', slot:'acc',    grade:'legend', cost:280, stats:{atk:24, skill:0.45, crit:0.10} },
+  { id:'w_worldend',name:'세계의 끝',     icon:'🌑', sprite:'item.w_worldend',slot:'weapon', grade:'legend', cost:290, stats:{atk:62, crit:0.14, aspd:0.10} },
+  { id:'h_halo',    name:'성좌의 투구',   icon:'💫', sprite:'item.h_halo',    slot:'helmet', grade:'legend', cost:260, stats:{hp:130, def:7, exp:0.30} },
+  { id:'a_aegis',   name:'불멸의 흉갑',   icon:'🜲', sprite:'item.a_aegis',   slot:'armor',  grade:'legend', cost:300, stats:{def:22, hp:150, regen:2.5} },
+  { id:'p_stride',  name:'천리의 장갑',   icon:'🧤', sprite:'item.p_stride',  slot:'pants',  grade:'legend', cost:250, stats:{hp:120, def:11, aspd:0.14} },
+  { id:'b_void',    name:'공허의 발자국', icon:'🕳', sprite:'item.b_void',    slot:'boots',  grade:'legend', cost:270, stats:{aspd:0.42, range:0.35, hp:50} },
+  { id:'c_eye',     name:'심연의 결정',   icon:'👁', sprite:'item.c_eye',     slot:'acc',    grade:'legend', cost:280, stats:{atk:24, skill:0.45, crit:0.10} },
 ];
 // 등급별 매대 등장 가중치와, 그 등급이 열리는 상점 레벨(화면상 Lv.)
 const GRADE_WEIGHT     = { common:34, rare:26, epic:12, legend:4 };
@@ -708,6 +715,14 @@ function unlockSigil(gs, id) {
 function castFx(kind, o) {
   if (typeof FX !== 'undefined' && FX.cast) FX.cast(kind, o);
 }
+// 🎞 그림 연출 한 장. 시트가 아직 안 실렸으면 조용히 넘어간다 —
+// 도형 연출은 이미 따로 깔려 있어서, 그림이 없어도 화면이 비지는 않는다.
+const CAST_SHEET_FRAMES = { 'fx.nova':16, 'fx.slashx':9, 'fx.spin':22,
+                            'fx.burst':10, 'fx.rune':13, 'fx.streak':11 };
+function castSheet(key, x, y, size, color, dur) {
+  castFx('sheet', { key, n: CAST_SHEET_FRAMES[key] || 8,
+                    x, y, size: size || 80, color: color || '#ffffff', dur: dur || 0.5 });
+}
 // 영웅이 지금 서 있는 화면 좌표. 하단에 있으면 아레나의 영웅 유닛,
 // 상단이면 방어 격자 위의 좌표, 둘 다 없으면 아레나 한가운데.
 function heroSpot(gs) {
@@ -747,6 +762,7 @@ function castHeroActive(gs, id, opts) {
       for (const t of gs.towers) {
         const c = cellCenter(t.col, t.row);
         castFx('pillar', { x:c.x, y:c.y + 14, h:44, w:18, color:'#fbbf24', dur:0.45 });
+        castSheet('fx.rune', c.x, c.y, 54, '#fbbf24', 0.55);
       }
       ok = true; msg = `⚡ 타워 ${gs.towers.length}기 과부하`;
       break;
@@ -756,7 +772,7 @@ function castHeroActive(gs, id, opts) {
       const dmg = Math.max(1, Math.round(atk * 2.2));
       for (const e of tops) {
         hurtDefenseEnemy(e, dmg, true, x => onDefenseKill(x, true), 1, 0);
-        castFx('nova', { x:e.x, y:e.y, r:26, color:'#fb923c', dur:0.45 });
+        castSheet('fx.burst', e.x, e.y, 62, '#fb923c', 0.42);
       }
       castFx('rain', { x:0, y:0, w:CW, h:DEFENSE_H, n:26, color:'#fb923c', dur:0.7 });
       ok = true; msg = `☄️ 상단 ${tops.length}마리 −${dmg}`;
@@ -766,7 +782,7 @@ function castHeroActive(gs, id, opts) {
       gs.baseWardUntil = Math.max(gs.baseWardUntil || 0, 6);
       const bc = cellCenter(CASTLE_C, CASTLE_R);
       castFx('runes', { x:bc.x, y:bc.y, r:44, color:'#38bdf8', dur:0.8 });
-      castFx('nova',  { x:bc.x, y:bc.y, r:70, color:'#38bdf8', dur:0.55 });
+      castSheet('fx.rune', bc.x, bc.y, 96, '#38bdf8', 0.7);
       ok = true; msg = '🧱 성벽 결계 6초';
       break;
     }
@@ -786,7 +802,7 @@ function castHeroActive(gs, id, opts) {
       const dmg = arenaDamage(atk * 4.5, t.def);
       hurtMob(gs, t, dmg, '#fbbf24');
       castFx('pillar', { x:t.x, y:t.y + 8, h:130, w:30, color:'#fbbf24', dur:0.5 });
-      castFx('nova',   { x:t.x, y:t.y, r:52, color:'#fde047', dur:0.45 });
+      castSheet('fx.burst', t.x, t.y, 110, '#fde047', 0.5);
       if (typeof FX !== 'undefined') FX.burst(t.x, t.y, '#fde047', 16, 18);
       ok = true; msg = `💥 심판 −${dmg}`;
       break;
@@ -819,7 +835,7 @@ function castHeroActive(gs, id, opts) {
         n++;
       }
       castFx('nova',  { x:cx, y:cy, r:140, color:'#a5b4fc', dur:0.5 });
-      castFx('runes', { x:cx, y:cy, r:52, color:'#818cf8', dur:0.75 });
+      castSheet('fx.spin', cx, cy, 120, '#818cf8', 0.55);
       ok = true; msg = `🌪 ${n}마리 소집`;
       break;
     }
@@ -836,7 +852,7 @@ function castHeroActive(gs, id, opts) {
         clampToArena(m, m.radius);
       }
       castFx('slash', { x:c.x, y:c.y, r:R, n:3, color:'#f87171', dur:0.45 });
-      castFx('nova',  { x:c.x, y:c.y, r:R, color:'#fca5a5', dur:0.4 });
+      castSheet('fx.spin', c.x, c.y, R * 2.1, '#fca5a5', 0.5);
       ok = true; msg = `🌀 ${hit.length}마리 베기`;
       break;
     }
@@ -848,7 +864,7 @@ function castHeroActive(gs, id, opts) {
       const dmg = low ? t.hp : arenaDamage(atk * 6, t.def);
       hurtMob(gs, t, dmg, '#f43f5e');
       castFx('beam',  { x1:t.x, y1:ARENA_Y, x2:t.x, y2:t.y, w:18, color:'#f43f5e', dur:0.35 });
-      castFx('slash', { x:t.x, y:t.y, r:46, n:2, color:'#fecdd3', dur:0.4 });
+      castSheet('fx.slashx', t.x, t.y, 96, '#fb7185', 0.42);
       if (typeof FX !== 'undefined') { FX.burst(t.x, t.y, '#f43f5e', 20, 20); FX.shake(5, 0.25); }
       ok = true; msg = low ? '🗡 참수!' : `🗡 −${dmg}`;
       break;
@@ -860,7 +876,7 @@ function castHeroActive(gs, id, opts) {
       const heal = Math.round(heroMaxHp() * 0.20);
       gs.hero.hp = Math.min(heroMaxHp(), gs.hero.hp + heal);
       for (const u of gs.battle.ourTeam)
-        if (!u.dead) castFx('runes', { x:u.x, y:u.y, r:15, color:'#f43f5e', dur:0.75 });
+        if (!u.dead) castSheet('fx.rune', u.x, u.y, 46, '#f43f5e', 0.6);
       castFx('wash', { y:ARENA_Y, h:ARENA_H, color:'#f43f5e', dur:0.5 });
       ok = true; msg = `🩸 8초 공격력 ×1.5 · +${heal}`;
       break;
@@ -877,6 +893,7 @@ function castHeroActive(gs, id, opts) {
       arena.buffs = (arena.buffs || []).filter(b => b.kind !== 'guard');
       arena.buffs.push({ kind:'guard', mult:0.60, until: arena.elapsed + 5 });
       castFx('nova',  { x:c.x, y:c.y, r:150, color:'#38bdf8', dur:0.5 });
+      castSheet('fx.nova', c.x, c.y, 120, '#38bdf8', 0.55);
       castFx('runes', { x:c.x, y:c.y, r:40, color:'#38bdf8', dur:0.7 });
       ok = true; msg = `📢 ${mobs.length}마리 도발 · 5초 피해 40%↓`;
       break;
@@ -914,6 +931,7 @@ function castHeroActive(gs, id, opts) {
         m.slowUntil = Math.max(m.slowUntil || 0, 4);
       }
       castFx('nova',  { x:c.x, y:c.y, r:R, color:'#67e8f9', dur:0.55 });
+      castSheet('fx.nova', c.x, c.y, R * 2, '#67e8f9', 0.6);
       castFx('runes', { x:c.x, y:c.y, r:R*0.55, color:'#a5f3fc', dur:0.75 });
       ok = true; msg = `❄️ ${hit.length}마리 −둔화`;
       break;
@@ -932,7 +950,7 @@ function castHeroActive(gs, id, opts) {
         if (typeof FX !== 'undefined') FX.spark(from.x, from.y, m.x, m.y, '#c4b5fd');
         castFx('beam', { x1:from.x, y1:from.y, x2:m.x, y2:m.y, w:7, color:'#c4b5fd', dur:0.3 });
         hurtMob(gs, m, arenaDamage(atk * 1.9, m.def), '#c4b5fd');
-        castFx('nova', { x:m.x, y:m.y, r:24, color:'#c4b5fd', dur:0.35 });
+        castSheet('fx.burst', m.x, m.y, 52, '#c4b5fd', 0.35);
         from = { x:m.x, y:m.y }; n++;
       }
       ok = true; msg = `🔗 ${n}마리 연쇄`;
@@ -960,7 +978,7 @@ function castHeroActive(gs, id, opts) {
       const dmg = arenaDamage(atk * 1.9, 0);
       for (const m of mobs) {
         hurtMob(gs, m, arenaDamage(atk * 1.9, m.def), '#86efac', true, null);
-        castFx('nova', { x:m.x, y:m.y, r:20, color:'#86efac', dur:0.35 });
+        castSheet('fx.nova', m.x, m.y, 46, '#86efac', 0.4);
       }
       castFx('rain', { x:ARENA_X, y:ARENA_Y, w:ARENA_W, h:ARENA_H, n:30, color:'#86efac', dur:0.8 });
       ok = true; msg = `🏹 ${mobs.length}마리 −${dmg}`;
@@ -987,6 +1005,7 @@ function castHeroActive(gs, id, opts) {
         castFx('nova', { x:m.x, y:m.y, r:26, color:'#4ade80', dur:0.35 });
       }
       castFx('beam', { x1:c.x, y1:c.y, x2:ex, y2:ey, w:16, color:'#4ade80', dur:0.4 });
+      castSheet('fx.streak', (c.x+near.x)/2, (c.y+near.y)/2, 96, '#4ade80', 0.4);
       ok = true; msg = `➶ ${hit.length}마리 관통`;
       break;
     }
@@ -996,7 +1015,7 @@ function castHeroActive(gs, id, opts) {
         const t = mobs.reduce((a, m) => (m.maxHp > a.maxHp ? m : a), mobs[0]);
         t.markUntil = arena.elapsed + 12; t.markPct = 0.6;
         castFx('runes', { x:t.x, y:t.y, r:26, color:'#fbbf24', dur:0.9 });
-        castFx('nova',  { x:t.x, y:t.y, r:40, color:'#fbbf24', dur:0.45 });
+        castSheet('fx.rune', t.x, t.y, 64, '#fbbf24', 0.6);
         n++;
       }
       if (tops.length) {

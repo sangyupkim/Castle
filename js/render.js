@@ -1844,6 +1844,30 @@ function drawArenaFloor(ctx) {
 }
 
 // 🎯 사냥 표식 — 네 귀퉁이 괄호 + 도는 고리. 화살표 하나보다 눈에 걸린다.
+// ── 🎒 아이템 아이콘 ─────────────────────────────────────────────────────────
+// 그림이 있으면 그림, 없으면 지금까지처럼 이모지. 이모지는 기기마다 그림이
+// 달라서(안드로이드·iOS·PC가 제각각) 픽셀 아트인 나머지 화면과 따로 놀았다.
+//
+// 좌표는 **이모지를 그리던 자리를 그대로 받는다** — 부르는 쪽 스무 군데의
+// 정렬을 다시 재지 않으려고, 지금 ctx에 걸린 textAlign/textBaseline을 읽어
+// 그림 위치를 맞춘다. 그래서 fillText 한 줄을 이 함수로 바꾸면 끝난다.
+function drawItemIcon(ctx, def, x, y, size) {
+  if (!def) return;
+  const sz  = size || 16;
+  const key = def.sprite;
+  if (key && typeof Sprites !== 'undefined' && Sprites.has(key)) {
+    let dx = x, dy = y;
+    const al = ctx.textAlign, bl = ctx.textBaseline;
+    if (al === 'center') dx -= sz / 2;
+    else if (al === 'right') dx -= sz;
+    if (bl === 'middle') dy -= sz / 2;
+    else if (bl === 'alphabetic' || bl === 'bottom') dy -= sz;
+    Sprites.draw(ctx, key, Math.round(dx), Math.round(dy), sz, sz);
+    return;
+  }
+  ctx.fillText(def.icon, x, y);
+}
+
 function drawHuntMark(ctx, x, y, r) {
   const R = (r || 10) + 7;
   const t = (performance.now() / 1000) % 1;
@@ -5142,7 +5166,7 @@ function renderHeroShopScreen(ctx, gs) {
     const gc=GRADE_COLOR[item.grade]||'#94a3b8';
     uiPanel(ctx, 6,sy,CW-12,ih,5, '#0d1929', gc, 1);
     ctx.font='16px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.fillStyle='#e2e8f0';
-    ctx.fillText(item.icon,12,sy+ih/2);
+    drawItemIcon(ctx, item, 12, sy+ih/2, 20);
     ctx.fillStyle='#f1f5f9'; ctx.font='bold 10px sans-serif'; ctx.fillText(item.name,30,sy+ih/2-7);
     ctx.fillStyle='#cbd5e1'; ctx.font='bold 9px sans-serif'; ctx.fillText(item.desc,30,sy+ih/2+6);
     const canAff=gs.gold>=item.cost;
@@ -5174,7 +5198,7 @@ function renderHeroShopScreen(ctx, gs) {
     const have=_owned.has(item.id);
     uiPanel(ctx, 6,sy,CW-12,ih,5, have?'#141e0d':'#0d1929', gc, have?2:1);
     ctx.font='18px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.fillStyle='#e2e8f0';
-    ctx.fillText(item.icon,12,sy+ih/2);
+    drawItemIcon(ctx, item, 12, sy+ih/2, 22);
     const sl=EQUIP_SLOTS.find(s2=>s2.accepts===item.slot);
     ctx.fillStyle=gc; ctx.font='bold 10px sans-serif';
     ctx.fillText(`[${item.slot==='acc'?'악세':(sl?sl.name:item.slot)}] ${item.name}`,32,sy+ih/2-8);
@@ -5287,7 +5311,8 @@ function renderHeroShopScreen(ctx, gs) {
   EQUIP_SLOTS.forEach((sl,i)=>{
     const it=equippedItem(gs,sl.id);
     ctx.globalAlpha=it?1:0.22;
-    ctx.fillStyle='#e2e8f0'; ctx.fillText(it?it.icon:sl.icon,10+i*24,sy);
+    ctx.fillStyle='#e2e8f0';
+    if (it) drawItemIcon(ctx, it, 10+i*24, sy, 18); else ctx.fillText(sl.icon,10+i*24,sy);
     ctx.globalAlpha=1;
   });
   sy += 22;
@@ -5413,7 +5438,7 @@ function renderTownPageBuildingGrid(ctx, gs, startY) {
 
     uiPanel(ctx, bx,by,bw,bh,8, built?'#0d1929':'#080d18', built?def.color:'#334155', built?2:1);
 
-    ctx.font='32px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.fillText(def.icon,bx+10,by+10);
+    ctx.font='32px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top'; drawItemIcon(ctx, def, bx+10, by+10, 34);
     ctx.fillStyle=built?def.color:'#64748b'; ctx.font='bold 12px sans-serif'; ctx.fillText(def.name,bx+50,by+10);
 
     if (built) {
@@ -5594,7 +5619,8 @@ function renderHeroDetail(ctx, gs, startY) {
     uiPanel(ctx, 6,ry,colW,rowH,4, picked?'#20262e' : item?'#101a28':'#0a0f1a', picked?'#fbbf24' : fitHint?'#22c55e' : gc, (picked||fitHint)?1.6:1);
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.font='13px sans-serif'; ctx.globalAlpha=item?1:0.3;
-    ctx.fillStyle='#e2e8f0'; ctx.fillText(item?item.icon:sl.icon, 20, ry+rowH/2);
+    ctx.fillStyle='#e2e8f0';
+    if (item) drawItemIcon(ctx, item, 20, ry+rowH/2, 22); else ctx.fillText(sl.icon, 20, ry+rowH/2);
     ctx.globalAlpha=1;
     ctx.textAlign='left';
     ctx.fillStyle='#475569'; ctx.font='bold 8px sans-serif';
@@ -5820,7 +5846,7 @@ function renderHeroDetail(ctx, gs, startY) {
       const gc = GRADE_COLOR[item.grade]||'#94a3b8';
       uiPanel(ctx, cx,cy,cw,chh,5, picked?'#20262e' : on?'#101a12':'#0c1220', picked?'#fbbf24' : on?'#22c55e':gc, picked?1.8:1);
       ctx.textAlign='center'; ctx.textBaseline='top';
-      ctx.fillStyle='#e2e8f0'; ctx.font='21px sans-serif'; ctx.fillText(item.icon,cx+cw/2,cy+6);
+      ctx.fillStyle='#e2e8f0'; ctx.font='21px sans-serif'; drawItemIcon(ctx, item, cx+cw/2, cy+6, 24);
       ctx.fillStyle=gc; ctx.font='bold 9px sans-serif'; ctx.fillText(item.name,cx+cw/2,cy+31);
       ctx.fillStyle= on?'#22c55e':'#475569'; ctx.font='bold 8px sans-serif';
       ctx.fillText(on?'장착 중':GRADE_NAME[item.grade]||'',cx+cw/2,cy+44);

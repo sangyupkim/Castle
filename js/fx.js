@@ -102,6 +102,19 @@ const FX = (() => {
         ctx.save();
         ctx.strokeStyle = c.color; ctx.fillStyle = c.color;
         switch (c.kind) {
+          // 🎞 그림 연출 — 흰 스프라이트 한 줄을 색만 입혀 돌린다.
+          // 여기 도형들과 겹쳐 쓰면 서로 부족한 곳을 메운다:
+          // 도형은 크기를 마음대로 늘릴 수 있고(장판·전선 전체), 그림은 결이 있다.
+          case 'sheet': {
+            if (typeof Sprites === 'undefined' || !Sprites.has(c.key)) break;
+            const n  = c.n || 1;
+            const fi = Math.min(n - 1, Math.floor(p * n));
+            const sz = c.size || 64;
+            ctx.globalAlpha = 0.55 + fade * 0.45;
+            Sprites.frame(ctx, c.key, fi, c.x - sz/2, c.y - sz/2, sz, sz,
+                          { tint: c.color, tintAmt: c.tintAmt === undefined ? 0.85 : c.tintAmt });
+            break;
+          }
           // 💥 폭발 — 차오르는 원 + 테두리 파동. 광역기 전반
           case 'nova': {
             const r = c.r * (0.25 + p * 0.9);

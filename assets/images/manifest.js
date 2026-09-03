@@ -300,6 +300,13 @@ self.SPRITE_FILES = {
   'mob.warlord.2': 'mobs2/warlord_2.png',
   'mob.warlord.3': 'mobs2/warlord_3.png',
 
+  // 🛡 방패병 — 0x72 knight_m(16×28). 이 팩에서 큰 방패를 든 유일한 개체다.
+  // 지금까지 그림이 없어 방패 이모지(🛡)로 그려지던 자리다.
+  'mob.shieldman.0': 'mobs2/shieldman_0.png',
+  'mob.shieldman.1': 'mobs2/shieldman_1.png',
+  'mob.shieldman.2': 'mobs2/shieldman_2.png',
+  'mob.shieldman.3': 'mobs2/shieldman_3.png',
+
   // 👹 마왕 — 0x72 던전 팩의 big_demon(32×36). 100층에 한 마리만 나오므로
   // 배우(SPRITE_ACTORS)로 등록하지 않고 낱장 8프레임을 시간으로 돌린다.
   'mob.demon.idle.0': 'mobs/demon/idle_0.png',
@@ -310,6 +317,43 @@ self.SPRITE_FILES = {
   'mob.demon.run.1':  'mobs/demon/run_1.png',
   'mob.demon.run.2':  'mobs/demon/run_2.png',
   'mob.demon.run.3':  'mobs/demon/run_3.png',
+  // 🎒 장비 아이콘 — Kyrise 16x16 RPG Icon Pack의 32×32판.
+  // 지금까지 전부 이모지였는데, 이모지는 기기마다 그림이 다르고(안드로이드·iOS·PC가
+  // 제각각) 픽셀 아트인 나머지 화면과 따로 논다. 등급이 색으로 읽히도록
+  // 팩의 색 램프(갈색 → 은 → 파랑 → 금 → 빨강)를 부위마다 그대로 태웠다.
+  'item.w_iron':   'items/w_iron.png',
+  'item.w_silver': 'items/w_silver.png',
+  'item.w_staff':  'items/w_staff.png',
+  'item.w_dragon': 'items/w_dragon.png',
+  'item.w_worldend':'items/w_worldend.png',
+
+  'item.h_leather':'items/h_leather.png',
+  'item.h_warrior':'items/h_warrior.png',
+  'item.h_crown':  'items/h_crown.png',
+  'item.h_halo':   'items/h_halo.png',
+
+  'item.a_chain':  'items/a_chain.png',
+  'item.a_plate':  'items/a_plate.png',
+  'item.a_shadow': 'items/a_shadow.png',
+  'item.a_aegis':  'items/a_aegis.png',
+
+  'item.p_cloth':  'items/p_cloth.png',
+  'item.p_guard':  'items/p_guard.png',
+  'item.p_titan':  'items/p_titan.png',
+  'item.p_stride': 'items/p_stride.png',
+
+  'item.b_swift':  'items/b_swift.png',
+  'item.b_wind':   'items/b_wind.png',
+  'item.b_sky':    'items/b_sky.png',
+  'item.b_void':   'items/b_void.png',
+
+  'item.c_ringhp':  'items/c_ringhp.png',
+  'item.c_ringgold':'items/c_ringgold.png',
+  'item.c_amulet':  'items/c_amulet.png',
+  'item.c_cross':   'items/c_cross.png',
+  'item.c_tome':    'items/c_tome.png',
+  'item.c_eye':     'items/c_eye.png',
+
   // 🖼 UI — Cryo's Mini GUI에서 잘라낸 9슬라이스 판과 막대 채움.
   // 패널은 8px 모서리 기준으로 늘린다(drawPanel9). 막대는 가로로 늘리면 된다.
   'ui.panel.dark':  'ui/panel_dark.png',    // 검정 + 옅은 남색 테두리 — 기본
@@ -327,6 +371,17 @@ self.SPRITE_FILES = {
 self.SPRITE_SHEETS = {
   // 지켜야 하는 기지. 4프레임짜리 깃발 애니메이션이다.
   'tile.base': { file:'tiles/castle.png', fw:52, fh:38, frames:4, fps:4 },
+
+  // ✨ 스킬 연출 — Effect and FX Pixel All Free. 원본은 64px 격자에
+  // 가로=프레임 / 세로=색 9종인데, **채도가 0인 흰 행만** 한 줄 뽑아 왔다.
+  // 색은 게임에서 입힌다(Sprites의 tint가 곱하기라 흰 그림이 제일 잘 물든다).
+  // 스킬마다 파일을 따로 두면 20종 × 색이 곱셈으로 늘어난다.
+  'fx.nova':   { file:'fx/nova.png',   fw:64, fh:64, frames:16, fps:26 },  // 사방으로 뻗는 광선
+  'fx.slashx': { file:'fx/slashx.png', fw:64, fh:64, frames:9,  fps:22 },  // X자 베기
+  'fx.spin':   { file:'fx/spin.png',   fw:64, fh:64, frames:22, fps:34 },  // 회전하는 칼날 넷
+  'fx.burst':  { file:'fx/burst.png',  fw:64, fh:64, frames:10, fps:24 },  // 꽃처럼 터지는 폭발
+  'fx.rune':   { file:'fx/rune.png',   fw:64, fh:64, frames:13, fps:20 },  // 마법진
+  'fx.streak': { file:'fx/streak.png', fw:64, fh:64, frames:11, fps:26 },  // 길게 늘어지는 섬광
 };
 
 // ── 배우 (방향 × 동작 × 프레임) ─────────────────────────────────────────────
