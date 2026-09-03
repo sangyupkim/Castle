@@ -74,7 +74,7 @@ function st_branchId(br) { return br ? br.id : null; }
 
 function towerStats(t) {
   const tpl = TOWER_TYPES[t.typeId];
-  const m   = TOWER_LEVEL_MULT[Math.min(t.level || 1, towerLevelCap())] || TOWER_LEVEL_MULT[1];
+  const m   = TOWER_LEVEL_MULT[towerStatLevel(t)] || TOWER_LEVEL_MULT[1];
   const overloaded = (t.overloadUntil || 0) > 0;
   // 층 이벤트 — 안개는 사거리를, 부식은 공격력을, 봉인은 한 종류를 통째로 막는다
   const sealed = fev('sealedTower', null) === t.typeId;

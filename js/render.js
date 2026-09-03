@@ -521,7 +521,7 @@ function renderDefense(ctx, gs) {
       }
       uiPanel(ctx, ax,ay2,aw,ah,4, '#0f172a', '#f59e0b', 1.5);
       ctx.fillStyle='#f59e0b'; ctx.font='bold 8px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText(`Lv.${lv}/${towerLevelCap()}`,ax+18,ay2+ah/2);
+      ctx.fillText(`Lv.${lv}/${towerStarCap()}`,ax+18,ay2+ah/2);
       if (lv<3) {
         uiPanel(ctx, ax+26,ay2+2,42,ah-4,3, '#1e3a5f', '#60a5fa', 1);
         ctx.fillStyle='#60a5fa'; ctx.font='7px sans-serif'; ctx.fillText(`강화 ${lv*15}💰`,ax+47,ay2+ah/2);
@@ -5709,7 +5709,7 @@ function renderTownPageTowers(ctx, gs, startY) {
       ctx.font='20px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
       ctx.fillText(tpl.icon,14,panelY+20);
       ctx.fillStyle='#f1f5f9'; ctx.font='bold 12px sans-serif';
-      const nameTxt=`${tpl.name}  Lv.${lv}/${towerLevelCap()}`;
+      const nameTxt=`${tpl.name}  Lv.${lv}/${towerStarCap()}`;
       ctx.fillText(nameTxt,42,panelY+13);
       if (br) {   // 고른 분기를 이름 옆에 붙인다 — 이 타워가 무엇이 됐는지
         const nw=ctx.measureText(nameTxt).width;
@@ -5747,12 +5747,20 @@ function renderTownPageTowers(ctx, gs, startY) {
       ctx.textAlign='left';
 
       const upgCost=towerUpgradeCost(tower);
+      const bw2=150, bh2=26, ubY=panelY+42+_cShift;
+      gs.ui.towerUpgradeBtn=null; gs.ui.towerPromoteBtn=null;
       if (upgCost!==null) {
-        const canAff=gs.gold>=upgCost,bw2=150,bh2=26;
-        drawBtn(ctx,10,panelY+42+_cShift,bw2,bh2,`강화 Lv.${lv+1}  ${upgCost}💰`,canAff?'#1e3a5f':'#1e293b',canAff?'#60a5fa':'#64748b',canAff);
-        gs.ui.towerUpgradeBtn={x:10,y:panelY+42+_cShift,w:bw2,h:bh2};
+        const canAff=gs.gold>=upgCost;
+        drawBtn(ctx,10,ubY,bw2,bh2,`강화 Lv.${lv+1}  ${upgCost}💰`,canAff?'#1e3a5f':'#1e293b',canAff?'#60a5fa':'#64748b',canAff);
+        gs.ui.towerUpgradeBtn={x:10,y:ubY,w:bw2,h:bh2};
+      } else if (lv < towerStarCap()) {
+        // ★5 위로는 심 하나에 타워 하나. 가진 심 개수를 버튼에 같이 적는다 —
+        // 없으면 왜 못 누르는지가 화면에 있어야 한다.
+        const need = lv + 1, have = forgeCores(gs, need), can = have > 0;
+        drawBtn(ctx,10,ubY,bw2,bh2,`★${need} 승급  심 ${have}개`,
+                can?'#2a1f05':'#1e293b', can?'#fbbf24':'#64748b', can);
+        if (can) gs.ui.towerPromoteBtn={x:10,y:ubY,w:bw2,h:bh2};
       } else {
-        gs.ui.towerUpgradeBtn=null;
         ctx.fillStyle='#f59e0b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
         ctx.fillText('★ 최고 레벨',12,panelY+55+_cShift);
       }

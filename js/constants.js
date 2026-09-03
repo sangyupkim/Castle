@@ -798,11 +798,23 @@ function towerBuildCost(typeId, towers) {
 // Lv.3까지는 완만하고, Lv.4부터 급격히 비싸진다
 const TOWER_HIGH_LEVEL_ESCALATION = 2.6;
 // 합성으로 연 별과 서약 상한 중 낮은 쪽
+// 💰 골드로 올릴 수 있는 한계. ★5까지다.
+//
+// 예전에는 여기서 forgeBestStar(가진 최고 별)를 읽었다. 그래서 ★6 심을 하나
+// 만들면 **판 위의 모든 타워**가 골드만으로 ★6이 됐다 — 심 하나에 타워 하나라는
+// 규칙이 성립하지 않았다. ★5 위로는 골드가 아니라 심을 태워야 오른다.
 function towerLevelCap() {
-  const forged = (typeof gs !== 'undefined' && gs && gs.town && typeof forgeBestStar === 'function')
-               ? forgeBestStar(gs) : TOWER_BASE_LEVEL_CAP;
-  return Math.max(1, Math.min(TOWER_MAX_LEVEL, forged,
+  return Math.max(1, Math.min(TOWER_BASE_LEVEL_CAP,
                               BONUSES.pactTowerLevelCap || TOWER_MAX_LEVEL));
+}
+// 🔥 심을 태워 올릴 수 있는 한계 (★10). 서약이 상한을 낮추면 그것도 따른다.
+function towerStarCap() {
+  return Math.max(1, Math.min(TOWER_MAX_LEVEL, BONUSES.pactTowerLevelCap || TOWER_MAX_LEVEL));
+}
+// 능력치를 찾을 때 쓰는 레벨 — 골드 상한이 아니라 **그 타워가 실제로 가진 별**이다.
+// 여기서 towerLevelCap을 쓰면 심으로 올린 ★7 타워가 ★5 능력치로 계산된다.
+function towerStatLevel(t) {
+  return Math.max(1, Math.min(TOWER_MAX_LEVEL, (t && t.level) || 1));
 }
 function towerUpgradeCost(t) {
   const lv = t.level || 1;
@@ -1257,7 +1269,12 @@ function clearRepair(waveIndex) {
 // 이 상태에서는 기지에 닿는 모든 피해가 1/7이 되어, 적을 아무리 강하게 만들어도
 // 만렙 편성이 죽지 않는다. 실측(∞-29, 적 ×44.7)에서 한 웨이브 피해가
 // 상수 9HP로 고정돼 있던 원인 중 하나가 이것이다.
-const BASE_DEF_PCT_CAP = 0.55;
+// 기지 피해 감소의 **합계** 상한. 갈래마다 따로 상한을 두고 곱했더니
+// (1-0.55) × (1-0.6) = 0.18, 즉 82%까지 깎였다. 거기서 피해가 1로 바닥을 치고
+// 기지 재생이 그걸 도로 채워서 "맞았는데 체력이 안 줄어든다"가 됐다.
+// 이제 어느 갈래를 얼마나 쌓든 **절반 아래로는 내려가지 않는다.**
+const BASE_DEF_PCT_CAP   = 0.55;   // (개별 갈래 표시용으로만 남긴다)
+const BASE_DEF_TOTAL_CAP = 0.50;
 // 웨이브가 끝나도 아직 걸어오던 적은 사라지지 않고 다음 웨이브로 넘어간다.
 // 상한은 성능과 가독성 때문이지, 밸런스 때문이 아니다.
 const CARRYOVER_MAX = 40;
@@ -1265,9 +1282,13 @@ const CARRYOVER_MAX = 40;
 function baseDamageMult() {
   // 🧱 성벽 결계가 걸려 있는 동안은 기지가 아무 피해도 받지 않는다
   if (typeof gs !== 'undefined' && gs && (gs.baseWardUntil || 0) > 0) return 0;
-  return (1 - Math.min(BASE_DEF_PCT_CAP, BONUSES.baseDefPct || 0))
-       * (1 - Math.min(0.6, BONUSES.breachReduce || 0));
+  // 두 갈래를 각각 자른 뒤 곱하면 상한이 상한 구실을 못 한다 — 합쳐서 한 번 자른다.
+  const combined = 1 - (1 - Math.max(0, BONUSES.baseDefPct    || 0))
+                     * (1 - Math.max(0, BONUSES.breachReduce  || 0));
+  return 1 - Math.min(BASE_DEF_TOTAL_CAP, combined);
 }
+// 화면에 적어 주기 위한 값 — 지금 실제로 몇 %가 깎이는가
+function baseDefPctShown() { return Math.round((1 - baseDamageMult()) * 100); }
 
 // 🏰 최후 저지선 — 성채가 직접 쏜다. 강화를 사지 않으면 공격력이 0이라 아무 일도 없다.
 const CASTLE_BASE_RANGE = CELL_W * 1.6;

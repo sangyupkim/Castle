@@ -99,6 +99,32 @@ function fuseCores(gs, star) {
   return { ok:false, star, got:star };
 }
 
+// ── 2-b. 심으로 타워 승급 ────────────────────────────────────────────────────
+// ★5 위로는 골드가 통하지 않는다. **심 하나에 타워 하나**다 —
+// ★6 심을 태우면 그 타워 한 기만 ★6이 된다. 다른 타워는 그대로 ★5다.
+//
+// 예전에는 심을 하나 만들면 판 위의 모든 타워가 골드로 그 별까지 올라갔다.
+// 심을 모으는 일이 "한 번만 하면 끝나는 해금"이 되어 버려서, 합성을 계속할 이유가 없었다.
+function towerPromoteStar(t) { return ((t && t.level) || 1) + 1; }
+
+// 이 타워를 한 별 올리는 데 필요한 심을 가지고 있나
+function canPromoteTower(gs, t) {
+  if (!t) return false;
+  const next = towerPromoteStar(t);
+  if (next <= towerLevelCap()) return false;      // 아직 골드로 올릴 구간
+  if (next > towerStarCap())   return false;      // ★10이 끝
+  return forgeCores(gs, next) > 0;
+}
+// 승급 한 번. 심 하나를 태우고 그 타워만 한 별 올린다.
+function promoteTowerWithCore(gs, t) {
+  if (!canPromoteTower(gs, t)) return false;
+  const next = towerPromoteStar(t);
+  const f = forgeState(gs);
+  f.cores[next] -= 1;
+  t.level = next;
+  return true;
+}
+
 // ── 3. 담금질 ────────────────────────────────────────────────────────────────
 // 숙련도를 걸고 굴린다. 5의 배수는 체크포인트라 실패해도 거기서 멈춘다.
 const TEMPER_CHECKPOINT = 5;

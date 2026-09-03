@@ -169,7 +169,7 @@ function newState() {
          backupExportBtn:null, backupImportBtn:null, backupMsg:null,
          tutReplayBtn:null, tutResetTipBtn:null, guideReplayBtn:null, campBtns:[], campGroupBtns:[], cardMetaBtns:[], cardCatBtns:[], cardBanBtns:[], cardBackBtn:null,
          rankSubmitBtn:null, rankBoardBtns:[], rankReloadBtn:null,
-         pauseCardsBtn:null, runCardsCloseBtn:null, runCardsScroll:null, bgmToggleBtn:null, sfxToggleBtn:null,
+         pauseCardsBtn:null, runCardsCloseBtn:null, runCardsScroll:null, towerPromoteBtn:null, bgmToggleBtn:null, sfxToggleBtn:null,
          tutSkipBtn:null, tutBackBtn:null, sigilCards:[] },
     // 영구 데이터 참조
     get soulStones()    { return _soulStones; },
@@ -1544,6 +1544,7 @@ function handleTownTap(x,y) {
   // Towers tab
   if (t.tab==='towers') {
     if (hitTest(x,y,gs.ui.towerUpgradeBtn||{})) { upgradeSelectedTower(x,y); return; }
+    if (hitTest(x,y,gs.ui.towerPromoteBtn||{})) { promoteSelectedTower(x,y); return; }
     if (hitTest(x,y,gs.ui.towerMoveBtn||{}))    { beginTowerMove();          return; }
     if (hitTest(x,y,gs.ui.towerRemoveBtn||{}))  { sellSelectedTower(x,y);    return; }
     // ★5 분기 — 세 갈래 중 하나
@@ -1717,6 +1718,23 @@ function buildTowerAt(c, r, fx, fy) {
   FX.ring(ctr.x, ctr.y, TOWER_TYPES[typeId].color, 8);
   SFX.build();
   return true;
+}
+
+// 🔥 ★5 위로는 심을 태워 한 기씩 올린다 — 심 하나에 타워 하나.
+function promoteSelectedTower(x, y) {
+  const ta = gs.ui.towerAction;
+  if (!ta) return;
+  const tower = gs.towers.find(tw => tw.col === ta.col && tw.row === ta.row);
+  if (!tower) { gs.ui.towerAction = null; return; }
+  const need = (tower.level || 1) + 1;
+  if (!promoteTowerWithCore(gs, tower)) {
+    spawnFloaty(`★${need} 심이 없습니다`, x, y, '#ef4444'); SFX.denied(); return;
+  }
+  spawnFloaty(`★${tower.level} 승급!`, x, y, '#fbbf24');
+  const ctr = cellCenter(tower.col, tower.row);
+  FX.ring(ctr.x, ctr.y, '#fbbf24', 12);
+  SFX.upgrade();
+  SaveManager.save(gs);
 }
 
 function upgradeSelectedTower(x, y) {
