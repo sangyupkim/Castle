@@ -842,13 +842,29 @@ function renderHeroInDefense(ctx, hero) {
   ctx.strokeStyle='rgba(245,158,11,0.3)'; ctx.lineWidth=1; ctx.stroke();
   ctx.restore();
 
-  // 영웅 원
-  ctx.beginPath(); ctx.arc(hx, hy, r, 0, Math.PI*2);
-  ctx.fillStyle=COLORS.hero; ctx.fill();
-  ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.stroke();
-
-  ctx.font=`${r}px sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText('👑', hx, hy+1);
+  // 영웅 — 아레나와 같은 각인 그림을 쓴다.
+  // 상단에만 왕관 이모지가 박혀 있어서, 같은 영웅이 위아래에서 다른 것으로 보였다.
+  // 그림이 아직 안 실렸으면 예전처럼 원 + 왕관으로 떨어진다.
+  const _hsg  = hero.sigil || ((typeof activeSigil === 'function') ? activeSigil().id : DEFAULT_SIGIL);
+  const _hf   = Math.floor(Date.now() / (1000 / ARENA_ANIM_FPS)) % 4;
+  const _hkey = (typeof Sprites !== 'undefined')
+              ? Sprites.pick(`hero.${_hsg}.${_hf}`, `hero.${_hsg}.0`, 'hero.blade.0') : null;
+  let _hdrew = false;
+  if (_hkey) {
+    // 발밑을 원 아래에 맞춘다 — 격자 위에 서 있는 것으로 읽히게
+    _hdrew = Sprites.drawFootH(ctx, _hkey, hx, hy + r, r * 2.4);
+  }
+  if (!_hdrew) {
+    ctx.beginPath(); ctx.arc(hx, hy, r, 0, Math.PI*2);
+    ctx.fillStyle=COLORS.hero; ctx.fill();
+    ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.stroke();
+    ctx.font=`${r}px sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('👑', hx, hy+1);
+  } else {
+    // 그림을 쓸 때는 발밑에 옅은 고리를 둬서 '지금 이 칸에 있다'가 보이게 한다
+    ctx.beginPath(); ctx.ellipse(hx, hy + r, r * 0.8, r * 0.3, 0, 0, Math.PI*2);
+    ctx.strokeStyle='rgba(245,158,11,0.55)'; ctx.lineWidth=1.5; ctx.stroke();
+  }
 
   // HP 바 + 레벨 뱃지
   const hMax = Math.round((lv.hp + BONUSES.heroHpFlat) * BONUSES.heroStatMult * BONUSES.sigilHeroHpMult);

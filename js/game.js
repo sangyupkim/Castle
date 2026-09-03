@@ -2222,31 +2222,48 @@ function updateHeroDefense(dt) {
   // 경로 한가운데 서면 지나가는 무리 전체가 매 초 다시 계산되므로,
   // 30마리짜리 웨이브에서는 영웅이 몇 초 만에 녹았다 — 서 있을 이유가 없어진다.
   //
-  // 이제 적 하나는 **한 번 지나갈 때 한 대만** 친다. 사거리 밖으로 나갔다가
-  // 다시 들어오면 그때 또 한 대다. 대신 부딪히는 동안 그 적은 느려진다 —
-  // 영웅을 경로에 세우는 것이 "몸으로 막는" 선택이 되도록.
+  // 그렇다고 '한 번 지나갈 때 한 대'로 두니 반대로 기울었다 — 영웅을 경로에
+  // 세워 두면 무리 전체가 느려지는데 영웅은 거의 안 아팠다. 몸으로 막는 것이
+  // 공짜면 그것 말고 다른 선택이 없어진다.
+  //
+  // 이제 붙어 있는 동안 **계속** 맞는다(하단 아레나와 같다). 대신 두 가지로 조인다:
+  //   ① 동시에 때릴 수 있는 마릿수에 상한(HERO_TOUCH_MAX) — 둘러쌀 자리는 유한하다
+  //   ② 방어력을 적 하나하나에서 뺀다 — 합계에서 한 번만 빼면 마릿수가 늘수록
+  //      방어력이 없는 것과 같아진다
   const touchR = CELL_W * 0.75;
-  let incoming = 0, touched = 0;
+  const heroDef = Math.round(lv.def * BONUSES.heroStatMult);
+  // 붙어 있는 적을 가까운 순으로 줄 세운다 — 앞의 몇만 실제로 때린다.
+  const inTouch = [];
   for (const e of gs.defenseEnemies) {
     if (e.dead || e.reached) continue;
-    const near = Math.hypot(e.x - hero.defX, e.y - hero.defY) < touchR;
-    if (!near) { e._heroHit = false; continue; }
-    touched++;
+    const d = Math.hypot(e.x - hero.defX, e.y - hero.defY);
+    if (d >= touchR) { e._heroAtkCd = 0; continue; }
     // 몸으로 막는다 — 영웅과 겹친 동안 이동이 느려진다
     e.heroBlockUntil = HERO_BLOCK_SLOW_DUR;
-    if (e._heroHit) continue;          // 이번 통과에서 이미 한 대 쳤다
-    e._heroHit = true;
-    incoming += e.dmg;
+    inTouch.push({ e, d });
+  }
+  inTouch.sort((a, b) => a.d - b.d);
+
+  let incoming = 0;
+  for (let i = 0; i < inTouch.length; i++) {
+    const e = inTouch[i].e;
+    // 둘러쌀 수 있는 수에는 한계가 있다. 이 줄이 없으면 서른 마리짜리 웨이브에서
+    // 영웅이 몇 초 만에 녹아, 상단에 세우는 것이 선택이 아니라 자살이 된다.
+    if (i >= HERO_TOUCH_MAX) { e._heroAtkCd = 0; continue; }
+    e._heroAtkCd = (e._heroAtkCd || 0) - dt;
+    if (e._heroAtkCd > 0) continue;
+    e._heroAtkCd = HERO_TOUCH_PERIOD;
+    // 방어력은 **적 하나하나에** 뺀다. 예전처럼 합계에서 한 번만 빼면
+    // 붙은 마릿수가 늘수록 방어력이 없는 것과 같아졌다.
+    incoming += Math.max(1, e.dmg - heroDef);
   }
   if (incoming > 0) {
-    const def  = Math.round(lv.def * BONUSES.heroStatMult);
-    const real = Math.max(1, incoming - def);
-    hero.hp -= real;
-    spawnFloaty(`-${real}`, hero.defX, hero.defY - 18, '#ef4444');
+    hero.hp -= incoming;
+    spawnFloaty(`-${incoming}`, hero.defX, hero.defY - 18, '#ef4444');
     FX.burst(hero.defX, hero.defY, '#ef4444', 5, 10);
     if (hero.hp <= 0) { killHero(gs); return; }
   }
-  hero.blocking = touched;
+  hero.blocking = inTouch.length;
 }
 
 // 기억해둔 자리에 영웅을 다시 세운다. 층이 넘어갈 때와 부활할 때 부른다.

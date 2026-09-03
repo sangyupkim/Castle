@@ -300,12 +300,13 @@ self.SPRITE_FILES = {
   'mob.warlord.2': 'mobs2/warlord_2.png',
   'mob.warlord.3': 'mobs2/warlord_3.png',
 
-  // 🛡 방패병 — 0x72 knight_m(16×28). 이 팩에서 큰 방패를 든 유일한 개체다.
-  // 지금까지 그림이 없어 방패 이모지(🛡)로 그려지던 자리다.
-  'mob.shieldman.0': 'mobs2/shieldman_0.png',
-  'mob.shieldman.1': 'mobs2/shieldman_1.png',
-  'mob.shieldman.2': 'mobs2/shieldman_2.png',
-  'mob.shieldman.3': 'mobs2/shieldman_3.png',
+  // 😈 뿔귀 — 0x72 chort(16×23). 붉은 몸에 흰 뿔이라 지금 화면의 어떤 것과도 안 겹친다.
+  // 처음엔 knight_m(방패 든 파란 기사)을 썼는데, 아군 수호병과 색·실루엣이 거의 같아
+  // 적인지 아군인지 구별되지 않았다. 이름도 둘 다 '방패병'이었다.
+  'mob.hornfiend.0': 'mobs2/hornfiend_0.png',
+  'mob.hornfiend.1': 'mobs2/hornfiend_1.png',
+  'mob.hornfiend.2': 'mobs2/hornfiend_2.png',
+  'mob.hornfiend.3': 'mobs2/hornfiend_3.png',
 
   // 👹 마왕 — 0x72 던전 팩의 big_demon(32×36). 100층에 한 마리만 나오므로
   // 배우(SPRITE_ACTORS)로 등록하지 않고 낱장 8프레임을 시간으로 돌린다.

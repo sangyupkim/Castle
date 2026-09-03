@@ -262,7 +262,9 @@ function createWaveManager() {
         gs.battle.phase = 'idle_defeated';
         this.wipedAt = this.elapsed;
         addLog(gs.battle, '☠️ 병력 전멸 — 하단이 뚫렸습니다', '#ef4444');
-        launchCharge(gs, wipeCost(this.timer, this.waveIndex), 'wipe');
+        // 살아 있는 몹 + 남은 시간에 나왔을 몹이 전부 성문으로 간다
+        const liveNow = gs.arena.mobs.filter(m => !m.dead).length;
+        launchCharge(gs, wipeCost(this.timer, this.waveIndex, liveNow, gs.arena), 'wipe');
         clearArena(gs);
       }
 

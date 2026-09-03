@@ -1003,17 +1003,54 @@ const WIPE_TIER   = 0.55;  // 층당 가산
 // 전멸하나 62 대 42, 1.5배밖에 안 갈렸다. 1초 만에 무너진 것과 59초를 버틴 것이
 // 거의 같은 값이면 "버틴다"는 행동에 값이 없다.
 // 비율로 바꾸면 층과 무관하게 늘 같은 배수로 갈린다.
-const WIPE_EARLY_MULT = 1.0;   // 시작하자마자 무너지면 두 배
+const WIPE_EARLY_MULT = 1.0;   // (구식 공식의 잔재 — 지금은 per-mob 쪽을 쓴다)
+// 성문에 닿는 한 마리가 물고 가는 값 — **성벽 최대치의 이 비율**이다.
+//
+// 정액으로 두면 초반과 후반 중 한쪽이 반드시 망가진다. 성벽이 100일 때는
+// 한 마리 2.4가 상한에 눌려 몇 마리가 오든 똑같았고, 성벽이 수만일 때는
+// 예순 마리가 와도 긁힌 자국이었다. 비율로 두면 규칙이 하나로 읽힌다 —
+// **성문에 닿은 한 마리가 성벽의 1%를 문다.**
+const WIPE_PER_MOB_PCT  = 0.010;
 // 다만 한 번의 전멸이 만피에서 즉사가 되지는 않게 상한을 둔다.
 // 아레나에서 전멸은 예외가 아니라 흔한 일이다.
-const WIPE_HP_CAP_PCT = 0.55;
-function wipeCost(remainSec, waveIndex) {
-  const t    = Math.max(0, waveIndex || 0);
-  const dur  = (typeof waveDuration === 'function') ? Math.max(1, waveDuration()) : 60;
-  const left = Math.max(0, Math.min(1, (remainSec || 0) / dur));
-  const raw  = (WIPE_BASE + t * WIPE_TIER) * (1 + left * WIPE_EARLY_MULT);
-  const cap  = (typeof baseHpMax === 'function')
-    ? Math.max(WIPE_BASE, Math.round(baseHpMax() * WIPE_HP_CAP_PCT)) : Infinity;
+// 예전 0.55는 너무 물러서 하단을 통째로 버리는 쪽이 늘 쌌다 —
+// 두 번 뚫리면 죽는 자리까지 올린다.
+const WIPE_HP_CAP_PCT = 0.80;
+// 남은 시간 동안 **나왔을** 마릿수. 아레나는 정해진 대기열이 아니라
+// spawnInterval(경과시간)로 계속 뽑으므로, 남은 시간을 그 간격으로 적분해 센다.
+function pendingArenaSpawns(elapsed, remainSec, spawnMult) {
+  let t = Math.max(0, elapsed || 0);
+  let left = Math.max(0, remainSec || 0);
+  let n = 0, guard = 0;
+  while (left > 0 && guard++ < 4000) {
+    const iv = Math.max(0.05, spawnInterval(t) * (spawnMult || 1));
+    left -= iv; t += iv;
+    if (left >= 0) n++;
+  }
+  return n;
+}
+
+// 하단이 뚫렸을 때 성벽이 무는 값.
+//
+// 예전에는 "기본값 + 층 × 계수"짜리 공식이었다. 그러면 **얼마나 일찍 뚫렸는지가
+// 거의 반영되지 않는다** — 20초 만에 전멸한 판과 59초까지 버틴 판이 두 배도
+// 차이 나지 않았다. 하단을 아예 포기하는 쪽이 늘 쌌다.
+//
+// 이제는 마릿수로 센다. 지금 판에 살아 있는 몹 + **남은 시간에 나왔을 몹**이
+// 전부 성문으로 간다. 20초에 뚫리면 40초어치가 통째로 얹히므로, 일찍 무너질수록
+// 정직하게 더 아프다.
+function wipeCost(remainSec, waveIndex, liveMobs, arena) {
+  const a   = arena || (typeof gs !== 'undefined' && gs ? gs.arena : null);
+  const el  = a ? (a.elapsed || 0) : 0;
+  const sm  = a ? (a.spawnMult || 1) : 1;
+  const pend = pendingArenaSpawns(el, remainSec, sm);
+  const n    = Math.max(0, liveMobs || 0) + pend;
+  // 한 마리가 성문에서 물고 가는 값 — 성벽 최대치의 1%
+  const hpMax = (typeof baseHpMax === 'function') ? baseHpMax() : 100;
+  const per   = Math.max(1, hpMax * WIPE_PER_MOB_PCT);
+  // 한 마리도 안 남았는데 뚫렸다면(시간이 다 된 전멸) 최소한은 문다
+  const raw  = Math.max(WIPE_BASE, n * per);
+  const cap  = Math.max(WIPE_BASE, Math.round(hpMax * WIPE_HP_CAP_PCT));
   return Math.min(cap, Math.round(raw));
 }
 
@@ -1261,14 +1298,19 @@ const BATTLE_MOB_TYPES = {
   orc:      { id:'orc',      name:'오크',     hp:80,  atk:15, def:4,  atkPeriod:1.2, range:22,  moveSpd:55,  radius:8,  goldReward:8,  color:'#818cf8', icon:'👹', behavior:'charge' },
   darkarch: { id:'darkarch', name:'다크아처', hp:45,  atk:12, def:2,  atkPeriod:1.4, range:140, moveSpd:60,  radius:7,  goldReward:9,  color:'#c084fc', icon:'🏹', behavior:'kite', ranged:true },
   ogre:     { id:'ogre',     name:'오우거',   hp:150, atk:22, def:6,  atkPeriod:1.6, range:26,  moveSpd:45,  radius:10, goldReward:15,  color:'#a16207', icon:'🧌', behavior:'charge' },
-  // 🛡 방패병 — 화살을 막는다. 궁수 한 종류로 칸을 다 채우는 것이 늘 정답이던 것을
-  // 되돌리려고 넣었다. 궁수를 약하게 만드는 대신 **궁수만으로는 안 되는 적**을 둔다 —
-  // 숫자를 깎으면 궁수가 나빠지지만, 이 적을 두면 검사를 섞을 이유가 생긴다.
-  // 붙어서 때리면 그대로 아프다. 막는 것은 날아오는 것뿐이다.
+  // 😈 뿔귀 — 날아오는 것이 뿔과 가죽에 튕긴다. 궁수 한 종류로 칸을 다 채우는 것이
+  // 늘 정답이던 것을 되돌리려고 넣었다. 궁수를 약하게 만드는 대신
+  // **궁수만으로는 안 되는 적**을 둔다 — 숫자를 깎으면 궁수가 나빠지지만,
+  // 이 적을 두면 검사를 섞을 이유가 생긴다. 붙어서 때리면 그대로 아프다.
+  //
   // 저항 0.65 + 방어 5는 두 겹으로 물려 궁수가 '약한' 게 아니라 '안 통하는' 것이 됐다 —
-  // 궁수 여섯이 30초 동안 방패병 여섯을 한 마리도 못 잡았다. 그건 편성을 섞게 만드는 게
-  // 아니라 궁수를 버리게 만든다. 방어를 낮추고 저항만 남겨 한 겹으로 만든다.
-  shieldman:{ id:'shieldman',name:'방패병',   hp:110, atk:14, def:2,  atkPeriod:1.3, range:22,  moveSpd:58,  radius:9,  goldReward:13,  color:'#38bdf8', icon:'🛡', behavior:'charge', rangedResist:0.50 },
+  // 궁수 여섯이 30초 동안 여섯 마리를 한 마리도 못 잡았다. 그건 편성을 섞게 만드는 게
+  // 아니라 궁수를 버리게 만든다. 방어를 낮추고 저항만 남겨 한 겹으로 만들었다.
+  //
+  // 예전 이름은 '방패병', 그림은 방패 든 파란 기사였다. 그런데 **아군에도 방패병이
+  // 있다**(guardian). 이름이 같고 색·실루엣까지 겹쳐서, 화면에서 적인지 아군인지
+  // 구별되지 않았다. 붉은 뿔 달린 마귀로 갈아 이름부터 겹치지 않게 했다.
+  hornfiend:{ id:'hornfiend',name:'뿔귀',     hp:110, atk:14, def:2,  atkPeriod:1.3, range:22,  moveSpd:58,  radius:9,  goldReward:13,  color:'#ef4444', icon:'😈', behavior:'charge', rangedResist:0.50 },
   boss:     { id:'boss',     name:'보스',     hp:200, atk:25, def:8,  atkPeriod:1.5, range:30,  moveSpd:40,  radius:11, goldReward:24,  color:'#ef4444', icon:'💀', behavior:'dash',  isBoss:true },
   warlord:  { id:'warlord',  name:'마왕',     hp:520, atk:40, def:14, atkPeriod:1.8, range:34,  moveSpd:35,  radius:11, goldReward:70, color:'#db2777', icon:'🐲', behavior:'slam',  isBoss:true }
 };
@@ -1455,10 +1497,10 @@ const WAVE_DEFS = [
   // ── 1-3 : 오크 · 체력 벽 ─────────────────────────────────────────────────
   { defenseEnemies:[{type:'goblin',count:8,interval:1200},{type:'orc',count:2,interval:4000}], arenaPool:[['goblin',8],['hound',5],['orc',3]] },
   { defenseEnemies:[{type:'goblin',count:9,interval:1100},{type:'orc',count:3,interval:3500}], arenaPool:[['goblin',7],['hound',5],['orc',5]] },
-  { defenseEnemies:[{type:'goblin',count:10,interval:1000},{type:'orc',count:3,interval:3200}], arenaPool:[['goblin',6],['hound',5],['orc',6],['shieldman',3]] },
+  { defenseEnemies:[{type:'goblin',count:10,interval:1000},{type:'orc',count:3,interval:3200}], arenaPool:[['goblin',6],['hound',5],['orc',6],['hornfiend',3]] },
   // ── 1-4 : 다크아처 · 접근 강제 ───────────────────────────────────────────
-  { defenseEnemies:[{type:'goblin',count:8,interval:1000},{type:'brute',count:1,interval:6000},{type:'bat',count:3,interval:3000}], arenaPool:[['goblin',6],['hound',5],['orc',5],['shieldman',4],['darkarch',3]] },
-  { defenseEnemies:[{type:'orc',count:4,interval:2500},{type:'brute',count:1,interval:6000},{type:'bat',count:4,interval:2600}], arenaPool:[['goblin',5],['hound',4],['orc',5],['shieldman',4],['darkarch',4]] },
+  { defenseEnemies:[{type:'goblin',count:8,interval:1000},{type:'brute',count:1,interval:6000},{type:'bat',count:3,interval:3000}], arenaPool:[['goblin',6],['hound',5],['orc',5],['hornfiend',4],['darkarch',3]] },
+  { defenseEnemies:[{type:'orc',count:4,interval:2500},{type:'brute',count:1,interval:6000},{type:'bat',count:4,interval:2600}], arenaPool:[['goblin',5],['hound',4],['orc',5],['hornfiend',4],['darkarch',4]] },
   { defenseEnemies:[{type:'orc',count:5,interval:2200},{type:'brute',count:2,interval:5000},{type:'bat',count:5,interval:2400}], arenaPool:[['goblin',4],['hound',5],['orc',7],['darkarch',5]] },
   // ── 1-5 : 오우거 · 고타격 저속 ───────────────────────────────────────────
   { defenseEnemies:[{type:'runner',count:6,interval:1400},{type:'orc',count:3,interval:2200},{type:'bat',count:5,interval:2200}], arenaPool:[['goblin',4],['hound',5],['orc',6],['darkarch',4],['ogre',2]] },
@@ -1777,9 +1819,9 @@ const ENDLESS_ARENA_UNLOCK = [
   { tier: 1,  type: 'goblin'  },
   { tier: 3,  type: 'hound'   },
   { tier: 6,  type: 'orc'     },
-  // 🛡 방패병 — 다크아처(원거리 적)보다 먼저 나온다. 궁수로만 밀던 편성이
+  // 😈 뿔귀 — 다크아처(원거리 적)보다 먼저 나온다. 궁수로만 밀던 편성이
   // 처음으로 막히는 자리다.
-  { tier: 7,  type: 'shieldman'},
+  { tier: 7,  type: 'hornfiend'},
   { tier: 9,  type: 'darkarch'},
   { tier: 13, type: 'ogre'    },
   { tier: 17, type: 'boss'    },
@@ -2185,6 +2227,10 @@ const HERO_DEF_MOVE_SPD = 105;  // 상단 영웅 이동속도(px/s)
 // 👑 영웅과 겹친 적은 느려진다 — 상단에 세우는 것이 "몸으로 막는" 선택이 되도록
 const HERO_BLOCK_SLOW      = 0.45;  // 이동속도 배율
 const HERO_BLOCK_SLOW_DUR  = 0.35;  // 겹침이 끊겨도 이만큼은 남는다(초)
+// 붙어 있는 적이 영웅을 때리는 주기와, 동시에 때릴 수 있는 마릿수.
+// 상단은 아레나처럼 개체마다 공격 주기를 굴리지 않으므로 여기서 한 번에 정한다.
+const HERO_TOUCH_PERIOD    = 1.0;   // 초
+const HERO_TOUCH_MAX       = 6;     // 둘러쌀 수 있는 자리는 유한하다
 
 // 몹 강화 곡선.
 // v1.0에서는 "처치 1회마다 +8%"였다. 한 웨이브에 10마리쯤 잡던 그룹 전투에서는
