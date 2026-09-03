@@ -137,7 +137,11 @@ function sellGear(gs, uid) {
   return v;
 }
 
-// ── 🔮 영웅 스킬 ─────────────────────────────────────────────────────────────
+// ── 🧬 패시브 스킬 ───────────────────────────────────────────────────────────
+// 상점에서 '영웅 스킬'로 팔던 것들이다. 이름과 달리 전부 **패시브**라
+// 아래 ⚡액티브와 구별이 안 됐다 — 이름을 물건에 맞췄다.
+// 각인과 무관하게 누구에게나 같은 것이 나온다. 다만 sigil이 붙은 몇은
+// 그 각인일 때만 매대에 오른다(아래 SIGIL_PASSIVES).
 // 스킬은 굴림값(roll)을 함께 들고 다닌다. 같은 '광폭'이라도 0.72짜리와 1.34짜리는
 // 다른 물건이다 — 좋은 굴림을 뽑는 것 자체가 상점을 계속 들여다볼 이유가 된다.
 const SKILL_ROLL_MIN = 0.70;
@@ -167,7 +171,29 @@ const HERO_SKILL_POOL = [
   { id:'s_avatar', name:'전쟁의 화신',icon:'⚡', grade:'epic',   cost:150,
     base:{atk:22, aspd:0.14, crit:0.06}, note:'공격 전반' },
 ];
-function skillDef(id) { return HERO_SKILL_POOL.find(s => s.id === id); }
+// 각인 색이 도는 패시브 넷. 공통 열 개는 누구에게나 똑같이 나오고,
+// 이것만 그 각인일 때 매대에 섞여 든다 — "달라도 똑같은 게 나오게, 다른 게
+// 섞여 나와도 좋다"는 요구를 이렇게 갈랐다. 공통이 기본이고 이쪽이 양념이다.
+// 값은 공통 희귀급과 같은 자리에 두되, 그 각인이 하는 일을 한 칸 더 밀어 준다.
+const SIGIL_PASSIVES = [
+  { id:'s_edge',   sigil:'blade',    name:'검성의 결의', icon:'⚔️', grade:'rare', cost:74,
+    base:{atk:16, crit:0.05},        note:'검성 — 공격력 · 치명타' },
+  { id:'s_bastion',sigil:'warden',   name:'수호의 맹세', icon:'🛡', grade:'rare', cost:74,
+    base:{hp:70, def:6, regen:1},    note:'수호자 — 체력 · 방어 · 재생' },
+  { id:'s_arcane', sigil:'sorcerer', name:'술사의 정수', icon:'🔮', grade:'rare', cost:76,
+    base:{skill:0.35, aspd:0.06},    note:'술사 — 스킬 피해 · 공격속도' },
+  { id:'s_hawk',   sigil:'ranger',   name:'신궁의 눈',   icon:'🏹', grade:'rare', cost:76,
+    base:{range:0.30, crit:0.06},    note:'신궁 — 사거리 · 치명타' },
+];
+function skillDef(id) {
+  return HERO_SKILL_POOL.find(s => s.id === id)
+      || SIGIL_PASSIVES.find(s => s.id === id);
+}
+// 지금 각인에서 매대에 오를 수 있는 패시브 전부
+function availablePassives(sigilId) {
+  const sg = sigilId || ((typeof activeSigil === 'function') ? activeSigil().id : null);
+  return HERO_SKILL_POOL.concat(SIGIL_PASSIVES.filter(s => s.sigil === sg));
+}
 
 function rollSkillPower(grade) {
   const lo = SKILL_GRADE_FLOOR[grade] || SKILL_ROLL_MIN;
@@ -233,7 +259,79 @@ const HERO_ACTIVE_POOL = [
     desc:'즉시 골드 획득 (층에 비례)',
     note:'마을 값이 오른 만큼 벌이도 필요하다' },
 ];
-function activeDef(id) { return HERO_ACTIVE_POOL.find(a => a.id === id); }
+// ── 🏅 각인 전용 액티브 ──────────────────────────────────────────────────────
+// 위의 여덟은 누구나 산다. 여기 열둘은 **각인마다 셋씩**, 그 각인일 때만 매대에
+// 올라온다. 정합(ACTIVE_FIT)은 "맞으면 싸다"는 할인이라 각인을 바꿔도 손해가
+// 크지 않았는데, 그러다 보니 각인이 스킬 구성을 바꾸지는 못했다.
+// 전용 셋이 있으면 각인을 고르는 일이 "어떤 스킬을 쓸 것인가"가 된다.
+//
+// 잠그는 것은 **매대뿐**이다. 한 번 산 스킬은 각인을 바꿔도 남는다 —
+// 산 물건이 각인 하나 바꿨다고 사라지면 아무도 각인을 안 바꾼다.
+const SIGIL_ACTIVE_POOL = [
+  // ⚔️ 검성 — 붙어서, 한 점에, 세게
+  { id:'a_whirl',  sigil:'blade', name:'회전 베기', icon:'🌀', grade:'rare', cost:86, mp:22, cd:14, lane:'bottom',
+    desc:'영웅 주위 적 전체에 공격력 ×2.2 · 뒤로 밀어낸다',
+    note:'둘러싸였을 때 한 번에 걷어낸다' },
+  { id:'a_exec',   sigil:'blade', name:'참수',      icon:'🗡', grade:'epic', cost:128, mp:28, cd:18, lane:'bottom',
+    desc:'체력 25% 이하 적을 즉사 · 아니면 공격력 ×6',
+    note:'깎아 둔 적을 확실히 끊는다' },
+  { id:'a_frenzy', sigil:'blade', name:'혈전',      icon:'🩸', grade:'rare', cost:92, mp:24, cd:22, lane:'bottom',
+    desc:'8초간 부대 전체 공격력 ×1.5 · 즉시 영웅 HP 20% 회복',
+    note:'짧게 몰아치는 구간을 만든다' },
+
+  // 🛡 수호자 — 버티고, 끌고, 되돌려준다
+  { id:'a_taunt',  sigil:'warden', name:'도발',      icon:'📢', grade:'common', cost:66, mp:18, cd:15, lane:'bottom',
+    desc:'아레나 적을 영웅에게 끌어모으고 5초간 부대 피해 40% 감소',
+    note:'뒷줄이 맞고 있을 때 앞으로 당긴다' },
+  { id:'a_aegis',  sigil:'warden', name:'불굴의 방벽', icon:'🛡', grade:'epic', cost:124, mp:30, cd:26, lane:'both',
+    desc:'7초간 부대 피해 60% 감소 · 기지 피해도 함께 막는다',
+    note:'두 전선을 한꺼번에 버틴다' },
+  { id:'a_thorn',  sigil:'warden', name:'가시 갑주', icon:'🌵', grade:'rare', cost:88, mp:22, cd:20, lane:'bottom',
+    desc:'10초간 근접으로 받은 피해의 45%를 되돌린다',
+    note:'맞을수록 이득이 되는 유일한 스킬' },
+
+  // 🔮 술사 — 넓게, 묶고, 되감는다
+  { id:'a_nova',   sigil:'sorcerer', name:'서리 폭발', icon:'❄️', grade:'rare', cost:90, mp:24, cd:15, lane:'bottom',
+    desc:'넓은 범위에 공격력 ×2.4 · 4초간 둔화',
+    note:'물량을 한 번에 묶는다' },
+  { id:'a_chain',  sigil:'sorcerer', name:'연쇄 번개', icon:'🔗', grade:'epic', cost:126, mp:28, cd:16, lane:'bottom',
+    desc:'가까운 적 여섯을 튀며 공격력 ×1.9씩',
+    note:'흩어진 적을 골라 때린다' },
+  { id:'a_rift',   sigil:'sorcerer', name:'시간 균열', icon:'🌀', grade:'epic', cost:132, mp:32, cd:24, lane:'top',
+    desc:'상단 적 전체를 경로 세 칸 뒤로 되돌린다',
+    note:'관문 러시를 통째로 물린다 — 타워가 다시 때릴 시간을 번다' },
+
+  // 🏹 신궁 — 멀리서, 꿰뚫고, 표시한다
+  { id:'a_arrows', sigil:'ranger', name:'화살비',    icon:'🏹', grade:'rare', cost:88, mp:24, cd:16, lane:'bottom',
+    desc:'아레나 전역에 공격력 ×1.9',
+    note:'범위가 곧 화면 전체 — 위치를 안 봐도 된다' },
+  { id:'a_pierce', sigil:'ranger', name:'관통 사격', icon:'➶', grade:'epic', cost:122, mp:26, cd:14, lane:'bottom',
+    desc:'영웅이 보는 방향으로 관통하는 화살 · 맞은 전부에 공격력 ×3.4',
+    note:'줄지어 오는 적을 한 줄로 꿴다' },
+  { id:'a_mark',   sigil:'ranger', name:'사냥 표식', icon:'🎯', grade:'rare', cost:84, mp:20, cd:18, lane:'both',
+    desc:'양쪽 전선에서 가장 단단한 적에게 12초간 받는 피해 +60%',
+    note:'보스와 정예를 녹이는 준비 동작' },
+];
+
+// 지금 각인에서 살 수 있는 액티브 전부 (공통 + 그 각인 전용)
+function availableActives(sigilId) {
+  const sg = sigilId || ((typeof activeSigil === 'function') ? activeSigil().id : null);
+  return HERO_ACTIVE_POOL.concat(SIGIL_ACTIVE_POOL.filter(a => a.sigil === sg));
+}
+function activeDef(id) {
+  return HERO_ACTIVE_POOL.find(a => a.id === id)
+      || SIGIL_ACTIVE_POOL.find(a => a.id === id);
+}
+// 전용 스킬은 제 각인에서 늘 정합이다 — ACTIVE_FIT에 또 적지 않는다
+// 각인 전용 표시 — 상점 줄 끝에 붙는다. "이 각인이라 살 수 있는 물건"이라는 뜻이다.
+function sigilBadge(sigilId) {
+  const sg = (typeof HERO_SIGILS !== 'undefined') ? HERO_SIGILS.find(x => x.id === sigilId) : null;
+  return sg ? `${sg.icon}${sg.name} 전용` : '전용';
+}
+function activeSigilOwner(id) {
+  const d = SIGIL_ACTIVE_POOL.find(a => a.id === id);
+  return d ? d.sigil : null;
+}
 
 // ── 각인 정합 ────────────────────────────────────────────────────────────────
 // 액티브 여덟 개가 각인과 무관하게 똑같이 돌았다. 그래서 각인은 아레나 스킬만
@@ -256,9 +354,12 @@ const ACTIVE_FIT_MP = 0.70;   // 맞으면 MP 30% 싸고
 const ACTIVE_FIT_CD = 0.80;   // 쿨다운 20% 짧다
 
 function activeFitsSigil(id, sigilId) {
+  const sg = sigilId || ((typeof activeSigil === 'function') ? activeSigil().id : null);
+  // 각인 전용 스킬은 제 각인에서 늘 정합이다
+  const owner = activeSigilOwner(id);
+  if (owner) return owner === sg;
   const list = ACTIVE_FIT[id];
   if (!list) return false;
-  const sg = sigilId || ((typeof activeSigil === 'function') ? activeSigil().id : null);
   return list.includes(sg);
 }
 // 지금 각인 기준의 실제 MP·쿨다운. 화면과 시전이 같은 값을 써야 한다.
@@ -461,7 +562,7 @@ const STAT_PANEL_ROWS = [
 function refreshSkillOffers(gs) {
   const g = heroGear(gs);
   refreshActiveOffers(gs);
-  const picked = [], avail = HERO_SKILL_POOL.slice();
+  const picked = [], avail = availablePassives();
   while (picked.length < 3 && avail.length) {
     const i = Math.floor(Math.random() * avail.length);
     const def = avail.splice(i, 1)[0];
@@ -473,7 +574,8 @@ function refreshSkillOffers(gs) {
 function refreshActiveOffers(gs) {
   const g = heroGear(gs);
   if (!g.actives) g.actives = [];
-  const pool = HERO_ACTIVE_POOL.filter(a => !g.actives.includes(a.id));
+  // 각인 전용까지 포함해서 굴린다 — 전용이 매대에 안 오르면 존재하지 않는 것과 같다
+  const pool = availableActives().filter(a => !g.actives.includes(a.id));
   const picked = [], avail = pool.slice();
   while (picked.length < 2 && avail.length) {
     picked.push(avail.splice(Math.floor(Math.random() * avail.length), 1)[0].id);
@@ -601,6 +703,20 @@ function unlockSigil(gs, id) {
   return true;
 }
 
+// ── 연출 보조 ────────────────────────────────────────────────────────────────
+// FX가 아직 안 실린 상황(로드 순서·테스트 하네스)에서도 시전 자체는 성립해야 한다.
+function castFx(kind, o) {
+  if (typeof FX !== 'undefined' && FX.cast) FX.cast(kind, o);
+}
+// 영웅이 지금 서 있는 화면 좌표. 하단에 있으면 아레나의 영웅 유닛,
+// 상단이면 방어 격자 위의 좌표, 둘 다 없으면 아레나 한가운데.
+function heroSpot(gs) {
+  const h = gs.battle && gs.battle.ourTeam ? gs.battle.ourTeam.find(u => u.isHero && !u.dead) : null;
+  if (h) return { x:h.x, y:h.y };
+  if (gs.hero && gs.hero.placement === 'top') return { x:gs.hero.defX, y:gs.hero.defY };
+  return arenaCenter();
+}
+
 // ── 액티브 시전 ──────────────────────────────────────────────────────────────
 // 효과는 전부 여기 한 군데에 모은다. 상단·하단 어느 쪽을 건드리든
 // "어떤 스킬이 무엇을 하는가"를 한 화면에서 읽을 수 있어야 고칠 수 있다.
@@ -627,18 +743,30 @@ function castHeroActive(gs, id, opts) {
     case 'a_overload': {
       if (!gs.towers.length) break;
       for (const t of gs.towers) t.overloadUntil = OVERLOAD_DURATION;
+      castFx('wash', { y:0, h:DEFENSE_H, color:'#fbbf24', dur:0.5 });
+      for (const t of gs.towers) {
+        const c = cellCenter(t.col, t.row);
+        castFx('pillar', { x:c.x, y:c.y + 14, h:44, w:18, color:'#fbbf24', dur:0.45 });
+      }
       ok = true; msg = `⚡ 타워 ${gs.towers.length}기 과부하`;
       break;
     }
     case 'a_meteor': {
       if (!tops.length) break;
       const dmg = Math.max(1, Math.round(atk * 2.2));
-      for (const e of tops) hurtDefenseEnemy(e, dmg, true, x => onDefenseKill(x, true), 1, 0);
+      for (const e of tops) {
+        hurtDefenseEnemy(e, dmg, true, x => onDefenseKill(x, true), 1, 0);
+        castFx('nova', { x:e.x, y:e.y, r:26, color:'#fb923c', dur:0.45 });
+      }
+      castFx('rain', { x:0, y:0, w:CW, h:DEFENSE_H, n:26, color:'#fb923c', dur:0.7 });
       ok = true; msg = `☄️ 상단 ${tops.length}마리 −${dmg}`;
       break;
     }
     case 'a_bulwark': {
       gs.baseWardUntil = Math.max(gs.baseWardUntil || 0, 6);
+      const bc = cellCenter(CASTLE_C, CASTLE_R);
+      castFx('runes', { x:bc.x, y:bc.y, r:44, color:'#38bdf8', dur:0.8 });
+      castFx('nova',  { x:bc.x, y:bc.y, r:70, color:'#38bdf8', dur:0.55 });
       ok = true; msg = '🧱 성벽 결계 6초';
       break;
     }
@@ -646,6 +774,9 @@ function castHeroActive(gs, id, opts) {
       for (const e of tops) { e.slowTimer = Math.max(e.slowTimer || 0, 3.5); e.slowFactor = Math.max(e.slowFactor || 0, 0.7); }
       for (const m of mobs) m.slowUntil = Math.max(m.slowUntil || 0, 3.5);
       if (!tops.length && !mobs.length) break;
+      castFx('wash', { y:0, h:DEFENSE_H, color:'#67e8f9', dur:0.6 });
+      castFx('wash', { y:ARENA_Y, h:ARENA_H, color:'#67e8f9', dur:0.6 });
+      for (const m of mobs) castFx('runes', { x:m.x, y:m.y, r:16, color:'#67e8f9', dur:0.7 });
       ok = true; msg = `🕐 ${tops.length + mobs.length}마리 정지`;
       break;
     }
@@ -654,7 +785,9 @@ function castHeroActive(gs, id, opts) {
       const t = mobs.reduce((a, m) => (m.hp > a.hp ? m : a), mobs[0]);
       const dmg = arenaDamage(atk * 4.5, t.def);
       hurtMob(gs, t, dmg, '#fbbf24');
-      arena.bursts.push({ x:t.x, y:t.y, r:44, color:'#fbbf24', t:0, dur:0.4 });
+      castFx('pillar', { x:t.x, y:t.y + 8, h:130, w:30, color:'#fbbf24', dur:0.5 });
+      castFx('nova',   { x:t.x, y:t.y, r:52, color:'#fde047', dur:0.45 });
+      if (typeof FX !== 'undefined') FX.burst(t.x, t.y, '#fde047', 16, 18);
       ok = true; msg = `💥 심판 −${dmg}`;
       break;
     }
@@ -668,7 +801,9 @@ function castHeroActive(gs, id, opts) {
       const hAmt = Math.min(heroMaxHp() - gs.hero.hp, Math.round(heroMaxHp() * 0.30));
       gs.hero.hp += Math.max(0, hAmt); healed += Math.max(0, hAmt);
       if (healed <= 0) break;
-      if (arena) arena.bursts.push({ x:arenaCenter().x, y:arenaCenter().y, r:120, color:'#34d399', t:0, dur:0.5 });
+      for (const u of gs.battle.ourTeam)
+        if (!u.dead) castFx('runes', { x:u.x, y:u.y, r:15, color:'#34d399', dur:0.7 });
+      castFx('nova', { x:arenaCenter().x, y:arenaCenter().y, r:150, color:'#34d399', dur:0.55 });
       ok = true; msg = `💚 +${healed}`;
       break;
     }
@@ -683,15 +818,206 @@ function castHeroActive(gs, id, opts) {
         hurtMob(gs, m, arenaDamage(atk * 1.6, m.def), '#a5b4fc');
         n++;
       }
-      arena.bursts.push({ x:cx, y:cy, r:130, color:'#a5b4fc', t:0, dur:0.45 });
+      castFx('nova',  { x:cx, y:cy, r:140, color:'#a5b4fc', dur:0.5 });
+      castFx('runes', { x:cx, y:cy, r:52, color:'#818cf8', dur:0.75 });
       ok = true; msg = `🌪 ${n}마리 소집`;
       break;
     }
+    // ⚔️ 검성 전용 ───────────────────────────────────────────────────────
+    case 'a_whirl': {
+      const c = heroSpot(gs), R = 92;
+      const hit = mobs.filter(m => Math.hypot(m.x - c.x, m.y - c.y) <= R);
+      if (!hit.length) break;
+      for (const m of hit) {
+        hurtMob(gs, m, arenaDamage(atk * 2.2, m.def), '#f87171');
+        // 뒤로 민다 — 둘러싸인 것을 푸는 게 이 스킬의 일이다
+        const d = Math.max(1, Math.hypot(m.x - c.x, m.y - c.y));
+        m.x += (m.x - c.x) / d * 34; m.y += (m.y - c.y) / d * 34;
+        clampToArena(m, m.radius);
+      }
+      castFx('slash', { x:c.x, y:c.y, r:R, n:3, color:'#f87171', dur:0.45 });
+      castFx('nova',  { x:c.x, y:c.y, r:R, color:'#fca5a5', dur:0.4 });
+      ok = true; msg = `🌀 ${hit.length}마리 베기`;
+      break;
+    }
+    case 'a_exec': {
+      if (!mobs.length) break;
+      // 가장 약해진 놈부터 — '깎아 둔 것을 끊는' 스킬이라 체력 비율로 고른다
+      const t = mobs.reduce((a, m) => ((m.hp / m.maxHp) < (a.hp / a.maxHp) ? m : a), mobs[0]);
+      const low = (t.hp / t.maxHp) <= 0.25;
+      const dmg = low ? t.hp : arenaDamage(atk * 6, t.def);
+      hurtMob(gs, t, dmg, '#f43f5e');
+      castFx('beam',  { x1:t.x, y1:ARENA_Y, x2:t.x, y2:t.y, w:18, color:'#f43f5e', dur:0.35 });
+      castFx('slash', { x:t.x, y:t.y, r:46, n:2, color:'#fecdd3', dur:0.4 });
+      if (typeof FX !== 'undefined') { FX.burst(t.x, t.y, '#f43f5e', 20, 20); FX.shake(5, 0.25); }
+      ok = true; msg = low ? '🗡 참수!' : `🗡 −${dmg}`;
+      break;
+    }
+    case 'a_frenzy': {
+      // 부대 공격력 버프는 아레나 버프판(rage)에 얹는다 — 계산 경로를 새로 파지 않는다
+      arena.buffs = (arena.buffs || []).filter(b => b.kind !== 'rage');
+      arena.buffs.push({ kind:'rage', mult:1.5, until: arena.elapsed + 8 });
+      const heal = Math.round(heroMaxHp() * 0.20);
+      gs.hero.hp = Math.min(heroMaxHp(), gs.hero.hp + heal);
+      for (const u of gs.battle.ourTeam)
+        if (!u.dead) castFx('runes', { x:u.x, y:u.y, r:15, color:'#f43f5e', dur:0.75 });
+      castFx('wash', { y:ARENA_Y, h:ARENA_H, color:'#f43f5e', dur:0.5 });
+      ok = true; msg = `🩸 8초 공격력 ×1.5 · +${heal}`;
+      break;
+    }
+
+    // 🛡 수호자 전용 ──────────────────────────────────────────────────────
+    case 'a_taunt': {
+      if (!mobs.length) break;
+      const c = heroSpot(gs);
+      for (const m of mobs) {
+        m.x += (c.x - m.x) * 0.6; m.y += (c.y - m.y) * 0.6;
+        clampToArena(m, m.radius);
+      }
+      arena.buffs = (arena.buffs || []).filter(b => b.kind !== 'guard');
+      arena.buffs.push({ kind:'guard', mult:0.60, until: arena.elapsed + 5 });
+      castFx('nova',  { x:c.x, y:c.y, r:150, color:'#38bdf8', dur:0.5 });
+      castFx('runes', { x:c.x, y:c.y, r:40, color:'#38bdf8', dur:0.7 });
+      ok = true; msg = `📢 ${mobs.length}마리 도발 · 5초 피해 40%↓`;
+      break;
+    }
+    case 'a_aegis': {
+      arena.buffs = (arena.buffs || []).filter(b => b.kind !== 'guard');
+      arena.buffs.push({ kind:'guard', mult:0.40, until: arena.elapsed + 7 });
+      gs.baseWardUntil = Math.max(gs.baseWardUntil || 0, 7);
+      const bc = cellCenter(CASTLE_C, CASTLE_R);
+      castFx('runes', { x:bc.x, y:bc.y, r:44, color:'#93c5fd', dur:0.8 });
+      castFx('wash',  { y:0, h:DEFENSE_H, color:'#93c5fd', dur:0.55 });
+      castFx('wash',  { y:ARENA_Y, h:ARENA_H, color:'#93c5fd', dur:0.55 });
+      for (const u of gs.battle.ourTeam)
+        if (!u.dead) castFx('runes', { x:u.x, y:u.y, r:16, color:'#93c5fd', dur:0.8 });
+      ok = true; msg = '🛡 7초 피해 60%↓ · 기지 보호';
+      break;
+    }
+    case 'a_thorn': {
+      arena.allyThornUntil = arena.elapsed + 10;
+      arena.allyThornPct   = 0.45;
+      for (const u of gs.battle.ourTeam)
+        if (!u.dead) castFx('runes', { x:u.x, y:u.y, r:17, color:'#84cc16', dur:0.8 });
+      castFx('wash', { y:ARENA_Y, h:ARENA_H, color:'#84cc16', dur:0.5 });
+      ok = true; msg = '🌵 10초 반사 45%';
+      break;
+    }
+
+    // 🔮 술사 전용 ────────────────────────────────────────────────────────
+    case 'a_nova': {
+      const c = heroSpot(gs), R = 130;
+      const hit = mobs.filter(m => Math.hypot(m.x - c.x, m.y - c.y) <= R);
+      if (!hit.length) break;
+      for (const m of hit) {
+        hurtMob(gs, m, arenaDamage(atk * 2.4, m.def), '#67e8f9');
+        m.slowUntil = Math.max(m.slowUntil || 0, 4);
+      }
+      castFx('nova',  { x:c.x, y:c.y, r:R, color:'#67e8f9', dur:0.55 });
+      castFx('runes', { x:c.x, y:c.y, r:R*0.55, color:'#a5f3fc', dur:0.75 });
+      ok = true; msg = `❄️ ${hit.length}마리 −둔화`;
+      break;
+    }
+    case 'a_chain': {
+      if (!mobs.length) break;
+      const rest = mobs.slice();
+      let from = heroSpot(gs), n = 0;
+      while (n < 6 && rest.length) {
+        let bi = 0, bd = Infinity;
+        for (let i = 0; i < rest.length; i++) {
+          const d = Math.hypot(rest[i].x - from.x, rest[i].y - from.y);
+          if (d < bd) { bd = d; bi = i; }
+        }
+        const m = rest.splice(bi, 1)[0];
+        if (typeof FX !== 'undefined') FX.spark(from.x, from.y, m.x, m.y, '#c4b5fd');
+        castFx('beam', { x1:from.x, y1:from.y, x2:m.x, y2:m.y, w:7, color:'#c4b5fd', dur:0.3 });
+        hurtMob(gs, m, arenaDamage(atk * 1.9, m.def), '#c4b5fd');
+        castFx('nova', { x:m.x, y:m.y, r:24, color:'#c4b5fd', dur:0.35 });
+        from = { x:m.x, y:m.y }; n++;
+      }
+      ok = true; msg = `🔗 ${n}마리 연쇄`;
+      break;
+    }
+    case 'a_rift': {
+      if (!tops.length) break;
+      // 경로를 세 칸 되감는다. 타워가 그 구간을 다시 때릴 시간을 버는 것이 전부다.
+      let n = 0;
+      for (const e of tops) {
+        const before = e.wpIdx || 0;
+        e.wpIdx = Math.max(0, before - 3);
+        if (e.wpIdx !== before) n++;
+        castFx('runes', { x:e.x, y:e.y, r:18, color:'#c084fc', dur:0.8 });
+      }
+      castFx('wash', { y:0, h:DEFENSE_H, color:'#c084fc', dur:0.6 });
+      if (!n) break;
+      ok = true; msg = `🌀 상단 ${n}마리 되감기`;
+      break;
+    }
+
+    // 🏹 신궁 전용 ────────────────────────────────────────────────────────
+    case 'a_arrows': {
+      if (!mobs.length) break;
+      const dmg = arenaDamage(atk * 1.9, 0);
+      for (const m of mobs) {
+        hurtMob(gs, m, arenaDamage(atk * 1.9, m.def), '#86efac', true, null);
+        castFx('nova', { x:m.x, y:m.y, r:20, color:'#86efac', dur:0.35 });
+      }
+      castFx('rain', { x:ARENA_X, y:ARENA_Y, w:ARENA_W, h:ARENA_H, n:30, color:'#86efac', dur:0.8 });
+      ok = true; msg = `🏹 ${mobs.length}마리 −${dmg}`;
+      break;
+    }
+    case 'a_pierce': {
+      if (!mobs.length) break;
+      const c = heroSpot(gs);
+      // 가장 가까운 적 쪽을 본다 — 방향을 따로 고르게 하지 않는다
+      const near = mobs.reduce((a, m) =>
+        (Math.hypot(m.x-c.x, m.y-c.y) < Math.hypot(a.x-c.x, a.y-c.y) ? m : a), mobs[0]);
+      const ang = Math.atan2(near.y - c.y, near.x - c.x);
+      const ex = c.x + Math.cos(ang) * 600, ey = c.y + Math.sin(ang) * 600;
+      // 선분에서 22px 안쪽이면 맞는다
+      const hit = mobs.filter(m => {
+        const t = ((m.x-c.x)*(ex-c.x) + (m.y-c.y)*(ey-c.y)) / ((ex-c.x)**2 + (ey-c.y)**2);
+        if (t < 0) return false;
+        const px = c.x + (ex-c.x)*Math.min(1,t), py = c.y + (ey-c.y)*Math.min(1,t);
+        return Math.hypot(m.x-px, m.y-py) <= 22 + m.radius;
+      });
+      if (!hit.length) break;
+      for (const m of hit) {
+        hurtMob(gs, m, arenaDamage(atk * 3.4, m.def), '#4ade80', true, null);
+        castFx('nova', { x:m.x, y:m.y, r:26, color:'#4ade80', dur:0.35 });
+      }
+      castFx('beam', { x1:c.x, y1:c.y, x2:ex, y2:ey, w:16, color:'#4ade80', dur:0.4 });
+      ok = true; msg = `➶ ${hit.length}마리 관통`;
+      break;
+    }
+    case 'a_mark': {
+      let n = 0;
+      if (mobs.length) {
+        const t = mobs.reduce((a, m) => (m.maxHp > a.maxHp ? m : a), mobs[0]);
+        t.markUntil = arena.elapsed + 12; t.markPct = 0.6;
+        castFx('runes', { x:t.x, y:t.y, r:26, color:'#fbbf24', dur:0.9 });
+        castFx('nova',  { x:t.x, y:t.y, r:40, color:'#fbbf24', dur:0.45 });
+        n++;
+      }
+      if (tops.length) {
+        const e = tops.reduce((a, x) => (x.maxHp > a.maxHp ? x : a), tops[0]);
+        e.markedUntil = 12;   // 상단은 초 단위로 줄어드는 타이머를 쓴다
+        castFx('runes', { x:e.x, y:e.y, r:22, color:'#fbbf24', dur:0.9 });
+        n++;
+      }
+      if (!n) break;
+      ok = true; msg = `🎯 표식 ${n}곳`;
+      break;
+    }
+
     case 'a_plunder': {
       const tier = Math.max(1, endlessTier(gs.wave) || (gs.wave + 1));
       const gold = Math.round((18 + tier * 9) * BONUSES.battleGoldMult);
       gs.gold += gold;
       gs.battle.totalGoldEarned += gold;
+      const pc = heroSpot(gs);
+      castFx('nova', { x:pc.x, y:pc.y, r:70, color:'#fbbf24', dur:0.45 });
+      if (typeof FX !== 'undefined') FX.burst(pc.x, pc.y, '#fbbf24', 18, 16);
       ok = true; msg = `💰 +${gold}`;
       break;
     }

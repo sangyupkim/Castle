@@ -2594,7 +2594,7 @@ function frame(ts) {
     // 👹 보스전 — 한쪽 전선만 쓴다. 안 쓰는 쪽은 아예 그리지 않고,
     // 쓰는 쪽이 화면 세로를 다 가져간다. 반씩 보다가 보스를 놓치지 않게.
     renderBossLane(ctx, gs);
-    FX.draw(ctx);
+    FX.draw(ctx); FX.drawCasts(ctx);
   } else {
     renderDefense(ctx,gs);
     renderUIBar(ctx,gs,wm);
@@ -2604,7 +2604,7 @@ function frame(ts) {
         && gs.mid.side === 'arena' && typeof renderBossFields === 'function') {
       renderBossFields(ctx, gs);
     }
-    FX.draw(ctx);
+    FX.draw(ctx); FX.drawCasts(ctx);
   }
   ctx.restore();
   if (typeof bossActive === 'function' && bossActive(gs)
@@ -2644,7 +2644,12 @@ function frame(ts) {
   // 🧭 시킨 일을 해냈는지 매 프레임 본다. 확인 버튼이 없으므로 이게 유일한 진행 수단이다.
   if (!_titleScreen && !tut.active) { try { guide.update(gs, dt); } catch (e) {} }
 
-  // 👹 기믹 예고 창은 **실시간**으로 센다. 아래 배속 루프 안에서 세면
+  // ✨ 스킬 연출은 **실시간**으로 돈다. 아래 배속 루프 안에 넣으면
+  // 10배속에서 0.5초짜리 연출이 세 프레임 만에 끝나 보이지도 않는다.
+  // 일시정지·튜토리얼 중에도 계속 사그라들게 둔다 — 멈춘 화면에 잔상이 박히지 않게.
+  if (typeof FX !== 'undefined' && FX.updateCasts) FX.updateCasts(dt);
+
+  // 👹 기믹 예고 창도 같은 이유로 실시간이다. 배속 루프 안에서 세면
   // 10배속에서 창이 1/10로 줄어 사람이 누를 수 없다.
   if (!_paused && !tut.active && !_titleScreen && typeof bossParryTick === 'function') {
     try { bossParryTick(gs, dt); } catch (e) {}

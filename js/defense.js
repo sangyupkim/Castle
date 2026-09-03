@@ -286,7 +286,10 @@ function hurtDefenseEnemy(e, dmg, pierceArmor, onKill, affinity, pierce) {
       spawnFloaty('🛡 무효', e.x, e.y - 18, '#94a3b8');
     return 0;
   }
-  const real = defDamage(e, dmg, pierceArmor, affinity, pierce);
+  let real = defDamage(e, dmg, pierceArmor, affinity, pierce);
+  // 🎯 사냥 표식(신궁) — 표식이 붙은 동안 받는 피해가 늘어난다.
+  // 상단은 아레나처럼 경과 시간(elapsed)이 없어서 남은 초를 직접 깎는다.
+  if ((e.markedUntil || 0) > 0) real = Math.round(real * 1.6);
   e.hp -= real;
   e.hitFlash = 0.12;
   if (e.hp <= 0) {
@@ -311,6 +314,7 @@ function updateDefenseEnemies(enemies, dt) {
     if (e.corrodeUntil > 0) { e.corrodeUntil = Math.max(0, e.corrodeUntil - dt); if (!e.corrodeUntil) e.corrodeAmt = 0; }
     // 🌱 재생 — 꾸준히 깎지 못하면 원점으로 돌아간다. 단발 화력보다 지속 화력을 요구한다.
     if (e.regen > 0 && e.hp < e.maxHp) e.hp = Math.min(e.maxHp, e.hp + e.maxHp * e.regen * dt);
+    if (e.markedUntil > 0) e.markedUntil = Math.max(0, e.markedUntil - dt);
 
     let mult = 1;
     // 📣 포효 — 중간보스가 북돋운 잡몹이 잠깐 빨라진다
