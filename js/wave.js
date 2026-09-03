@@ -82,24 +82,27 @@ function createWaveManager() {
         extraMult: spawnMult / Math.max(0.01, density)
       });
 
-      // 👹 보스 층 — 마왕이든 중간보스든 **한쪽 전선만** 쓴다.
-      // 어디서 싸울지는 준비 화면에서 고른 값(gs.bossPick)이 정하고,
-      // '무작위'를 골랐으면 여기서 굴린다(보상 우대).
+      // 👹 마왕 층 — **한쪽 전선만** 쓴다. 어디서 싸울지는 준비 화면에서 고른
+      // 값(gs.bossPick)이 정하고, '무작위'를 골랐으면 여기서 굴린다(보상 우대).
       this.bossPhase = 0;
+      this.midBossSide = null;
       const bkind = bossKindFor(gs, this.waveIndex);
-      if (bkind) {
+      if (bkind === 'lord') {
         const b = beginBossFight(gs, this.waveIndex, bkind, gs.bossPick || 'random');
         this.midBossSide = b.side === 'top' ? 'defense' : 'arena';
-        if (b.side === 'top') {
-          this.defenseQueues = [];     // 잡몹 없이 보스 한 마리만
-          if (bkind === 'lord') spawnDemonLord(gs, this.waveIndex);
-          else                  spawnMidBoss(gs, this.waveIndex);
-        } else {
-          // 하단이면 격자에는 한 마리도 안 온다
-          this.defenseQueues = [];
-          this.midBossPending = endlessTier(this.waveIndex);
-          this.midBossKind    = bkind;
-        }
+        this.defenseQueues = [];       // 잡몹 없이 보스 한 마리만
+        if (b.side === 'top') spawnDemonLord(gs, this.waveIndex);
+        else { this.midBossPending = endlessTier(this.waveIndex); this.midBossKind = 'lord'; }
+      }
+      // 🐲 중간보스 층 — 보스전을 열지 않는다. **평소의 층 위에 한 마리가 얹힌다.**
+      // 위아래 중 한쪽에 나오되(층·시드로 정해져 예고와 실제가 늘 같다)
+      // 반대쪽 라인은 평소대로 돈다.
+      else if (typeof isMidBossFloor === 'function' && isMidBossFloor(gs, this.waveIndex)) {
+        const side = midBossSide(endlessTier(this.waveIndex));
+        this.midBossSide = side;
+        beginMidBoss(gs, side);
+        if (side === 'defense') spawnMidBoss(gs, this.waveIndex);
+        else { this.midBossPending = endlessTier(this.waveIndex); this.midBossKind = 'mid'; }
       }
 
       // 예약해둔 현상수배는 웨이브 시작 조금 뒤에 등장한다
@@ -111,7 +114,10 @@ function createWaveManager() {
       startFighting(gs.battle);
       startArena(gs, this.waveIndex);
       if (this.midBossPending) {
-        spawnRaidBoss(gs, this.midBossPending, this.midBossKind || 'mid');
+        // 마왕은 레이드 보스(멀리 서서 장판) · 중간보스는 그냥 무거운 한 마리로 붙는다.
+        // 중간보스까지 레이드로 세우면 층이 또 다른 게임이 된다.
+        if (this.midBossKind === 'lord') spawnRaidBoss(gs, this.midBossPending, 'lord');
+        else                             spawnMidBossMob(gs, this.midBossPending);
         this.midBossPending = null;
       }
       if (typeof SFX !== 'undefined') SFX.waveStart();
@@ -286,6 +292,7 @@ function createWaveManager() {
     },
 
     endWave(gs) {
+      if (typeof endMidBoss === 'function') endMidBoss(gs);
       // 타이머 만료까지 'fighting'이었다면 완주다.
       const cleared   = (gs.battle.phase === 'fighting');
       const retreated = (gs.battle.phase === 'retreated');

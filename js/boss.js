@@ -133,9 +133,17 @@ function bossEffect(gs, id)  { return bossActive(gs) && (gs.boss.effects[id] || 
 
 // ─── 이 층이 보스 층인가 ─────────────────────────────────────────────────────
 // 마왕(100층)과 중간보스(10층마다) 둘 다 '한쪽만 쓰는' 같은 규칙으로 돈다.
+// 전면 보스전(한쪽 전선만 쓰고 화면을 통째로 가져가는 것)은 **마왕뿐이다.**
+//
+// 한때 중간보스도 여기에 넣었다. 그랬더니 100층짜리 한 판에 그 연출이 열 번 나왔고,
+// 10층마다 화면이 접히고 전선을 고르고 기믹을 파훼하는 것이 '특별한 층'이 아니라
+// '10층마다 오는 절차'가 됐다. 게다가 60초 고정이라 스펙이 넘치면 20초에 끝내 놓고
+// 남은 40초를 그냥 기다렸다.
+//
+// 중간보스는 원래 자리로 돌아갔다 — **평소의 층 위에 얹힌 벽** 하나다.
+// 위아래 중 한쪽에 나오되(층·시드로 정해진다) 반대쪽 라인은 평소대로 돈다.
 function bossKindFor(gsp, waveIndex) {
-  if (typeof isBossFloor === 'function' && isBossFloor(gsp, waveIndex))       return 'lord';
-  if (typeof isMidBossFloor === 'function' && isMidBossFloor(gsp, waveIndex)) return 'mid';
+  if (typeof isBossFloor === 'function' && isBossFloor(gsp, waveIndex)) return 'lord';
   return null;
 }
 
@@ -323,6 +331,114 @@ function bossFindTop(gs) {
   return (gs.defenseEnemies || []).find(e => (e.isBoss || e.isMidBoss) && !e.dead && !e.reached) || null;
 }
 
+// ─── 🐲 중간보스 — 층 위에 얹힌 벽 ───────────────────────────────────────────
+// 마왕의 축소판이 아니다. 보스전을 열지 않고, 화면을 가져가지 않고, 파훼도 없다.
+// 대신 **가끔 한 번씩** 제 성격을 드러낸다 —
+//   상단: 잡몹을 북돋우거나 타워를 잠깐 무르게 하는 정도. 타워를 부수지는 않는다.
+//   하단: 장판 하나. 피하면 그만이다.
+// 층을 어렵게 만드는 것이지 층을 다른 게임으로 바꾸는 것이 아니다.
+const MIDBOSS_SKILL_CD  = 11;   // 이 간격으로 한 번씩
+const MIDBOSS_LAP_SECS  = 60;   // 상단은 이만큼 돌다가 성으로 들어간다
+
+const MIDBOSS_SKILLS_TOP = [
+  { id:'ms_rally', icon:'📣', name:'포효',
+    desc:'주변 잡몹이 잠깐 빨라집니다',
+    fire(gs, e) {
+      let n = 0;
+      for (const x of gs.defenseEnemies) {
+        if (x === e || x.dead || x.reached) continue;
+        if (Math.hypot(x.x - e.x, x.y - e.y) > CELL_W * 3) continue;
+        x.rallyUntil = Math.max(x.rallyUntil || 0, 6);
+        n++;
+      }
+      return n ? `잡몹 ${n}마리가 빨라졌습니다` : null;
+    } },
+  { id:'ms_guard', icon:'🪨', name:'단단해짐',
+    desc:'8초 동안 자기 방어력이 오릅니다',
+    fire(gs, e) { e.hardenUntil = 8; return '방어가 두꺼워졌습니다'; } },
+  { id:'ms_dull',  icon:'🌫', name:'흐림',
+    desc:'6초 동안 타워 공격속도가 조금 느려집니다',
+    fire(gs, e) { const b = bossState(gs); b.midDull = 6; return '타워가 굼떠집니다'; } },
+];
+
+function midBossSkillPool() { return MIDBOSS_SKILLS_TOP; }
+
+// 중간보스 상태 — 보스전(gs.boss.active)과 별개로 돈다
+function midBossState(gs) {
+  if (!gs.mid) gs.mid = { active:false, side:null, cd:MIDBOSS_SKILL_CD, left:0, log:null, dull:0, fieldTimer:0 };
+  return gs.mid;
+}
+function midBossActive(gs) { return !!(gs.mid && gs.mid.active); }
+
+function beginMidBoss(gs, side) {
+  const m = midBossState(gs);
+  m.active = true;
+  m.side   = side;                 // 'defense' | 'arena'
+  m.cd     = MIDBOSS_SKILL_CD;
+  m.left   = MIDBOSS_LAP_SECS;     // 상단만 쓴다 — 이만큼 돌다가 들어간다
+  m.log    = null;
+  m.dull   = 0;
+  m.fieldTimer = 4;
+  return m;
+}
+function endMidBoss(gs) {
+  const m = midBossState(gs);
+  m.active = false; m.log = null; m.dull = 0;
+}
+// 타워가 지금 흐림에 걸려 있나 — towerStats가 본다
+function midBossDulled(gs) {
+  return !!(gs && gs.mid && gs.mid.active && (gs.mid.dull || 0) > 0);
+}
+
+function midBossUpdate(gs, dt) {
+  const m = midBossState(gs);
+  if (!m.active) return;
+  if (m.dull > 0) m.dull = Math.max(0, m.dull - dt);
+  if (m.log) { m.log.until -= dt; if (m.log.until <= 0) m.log = null; }
+
+  if (m.side === 'defense') {
+    const e = (gs.defenseEnemies || []).find(x => x.isMidBoss && !x.dead && !x.reached);
+    if (!e) { endMidBoss(gs); return; }
+    // 60초를 돌면 성으로 들어간다 — 경로 끝으로 보낸다
+    m.left -= dt;
+    if (m.left <= 0) {
+      e.wpIdx = e.path.length - 1;
+      m.left = 999;   // 다시 발동하지 않게
+      if (typeof addLog === 'function')
+        addLog(gs.battle, `🐲 ${e.name} — 다 돌았습니다. 성으로 들어갑니다!`, '#ef4444');
+      return;
+    }
+    m.cd -= dt;
+    if (m.cd <= 0) {
+      m.cd = MIDBOSS_SKILL_CD;
+      const pool = midBossSkillPool();
+      const sk = pool[Math.floor(Math.random() * pool.length)];
+      let extra = null;
+      try { extra = sk.fire(gs, e); } catch (err) {}
+      if (sk.id === 'ms_dull') m.dull = 6;
+      m.log = { icon:sk.icon, name:sk.name, desc: extra || sk.desc, until: 2.6 };
+      if (typeof addLog === 'function')
+        addLog(gs.battle, `${sk.icon} ${sk.name} — ${extra || sk.desc}`, '#fb923c');
+      if (typeof FX !== 'undefined') FX.shake(4, 0.3);
+    }
+  } else {
+    const mob = (gs.arena && gs.arena.mobs || []).find(x => x.isMidBoss && !x.dead);
+    if (!mob) { endMidBoss(gs); return; }
+    // 하단은 장판 하나씩. 마왕 레이드보다 훨씬 드물다.
+    m.fieldTimer -= dt;
+    if (m.fieldTimer <= 0) {
+      m.fieldTimer = 7.5;
+      const b = bossState(gs);
+      bossSpawnField(gs,
+        ARENA_X + 30 + Math.random() * (ARENA_W - 60),
+        ARENA_Y + 30 + Math.random() * (ARENA_H - 60));
+      m.log = { icon:'🔥', name:'장판', desc:'바닥이 달아오릅니다', until: 2.0 };
+    }
+  }
+  // 깔린 장판을 터뜨리는 일은 보스전과 같은 함수를 쓴다
+  bossUpdateFields(gs, dt);
+}
+
 // ─── 하단 장판 ───────────────────────────────────────────────────────────────
 // 보스는 가까이 붙어서 때리지 않는다. 바닥에 원을 예고하고, 잠시 뒤 터진다.
 // 서 있으면 맞고, 비키면 안 맞는다 — 스펙이 아니라 손이 푸는 문제로 만들려는 것이다.
@@ -354,18 +470,24 @@ function bossSpawnFieldBurst(gs, n) {
 // 장판 진행 — 예고가 끝나면 터지고, 그 안에 있는 아군이 맞는다
 function bossUpdateFields(gs, dt) {
   const b = bossState(gs);
-  if (!b.active || b.side !== 'bottom') return;
+  // 마왕 레이드가 새 장판을 깔고, 하단 중간보스도 제 박자로 하나씩 깐다.
+  // 이미 깔린 장판을 터뜨리는 아래 절반은 **둘 다** 돌아야 한다 —
+  // 여기서 일찍 빠져나가면 중간보스가 깐 장판이 영영 안 터진다.
+  const raid = b.active && b.side === 'bottom';
+  const mid  = (typeof midBossActive === 'function') && midBossActive(gs)
+               && gs.mid && gs.mid.side === 'arena';
+  if (!raid && !mid) { if (b.fields.length) b.fields.length = 0; return; }
 
-  // 주기적으로 새 장판. 체력이 깎일수록 촘촘해진다.
-  // 중간보스의 장판은 '가끔'이다. 마왕과 같은 밀도로 깔면 60초짜리 구간이
-  // 마왕전보다 손이 더 바빠진다.
-  const pace = b.kind === 'lord'
-    ? Math.max(0.9, 2.6 - b.broken * 0.18)
-    : Math.max(2.4, 4.6 - b.broken * 0.30);
-  b.fieldTimer -= dt;
-  if (b.fieldTimer <= 0) {
-    b.fieldTimer = pace;
-    bossSpawnFieldBurst(gs, 1 + (Math.random() < 0.35 ? 1 : 0));
+  // 주기적으로 새 장판. 체력이 깎일수록 촘촘해진다. (마왕 레이드만)
+  if (raid) {
+    const pace = b.kind === 'lord'
+      ? Math.max(0.9, 2.6 - b.broken * 0.18)
+      : Math.max(2.4, 4.6 - b.broken * 0.30);
+    b.fieldTimer -= dt;
+    if (b.fieldTimer <= 0) {
+      b.fieldTimer = pace;
+      bossSpawnFieldBurst(gs, 1 + (Math.random() < 0.35 ? 1 : 0));
+    }
   }
 
   for (let i = b.fields.length - 1; i >= 0; i--) {

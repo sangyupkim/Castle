@@ -1099,6 +1099,73 @@ function renderBossParry(ctx, gs) {
   ctx.restore();
 }
 
+// ─── 🐲 중간보스 띠 ──────────────────────────────────────────────────────────
+// 보스 HUD와 같은 '에너지바'를 쓰되 **화면을 밀지 않는다.** 중간보스는 층을
+// 가져가지 않으므로 배치가 바뀌면 안 된다 — 위에 얇게 덮기만 한다.
+const MIDHUD_H = 30;
+function renderMidBossHud(ctx, gs) {
+  if (typeof midBossActive !== 'function' || !midBossActive(gs)) return;
+  if (typeof bossActive === 'function' && bossActive(gs)) return;   // 마왕전이면 그쪽 HUD가 있다
+  const md = gs.mid;
+  const m = md.side === 'defense'
+    ? (gs.defenseEnemies || []).find(e => e.isMidBoss && !e.dead && !e.reached)
+    : (gs.arena?.mobs || []).find(e => e.isMidBoss && !e.dead);
+  if (!m) return;
+
+  // 띠가 격자 첫 줄을 덮는다. 상단 보스가 마침 그 자리에 있으면 정작 봐야 할 것이
+  // 가려지므로, 그럴 때는 띠를 방어 구역 **아래쪽**으로 비킨다.
+  // 자리를 옮길 뿐 배치를 밀지는 않는다 — 중간보스는 층을 가져가지 않는다.
+  const dodge = md.side === 'defense' && m.y < MIDHUD_H + 26;
+  const top = dodge ? (DEFENSE_H - MIDHUD_H) : 0;
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(10,6,14,0.92)';
+  ctx.fillRect(0, top, CW, MIDHUD_H);
+  ctx.strokeStyle = '#7c2d12'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, dodge ? top+0.5 : top+MIDHUD_H-0.5);
+  ctx.lineTo(CW, dodge ? top+0.5 : top+MIDHUD_H-0.5);
+  ctx.stroke();
+
+  ctx.textAlign='left'; ctx.textBaseline='middle';
+  ctx.fillStyle='#fdba74'; ctx.font='bold 10px sans-serif';
+  const tag = md.side === 'defense' ? '🐲 상단' : '🐲 하단';
+  ctx.fillText(`${tag} · ${m.name || '중간보스'}`, 9, top+9);
+
+  // 남은 시간(상단만) — 다 돌면 성으로 들어간다
+  ctx.textAlign='right';
+  if (md.side === 'defense' && md.left < 900) {
+    ctx.fillStyle = md.left <= 10 ? '#f87171' : '#fbbf24';
+    ctx.font='bold 10px sans-serif';
+    ctx.fillText(`${Math.max(0, Math.ceil(md.left))}초 뒤 성으로`, CW-9, top+9);
+  }
+
+  // 에너지바 — 마왕과 같은 모양. 줄로 나눠 얼마나 깎았는지 눈에 잡히게.
+  const bx=9, bw=CW-18, by=top+18, bh=7;
+  ctx.fillStyle='#1a0a0a'; ctx.fillRect(bx, by, bw, bh);
+  if (m.maxHp > 0) {
+    const frac = Math.max(0, Math.min(1, m.hp / m.maxHp));
+    ctx.fillStyle='#fb923c'; ctx.fillRect(bx, by, bw * frac, bh);
+  }
+  ctx.fillStyle='rgba(8,4,10,0.85)';
+  for (let i=1;i<MIDBOSS_BARS;i++) ctx.fillRect(bx + bw*(i/MIDBOSS_BARS) - 1, by, 2, bh);
+  ctx.strokeStyle='#7c2d12'; ctx.lineWidth=1; ctx.strokeRect(bx+0.5, by+0.5, bw-1, bh-1);
+  ctx.restore();
+
+  // 방금 쓴 기술 — 띠 바로 옆에 잠깐
+  if (md.log) {
+    const t = `${md.log.icon} ${md.log.name} — ${md.log.desc}`;
+    ctx.font='bold 10px sans-serif';
+    const w = ctx.measureText(t).width + 18;
+    const x = (CW - w) / 2, y = dodge ? (top - 24) : (MIDHUD_H + 4);
+    uiPanel(ctx, x, y, w, 20, 5, '#2a1206', '#fb923c', 1.5);
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle='#fdba74';
+    ctx.fillText(t, CW/2, y + 10);
+    ctx.textAlign='left'; ctx.textBaseline='top';
+  }
+}
+
 // ─── 👹 보스 HUD ─────────────────────────────────────────────────────────────
 // 화면 맨 위에 붙는 한 덩어리. 보스 체력(줄로 나뉜)·남은 바퀴/시간·영웅 체력·
 // 방금 터진 기믹을 여기서 다 읽을 수 있어야 한다.
@@ -6028,6 +6095,27 @@ function renderTownPageArmy(ctx, gs, startY) {
       });
       ctx.textAlign='left'; ctx.textBaseline='middle';
       y += 84;
+    }
+    // 🐲 중간보스 층 — 고르는 것이 아니라 **알려 주는** 자리다.
+    // 어느 쪽에 나올지는 층과 런 시드로 정해져 있고, 예고와 실제는 늘 같다.
+    // 영웅을 위로 보낼지 아래로 보낼지가 이 한 줄에 달려 있다.
+    else if (typeof isMidBossFloor === 'function' && isMidBossFloor(gs, gs.wave)) {
+      const tier = endlessTier(gs.wave);
+      const side = midBossSide(tier);
+      const top  = side === 'defense';
+      uiPanel(ctx, 6, y, CW-12, 44, 6, '#1a1206', '#fb923c', 1.5);
+      ctx.textAlign='left'; ctx.textBaseline='middle';
+      ctx.fillStyle='#fdba74'; ctx.font='bold 11px sans-serif';
+      ctx.fillText(`🐲 ${midBossName(tier)}`, 14, y+14);
+      ctx.fillStyle = top ? '#f97316' : '#a855f7'; ctx.font='bold 11px sans-serif';
+      ctx.textAlign='right';
+      ctx.fillText(top ? '🗼 상단에 나옵니다' : '⚔️ 하단에 나옵니다', CW-14, y+14);
+      ctx.textAlign='left';
+      ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif';
+      ctx.fillText(top ? '60초를 돌다가 성으로 들어갑니다 — 그 안에 잡으세요'
+                       : '가끔 바닥에 장판을 깝니다 — 비켜서면 안 맞습니다', 14, y+30);
+      ctx.textBaseline='middle';
+      y += 50;
     }
   }
 
