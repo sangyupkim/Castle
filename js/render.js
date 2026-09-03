@@ -1039,6 +1039,66 @@ function renderBossLane(ctx, gs) {
   }
 }
 
+// ─── ✋ 기믹 파훼 과녁 ────────────────────────────────────────────────────────
+// 예고 중인 기믹이 있으면 보스 위에 과녁을 그린다. 조여드는 고리가 창의 남은 시간이고,
+// 고리가 과녁에 닿기 전에 누르면 막힌다.
+//
+// 무엇을 막는 것인지(아이콘·이름)를 같이 적는다 — 뭔지도 모르고 누르는 것은
+// 반사신경 시험이지 판단이 아니다. 붕괴가 뜬 것을 보고 "지금은 꼭 막아야 한다"가
+// 되어야 이 기능에 뜻이 생긴다.
+function renderBossParry(ctx, gs) {
+  if (typeof bossParryTarget !== 'function') return;
+  const t = bossParryTarget(gs);
+  if (!t) return;
+  const frac = Math.max(0, Math.min(1, t.left / Math.max(0.001, t.total)));
+  const pulse = 0.55 + 0.45 * Math.sin(Date.now() / 90);
+
+  ctx.save();
+  // 과녁이 보스에서 밀려났으면 선으로 이어 준다 — 무엇을 막는 건지 잃지 않게
+  if (t.offset) {
+    ctx.beginPath(); ctx.moveTo(t.bx, t.by); ctx.lineTo(t.x, t.y);
+    ctx.strokeStyle='rgba(250,204,21,0.45)'; ctx.lineWidth=1.5;
+    ctx.setLineDash([4,3]); ctx.stroke(); ctx.setLineDash([]);
+  }
+  // 과녁 — 굵은 원
+  ctx.beginPath(); ctx.arc(t.x, t.y, t.r, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(250,204,21,0.10)'; ctx.fill();
+  ctx.strokeStyle = `rgba(250,204,21,${0.55 + 0.35*pulse})`;
+  ctx.lineWidth = 3; ctx.stroke();
+
+  // 조여드는 고리 — 남은 시간
+  const rr = t.r + 26 * frac;
+  ctx.beginPath(); ctx.arc(t.x, t.y, rr, 0, Math.PI*2);
+  ctx.strokeStyle = frac > 0.35 ? '#facc15' : '#f87171';
+  ctx.lineWidth = 2.5; ctx.stroke();
+
+  // 남은 시간을 호로도 — 색만으로는 얼마 남았는지 안 읽힌다
+  ctx.beginPath();
+  ctx.arc(t.x, t.y, t.r + 7, -Math.PI/2, -Math.PI/2 + Math.PI*2*frac);
+  ctx.strokeStyle = frac > 0.35 ? '#fde047' : '#fca5a5';
+  ctx.lineWidth = 4; ctx.stroke();
+
+  // 무엇을 막는가 — 과녁 위에 띄운다
+  const label = `${t.g.icon} ${t.g.name}`;
+  ctx.font = 'bold 11px sans-serif';
+  const lw = ctx.measureText(label).width + 16;
+  // 위로 넘치면 아래에 붙인다 — 화면 밖으로 나가면 무엇을 막는지 못 읽는다
+  const above = t.y - t.r - 34;
+  const below = above < BOSS_HUD_H + 4;
+  const ly = below ? (t.y + t.r + 22) : above;
+  uiPanel(ctx, Math.max(4, Math.min(CW - lw - 4, t.x - lw/2)), ly, lw, 19, 5, '#2a1f05', '#facc15', 1.5);
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillStyle='#fde047';
+  ctx.fillText(label, Math.max(4 + lw/2, Math.min(CW - 4 - lw/2, t.x)), ly + 10);
+
+  // 안내는 라벨 반대쪽이 아니라 라벨 바로 아래에 붙인다 — 반대쪽으로 보내면
+  // 과녁이 위로 물려 있을 때 HUD에 겹친다
+  ctx.font = 'bold 9px sans-serif'; ctx.fillStyle = '#fbbf24';
+  ctx.fillText('눌러서 막기!', t.x, below ? (ly + 29) : (t.y + t.r + 16));
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.restore();
+}
+
 // ─── 👹 보스 HUD ─────────────────────────────────────────────────────────────
 // 화면 맨 위에 붙는 한 덩어리. 보스 체력(줄로 나뉜)·남은 바퀴/시간·영웅 체력·
 // 방금 터진 기믹을 여기서 다 읽을 수 있어야 한다.
@@ -1062,6 +1122,14 @@ function renderBossHud(ctx, gs) {
   ctx.textAlign='right';
   ctx.fillStyle = '#fbbf24'; ctx.font='bold 11px sans-serif';
   ctx.fillText(bossBarText(gs), CW-10, 13);
+  // ✋ 막아낸 수 — 이름 옆에 붙인다. 잘하고 있는지가 보여야 계속 누른다.
+  if (b.parried > 0) {
+    ctx.textAlign='left';
+    ctx.fillStyle='#86efac'; ctx.font='bold 10px sans-serif';
+    const nw = ctx.measureText(m ? (m.name || '보스') : '보스').width;
+    ctx.font='bold 10px sans-serif';
+    ctx.fillText(`✋${b.parried}`, 10 + nw + 8, 13);
+  }
 
   // 체력 — 줄로 나눈다. 깎인 줄은 어둡게, 지금 줄만 밝게.
   const bx=10, bw=CW-20, by=22, bh=10;
