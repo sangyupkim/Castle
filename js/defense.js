@@ -119,6 +119,28 @@ function towerStats(t) {
     corrode:     sp.corrode    || 0,
     overloaded
   };
+  // ✦ ★6부터 붙은 특수능력을 얹는다. 분기(sp) 위에 더해지므로
+  // "저격탑 대공 분기 + 연쇄 + 처형" 같은 조합이 나온다.
+  applyTowerPerks(t, st);
+  return st;
+}
+
+// 타워에 붙은 특수능력을 실효 스탯에 반영한다.
+// 배율은 곱하고, 확률·범위 같은 것은 이미 있는 값과 큰 쪽을 쓴다 —
+// 분기가 이미 급소를 주는데 능력이 그것을 덮어써 낮추면 승급이 손해가 된다.
+function applyTowerPerks(t, st) {
+  const ids = (t && Array.isArray(t.perks)) ? t.perks : null;
+  if (!ids || !ids.length || typeof towerPerkDef !== 'function') return st;
+  for (const id of ids) {
+    const p = towerPerkDef(id);
+    if (!p) continue;
+    if (p.mult) for (const k of Object.keys(p.mult)) st[k] = (st[k] || 0) * p.mult[k];
+    if (p.add)  for (const k of Object.keys(p.add))  st[k] = (st[k] || 0) + p.add[k];
+    if (p.set)  for (const k of Object.keys(p.set))  st[k] = Math.max(st[k] || 0, p.set[k]);
+    if (p.pierceMul) st.piercePct = Math.min(0.90, (st.piercePct || 0) + p.pierceMul);
+  }
+  st.dmg  = Math.round(st.dmg);
+  st.slow = Math.min(0.85, st.slow);
   return st;
 }
 
@@ -405,6 +427,7 @@ function updateTowers(towers, enemies, projectiles, dt) {
       chain: st.chain, chainRange: st.chainRange,
       // ★5 분기 고유 — 명중 시점에 발사체가 그대로 들고 간다
       critChance: st.critChance, critMult: st.critMult, execute: st.execute,
+      piercePct: st.piercePct || 0,
       vsSlowed: st.vsSlowed, stunChance: st.stunChance, stunDur: st.stunDur,
       corrode: st.corrode
     });
@@ -512,7 +535,10 @@ function updateProjectiles(projectiles, onKill, dt) {
     // 🎯 헤드샷 — 평균은 ×1.8이지만 한 발 한 발이 흔들린다
     if (p.critChance > 0 && Math.random() < p.critChance) { dmg *= p.critMult; crit = true; }
 
-    const dealt = hurtDefenseEnemy(tgt, dmg, p.pierceArmor, credit, aff, p.pierce);
+    // 🔩 철갑탄(★6 능력)은 비율 관통이다. 그 자리에서 상대의 방어력을 보고
+    // 정액으로 환산해 더한다 — 계산 함수의 모양을 바꾸지 않으면서 값은 정확하다.
+    const pierceAll = (p.pierce || 0) + (tgt.armor || 0) * (p.piercePct || 0);
+    const dealt = hurtDefenseEnemy(tgt, dmg, p.pierceArmor, credit, aff, pierceAll);
     if (p.owner) p.owner.damageDealt += dealt;
     if (crit && typeof spawnFloaty === 'function') {
       spawnFloaty('치명타!', tgt.x, tgt.y - (tgt.radius || 8) - 12, '#f0abfc');

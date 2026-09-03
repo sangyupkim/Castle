@@ -128,6 +128,54 @@ function fuseCores(gs, star) {
   return { ok:false, star, got:star };
 }
 
+// 🔁 자동 제작 — 목표 별까지 알아서 사고 녹인다.
+// ★8 심 하나를 손으로 만들려면 ★5를 여덟 번 사고 네 번 녹이고 그 결과를 또 녹이고…를
+// 실패까지 섞어 수십 번 눌러야 한다. 그 반복에는 결정이 하나도 없다 —
+// 어느 타워에 넣을지가 결정이지, 몇 번 누르는지는 결정이 아니다.
+// 골드가 떨어지거나 안전장치에 걸리면 멈추고, 무엇을 얼마에 만들었는지 돌려준다.
+// ★10 하나에는 ★5가 이백 개 남짓 든다. 400으로 잡았더니 골드가 넉넉해도
+// 상한에 먼저 걸려 8%만 성공했다 — 안전장치가 기능을 막고 있었다.
+// 무한 루프만 막으면 되므로 넉넉히 둔다.
+const FORGE_AUTO_MAX_STEPS = 6000;
+function autoForgeCore(gs, targetStar) {
+  const f = forgeState(gs);
+  const goal = Math.max(FORGE_STAR_MIN + 1, Math.min(FORGE_STAR_MAX, targetStar | 0));
+  const gold0 = gs.gold || 0;
+  let bought = 0, fused = 0, failed = 0, steps = 0;
+
+  while (forgeCores(gs, goal) < 1 && steps++ < FORGE_AUTO_MAX_STEPS) {
+    // 목표 아래에서 둘 이상 모인 가장 높은 별을 먼저 녹인다 —
+    // 낮은 것부터 녹이면 재료가 위로 안 올라간다.
+    let star = null;
+    for (let sv = goal - 1; sv >= FORGE_STAR_MIN; sv--) {
+      if (forgeCores(gs, sv) >= 2) { star = sv; break; }
+    }
+    if (star !== null) {
+      const r = fuseCores(gs, star);
+      if (!r) break;
+      fused++; if (!r.ok) failed++;
+      continue;
+    }
+    // 녹일 것이 없으면 ★5를 산다
+    if ((gs.gold || 0) < FORGE_CORE_COST) break;
+    if (!buyForgeCore(gs)) break;
+    bought++;
+  }
+  return { goal, got: forgeCores(gs, goal) > 0,
+           bought, fused, failed, spent: gold0 - (gs.gold || 0) };
+}
+
+// 목표 별 하나를 만드는 데 드는 ★5 심의 기대 개수 (화면에 미리 적어 준다)
+function forgeCoresNeeded(targetStar) {
+  let n = 1;
+  for (let sv = FORGE_STAR_MIN; sv < targetStar; sv++) {
+    // 성공률 p면 한 단 올리는 데 기대 시도 1/p, 시도마다 심 하나가 탄다
+    const p = FORGE_ODDS[sv] || 0.15;
+    n = n * (1 + 1 / Math.max(0.05, p));
+  }
+  return Math.ceil(n);
+}
+
 // ── 2-b. 심으로 타워 승급 ────────────────────────────────────────────────────
 // ★5 위로는 골드가 통하지 않는다. **심 하나에 타워 하나**다 —
 // ★6 심을 태우면 그 타워 한 기만 ★6이 된다. 다른 타워는 그대로 ★5다.
@@ -144,14 +192,62 @@ function canPromoteTower(gs, t) {
   if (next > towerStarCap())   return false;      // ★10이 끝
   return forgeCores(gs, next) > 0;
 }
+// ── ✦ ★6부터 붙는 특수능력 ───────────────────────────────────────────────────
+// ★5까지는 어느 타워든 같은 사다리를 오른다 — 값이 커질 뿐 하는 일은 같다.
+// ★6 위는 심을 태워야 오르는 구간이고 그 값이 비싼데, 늘어나는 것이 숫자뿐이면
+// "심 다섯 개 = 공격력 조금"이 되어 버린다. 그래서 한 별마다 능력을 하나씩
+// 무작위로 붙인다. 같은 화살탑 둘이 ★8에서 다른 물건이 되고, 어느 타워에
+// 심을 넣을지가 결정이 된다.
+//
+// 무작위인 이유는 고르게 하면 늘 같은 것을 고르기 때문이다. 다만 **중복은 없다** —
+// 같은 능력이 두 번 붙으면 그건 무작위가 아니라 그냥 배율이다.
+const TOWER_PERKS = [
+  { id:'p_dmg',   icon:'⚔', name:'예리함',   desc:'공격력 +25%',
+    mult:{ dmg:1.25 } },
+  { id:'p_spd',   icon:'⚡', name:'속사',     desc:'공격속도 +25%',
+    mult:{ spd:1.25 } },
+  { id:'p_range', icon:'👁', name:'원시',     desc:'사거리 +20%',
+    mult:{ range:1.20 } },
+  { id:'p_crit',  icon:'🎯', name:'급소',     desc:'20% 확률로 피해 2배',
+    set:{ critChance:0.20, critMult:2.0 } },
+  { id:'p_chain', icon:'⛓', name:'연쇄',     desc:'한 명에게 더 튄다',
+    add:{ chain:1 } },
+  { id:'p_slow',  icon:'❄', name:'서리',     desc:'감속 +15%',
+    add:{ slow:0.15 } },
+  { id:'p_pierce',icon:'🔩', name:'철갑탄',   desc:'적 방어 25% 무시',
+    pierceMul:0.25 },
+  { id:'p_splash',icon:'💥', name:'작렬',     desc:'범위 피해',
+    set:{ splash:34 } },
+  { id:'p_exec',  icon:'☠', name:'처형',     desc:'체력 12% 이하를 즉사시킵니다',
+    set:{ execute:0.12 } },
+  { id:'p_hunt',  icon:'🏹', name:'추격',     desc:'느려진 적에게 피해 +40%',
+    set:{ vsSlowed:1.40 } },
+];
+function towerPerkDef(id) { return TOWER_PERKS.find(p => p.id === id) || null; }
+function towerPerks(t) { return (t && Array.isArray(t.perks)) ? t.perks : []; }
+
+// 아직 안 붙은 것 중 하나를 뽑는다
+function rollTowerPerk(t) {
+  const have = towerPerks(t);
+  const pool = TOWER_PERKS.filter(p => !have.includes(p.id));
+  if (!pool.length) return null;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 // 승급 한 번. 심 하나를 태우고 그 타워만 한 별 올린다.
+// ★6 이상으로 올라가면 특수능력이 하나 붙는다.
 function promoteTowerWithCore(gs, t) {
   if (!canPromoteTower(gs, t)) return false;
   const next = towerPromoteStar(t);
   const f = forgeState(gs);
   f.cores[next] -= 1;
   t.level = next;
-  return true;
+  let perk = null;
+  if (next >= 6) {
+    perk = rollTowerPerk(t);
+    if (perk) { if (!Array.isArray(t.perks)) t.perks = []; t.perks.push(perk.id); }
+  }
+  return perk || true;
 }
 
 // ── 3. 담금질 ────────────────────────────────────────────────────────────────

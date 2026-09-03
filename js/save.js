@@ -59,6 +59,7 @@ const SaveManager = {
       towers: (gs.towers || []).map(t => ({
         col:t.col, row:t.row, typeId:t.typeId, level:t.level || 1, invested:t.invested || 0,
         branch:t.branch || null,
+        perks: Array.isArray(t.perks) ? t.perks.slice() : null,   // ✦ ★6부터 붙은 능력
         kills:t.kills || 0, damageDealt:t.damageDealt || 0
       })),
       team: (gs.battle?.ourTeam || []).filter(u => !u.isHero).map(u => ({

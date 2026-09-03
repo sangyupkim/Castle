@@ -696,11 +696,33 @@ function renderTower(ctx, t) {
   }
   const tlv = t.level || 1;
   if (tlv > 1) {
-    // Lv.4~5는 별 네 개가 칸을 넘치므로 숫자로 표기한다.
-    // 그림을 쓰면 몸통 한가운데라 글자가 묻힌다 — 칸 바닥으로 내린다.
+    // 별을 다섯 개까지 한 줄에 놓고, 여섯 개째부터 아랫줄로 넘긴다.
+    // ★10을 한 줄로 그리면 칸 폭(53px)을 넘어 옆 타워까지 침범한다.
+    // 숫자(Lv7)로 적던 시절에는 ★6 이상이 특별해 보이지 않았다 —
+    // 심을 다섯 개 태워 만든 것이 'Lv10' 넉 자면 그 값이 화면에 없다.
+    const stars = tlv - 1;              // ★1 = Lv.2
+    const row1  = Math.min(5, stars), row2 = Math.max(0, stars - 5);
     ctx.fillStyle='#fbbf24'; ctx.font='bold 7px sans-serif';
     ctx.textAlign='center'; ctx.textBaseline= key ? 'bottom' : 'top';
-    ctx.fillText(tlv <= 3 ? '★'.repeat(tlv-1) : `Lv${tlv}`, x, key ? y+CELL_H/2-1 : y+9);
+    const baseY = key ? y+CELL_H/2-1 : y+9;
+    if (row2 > 0) {
+      // 두 줄이면 아랫줄이 칸 밖으로 나가지 않게 위로 한 줄 올려 잡는다
+      const topY = key ? baseY-8 : baseY;
+      ctx.fillText('★'.repeat(row1), x, topY);
+      ctx.fillStyle='#fde68a';
+      ctx.fillText('★'.repeat(row2), x, topY + (key ? 8 : 8));
+    } else {
+      ctx.fillText('★'.repeat(row1), x, baseY);
+    }
+  }
+  // ✦ ★6 능력 — 몇 개 붙었는지만 칸에 점으로 찍는다. 이름은 패널에서 읽는다.
+  const pk = (typeof towerPerks === 'function') ? towerPerks(t) : [];
+  if (pk.length) {
+    const px0 = x - CELL_W/2 + 6, py0 = y - CELL_H/2 + 6;
+    for (let i = 0; i < Math.min(5, pk.length); i++) {
+      ctx.beginPath(); ctx.arc(px0 + i*5, py0, 1.8, 0, Math.PI*2);
+      ctx.fillStyle='#c4b5fd'; ctx.fill();
+    }
   }
   // ★5 분기 — 어느 갈래로 갔는지 칸에서 바로 보여야 한다.
   // 배치를 짤 때 "여기 대공이 있었나"를 패널을 열어 봐야 안다면 표시가 아니다.
@@ -4296,11 +4318,11 @@ function renderForgeScreen(ctx, gs) {
   });
 
   // 시설 탭은 일반 건물 화면(트랙 목록)을 그대로 쓴다
-  if (cur === 'track') { gs.ui.forgeGearBtns=null; gs.ui.forgeFuseBtns=null; gs.ui.forgeTemperBtn=null; gs.ui.forgeTemperAutoBtn=null;
+  if (cur === 'track') { gs.ui.forgeGearBtns=null; gs.ui.forgeFuseBtns=null; gs.ui.forgeAutoBtns=null; gs.ui.forgeTemperBtn=null; gs.ui.forgeTemperAutoBtn=null;
                          _renderForgeTracks(ctx, gs, tabY+th+8); return; }
 
   const top = tabY+th+10;
-  gs.ui.forgeGearBtns=null; gs.ui.forgeFuseBtns=null; gs.ui.forgeTemperBtn=null; gs.ui.forgeTemperAutoBtn=null; gs.ui.forgeCoreBtn=null;
+  gs.ui.forgeGearBtns=null; gs.ui.forgeFuseBtns=null; gs.ui.forgeAutoBtns=null; gs.ui.forgeTemperBtn=null; gs.ui.forgeTemperAutoBtn=null; gs.ui.forgeCoreBtn=null;
   if      (cur==='gear')   _renderForgeGear(ctx, gs, top);
   else if (cur==='fuse')   _renderForgeFuse(ctx, gs, top);
   else                     _renderForgeTemper(ctx, gs, top);
@@ -4392,7 +4414,34 @@ function _renderForgeFuse(ctx, gs, y) {
   ctx.textAlign='right'; ctx.fillStyle=canBuy?'#fbbf24':'#475569'; ctx.font='bold 11px sans-serif';
   ctx.fillText(`💰 ${FORGE_CORE_COST}`, CW-18, y+18);
   gs.ui.forgeCoreBtn={x:8,y,w:CW-16,h:36};
-  y += 44;
+  y += 42;
+
+  // 🔁 자동 제작 — 목표 별 하나가 나올 때까지 알아서 사고 녹인다.
+  // 어느 타워에 넣을지가 결정이지, 몇 번 누르는지는 결정이 아니다.
+  gs.ui.forgeAutoBtns=[];
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle='#64748b'; ctx.font='9px sans-serif';
+  ctx.fillText('🔁 자동 — 목표 별이 하나 나올 때까지 사고 녹입니다 (골드가 떨어지면 멈춤)', 10, y);
+  y += 14;
+  {
+    const targets = [];
+    for (let sv = FORGE_STAR_MIN + 1; sv <= FORGE_STAR_MAX; sv++) targets.push(sv);
+    const aw = (CW - 16 - (targets.length-1)*4) / targets.length, ah = 40;
+    targets.forEach((sv, i) => {
+      const ax = 8 + i*(aw+4);
+      const need = forgeCoresNeeded(sv) * FORGE_CORE_COST;
+      const can  = gs.gold >= FORGE_CORE_COST;
+      uiPanel(ctx, ax, y, aw, ah, 5, can?'#131c10':'#0c1017', can?'#65a30d':'#1e293b', 1.5);
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillStyle=can?'#a3e635':'#475569'; ctx.font='bold 11px sans-serif';
+      ctx.fillText(`★${sv}`, ax+aw/2, y+13);
+      ctx.fillStyle='#64748b'; ctx.font='bold 7px sans-serif';
+      ctx.fillText(`≈💰${need >= 10000 ? Math.round(need/1000)+'k' : need}`, ax+aw/2, y+28);
+      if (can) gs.ui.forgeAutoBtns.push({x:ax,y,w:aw,h:ah,star:sv});
+    });
+    y += ah + 10;
+  }
+  ctx.textAlign='left'; ctx.textBaseline='top';
 
   // 합성 줄
   gs.ui.forgeFuseBtns=[];
@@ -6020,7 +6069,9 @@ function renderTownPageTowers(ctx, gs, startY) {
   // 🔥 이 타워에 붙은 캠프 단련 한 줄. 있으면 패널이 그만큼 길어지고 버튼이 내려간다.
   const _campLine = _selTower
       ? campTowerSummary(gs, _selTower.typeId, _selTower.branch) : null;
-  const _cShift = _campLine ? 13 : 0;
+  // ✦ ★6 능력 줄이 있으면 그만큼도 패널이 길어진다
+  const _pkShift = (_selTower && towerPerks(_selTower).length) ? 16 : 0;
+  const _cShift = (_campLine ? 13 : 0) + _pkShift;
   panelH += _cShift;
   if (_showBranch) panelH += 92;
   if (gs.ui.towerAction) {
@@ -6050,11 +6101,28 @@ function renderTownPageTowers(ctx, gs, startY) {
       } else {
         ctx.fillText(`ATK ${st.dmg}   ${st.spd.toFixed(2)}/s   사거리 ${Math.round(st.range)}px   처치 ${tower.kills}`,42,panelY+29);
       }
+      // ✦ ★6부터 붙은 능력 — 이 타워가 다른 같은 타워와 무엇이 다른가
+      const _pk = towerPerks(tower);
+      if (_pk.length) {
+        ctx.textAlign='left'; ctx.textBaseline='middle';
+        let pxx = 42;
+        for (const id of _pk) {
+          const d = towerPerkDef(id); if (!d) continue;
+          const label = `${d.icon}${d.name}`;
+          ctx.font='bold 8px sans-serif';
+          const w = ctx.measureText(label).width + 8;
+          if (pxx + w > CW - 14) break;
+          uiPanel(ctx, pxx, panelY+35, w, 13, 3, '#1b1533', '#7c5cd6', 1);
+          ctx.fillStyle='#c4b5fd'; ctx.font='bold 8px sans-serif';
+          ctx.fillText(label, pxx+4, panelY+42);
+          pxx += w + 3;
+        }
+      }
       // 분기를 타도 종류별 단련은 그대로 살아 있다 — 그것을 눈으로 확인하는 자리
       if (_campLine) {
         ctx.fillStyle='#fb923c'; ctx.font='bold 8px sans-serif';
         ctx.textAlign='left'; ctx.textBaseline='middle';
-        ctx.fillText(_campLine, 42, panelY+42);
+        ctx.fillText(_campLine, 42, panelY+42+_pkShift);
       }
 
       // 등급별 실효 피해 — 이 타워가 무엇을 잘 잡는지. 분기를 고르면 이 줄이 다시 쓰인다.

@@ -172,7 +172,7 @@ function newState() {
          backupExportBtn:null, backupImportBtn:null, backupMsg:null,
          tutReplayBtn:null, tutResetTipBtn:null, guideReplayBtn:null, campBtns:[], campGroupBtns:[], relicBtns:[], relicSellBtns:[], cardMetaBtns:[], cardCatBtns:[], cardBanBtns:[], cardBackBtn:null,
          rankSubmitBtn:null, rankBoardBtns:[], rankReloadBtn:null,
-         pauseCardsBtn:null, runCardsCloseBtn:null, runCardsScroll:null, towerPromoteBtn:null,
+         pauseCardsBtn:null, runCardsCloseBtn:null, runCardsScroll:null, towerPromoteBtn:null, forgeAutoBtns:[],
          bossPickBtns:[], bgmToggleBtn:null, sfxToggleBtn:null,
          tutSkipBtn:null, tutBackBtn:null, sigilCards:[] },
     // 영구 데이터 참조
@@ -327,6 +327,10 @@ let _restoredHero = null;   // 이어하는 판의 영웅 상태 (보너스 적�
     tw.level    = Math.max(1, Math.min(TOWER_MAX_LEVEL, t.level || 1));
     // ★5 분기 — 지금 정의에 없는 id면 버린다 (분기표가 바뀌어도 세이브가 안 깨지게)
     tw.branch   = branchDef(t.typeId, t.branch) ? t.branch : null;
+    // ✦ ★6 능력 — 지금 표에 없는 id는 버린다 (표가 바뀌어도 세이브가 안 깨지게)
+    tw.perks    = Array.isArray(t.perks)
+      ? t.perks.filter(id => typeof towerPerkDef === 'function' && towerPerkDef(id))
+      : [];
     tw.invested = t.invested || tw.invested;
     tw.kills    = t.kills || 0;
     tw.damageDealt = t.damageDealt || 0;
@@ -1483,6 +1487,16 @@ function handleForgeTap(x, y) {
       return true;
     }
   }
+  for (const b of gs.ui.forgeAutoBtns||[]) {
+    if (!hitTest(x,y,b)) continue;
+    const r = autoForgeCore(gs, b.star);
+    SaveManager.save(gs);
+    if (r.got) { SFX.levelUp();
+      say(`🔁 ★${r.goal} 완성 — ★5 ${r.bought}개 · 합성 ${r.fused}번 · 💰${r.spent}`, '#a3e635'); }
+    else { SFX.denied(); FX.shake(4,0.3);
+      say(`🔁 ★${r.goal} 실패 — 골드가 떨어졌습니다 (💰${r.spent} 씀)`, '#f59e0b'); }
+    return true;
+  }
   if (hitTest(x,y,gs.ui.forgeCoreBtn||{})) {
     if (buyForgeCore(gs)) { SFX.upgrade(); SaveManager.save(gs); say('★5 심을 사들였습니다', '#60a5fa'); }
     else { SFX.denied(); say(`💎 ${FORGE_CORE_COST} 부족`, '#ef4444'); }
@@ -1781,11 +1795,21 @@ function promoteSelectedTower(x, y) {
   const tower = gs.towers.find(tw => tw.col === ta.col && tw.row === ta.row);
   if (!tower) { gs.ui.towerAction = null; return; }
   const need = (tower.level || 1) + 1;
-  if (!promoteTowerWithCore(gs, tower)) {
+  const res = promoteTowerWithCore(gs, tower);
+  if (!res) {
     spawnFloaty(`★${need} 심이 없습니다`, x, y, '#ef4444'); SFX.denied(); return;
   }
-  spawnFloaty(`★${tower.level} 승급!`, x, y, '#fbbf24');
   const ctr = cellCenter(tower.col, tower.row);
+  // ✦ 능력이 붙었으면 그것이 승급의 알맹이다 — 별보다 먼저 읽히게 띄운다
+  if (res !== true) {
+    spawnFloaty(`✦ ${res.icon} ${res.name}`, x, y - 16, '#c4b5fd');
+    spawnFloaty(`★${tower.level} 승급`, x, y, '#fbbf24');
+    if (typeof addLog === 'function')
+      addLog(gs.battle, `✦ ${TOWER_TYPES[tower.typeId].name} ★${tower.level} — ${res.icon} ${res.name}: ${res.desc}`, '#c4b5fd');
+    FX.ring(ctr.x, ctr.y, '#c4b5fd', 18);
+  } else {
+    spawnFloaty(`★${tower.level} 승급!`, x, y, '#fbbf24');
+  }
   FX.ring(ctr.x, ctr.y, '#fbbf24', 12);
   SFX.upgrade();
   SaveManager.save(gs);
