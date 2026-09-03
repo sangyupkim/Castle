@@ -1696,6 +1696,18 @@ function renderBriefing(ctx, gs, top) {
   uiPanel(ctx, 6,y,CW-12,panelH,7, '#0a1019', '#3f1d1d', 1);
   ctx.fillStyle='#f87171'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillText('⚔️ 아레나 — 60초 내내 리젠 · 갈수록 촘촘하고 강해집니다', 12, y+7);
+  // 🗺 이 층의 지형 배치 — 편성을 바꿀 판단거리라 들어가기 전에 알려준다.
+  // (미로면 원거리가 손해, 호수면 근접이 돌아가야 한다.)
+  {
+    const _tier = getStageInfo(gs.wave).tier || 0;
+    const L = (_tier > 0 && typeof arenaLayoutFor === 'function')
+            ? arenaLayoutFor(_tier, gs.runSeed) : null;
+    if (L) {
+      ctx.textAlign='right'; ctx.fillStyle='#7dd3fc'; ctx.font='bold 9px sans-serif';
+      ctx.fillText(`${L.icon} ${L.name}`, CW-12, y+7);
+      ctx.textAlign='left';
+    }
+  }
 
   const pool = def.arenaPool || [];
   const total = pool.reduce((a,[,w])=>a+w, 0) || 1;
@@ -1923,6 +1935,20 @@ function renderArenaTerrain(ctx, a) {
         for (let xx = t.x; xx < t.x + t.w; xx += 10) ctx.quadraticCurveTo(xx + 5, yy - 3, xx + 10, yy);
       }
       ctx.stroke();
+    } else if (t.kind === 'water') {
+      // 💧 물 — 흐르는 잔물결. 수렁(멈춘 물)과 한눈에 갈려야 한다:
+      // 하나는 지나갈 수 있고 느릴 뿐이고, 다른 하나는 아예 못 지나간다.
+      const tt = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 900;
+      ctx.globalAlpha = 0.55; ctx.lineWidth = 1.5;
+      for (let yy = t.y + 7; yy < t.y + t.h - 2; yy += 8) {
+        ctx.beginPath();
+        const ph = tt + yy * 0.18;
+        for (let xx = t.x; xx <= t.x + t.w; xx += 6) {
+          const wy = yy + Math.sin(ph + xx * 0.09) * 1.6;
+          if (xx === t.x) ctx.moveTo(xx, wy); else ctx.lineTo(xx, wy);
+        }
+        ctx.stroke();
+      }
     } else {
       ctx.beginPath();
       for (let yy = t.y + 8; yy < t.y + t.h + 8; yy += 10) {

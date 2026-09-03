@@ -247,7 +247,11 @@ const TOWN_BUILDINGS = [
         desc:v=>`특수 용병 능력치 +${pct(v)}`,               apply:(b,v)=>{ pctAdd(b, 'specialUnitMult', v); } },
       // 🚪 특수 용병 슬롯도 같은 이유로 여관 레벨에 딸렸다. 이 트랙은 그 위에
       // 얹는 한두 칸만 남긴다 — 82보석에서 ×1.404씩 네 번은 아무도 끝까지 못 샀다.
-      { id:'i_slot', name:'별관 증축',     icon:'🚪', unlockLv:2, cost:55, costMult:1.24, step:1,    growth:0,    maxLv:2,
+      // 🚪 특수 용병 자리. 병영의 ➕병력 증원과 같은 이유로 뒤로 미뤘다 —
+      // 여관 Lv.3에 열려 두 칸을 한 번에 살 수 있으니 여관에서 할 일이
+      // 그것뿐이 되고, 다 사고 나면 여관을 더 올릴 이유도 같이 사라진다.
+      // perLevel이 한 단에 하나씩만 내주므로 자리를 원하면 여관을 올려야 한다.
+      { id:'i_slot', name:'별관 증축',     icon:'🚪', unlockLv:5, cost:55, costMult:1.24, step:1,    growth:0,    maxLv:3, perLevel:true,
         desc:v=>`특수 용병 슬롯 +${Math.round(v)} (여관 레벨에 더해집니다)`,
         apply:(b,v)=>{ b.specialSlotBonus += Math.round(v); } },
       { id:'i_stock',name:'보급 계약',   icon:'📦', unlockLv:3, cost:44, costMult:1.2, step:8, growth:0.04,

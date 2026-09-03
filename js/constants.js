@@ -19,37 +19,49 @@ const GIVE_UP_GEM_MULT = 0.6;
 //     겹쳐 1440×3120 = 449만 픽셀을 매 프레임 칠했다. 같은 폰이라도
 //     브라우저(주소창만큼 짧다)는 멀쩡한데 설치 앱만 렉이 걸린 이유가 이것이다.
 //
-// 그래서 논리 해상도를 480×928로 못 박는다. 화면은 여백으로 채운다 —
+// 그래서 논리 해상도를 480×978로 못 박는다. 화면은 여백으로 채운다 —
 // 여백이 남는 편이 "긴 폰이 유리한 게임"보다 낫다.
 const CW = 480;
-const CH = 928;
+const CH = 978;
 // 예전 기준값. 저장된 수치·밸런스 문서가 이 높이를 전제로 적혀 있어 남겨 둔다.
 const CH_BASE = 800;
 
 const DEFENSE_Y  = 0;
-// 격자가 7줄 → 8줄이 되면서 355 → 405. 칸 높이(50)는 그대로다.
-const DEFENSE_H  = 405;
-const UIBAR_Y    = 405;
-const UIBAR_H    = 55;
-const BATTLE_Y   = 460;
-const BATTLE_H   = CH - BATTLE_Y;   // 468
-
+// 상단 = 여백(5) + 격자 8줄(각 50) + **성 전용 한 줄**(50).
+//
+// 격자를 7줄 → 8줄로 늘렸을 때 성도 같이 한 칸 내려왔다(6행 → 7행).
+// 그러면 늘어난 줄을 성이 도로 먹는 셈이라, 실제로 지을 수 있는 자리는
+// 그대로였다. 성을 격자 **밖** 한 줄로 빼서 8줄을 전부 쓸 수 있게 한다.
+//
+// 칸 높이는 DEFENSE_H를 줄 수로 나누지 않는다 — 성 줄까지 섞여 들어가
+// 칸이 50 → 56으로 부풀었다. 칸이 먼저고 상단 높이가 그 결과다.
 // ─── Defense Grid ────────────────────────────────────────────────────────────
+// 격자가 먼저다 — 상단 높이는 이 값들에서 나온다.
 const GRID_COLS = 9;
 const GRID_ROWS = 8;
 const CELL_W = Math.floor(CW / GRID_COLS);
-const CELL_H = Math.floor(DEFENSE_H / GRID_ROWS);
+const CELL_H = 50;                               // 칸 한 변(세로)
 const GRID_OX = Math.floor((CW - GRID_COLS * CELL_W) / 2);
-const GRID_OY = 5;
+const GRID_OY = 5;                               // 격자 위 여백
+const CASTLE_ROW_H = 50;                         // 성이 서는 줄
+
+const DEFENSE_H  = GRID_OY + GRID_ROWS * CELL_H + CASTLE_ROW_H;   // 455
+const UIBAR_Y    = DEFENSE_H;
+const UIBAR_H    = 55;
+const BATTLE_Y   = UIBAR_Y + UIBAR_H;            // 510
+const BATTLE_H   = CH - BATTLE_Y;
 // 기지(성) 칸. 예전에는 네 파일에 cellCenter(4, 6)으로 흩어져 있어서
 // 격자를 한 줄 늘리자 전부 어긋났다. 좌표는 한 군데서만 정한다.
 const CASTLE_C = 4;
-const CASTLE_R = GRID_ROWS - 1;
+// 성은 격자 **밖** 한 줄에 선다(행 인덱스 = GRID_ROWS).
+// 격자 안에 두면 늘린 줄을 성이 도로 먹어서, 줄을 늘린 값어치가 없어진다.
+// 지을 수 있는 칸은 0..GRID_ROWS-1 이므로 이 줄에는 아무것도 못 짓는다.
+const CASTLE_R = GRID_ROWS;
 
 // ─── 경로 변형 ───────────────────────────────────────────────────────────────
 // 경로가 하나뿐이면 최적 배치도 하나뿐이다 — 몇 판만 지나면 같은 자리에 같은 타워를 놓는다.
 // 관문(10층)마다 경로가 바뀌면 그 최적해가 리셋되고, 배치를 다시 생각하게 된다.
-// 모든 변형은 [4,0]에서 출발해 [4,7](기지)에서 끝나고 인접 칸으로만 이어진다.
+// 모든 변형은 [4,0]에서 출발해 [4,8](기지)에서 끝나고 인접 칸으로만 이어진다.
 // 격자가 8줄이 되면서 마지막 [4,6]→[4,7] 한 칸이 모든 변형에 붙었다 —
 // 마지막 직선이 한 칸 길어지고, 그만큼 기지 앞에 지을 자리가 늘었다.
 const PATH_VARIANTS = [
@@ -62,7 +74,7 @@ const PATH_VARIANTS = [
     [5,1],[6,1],[7,1],
     [7,2],[7,3],[7,4],
     [6,4],[5,4],[4,4],
-    [4,5],[4,6],[4,7] ],
+    [4,5],[4,6],[4,7],[4,8] ],
   // 1 — 넓은 ∞. 판 바깥을 크게 돌아 안쪽이 넓게 비고, 사거리가 짧은 타워가 불리해진다
   [ [4,0],[4,1],
     [3,1],[2,1],[1,1],[0,1],
@@ -72,7 +84,7 @@ const PATH_VARIANTS = [
     [5,1],[6,1],[7,1],[8,1],
     [8,2],[8,3],[8,4],
     [7,4],[6,4],[5,4],[4,4],
-    [4,5],[4,6],[4,7] ],
+    [4,5],[4,6],[4,7],[4,8] ],
   // 2 — 뱀 (S자). 가로로 세 번 훑어서 세로줄 하나에 몰아 지으면 세 번 때린다
   [ [4,0],[4,1],
     [5,1],[6,1],[7,1],
@@ -80,7 +92,7 @@ const PATH_VARIANTS = [
     [1,3],
     [1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],
     [7,5],[6,5],[5,5],[4,5],
-    [4,6],[4,7] ],
+    [4,6],[4,7],[4,8] ],
   // 3 — 나선. 바깥을 한 바퀴 돌고 안으로 감겨 들어온다 — 중앙 타워가 강해진다
   [ [4,0],[4,1],[3,1],[2,1],[1,1],
     [1,2],[1,3],[1,4],[1,5],
@@ -88,7 +100,7 @@ const PATH_VARIANTS = [
     [7,4],[7,3],[7,2],
     [6,2],[5,2],[4,2],[3,2],
     [3,3],[4,3],[4,4],
-    [4,5],[4,6],[4,7] ]
+    [4,5],[4,6],[4,7],[4,8] ]
 ];
 
 // 현재 활성 경로. 층이 바뀔 때 applyPathVariant로 교체된다.
@@ -166,8 +178,8 @@ function nearestFreeCell(col, row, occupied) {
 // (오크 147). 상성까지 겹치면 대포탑이 박쥐에게 내는 실효 화력은 오크의 1/21이다.
 // 플레이어 눈에는 그냥 "공중은 안 맞는다"로 보인다. 항로를 판 바깥으로 크게 돌려 길이를
 // 603 → 845px로 늘렸다. 여전히 지상보다 짧다 — 하늘은 미로를 건너뛰는 길이 맞다.
-const AIR_PATH_L = [[4,0],[1,0],[0,2],[2,3],[0,4],[1,6],[3,6],[4,7]];
-const AIR_PATH_R = [[4,0],[7,0],[8,2],[6,3],[8,4],[7,6],[5,6],[4,7]];
+const AIR_PATH_L = [[4,0],[1,0],[0,2],[2,3],[0,4],[1,6],[3,7],[4,8]];
+const AIR_PATH_R = [[4,0],[7,0],[8,2],[6,3],[8,4],[7,6],[5,7],[4,8]];
 function airPathFor(n) { return (n % 2 === 0) ? AIR_PATH_L : AIR_PATH_R; }
 
 // ─── 도보 시간 ───────────────────────────────────────────────────────────────
@@ -1711,7 +1723,13 @@ function endlessRand(tier, salt, seed) {
 const TERRAIN_DEFS = {
   rock:  { name:'바위', fill:'#3a4252', edge:'#6b7280', blocksMove:true, blocksShot:true },
   mud:   { name:'수렁', fill:'#2f2a16', edge:'#7c6f2a', slow:0.52 },
-  spike: { name:'가시', fill:'#33131f', edge:'#9f1239', dpsPct:0.014 }   // 초당 최대HP의 1.4%
+  spike: { name:'가시', fill:'#33131f', edge:'#9f1239', dpsPct:0.014 },  // 초당 최대HP의 1.4%
+  // 💧 물 — 못 지나가지만 **화살은 건너간다.** 바위와 정반대다.
+  // 이 하나가 있어야 지형이 "누구에게 불리한가"를 갈라 놓을 수 있다:
+  //   바위(둘 다 막음) → 근접·원거리 모두 답답
+  //   물(이동만 막음)  → 근접은 돌아가야 하고 원거리는 그대로 쏜다
+  //   미로(바위 벽)    → 원거리가 손해
+  water: { name:'물',   fill:'#12314f', edge:'#38bdf8', blocksMove:true }
 };
 const TERRAIN_ORDER    = ['rock','mud','spike'];
 const TERRAIN_MARGIN   = 22;   // 벽에서 떨어뜨릴 거리 — 밀려나도 아레나를 벗어나지 않게
@@ -1731,7 +1749,162 @@ function _rectsOverlap(a, b, pad) {
            a.y + a.h + pad < b.y || b.y + b.h + pad < a.y);
 }
 
-function generateArenaTerrain(tier) {
+// ─── 🗺 아레나 지형 배치 ─────────────────────────────────────────────────────
+// 예전에는 층마다 작은 사각형 몇 개를 무작위로 뿌리는 것이 전부였다. 그러니
+// 어느 층을 가도 "여기저기 조금 걸리적거린다"가 끝이고, 판이 달라지는 느낌이 없었다.
+//
+// 이제 층마다 **이름 있는 배치**를 하나 뽑는다. 배치마다 누가 손해를 보는지가
+// 분명해서, 편성을 그 층에 맞춰 바꿀 이유가 생긴다.
+//
+//   🌾 개활지  아무것도 없다 — 순수한 힘 싸움
+//   🪨 돌밭    예전의 무작위 흩뿌리기
+//   🧱 미로    긴 벽이 늘어서 시야를 끊는다 → **원거리가 손해**
+//   💧 호수    가운데가 물 → 근접은 돌아가야 한다, **원거리가 이득**
+//   🏛 회랑    가로 벽 두 줄로 길이 셋 → 뭉치면 갇힌다
+//   🌋 화산    가시밭이 넓게 깔린다 → 오래 서 있으면 녹는다
+//   🐊 늪지    수렁이 넓게 → 전부 느려진다, 원거리가 조금 이득
+//
+// 각 생성기는 사각형 목록만 돌려준다. 막기·느려짐·피해는 TERRAIN_DEFS가 정한다.
+function _terr(kind, x, y, w, h) {
+  const d = TERRAIN_DEFS[kind] || TERRAIN_DEFS.rock;
+  return { kind, x, y, w, h,
+           blocksMove: !!d.blocksMove, blocksShot: !!d.blocksShot,
+           slow: d.slow || 0, dpsPct: d.dpsPct || 0 };
+}
+// 아군이 시작하는 한가운데는 늘 비워 둔다 — 시작하자마자 벽에 끼면 판이 아니다.
+function _clearsCenter(r) {
+  const cx = ARENA_X + ARENA_W / 2, cy = ARENA_Y + ARENA_H / 2;
+  const nx = Math.max(r.x, Math.min(cx, r.x + r.w));
+  const ny = Math.max(r.y, Math.min(cy, r.y + r.h));
+  return Math.hypot(cx - nx, cy - ny) >= TERRAIN_SAFE_R;
+}
+
+const ARENA_LAYOUTS = [
+  { id:'open', name:'개활지', icon:'🌾', minTier:1, weight:14,
+    desc:'가릴 것이 없다 — 힘으로 붙는다',
+    gen: () => [] },
+
+  { id:'rubble', name:'돌밭', icon:'🪨', minTier:3, weight:20,
+    desc:'바위가 흩어져 있다 — 화살이 자주 걸린다',
+    gen: (tier) => scatterTerrain(tier) },
+
+  // 🧱 미로 — 긴 직선 벽. 벽이 화살을 막으므로 원거리 효율이 떨어진다.
+  // 벽마다 통로를 하나씩 남겨 길이 완전히 끊기지는 않게 한다.
+  { id:'maze', name:'미로', icon:'🧱', minTier:6, weight:16,
+    desc:'긴 벽이 시야를 끊는다 — 원거리가 손해',
+    gen: (tier) => {
+      const out = [];
+      const rows = 4, wallH = 12;
+      const gapW = 92;
+      for (let i = 0; i < rows; i++) {
+        const y = ARENA_Y + ARENA_H * (i + 1) / (rows + 1) - wallH / 2;
+        // 통로 위치를 줄마다 어긋나게 — 한 줄로 뚫려 있으면 미로가 아니다
+        const gx = ARENA_X + 14 + endlessRand(tier, 4100 + i) * (ARENA_W - gapW - 28);
+        const left  = _terr('rock', ARENA_X + 8, y, Math.max(0, gx - ARENA_X - 8), wallH);
+        const right = _terr('rock', gx + gapW, y,
+                            Math.max(0, ARENA_X + ARENA_W - 8 - (gx + gapW)), wallH);
+        for (const r of [left, right]) if (r.w > 16 && _clearsCenter(r)) out.push(r);
+      }
+      return out;
+    } },
+
+  // 💧 호수 — 가운데 물. 근접은 돌아가야 하고 화살은 그대로 건너간다.
+  // 한가운데를 통째로 막으면 아군 시작 자리가 없어지므로 도넛처럼 비켜 놓는다.
+  { id:'lake', name:'호수', icon:'💧', minTier:5, weight:16,
+    desc:'가운데가 물 — 근접은 돌아서 간다',
+    gen: (tier) => {
+      const cx = ARENA_X + ARENA_W / 2, cy = ARENA_Y + ARENA_H / 2;
+      const w = ARENA_W * 0.46, h = ARENA_H * 0.26;
+      // 물을 한가운데가 아니라 위/아래 중 한쪽으로 민다.
+      // 26px만 띄웠더니 아군이 시작하는 자리를 물이 덮어서, 판이 시작하자마자
+      // 부대가 물 밖으로 밀려났다. 안전 반경(TERRAIN_SAFE_R)만큼 띄운다.
+      const up  = endlessRand(tier, 4300) < 0.5;
+      const off = TERRAIN_SAFE_R - 10;
+      const y   = up ? cy - h - off : cy + off;
+      const out = [ _terr('water', cx - w / 2, y, w, h) ];
+      // 물가에 수렁을 조금 — 물을 돌아가는 길이 완전히 공짜는 아니게
+      out.push(_terr('mud', cx - w / 2 - 34, y + h * 0.2, 30, h * 0.6));
+      out.push(_terr('mud', cx + w / 2 + 4,  y + h * 0.2, 30, h * 0.6));
+      return out.filter(r => r.w > 8 && r.h > 8);
+    } },
+
+  // 🏛 회랑 — 가로 벽 두 줄. 길이 셋으로 갈려 부대가 흩어진다.
+  { id:'corridor', name:'회랑', icon:'🏛', minTier:8, weight:13,
+    desc:'가로 벽 두 줄 — 길이 셋으로 갈린다',
+    gen: (tier) => {
+      const out = [];
+      const wallH = 14, sideW = ARENA_W * 0.34;
+      for (let i = 0; i < 2; i++) {
+        const y = ARENA_Y + ARENA_H * (i === 0 ? 0.28 : 0.72) - wallH / 2;
+        const flip = endlessRand(tier, 4500 + i) < 0.5;
+        const a = _terr('rock', ARENA_X + 6, y, sideW, wallH);
+        const b = _terr('rock', ARENA_X + ARENA_W - 6 - sideW, y, sideW, wallH);
+        for (const r of (flip ? [a, b] : [b, a])) if (_clearsCenter(r)) out.push(r);
+      }
+      return out;
+    } },
+
+  // 🌋 화산 — 가시밭. 서 있으면 녹으므로 계속 움직여야 한다.
+  { id:'volcano', name:'화산', icon:'🌋', minTier:12, weight:11,
+    desc:'가시밭이 넓다 — 서 있으면 녹는다',
+    gen: (tier) => {
+      const out = [];
+      for (let i = 0; i < 5; i++) {
+        const w = 54 + endlessRand(tier, 4700 + i) * 60;
+        const h = 40 + endlessRand(tier, 4800 + i) * 46;
+        const x = ARENA_X + TERRAIN_MARGIN + endlessRand(tier, 4900 + i) * (ARENA_W - w - TERRAIN_MARGIN * 2);
+        const y = ARENA_Y + TERRAIN_MARGIN + endlessRand(tier, 5000 + i) * (ARENA_H - h - TERRAIN_MARGIN * 2);
+        const r = _terr('spike', x, y, w, h);
+        if (_clearsCenter(r) && !out.some(o => _rectsOverlap(o, r, 6))) out.push(r);
+      }
+      return out;
+    } },
+
+  // 🐊 늪지 — 수렁이 넓게. 전부 느려지니 원거리가 조금 이득이다.
+  { id:'swamp', name:'늪지', icon:'🐊', minTier:10, weight:11,
+    desc:'수렁이 넓다 — 모두 느려진다',
+    gen: (tier) => {
+      const out = [];
+      for (let i = 0; i < 4; i++) {
+        const w = 80 + endlessRand(tier, 5200 + i) * 90;
+        const h = 54 + endlessRand(tier, 5300 + i) * 60;
+        const x = ARENA_X + 10 + endlessRand(tier, 5400 + i) * (ARENA_W - w - 20);
+        const y = ARENA_Y + 10 + endlessRand(tier, 5500 + i) * (ARENA_H - h - 20);
+        const r = _terr('mud', x, y, w, h);
+        if (!out.some(o => _rectsOverlap(o, r, 4))) out.push(r);
+      }
+      return out;
+    } },
+];
+
+function arenaLayoutById(id) { return ARENA_LAYOUTS.find(l => l.id === id) || ARENA_LAYOUTS[0]; }
+
+// 이 층의 배치. 층과 런 시드로 정해지므로 브리핑에서 미리 보여줄 수 있다.
+function arenaLayoutFor(tier, seed) {
+  const t = Math.max(1, tier || 1);
+  const pool = ARENA_LAYOUTS.filter(l => t >= l.minTier);
+  if (!pool.length) return ARENA_LAYOUTS[0];
+  const total = pool.reduce((a, l) => a + l.weight, 0);
+  let r = endlessRand(t, 5900, seed) * total;
+  for (const l of pool) { r -= l.weight; if (r <= 0) return l; }
+  return pool[pool.length - 1];
+}
+
+// 이 층의 지형. 배치를 하나 뽑아 그 생성기를 돌린다.
+// (예전에는 이 자리가 곧 흩뿌리기였다 — 지금 그건 '돌밭' 배치 하나로 남았다.)
+function generateArenaTerrain(tier, seed) {
+  const L = arenaLayoutFor(tier, seed);
+  let out = [];
+  try { out = L.gen(tier) || []; } catch (e) { out = []; }
+  // 어떤 배치든 아레나 밖으로 새지 않게 한 번 다듬는다
+  return out.filter(r => r.w > 6 && r.h > 6).map(r => {
+    r.x = Math.max(ARENA_X, Math.min(ARENA_X + ARENA_W - r.w, r.x));
+    r.y = Math.max(ARENA_Y, Math.min(ARENA_Y + ARENA_H - r.h, r.y));
+    return r;
+  });
+}
+
+function scatterTerrain(tier) {
   const n = terrainCountFor(tier);
   if (n <= 0) return [];
   const cx = ARENA_X + ARENA_W / 2, cy = ARENA_Y + ARENA_H / 2;
