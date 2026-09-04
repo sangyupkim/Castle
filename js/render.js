@@ -2902,6 +2902,18 @@ function renderLobbyHeader(ctx, gs) {
   ctx.fillStyle='#475569'; ctx.font='9px sans-serif';
   ctx.fillText('다음 출격을 준비하는 곳', 12, 39);
 
+  // 📖 게임 가이드 — 타이틀에만 두면 한 판 시작한 뒤에는 못 본다.
+  // 막히는 것은 대개 몇 판 돌린 뒤이므로 여기에도 둔다.
+  {
+    const w = 62, h = 24, x = 12 + ctx.measureText('다음 출격을 준비하는 곳').width + 76, y = 8;
+    const gx = Math.min(x, CW - w - 96);
+    uiPanel(ctx, gx, y, w, h, 5, 'rgba(28,22,8,0.9)', 'rgba(251,191,36,0.5)', 1);
+    ctx.textAlign='center'; ctx.fillStyle='#fcd34d'; ctx.font='bold 10px sans-serif';
+    ctx.fillText('📖 가이드', gx + w/2, y + h/2);
+    ctx.textAlign='left';
+    gs.ui.lobbyGuideBtn = { x:gx, y, w, h };
+  }
+
   ctx.textAlign='right';
   ctx.fillStyle='#a78bfa'; ctx.font='bold 19px sans-serif';
   ctx.fillText(`💎 ${gs.soulStones}`, CW-12, 20);
@@ -7152,6 +7164,16 @@ function renderTitleScreen(ctx, alpha) {
   }
   gs.ui.titlePatchBtn = {x:nx, y:ny, w:nw2, h:nh2};
 
+  // 📖 게임 가이드 — 소식 옆에 나란히. 소식은 "무엇이 바뀌었나"고
+  // 가이드는 "어떻게 이기나"라서, 둘 다 시작 전에 볼 것이다.
+  const gw=150, gh=30, gx=(CW-gw)/2, gy=ny-gh-8;
+  uiPanel(ctx, gx, gy, gw, gh, 15, 'rgba(28,22,8,0.80)', 'rgba(251,191,36,0.55)', 1);
+  ctx.fillStyle = 'rgba(253,224,120,0.88)';
+  ctx.font = '12px sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('📖 게임 가이드', CW/2, gy + gh/2);
+  gs.ui.titleGuideBtn = {x:gx, y:gy, w:gw, h:gh};
+
   // 탭 안내
   ctx.fillStyle = 'rgba(255,255,255,0.40)';
   ctx.font = '10px sans-serif'; ctx.textBaseline = 'bottom';
@@ -7288,3 +7310,176 @@ function renderPatchNotes(ctx, gs) {
   }
 }
 function patchScrollMax() { return Math.max(0, _patchBottom - (CH - 46)); }
+
+// ─── 📖 게임 가이드 ───────────────────────────────────────────────────────────
+// 소식(patch)과 같은 뼈대를 쓰되 한 가지가 다르다 — **장 탭**이 있다.
+// 여덟 장을 한 줄로 이어 붙이면 480px 폭에서 스크롤이 끝없이 길어져,
+// "감속이 어떻게 겹치더라"를 다시 찾는 데 한참 걸린다. 장을 갈라 두면
+// 한 번에 한 장만 굴리면 된다.
+let _guideBottom = 0;
+const GUIDE_HEAD_H = 46;
+const GUIDE_TAB_H  = 38;
+
+function guideChapter(gs) {
+  const i = Math.max(0, Math.min(GUIDE_CHAPTERS.length - 1, gs.guideChapter || 0));
+  return GUIDE_CHAPTERS[i];
+}
+function guideScrollMax() {
+  return Math.max(0, _guideBottom - (CH - GUIDE_HEAD_H - GUIDE_TAB_H));
+}
+
+function renderGuideBook(ctx, gs) {
+  gs.ui.guideCloseBtn = null;
+  gs.ui.guideTabBtns  = [];
+  // 반투명으로 두면 타이틀의 밝은 그림이 글자 뒤로 비쳐 읽기가 어렵다.
+  // 문서는 문서여야 한다 — 통째로 덮는다.
+  ctx.fillStyle = '#070b12';
+  ctx.fillRect(0, 0, CW, CH);
+
+  // ── 머리 (고정) ────────────────────────────────────────────────────────
+  ctx.fillStyle = '#0b1220'; ctx.fillRect(0, 0, CW, GUIDE_HEAD_H);
+  ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, GUIDE_HEAD_H-0.5); ctx.lineTo(CW, GUIDE_HEAD_H-0.5); ctx.stroke();
+  ctx.textAlign='left'; ctx.textBaseline='middle';
+  ctx.fillStyle='#fbbf24'; ctx.font='bold 13px sans-serif';
+  ctx.fillText('📖 게임 가이드', 14, GUIDE_HEAD_H/2);
+
+  const cbw=54, cbh=26, cbx=CW-cbw-10, cby=(GUIDE_HEAD_H-cbh)/2;
+  uiPanel(ctx, cbx, cby, cbw, cbh, 5, '#1e293b', '#475569', 1);
+  ctx.textAlign='center';
+  ctx.fillStyle='#cbd5e1'; ctx.font='bold 11px sans-serif';
+  ctx.fillText('닫기', cbx+cbw/2, GUIDE_HEAD_H/2);
+  gs.ui.guideCloseBtn = { x:cbx, y:cby, w:cbw, h:cbh };
+
+  // ── 장 탭 (고정) ───────────────────────────────────────────────────────
+  const n = GUIDE_CHAPTERS.length, tw = CW / n, ty = GUIDE_HEAD_H;
+  const cur = Math.max(0, Math.min(n-1, gs.guideChapter || 0));
+  ctx.fillStyle = '#070b12'; ctx.fillRect(0, ty, CW, GUIDE_TAB_H);
+  GUIDE_CHAPTERS.forEach((c, i) => {
+    const tx = i*tw, on = i === cur;
+    if (on) {
+      ctx.fillStyle = '#141c2e'; ctx.fillRect(tx, ty, tw, GUIDE_TAB_H);
+      ctx.fillStyle = '#fbbf24'; ctx.fillRect(tx, ty+GUIDE_TAB_H-2.5, tw, 2.5);
+    }
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.globalAlpha = on ? 1 : 0.45;
+    ctx.font='13px sans-serif'; ctx.fillStyle='#e2e8f0';
+    ctx.fillText(c.icon, tx+tw/2, ty+13);
+    ctx.font='bold 9px sans-serif';
+    ctx.fillStyle = on ? '#fbbf24' : '#64748b';
+    ctx.fillText(c.name, tx+tw/2, ty+29);
+    ctx.globalAlpha = 1;
+    gs.ui.guideTabBtns.push({ x:tx, y:ty, w:tw, h:GUIDE_TAB_H, idx:i });
+  });
+  ctx.strokeStyle = '#1e293b';
+  ctx.beginPath(); ctx.moveTo(0, ty+GUIDE_TAB_H-0.5); ctx.lineTo(CW, ty+GUIDE_TAB_H-0.5); ctx.stroke();
+
+  // ── 본문 (스크롤) ──────────────────────────────────────────────────────
+  const top = GUIDE_HEAD_H + GUIDE_TAB_H;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, top, CW, CH - top); ctx.clip();
+  ctx.translate(0, -(gs.guideScroll || 0));
+  let y = top + 14;
+  ctx.textAlign='left'; ctx.textBaseline='top';
+
+  const ch = guideChapter(gs);
+  // 장 머리
+  ctx.fillStyle='#fbbf24'; ctx.font='bold 15px sans-serif';
+  ctx.fillText(`${ch.icon} ${ch.name}`, 14, y);
+  y += 21;
+  if (ch.lede) y += _patchWrapDraw(ctx, ch.lede, 14, y, CW-28, 14, '#64748b', '#94a3b8') + 8;
+
+  for (const b of ch.blocks) {
+    if (b.h) {                                   // 소제목
+      y += 6;
+      ctx.fillStyle='#7dd3fc'; ctx.font='bold 11px sans-serif';
+      ctx.fillText(b.h, 14, y);
+      y += 18;
+
+    } else if (b.p) {                            // 문단
+      y += _patchWrapDraw(ctx, b.p, 14, y, CW-28, 15, '#94a3b8', '#e2e8f0') + 8;
+
+    } else if (b.tip) {                          // 💡 요령 — 왼쪽 금색 선
+      const h = _patchMeasure(ctx, b.tip, CW-28-16, 15);
+      uiPanel(ctx, 12, y-4, CW-24, h+10, 5, '#1a1608', '#7c5e18', 1);
+      ctx.fillStyle='#fbbf24'; ctx.fillRect(12, y-4, 2.5, h+10);
+      _patchWrapDraw(ctx, '💡 ' + b.tip, 22, y+1, CW-28-16, 15, '#c9a961', '#fbbf24');
+      y += h + 16;
+
+    } else if (b.steps) {                        // 번호 없는 흐름
+      for (const [lab, txt] of b.steps) {
+        ctx.font='bold 10px sans-serif';
+        const lw = Math.max(52, ctx.measureText(lab).width + 12);
+        uiPanel(ctx, 14, y-2, lw, 17, 4, '#0d1b2e', '#2563eb', 1);
+        ctx.fillStyle='#60a5fa'; ctx.textAlign='center';
+        ctx.fillText(lab, 14+lw/2, y+2);
+        ctx.textAlign='left';
+        const tx2 = 14 + lw + 8;
+        const hh = _patchWrapDraw(ctx, txt, tx2, y+1, CW - tx2 - 14, 14, '#94a3b8', '#e2e8f0');
+        y += Math.max(22, hh + 7);
+      }
+      y += 4;
+
+    } else if (b.table) {                        // 표
+      const cols = b.table.head.length;
+      // 첫 칸은 좁게, 마지막 칸이 설명을 받는다
+      const w0 = cols === 2 ? 104 : 78;
+      const ws = cols === 2 ? [w0, CW-28-w0]
+                            : [w0, (CW-28-w0)*0.42, (CW-28-w0)*0.58];
+      ctx.font='bold 9px sans-serif'; ctx.fillStyle='#475569';
+      let cx = 14;
+      b.table.head.forEach((hd, i) => { ctx.fillText(hd, cx, y); cx += ws[i]; });
+      y += 14;
+      ctx.strokeStyle='rgba(71,85,105,0.5)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(14, y-3.5); ctx.lineTo(CW-14, y-3.5); ctx.stroke();
+      for (const row of b.table.rows) {
+        let rh = 0; cx = 14;
+        row.forEach((cell, i) => {
+          const h = _patchWrapDraw(ctx, cell, cx, y, ws[i]-8, 14,
+                                   i === 0 ? '#cbd5e1' : '#94a3b8', '#e2e8f0');
+          rh = Math.max(rh, h); cx += ws[i];
+        });
+        y += Math.max(17, rh + 4);
+      }
+      y += 8;
+
+    } else if (b.miss) {                         // 자주 하는 실수
+      const [bad, fix] = b.miss;
+      ctx.fillStyle='#f87171'; ctx.font='bold 10px sans-serif';
+      ctx.fillText('✗ ' + bad, 14, y);
+      y += 15;
+      y += _patchWrapDraw(ctx, fix, 24, y, CW-38, 14, '#94a3b8', '#e2e8f0') + 11;
+    }
+  }
+
+  ctx.fillStyle='#334155'; ctx.font='9px sans-serif';
+  ctx.fillText('위 탭으로 장을 옮깁니다.', 14, y);
+  y += 26;
+  ctx.restore();
+  _guideBottom = y + (gs.guideScroll || 0) - top;
+
+  // 스크롤 막대
+  const view = CH - top;
+  if (_guideBottom > view) {
+    const th = Math.max(30, view * (view / _guideBottom));
+    const maxS = _guideBottom - view;
+    const sy = top + (view - th) * Math.min(1, (gs.guideScroll || 0) / Math.max(1, maxS));
+    ctx.fillStyle='rgba(148,163,184,0.30)';
+    roundRect(ctx, CW-5, sy, 3, th, 1.5); ctx.fill();
+  }
+}
+
+// 그리지 않고 높이만 잰다 — 요령 상자는 글을 먼저 재야 테두리를 칠 수 있다
+function _patchMeasure(ctx, text, maxW, lineH) {
+  const spans = _patchSpans(text);
+  let cx = 0, lines = 1;
+  for (const sp of spans) {
+    for (const c of sp.t) {
+      ctx.font = sp.bold ? 'bold 10px sans-serif' : '10px sans-serif';
+      const w = ctx.measureText(c).width;
+      if (cx + w > maxW) { cx = 0; lines++; }
+      cx += w;
+    }
+  }
+  return lines * lineH;
+}

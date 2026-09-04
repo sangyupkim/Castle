@@ -77,6 +77,9 @@ let _titleScreen = true;  // 앱 시작 시 타이틀 화면 표시
 let _resetArmed  = false; // 리셋 버튼 1차 확인 상태
 // 📋 업데이트 소식 — 타이틀 위에 덮는 문서. 판이 시작되기 전에만 연다.
 let _patchOpen   = false;
+// 📖 게임 가이드 — 소식과 달리 타이틀·로비 **양쪽**에서 열린다.
+// 막히는 것은 대개 몇 판 돌린 뒤라서, 타이틀에만 두면 정작 필요할 때 못 본다.
+let _guideOpen   = false;
 let _resetArmedAt = 0;
 // 🌳 스킬 초기화도 되돌릴 수 없다 — 같은 두 번 누르기 규칙을 쓴다
 let _skillResetArmed = false, _skillResetArmedAt = 0;
@@ -156,6 +159,8 @@ function newState() {
     briefScroll: 0,
     lobbyScroll: 0,     // 캠프 기록 탭 스크롤
     patchScroll: 0,     // 📋 업데이트 소식 스크롤
+    guideScroll: 0,     // 📖 게임 가이드 스크롤
+    guideChapter: 0,    // 📖 보고 있는 장
     wallRepairs:0,      // 이번 런에서 성벽을 몇 번 보수했는지 (비용 체증)
     bossPick:'random',  // 👹 보스를 어디서 맞이할지 (준비 화면에서 고른다)
     runCardsOpen:false, // 🃏 이번 판 카드 보기 화면이 열려 있는가
@@ -445,6 +450,10 @@ let _drag = null;      // { y0, scroll0, region }
 let _didDrag = false;
 
 function scrollRegionAt(p) {
+  // 📖 가이드가 열려 있으면 화면 전체가 그 문서다. 장 탭 아래만 굴린다.
+  if (_guideOpen && typeof guideScrollMax === 'function') {
+    return { x:0, y:84, w:CW, h:CH-84, max: guideScrollMax(), kind:'guide' };
+  }
   // 📋 소식이 열려 있으면 화면 전체가 그 문서다 — 다른 영역은 보지 않는다
   if (_patchOpen && _titleScreen && typeof patchScrollMax === 'function') {
     return { x:0, y:46, w:CW, h:CH-46, max: patchScrollMax(), kind:'patch' };
@@ -468,11 +477,13 @@ function beginDrag(p) {
   _pressAt = { x: p.x, y: p.y };
   const r = scrollRegionAt(p);
   _drag = r ? { y0: p.y, x0: p.x, max: r.max, axis: r.axis === 'x' ? 'x' : 'y',
-                kind: r.kind === 'patch'      ? 'patch'
+                kind: r.kind === 'guide'      ? 'guide'
+                    : r.kind === 'patch'      ? 'patch'
                     : r === gs.ui.pickScroll  ? 'pick'
                     : r === gs.ui.briefScroll ? 'brief'
                     : r === gs.ui.lobbyScroll ? 'lobby' : 'town',
-                scroll0: r.kind === 'patch'      ? (gs.patchScroll||0)
+                scroll0: r.kind === 'guide'      ? (gs.guideScroll||0)
+                       : r.kind === 'patch'      ? (gs.patchScroll||0)
                        : r === gs.ui.pickScroll  ? (gs.pickScroll||0)
                        : r === gs.ui.briefScroll ? (gs.briefScroll||0)
                        : r === gs.ui.lobbyScroll ? (gs.lobbyScroll||0)
@@ -488,7 +499,8 @@ function moveDrag(p) {
   const d = _drag.axis === 'x' ? (p.x - _drag.x0) : (p.y - _drag.y0);
   if (!_didDrag) return;
   const v = Math.max(0, Math.min(_drag.max, _drag.scroll0 - d));
-  if      (_drag.kind === 'patch') gs.patchScroll = v;
+  if      (_drag.kind === 'guide') gs.guideScroll = v;
+  else if (_drag.kind === 'patch') gs.patchScroll = v;
   else if (_drag.kind === 'pick')  gs.pickScroll  = v;
   else if (_drag.kind === 'brief') gs.briefScroll = v;
   else if (_drag.kind === 'lobby') gs.lobbyScroll = v;
@@ -531,7 +543,8 @@ window.addEventListener('wheel', e=>{
   if (!r) return;
   e.preventDefault();
   // 가로 띠는 세로 휠로도 밀리게 한다 — 마우스에 가로 휠이 없는 쪽이 흔하다
-  if      (r.kind === 'patch')      gs.patchScroll = Math.max(0, Math.min(r.max, (gs.patchScroll||0) + e.deltaY));
+  if      (r.kind === 'guide')      gs.guideScroll = Math.max(0, Math.min(r.max, (gs.guideScroll||0) + e.deltaY));
+  else if (r.kind === 'patch')      gs.patchScroll = Math.max(0, Math.min(r.max, (gs.patchScroll||0) + e.deltaY));
   else if (r === gs.ui.pickScroll)  gs.pickScroll  = Math.max(0, Math.min(r.max, (gs.pickScroll||0) + (e.deltaX || e.deltaY)));
   else if (r === gs.ui.briefScroll) gs.briefScroll = Math.max(0, Math.min(r.max, (gs.briefScroll||0) + e.deltaY));
   else if (r === gs.ui.lobbyScroll) gs.lobbyScroll = Math.max(0, Math.min(r.max, (gs.lobbyScroll||0) + e.deltaY));
@@ -657,6 +670,20 @@ function tapsLocked() { return (typeof performance !== 'undefined' ? performance
 
 function tap({x,y}) {
   if (_assetsLoading) return;   // 로딩 화면에서는 아무것도 안 받는다
+  // 📖 가이드가 열려 있으면 화면이 무엇이든 이것만 받는다 —
+  // 뒤의 버튼이 살아 있으면 읽다가 판이 시작되거나 보석을 쓰게 된다.
+  if (_guideOpen) {
+    SFX.unlock();
+    if (hitTest(x, y, gs.ui.guideCloseBtn || {})) { _guideOpen = false; SFX.click(); return; }
+    for (const t of (gs.ui.guideTabBtns || [])) {
+      if (hitTest(x, y, t)) {
+        if (gs.guideChapter !== t.idx) { gs.guideChapter = t.idx; gs.guideScroll = 0; }
+        SFX.click(); return;
+      }
+    }
+    return;
+  }
+
   if (_titleScreen) {
     SFX.unlock();
     try { BGM.play('camp'); } catch (e) {}
@@ -669,6 +696,10 @@ function tap({x,y}) {
         if (pn && typeof markPatchRead === 'function') markPatchRead(pn.ver);
         SFX.click();
       }
+      return;
+    }
+    if (hitTest(x, y, gs.ui.titleGuideBtn || {})) {
+      _guideOpen = true; gs.guideScroll = 0; _resetArmed = false; SFX.click();
       return;
     }
     if (hitTest(x, y, gs.ui.titlePatchBtn || {})) {
@@ -969,6 +1000,12 @@ function clearStalePageUI() {
 // ─── 로비 ────────────────────────────────────────────────────────────────────
 function handleLobbyTap(x, y) {
   const L = gs.lobby;
+
+  // 📖 가이드 — 탭 줄보다 먼저 본다(머리에 있으므로 겹치지 않지만 순서를 못 박아 둔다)
+  if (hitTest(x, y, gs.ui.lobbyGuideBtn || {})) {
+    _guideOpen = true; gs.guideScroll = 0; SFX.click();
+    return;
+  }
 
   for (const b of gs.ui.lobbyTabBtns || []) {
     if (hitTest(x,y,b)) {
@@ -2662,6 +2699,10 @@ function frame(ts) {
   if (_titleScreen || _fadingOut) renderTitleScreen(ctx, _titleAlpha);
   if (_titleScreen && _patchOpen && typeof renderPatchNotes === 'function') {
     renderPatchNotes(ctx, gs);
+  }
+  // 📖 가이드는 타이틀에서도 캠프에서도 열린다 — 맨 위에 덮는다
+  if (_guideOpen && typeof renderGuideBook === 'function') {
+    renderGuideBook(ctx, gs);
   }
   // 배경음 — 화면과 상황에 맞는 곡으로. 같은 곡이면 아무 일도 하지 않는다.
   if (!_titleScreen) { try { BGM.sync(gs, wm); } catch (e) {} }
