@@ -215,6 +215,7 @@ function makeDefenseEnemy(typeId, waveIndex, opts) {
     // 🌱 재생 — 심층 변형. 상단 적이 초당 최대체력의 일부를 되돌린다.
     regen: mods ? (mods.regen || 0) : 0,
     slowTimer: 0, slowFactor: 0,
+    auraTimer: 0, auraFactor: 0,
     corrodeUntil: 0, corrodeAmt: 0,
     frailUntil: 0,   frailAmt: 0,
     frozenUntil: 0,
@@ -346,20 +347,37 @@ function updateDefenseEnemies(enemies, dt) {
     // 💨 질주 — 보스만 빨라진다
     if ((e.isBoss || e.isMidBoss) && typeof bossEffect === 'function' && bossEffect(gs, 'haste'))
       mult *= 1.6;
+    // ── 🐌 감속이 겹칠 때 ──────────────────────────────────────────────────
+    // 규칙 둘.
+    //   1. **같은 종류끼리는 안 쌓인다** — 눈보라를 세 대 세워도 센 것 하나만 든다.
+    //      (안 그러면 오라 도배로 판이 통째로 멈춘다)
+    //   2. **다른 종류끼리는 남은 속도에 곱한다** — 더하지 않는다.
+    //      혹한 70% + 눈보라 50%를 더하면 120%가 되어 속도가 음수가 된다.
+    //      곱하면 남은 30%의 절반이 다시 깎여 0.30 × 0.50 = 0.15, 즉 85% 감속이다.
+    //      아무리 겹쳐도 100%를 넘지 않는다.
+    // 그래서 종류마다 칸을 따로 둔다: 맞아서 걸린 것(slow) · 오라(aura) · 영웅(hero).
     if (e.slowTimer > 0) {
       e.slowTimer = Math.max(0, e.slowTimer - dt);
-      mult = 1 - e.slowFactor;
       if (e.slowTimer === 0) e.slowFactor = 0;
+      else mult *= (1 - e.slowFactor);
     }
-    // 💎 빙결 — 감속과 달리 완전히 멈춘다. 감속 위에 덮어써야 하므로 뒤에 둔다.
-    if (e.frozenUntil > 0) {
-      e.frozenUntil = Math.max(0, e.frozenUntil - dt);
-      mult = 0;
+    if (e.auraTimer > 0) {
+      e.auraTimer = Math.max(0, e.auraTimer - dt);
+      if (e.auraTimer === 0) e.auraFactor = 0;
+      else mult *= (1 - e.auraFactor);
     }
     // 👑 영웅이 몸으로 막고 있다 — 서리와 겹쳐도 더 느려지지, 서로 덮어쓰지 않는다
     if (e.heroBlockUntil > 0) {
       e.heroBlockUntil = Math.max(0, e.heroBlockUntil - dt);
       mult *= HERO_BLOCK_SLOW;
+    }
+    // 감속만으로는 완전히 세울 수 없다. 멈추는 것은 빙결 하나뿐이어야
+    // '멈췄다'가 특별한 일로 남는다. (📣포효·💨질주로 빨라진 것은 깎지 않는다)
+    if (mult < SLOW_MULT_FLOOR && !(e.rallyUntil > 0)) mult = Math.max(mult, SLOW_MULT_FLOOR);
+    // 💎 빙결 — 감속과 달리 완전히 멈춘다. 바닥 아래이므로 맨 뒤에 둔다.
+    if (e.frozenUntil > 0) {
+      e.frozenUntil = Math.max(0, e.frozenUntil - dt);
+      mult = 0;
     }
 
     if (e.wpIdx >= e.path.length - 1) {
@@ -432,7 +450,7 @@ function pickTargetSmart(enemies, center, range, mode, towerTypeId, branchId, pr
     // 💎 서릿발 — 얼릴 수 있는 놈을 노린다. 빙결 조건이 '이미 느려진 적'인데
     // 표적을 아무렇게나 고르면 조건을 만족하는 적이 사정권에 있어도 놓친다.
     // 실제로 그랬다 — 무리 48마리 중 20마리가 느려져 있는데 빙결은 0이었다.
-    if (preferSlowed && (e.slowTimer > 0 || (e.frozenUntil || 0) > 0)) score += 90;
+    if (preferSlowed && (e.slowTimer > 0 || e.auraTimer > 0 || (e.frozenUntil || 0) > 0)) score += 90;
     if (score > bestScore) { bestScore = score; best = e; }
   }
   return best;
@@ -461,8 +479,9 @@ function updateTowers(towers, enemies, projectiles, dt) {
         const dx = e.x - c.x, dy = e.y - c.y;
         if (dx*dx + dy*dy > r2) continue;
         if (bossImmune(e, 'unslow')) continue;
-        e.slowFactor = Math.max(e.slowFactor, stA.auraSlow);
-        e.slowTimer  = Math.max(e.slowTimer, 0.30);
+        // 오라끼리는 안 쌓인다 — 센 것 하나만. 맞아서 걸린 감속과는 따로 논다.
+        e.auraFactor = Math.max(e.auraFactor || 0, stA.auraSlow);
+        e.auraTimer  = Math.max(e.auraTimer  || 0, 0.30);
       }
       tower.muzzle = 0;
       continue;                       // 발사체를 만들지 않는다
@@ -604,7 +623,7 @@ function updateProjectiles(projectiles, onKill, dt) {
     // 💎 빙결의 조건은 '**이미** 느려진 적'이다. 서릿발 자신도 감속(30%)을 거니까,
     // 제 감속이 붙기 전에 여기서 붙들어 둬야 한다. 안 그러면 늘 스스로 조건을
     // 만족시켜 '조건부'라는 말이 뜻을 잃는다.
-    const wasSlowed = (tgt.slowTimer > 0 || tgt.heroBlockUntil > 0);
+    const wasSlowed = (tgt.slowTimer > 0 || tgt.auraTimer > 0 || tgt.heroBlockUntil > 0);
     let dmg = p.dmg, crit = false;
     // 💎 서릿발 — 이미 느려진 적에게만 값을 낸다. 혼자 두면 감속이 약해 손해다.
     if (p.vsSlowed > 1 && wasSlowed) dmg *= p.vsSlowed;
@@ -631,8 +650,9 @@ function updateProjectiles(projectiles, onKill, dt) {
     // 🔋 과충전 — 감전. 스턴 전용 필드를 새로 만들지 않고 아주 센 감속으로 낸다.
     if (p.stunChance > 0 && !tgt.dead && Math.random() < p.stunChance) {
       if (!bossImmune(tgt, 'unslow')) {
-        tgt.slowFactor = Math.max(tgt.slowFactor, 0.95);
-        tgt.slowTimer  = Math.max(tgt.slowTimer, p.stunDur);
+        // 예전에는 감속 0.95로 흉내 냈다. 이제 빙결 칸이 있으니 진짜로 세운다 —
+        // 안 그러면 감속 바닥(SLOW_MULT_FLOOR)에 걸려 도리어 약해진다.
+        tgt.frozenUntil = Math.max(tgt.frozenUntil || 0, p.stunDur);
       }
       if (typeof FX !== 'undefined') FX.ring(tgt.x, tgt.y, '#facc15', 10);
     }

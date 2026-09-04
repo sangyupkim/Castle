@@ -774,7 +774,7 @@ function renderTower(ctx, t) {
 }
 
 function renderDefEnemy(ctx, e) {
-  const slowed = e.slowTimer > 0;
+  const slowed = e.slowTimer > 0 || e.auraTimer > 0;   // 오라 감속도 파랗게 보여야 한다
   const bob    = e.flying ? Math.sin(Date.now()/220 + e.id) * 2.5 : 0;
   const ey     = e.y + bob;
 
@@ -2326,7 +2326,7 @@ function drawMobActor(ctx, e, drawY, arena) {
   if (e.hitFlash > 0)      { opts.tint = '#ffffff'; opts.tintAmt = 1; }
   // 💎 빙결은 감속보다 진하게 — '느리다'와 '멈췄다'가 한눈에 갈려야 한다
   else if ((e.frozenUntil||0) > 0) { opts.tint = '#67d4ff'; opts.tintAmt = 1; }
-  else if (e.slowTimer > 0){ opts.tint = '#8fd6ff'; opts.tintAmt = 0.75; }
+  else if (e.slowTimer > 0 || e.auraTimer > 0){ opts.tint = '#8fd6ff'; opts.tintAmt = 0.75; }
   else if (def.tint)       { opts.tint = def.tint; }
   const anim = 'Walk';
   const ok = Sprites.actor(ctx, def.actor, anim, f.dir, Date.now()/1000, e.x, drawY + e.radius, h, opts);
