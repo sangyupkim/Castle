@@ -92,6 +92,17 @@ const report = await pg.evaluate(({ scale, minPx, minLen }) => {
     return orig(t, x, y, m);
   };
   const st = (patch) => { const d = newState(); d.battle = createBattle(); Object.assign(d, patch || {}); return d; };
+  // ⚠️ newState()가 주는 객체에서 skillLevels·pacts 같은 **영구 데이터**는 getter/setter라
+  // 모듈 전역(_skillLevels)을 그대로 가리킨다. 한 화면을 위해 채워 놓으면
+  // 그 뒤에 재는 화면이 전부 그 값을 물고 간다 — 무엇을 쟀는지가 순서에 따라 달라진다.
+  // 채워 넣고 재는 화면은 이 도우미로 감싸서 원래대로 돌려놓는다.
+  const withMeta = (d, levels, pactIds, fn) => {
+    const savedSkills = Object.assign({}, d.skillLevels);
+    d.skillLevels = levels;
+    for (const id of pactIds) togglePact(id, d);
+    try { fn(); }
+    finally { for (const id of pactIds) togglePact(id, d); d.skillLevels = savedSkills; }
+  };
   const screens = {
     '전투 · 상단':     () => renderDefense(cx, st({ page:'battle', inRun:true, waveActive:true, wave:6 })),
     '전투 · 가운데 바': () => renderUIBar(cx, st({ page:'battle', inRun:true, wave:6 }),
@@ -108,6 +119,15 @@ const report = await pg.evaluate(({ scale, minPx, minLen }) => {
     '마을 · 타워':      () => renderTownPageTowers(cx, st({ page:'town', gold:420 }), 92),
     '캠프':            () => renderLobbyCamp(cx, st({ page:'lobby' })),
     '출전 준비':        () => renderLobbySortie(cx, st({ page:'lobby' })),
+    // 빈 세이브로만 재면 **채워졌을 때 넘치는 상자**를 영영 못 본다.
+    // 서약 상자와 「적용 중인 스킬」 줄이 정확히 그래서 겹쳐 있었다.
+    '출전 준비 · 채운 판':  () => {
+      const d = st({ page:'lobby', soulStones:5000 });
+      const lv = {};
+      for (const tid of SKILL_TREE_ORDER)
+        for (const sk of SKILL_TREES[tid].skills) lv[sk.id] = 1 + (sk.row * 9);
+      withMeta(d, lv, PACT_DEFS.slice(0, 4).map(p => p.id), () => renderLobbySortie(cx, d));
+    },
     // 📄 상세 시트 — 목록에서 걷어낸 설명이 전부 여기로 오므로,
     // 여기가 작으면 옮긴 의미가 없다. 같은 기준으로 잰다.
     '상세 시트':        () => { const d = st({ page:'lobby', soulStones:340 });
@@ -136,6 +156,13 @@ const report = await pg.evaluate(({ scale, minPx, minLen }) => {
     '영웅 상점':        () => renderHeroShopScreen(cx, st({ page:'town', gold:900 })),
     '영웅 상세':        () => renderHeroDetail(cx, st({ page:'town' }), 60),
     '로비 · 스킬':      () => renderLobbySkill(cx, st({ page:'lobby', soulStones:5000 })),
+    // 잠긴 트리만 재면 「윗줄 0/40Lv」 같은 짧은 딱지만 본다 — 자릿수가 늘면 달라진다
+    '로비 · 스킬 · 진행':  () => {
+      const d = st({ page:'lobby', soulStones:900000 });
+      const lv = {};
+      for (const sk of SKILL_TREES.tower.skills) lv[sk.id] = 47;
+      withMeta(d, lv, [], () => renderLobbySkill(cx, d));
+    },
     '로비 · 패':       () => renderLobbyCardMeta(cx, st({ page:'lobby', soulStones:5000 })),
     '로비 · 해금':      () => renderLobbyUnlock(cx, st({ page:'lobby', soulStones:5000 })),
     '로비 · 서약':      () => renderLobbyPact(cx, st({ page:'lobby', soulStones:5000 })),
@@ -153,6 +180,12 @@ const report = await pg.evaluate(({ scale, minPx, minLen }) => {
     ])),
     '타이틀':          () => renderTitleScreen(cx, 1),
     '일시정지':         () => renderPauseOverlay(cx),
+    // 정산 보석이 붙으면 안내 줄이 길어진다 — 짧은 쪽만 재면 넘치는 걸 못 본다
+    '일시정지 · 정산':    () => {
+      const oc = calcSoulStones;
+      window.calcSoulStones = () => 4820;
+      try { renderPauseOverlay(cx); } finally { window.calcSoulStones = oc; }
+    },
     '이번 판 카드':      () => { const d = st({ page:'battle', inRun:true, runCardsOpen:true });
                               renderRunCardsOverlay(cx, d); },
   };

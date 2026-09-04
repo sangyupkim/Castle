@@ -1005,44 +1005,59 @@ function renderHeroInDefense(ctx, hero) {
 
 // ─── 일시정지 오버레이 ───────────────────────────────────────────────────────
 function renderPauseOverlay(ctx) {
-  ctx.fillStyle='rgba(0,0,0,0.72)'; ctx.fillRect(0,0,CW,CH);
+  // 0.72로는 뒤 화면이 그대로 비쳤다 — 브리핑의 초록·빨강 글씨가 이 위의
+  // 글자와 겹쳐 둘 다 못 읽혔다. 멈춘 화면은 **덮는 것이 일**이므로 불투명하게.
+  ctx.fillStyle='rgba(4,7,14,0.96)'; ctx.fillRect(0,0,CW,CH);
+
+  // 버튼 폭 220으로는 정산 안내 한 줄이 좌우로 삐져나갔다. 넓히고,
+  // 버튼 안에 두 줄을 우겨넣던 것도 버튼 밑 제 줄로 내린다.
+  const bw=316, bh=52, cbh=40, bx=(CW-bw)/2;
+  const gaveUpGems = Math.max(0, Math.round(calcSoulStones(gs) * GIVE_UP_GEM_MULT));
+  const st = getStageInfo(gs.wave);
+
+  // 멈춘 동안 보는 것들을 상자 하나로 묶는다 — 뒤 화면 위에 뜬 글이 아니라 창으로 읽히게.
+  // 높이는 아래 레이아웃에서 그대로 계산한다 — 손으로 적으면 줄을 하나 넣을 때마다 어긋난다.
+  const cardH = 82 + bh + 16 + bh + 5 + 22 + cbh + 22 + 16;
+  const cardY = Math.round(CH/2 - cardH/2);
+  uiPanel(ctx, bx-14, cardY, bw+28, cardH, 12, '#0b1220', '#1e293b', 1.5);
+
   ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.fillStyle='#e2e8f0'; ctx.font='bold 28px sans-serif';
-  ctx.fillText('⏸ 일시정지', CW/2, CH/2-96);
+  ctx.fillText('⏸ 일시정지', CW/2, cardY+34);
 
-  const st = getStageInfo(gs.wave);
   ctx.fillStyle='#64748b'; setFont(ctx, 'body');
-  ctx.fillText(st.endless ? `∞ ${st.tier}층 진행 중` : `훈련 ${st.stageLabel}`, CW/2, CH/2-66);
+  ctx.fillText(st.endless ? `∞ ${st.tier}층 진행 중` : `훈련 ${st.stageLabel}`, CW/2, cardY+62);
 
   // 재개
-  const bw=220, bh=48, bx=(CW-bw)/2;
-  let y = CH/2-30;
+  let y = cardY + 82;
   uiPanel(ctx, bx,y,bw,bh,10, '#14532d', '#22c55e', 2);
   ctx.fillStyle='#fff'; ctx.font='bold 16px sans-serif';
   ctx.fillText('▶ 계속하기', CW/2, y+bh/2);
   gs.ui.pauseResumeBtn = {x:bx,y:y,w:bw,h:bh};
-  y += bh + 14;
+  y += bh + 16;
 
   // 포기 — 되돌릴 수 없으니 두 번 눌러야 한다
   uiPanel(ctx, bx,y,bw,bh,10, _giveUpArmed ? '#7f1d1d' : '#1f2937', _giveUpArmed ? '#ef4444' : '#475569', _giveUpArmed ? 2 : 1);
-  ctx.fillStyle = _giveUpArmed ? '#fecaca' : '#94a3b8'; ctx.font='bold 14px sans-serif';
-  ctx.fillText(_giveUpArmed ? '⚠ 정말 포기합니다 — 다시 탭' : '🏳 포기하고 정산', CW/2, y+bh/2-7);
-  ctx.fillStyle = _giveUpArmed ? '#f87171' : '#475569'; setFont(ctx, 'body', 'bold');
-  const gaveUpGems = Math.max(0, Math.round(calcSoulStones(gs) * GIVE_UP_GEM_MULT));
-  ctx.fillText(gaveUpGems > 0
-    ? `정산 💎${gaveUpGems}  —  끝까지 버티면 ${Math.round((1-GIVE_UP_GEM_MULT)*100)}% 더`
-    : '정산 💎0  —  한 층이라도 넘어야 보석이 남습니다', CW/2, y+bh/2+11);
+  ctx.fillStyle = _giveUpArmed ? '#fecaca' : '#94a3b8'; ctx.font='bold 15px sans-serif';
+  ctx.fillText(_giveUpArmed ? '⚠ 정말 포기합니다 — 다시 탭' : '🏳 포기하고 정산', CW/2, y+bh/2);
   gs.ui.pauseGiveUpBtn = {x:bx,y:y,w:bw,h:bh};
-  y += bh + 12;
+  y += bh + 5;
+
+  ctx.fillStyle = _giveUpArmed ? '#f87171' : '#475569'; setFont(ctx, 'body', 'bold');
+  ctx.textBaseline='top';
+  ctx.fillText(gaveUpGems > 0
+    ? `정산 💎${gaveUpGems} — 끝까지 버티면 ${Math.round((1-GIVE_UP_GEM_MULT)*100)}% 더`
+    : '정산 💎0 — 한 층이라도 넘어야 보석이 남습니다', CW/2, y);
+  ctx.textBaseline='middle';
+  y += 22;
 
   // 🃏 이번 판에 고른 카드 — 서른 번 넘게 고르고 나면 내가 뭘 쌓았는지 잊는다.
   const n = (gs.activeUpgrades || []).length;
-  const cbh = 34;
   uiPanel(ctx, bx, y, bw, cbh, 8, n ? '#0a1e3c' : '#12161f', n ? '#60a5fa' : '#2a3140', n ? 1.5 : 1);
   ctx.fillStyle = n ? '#93c5fd' : '#475569'; setFont(ctx, 'body', 'bold');
   ctx.fillText(n ? `🃏 고른 카드 ${n}장 보기` : '🃏 아직 고른 카드가 없습니다', CW/2, y+cbh/2);
   gs.ui.pauseCardsBtn = n ? {x:bx,y:y,w:bw,h:cbh} : null;
-  y += cbh + 16;
+  y += cbh + 22;
 
   ctx.fillStyle='#334155'; setFont(ctx, 'body');
   ctx.fillText('P 키 또는 ⏸ 버튼으로도 재개됩니다', CW/2, y);
@@ -3393,7 +3408,7 @@ function renderLobbySortie(ctx, gs) {
 
   // 적용 중인 스킬
   const sp = skillProgress(gs);
-  const sh = 62;
+  const sh = 88;   // 제목 + 아이콘 줄 + 13px 레벨 줄 + 진행 바가 서로 안 닿는 높이
   roundRect(ctx,10,y,CW-20,sh,7);
   ctx.fillStyle='#0c1220'; ctx.fill(); ctx.strokeStyle='#1e293b'; ctx.stroke();
   ctx.fillStyle='#a78bfa'; setFont(ctx, 'body', 'bold');
@@ -3408,22 +3423,23 @@ function renderLobbySortie(ctx, gs) {
       if (lv > 0) lvd.push([sk, lv]);
     }
   if (lvd.length) {
+    // 22px 간격에 13px 두 자리 숫자를 놓으니 옆 칸 숫자와 붙어 `2440443` 처럼 읽혔다
     let sx = 18;
     for (const [sk, lv] of lvd) {
-      if (sx > CW-46) { ctx.fillStyle='#475569'; setFont(ctx, 'body'); ctx.fillText('…', sx, y+30); break; }
-      ctx.font='13px sans-serif'; ctx.fillStyle='#e2e8f0';
-      ctx.fillText(sk.icon, sx, y+24);
+      if (sx > CW-52) { ctx.fillStyle='#475569'; setFont(ctx, 'body'); ctx.fillText('…', sx, y+36); break; }
+      ctx.font='15px sans-serif'; ctx.fillStyle='#e2e8f0';
+      ctx.fillText(sk.icon, sx, y+33);
       setFont(ctx, 'body', 'bold'); ctx.fillStyle='#a78bfa';
-      ctx.fillText(String(lv), sx+2, y+38);
-      sx += 22;
+      ctx.fillText(String(lv), sx+2, y+54);
+      sx += 30;
     }
   } else {
     ctx.fillStyle='#475569'; setFont(ctx, 'body');
-    ctx.fillText('아직 없습니다 — 🌳 스킬 탭에서 보석을 쓰세요', 18, y+30);
+    ctx.fillText('아직 없습니다 — 🌳 스킬 탭에서 보석을 쓰세요', 18, y+36);
   }
   // 진행 바
-  ctx.fillStyle='#1e293b'; ctx.fillRect(18, y+46, CW-36, 5);
-  ctx.fillStyle='#a78bfa'; ctx.fillRect(18, y+46, (CW-36)*(sp.total ? sp.owned/sp.total : 0), 5);
+  ctx.fillStyle='#1e293b'; ctx.fillRect(18, y+76, CW-36, 5);
+  ctx.fillStyle='#a78bfa'; ctx.fillRect(18, y+76, (CW-36)*(sp.total ? sp.owned/sp.total : 0), 5);
   y += sh + gap;
 
   // 🎴 부적 — 출전 전에 끼우는 일회용. 보석이 계속 들어오는 게임이라
@@ -3432,7 +3448,10 @@ function renderLobbySortie(ctx, gs) {
 
   // 서약
   const pacts = PACT_DEFS.filter(p => isPactOn(p.id));
-  const ph = 62;
+  // 62px에 13px 서약 줄을 12px 간격으로 세 줄 얹으니 글자가 서로 밟고 상자를 뚫었다.
+  // 줄 수만큼 상자가 자란다 — 서약은 최대 열 개까지 걸린다.
+  const pactRows = pacts.length ? Math.min(3, pacts.length) + (pacts.length > 3 ? 1 : 0) : 1;
+  const ph = 30 + pactRows*19 + 6;
   roundRect(ctx,10,y,CW-20,ph,7);
   ctx.fillStyle = pacts.length ? '#1a0d14' : '#0c1220'; ctx.fill();
   ctx.strokeStyle = pacts.length ? '#7f1d3a' : '#1e293b'; ctx.stroke();
@@ -3444,8 +3463,10 @@ function renderLobbySortie(ctx, gs) {
   ctx.textAlign='left';
   if (pacts.length) {
     ctx.fillStyle='#fda4af'; setFont(ctx, 'body');
-    let py = y+28;
-    for (const p of pacts.slice(0,3)) { ctx.fillText(`${p.icon} ${p.name} — ${p.desc}`, 18, py); py += 12; }
+    let py = y+31;
+    for (const p of pacts.slice(0,3)) {
+      ctx.fillText(_ellipsize(ctx, `${p.icon} ${p.name} — ${p.desc}`, CW-46), 18, py); py += 19;
+    }
     if (pacts.length > 3) ctx.fillText(`외 ${pacts.length-3}개`, 18, py);
   } else {
     ctx.fillStyle='#475569'; setFont(ctx, 'body');
@@ -4893,7 +4914,7 @@ function _renderSkillTree(ctx, gs, treeId, startY) {
   ctx.textAlign='center'; ctx.textBaseline='middle';
   for (const row of rows) {
     if (row === 0) continue;
-    const need = row * SKILL_ROW_GATE, have = treeLevelsAbove(gs, treeId, row);
+    const need = skillRowGate(treeId, row), have = treeRowLevels(gs, treeId, row-1);
     const gy = startY + row*(nodeH+vGap) - vGap/2;
     const open = have >= need;
     ctx.strokeStyle = open ? tree.color : '#1e293b'; ctx.lineWidth = open ? 2 : 1;
@@ -4961,7 +4982,7 @@ function _renderSkillTree(ctx, gs, treeId, startY) {
       ctx.fillText('★ 최대', x+nodeW/2, y+nodeH-15);
     } else if (gated) {
       ctx.fillStyle='#475569'; setFont(ctx, 'body', 'bold');
-      ctx.fillText(`🔒 ${sk.row*SKILL_ROW_GATE}Lv 필요`, x+nodeW/2, y+nodeH-15);
+      ctx.fillText(`🔒 윗줄 ${skillRowGate(treeId, sk.row)}Lv 필요`, x+nodeW/2, y+nodeH-15);
     } else {
       // 카드 전체가 '한 단계' 버튼이고, 오른쪽 끝에 ×10 칩을 붙인다.
       // 노드가 100레벨이라 칩이 없으면 나무 하나에 수백 번을 눌러야 한다.

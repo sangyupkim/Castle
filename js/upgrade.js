@@ -377,8 +377,18 @@ function skpct(x) { return Math.round(x * 1000) / 10 + '%'; }
 // 무거워진 만큼의 몫이다. 계수 45줄을 일일이 고치면 Math.min 상한이나
 // `v>=5` 같은 문턱을 하나씩 놓치기 마련이라, 한 군데서 나눈다.
 const SKILL_MAX_LV      = 100;  // 노드 하나가 오를 수 있는 최대 레벨
-const SKILL_ROW_GATE    = 30;   // 아랫줄 한 줄을 열 때마다 윗줄에 쌓아야 하는 레벨 수
 const SKILL_EFFECT_SCALE= 0.125;
+
+// ─── 줄을 여는 문턱 ──────────────────────────────────────────────────────────
+// 예전에는 30·60·90처럼 **고정 수치**였다. 그런데 줄마다 찍을 수 있는 양이
+// 다르다 — 1단은 노드 하나(100칸), 2단은 셋(300칸)이다. 고정 수치를 쓰면
+// 아래로 갈수록 문턱이 오히려 **헐거워진다**: 3단은 위에 700칸이 있는데
+// 90칸이면 열렸다(13%). 300칸짜리 줄을 거의 손대지 않고 그 아래로 내려갈 수
+// 있었다는 뜻이고, 그러면 줄을 나눈 이유가 없다.
+//
+// 이제 **바로 윗줄 용량의 40%**를 요구한다. 딱지에 적는 "윗줄"이 곧 사실이 되고,
+// 줄 구성이 바뀌어도 문턱이 저절로 따라온다.
+const SKILL_ROW_GATE_FRAC = 0.40;
 
 // maxLv를 따로 적은 노드(편성 슬롯 +N 같은 '개수' 노드)는 눈금이 곧 개수다.
 // 이런 것은 100칸으로 늘릴 수도, 계수를 나눌 수도 없다 — 제 눈금을 그대로 쓴다.
@@ -387,18 +397,22 @@ function skillEffV(sk, lv)   { return sk.maxLv ? lv : lv * SKILL_EFFECT_SCALE; }
 function skillIsFine(sk)     { return !sk.maxLv; }   // 눈금이 잘게 쪼개진 노드인가
 
 // 아랫줄일수록 한 칸이 비싸다 — 줄을 내려가는 것 자체가 값을 치르는 선택이 되게.
-// 기본값(cost)도 1→3으로 오르므로 3줄 아래는 실질 18배다.
-const SKILL_ROW_COST_MULT = [1, 2, 3.5, 6];
-function skillRowMult(sk) {
-  const r = Math.max(0, sk.row || 0);
-  return SKILL_ROW_COST_MULT[Math.min(SKILL_ROW_COST_MULT.length - 1, r)];
+// 아랫줄 노드는 위보다 효율이 좋으므로(치명타·연계·처치 회복) 값도 그만큼 다르다.
+const SKILL_ROW_COST_MULT = [1, 2.2, 4, 7];
+// 배수만으로는 **첫 칸**에서 차이가 안 난다. 값이 레벨에 비례하니
+// 3단 1레벨은 2보석, 1단 41레벨은 14보석 — 화면에는 아래가 더 싸 보였다.
+// 줄마다 바닥값을 둬서 내려가는 첫 칸부터 무겁게 한다.
+const SKILL_ROW_MIN_COST  = [1, 6, 16, 34];
+function skillRowIdx(sk) {
+  return Math.min(SKILL_ROW_COST_MULT.length - 1, Math.max(0, sk.row || 0));
 }
+function skillRowMult(sk) { return SKILL_ROW_COST_MULT[skillRowIdx(sk)]; }
 function skillLevelCost(sk, level) {
   const L = Math.max(1, level);
   const base = (sk.cost || 1) * skillRowMult(sk);
   // 개수 노드는 눈금이 4~8칸뿐이라 같은 식으로는 거저가 된다 — 한 칸을 무겁게.
   const per = sk.maxLv ? 25 : 0.35;
-  return Math.max(1, Math.round(base * L * per));
+  return Math.max(SKILL_ROW_MIN_COST[skillRowIdx(sk)], Math.round(base * L * per));
 }
 function skillNodeTotal(sk) {
   let t = 0; for (let i = 1; i <= skillMaxLv(sk); i++) t += skillLevelCost(sk, i); return t;
@@ -545,19 +559,30 @@ const SKILL_TREE_ORDER = ['tower','unit','hero','base','abyss'];
 
 // 한 노드의 현재 레벨
 function skillLevel(gs, id) { return (gs.skillLevels && gs.skillLevels[id]) || 0; }
-// 그 나무에서 특정 줄보다 위에 쌓인 총 레벨
-function treeLevelsAbove(gs, treeId, row) {
+// 그 나무의 한 줄이 담을 수 있는 총 칸 수 / 지금 그 줄에 쌓인 레벨
+function treeRowCap(treeId, row) {
   const tree = SKILL_TREES[treeId]; if (!tree) return 0;
   let n = 0;
-  for (const sk of tree.skills) if (sk.row < row) n += skillLevel(gs, sk.id);
+  for (const sk of tree.skills) if (sk.row === row) n += skillMaxLv(sk);
   return n;
+}
+function treeRowLevels(gs, treeId, row) {
+  const tree = SKILL_TREES[treeId]; if (!tree) return 0;
+  let n = 0;
+  for (const sk of tree.skills) if (sk.row === row) n += skillLevel(gs, sk.id);
+  return n;
+}
+// 이 줄을 열려면 **바로 윗줄**에 몇 레벨이 있어야 하는가 — 5단위로 떨어뜨려 읽기 쉽게
+function skillRowGate(treeId, row) {
+  if (row <= 0) return 0;
+  return Math.round(treeRowCap(treeId, row - 1) * SKILL_ROW_GATE_FRAC / 5) * 5;
 }
 // 이 노드를 지금 한 단계 올릴 수 있는가
 function skillCanBuy(gs, treeId, sk) {
   const lv = skillLevel(gs, sk.id);
   if (lv >= skillMaxLv(sk)) return { ok:false, why:'max' };
-  const need = sk.row * SKILL_ROW_GATE;
-  if (treeLevelsAbove(gs, treeId, sk.row) < need) return { ok:false, why:'gate', need };
+  const need = skillRowGate(treeId, sk.row);
+  if (treeRowLevels(gs, treeId, sk.row - 1) < need) return { ok:false, why:'gate', need };
   const cost = skillLevelCost(sk, lv + 1);
   if ((gs.soulStones || 0) < cost) return { ok:false, why:'gems', cost };
   return { ok:true, cost };
