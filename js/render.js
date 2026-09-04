@@ -1689,7 +1689,7 @@ function renderBriefing(ctx, gs, top) {
     ctx.fillStyle = '#fbbf24'; ctx.font='bold 13px sans-serif';
     ctx.fillText(`🏁 ${st.tier}층 — 관문`, 10, TOP+7);
   }
-  ctx.fillStyle='#475569'; ctx.font='bold 10px sans-serif';
+  ctx.fillStyle='#475569'; setFont(ctx, 'body', 'bold');
   const _gemStep = st.endless ? endlessGemStepFor(st.tier, gs.runBestAtStart) : 0;
   ctx.fillText(st.endless ? `적 HP ×${endlessStatMult(gs.wave).toFixed(1)} · 이동 ×${endlessSpdMult(gs.wave).toFixed(2)} · 이 층 보석 +${_gemStep.toFixed(2)}`
                           : `훈련 스테이지 ${st.stageLabel} · 웨이브 ${st.waveInStage+1}/3${st.isBossStage?'  ★보스':''}`,
@@ -1702,7 +1702,7 @@ function renderBriefing(ctx, gs, top) {
     const fresh = st.tier > (gs.runBestAtStart || 0);   // 처음 닿는 깊이인가
     const rx = CW - 12;
     ctx.textAlign='right'; ctx.fillStyle = fresh ? '#22c55e' : '#334155';
-    ctx.font='bold 10px sans-serif';
+    setFont(ctx, 'body', 'bold');
     ctx.fillText(`최고 ${best}층`, rx, gate ? TOP+26 : TOP+8);
     ctx.textAlign='left';
   }
@@ -1714,10 +1714,10 @@ function renderBriefing(ctx, gs, top) {
   if (pc && pc.wave === gs.wave) {
     const ph2 = 26;
     uiPanel(ctx, 6, y, CW-12, ph2, 6, 'rgba(8,47,73,0.55)', '#0891b2', 1);
-    ctx.fillStyle='#22d3ee'; ctx.font='bold 11px sans-serif';
+    ctx.fillStyle='#22d3ee'; setFont(ctx, 'body', 'bold');
     ctx.textAlign='left'; ctx.textBaseline='middle';
     ctx.fillText('🛤 경로가 바뀌었습니다', 12, y+ph2/2);
-    ctx.fillStyle='#0e7490'; ctx.font='bold 9px sans-serif'; ctx.textAlign='right';
+    ctx.fillStyle='#0e7490'; setFont(ctx, 'body', 'bold'); ctx.textAlign='right';
     ctx.fillText(pc.refunded
         ? `타워 ${pc.moved}기 이설 · ${pc.refunded}기 환불 +${pc.gold}💰`
         : `타워 ${pc.moved}기를 인접 칸으로 옮겼습니다 (레벨 유지)`, CW-12, y+ph2/2+1);
@@ -1730,10 +1730,10 @@ function renderBriefing(ctx, gs, top) {
   if (nextPath) {
     const nh = 26;
     uiPanel(ctx, 6, y, CW-12, nh, 6, 'rgba(8,47,73,0.35)', '#155e75', 1);
-    ctx.fillStyle='#67e8f9'; ctx.font='bold 11px sans-serif';
+    ctx.fillStyle='#67e8f9'; setFont(ctx, 'body', 'bold');
     ctx.textAlign='left'; ctx.textBaseline='middle';
     ctx.fillText('🛤 다음 층에서 경로가 바뀝니다', 12, y+nh/2);
-    ctx.fillStyle='#0e7490'; ctx.font='bold 9px sans-serif'; ctx.textAlign='right';
+    ctx.fillStyle='#0e7490'; setFont(ctx, 'body', 'bold'); ctx.textAlign='right';
     ctx.fillText('격자에 점선으로 표시 · 겹치는 칸에 지으면 안 옮겨집니다', CW-12, y+nh/2+1);
     ctx.textAlign='left'; ctx.textBaseline='top';
     y += nh + 5;
@@ -1747,14 +1747,14 @@ function renderBriefing(ctx, gs, top) {
     const eh = 46;
     uiPanel(ctx, 6, y, CW-12, eh, 6, 'rgba(49,10,84,0.48)', '#a855f7', 1.5);
     ctx.textAlign='left'; ctx.textBaseline='middle';
-    ctx.fillStyle='#d8b4fe'; ctx.font='bold 9px sans-serif';
+    ctx.fillStyle='#d8b4fe'; setFont(ctx, 'body', 'bold');
     ctx.fillText('🌑 심층 — 두 규칙이 겹칩니다', 12, y+9);
     ev.parts.forEach((pt, i) => {
       const py = y + 24 + i*15;
       const col = pt.tone === 'good' ? '#4ade80' : pt.tone === 'bad' ? '#f87171' : '#fbbf24';
-      ctx.fillStyle = col; ctx.font='bold 10px sans-serif';
+      ctx.fillStyle = col; setFont(ctx, 'body', 'bold');
       ctx.fillText(`${pt.icon} ${pt.name}`, 12, py);
-      ctx.fillStyle = '#8b7bb8'; ctx.font='9px sans-serif';
+      ctx.fillStyle = '#8b7bb8'; setFont(ctx, 'body');
       ctx.fillText(pt.desc, 92, py+1);
     });
     ctx.textAlign='left'; ctx.textBaseline='top';
@@ -1768,9 +1768,9 @@ function renderBriefing(ctx, gs, top) {
     ctx.fillStyle = tone.fg; ctx.font='bold 12px sans-serif';
     ctx.textAlign='left'; ctx.textBaseline='middle';
     ctx.fillText(`${ev.icon} ${ev.name}`, 12, y+eh/2-6);
-    ctx.fillStyle = tone.sub; ctx.font='bold 9px sans-serif';
+    ctx.fillStyle = tone.sub; setFont(ctx, 'body', 'bold');
     ctx.fillText(ev.desc, 12, y+eh/2+8);
-    ctx.textAlign='right'; ctx.fillStyle = tone.sub; ctx.font='bold 8px sans-serif';
+    ctx.textAlign='right'; ctx.fillStyle = tone.sub; setFont(ctx, 'body', 'bold');
     ctx.fillText('이 층에만 적용', CW-12, y+eh/2);
     ctx.textAlign='left'; ctx.textBaseline='top';
     y += eh + 5;
@@ -1785,16 +1785,16 @@ function renderBriefing(ctx, gs, top) {
     uiPanel(ctx, 6, y, CW-12, ah, 6, gate ? 'rgba(120,53,15,0.35)' : 'rgba(76,29,149,0.30)', gate ? '#f59e0b' : '#7c3aed', 1);
     let ax = 12;
     if (gate) {
-      ctx.fillStyle='#fbbf24'; ctx.font='bold 10px sans-serif';
+      ctx.fillStyle='#fbbf24'; setFont(ctx, 'body', 'bold');
       ctx.textAlign='left'; ctx.textBaseline='middle';
       ctx.fillText('🏁 관문 · 대형 집중', ax, y+ah/2);
       ax += 108;
     }
     affixes.forEach(a => {
-      ctx.fillStyle='#c4b5fd'; ctx.font='bold 10px sans-serif';
+      ctx.fillStyle='#c4b5fd'; setFont(ctx, 'body', 'bold');
       ctx.textAlign='left'; ctx.textBaseline='middle';
       ctx.fillText(`${a.icon} ${a.name}`, ax, y+ah/2-5);
-      ctx.fillStyle='#6d5b9e'; ctx.font='bold 8px sans-serif';
+      ctx.fillStyle='#6d5b9e'; setFont(ctx, 'body', 'bold');
       ctx.fillText(a.desc, ax, y+ah/2+7);
       ax += Math.max(72, ctx.measureText(a.desc).width + 14);
     });
@@ -1809,10 +1809,10 @@ function renderBriefing(ctx, gs, top) {
   if (carried > 0) {
     const ch = 26;
     uiPanel(ctx, 6, y, CW-12, ch, 6, 'rgba(120,53,15,0.40)', '#f59e0b', 1);
-    ctx.fillStyle='#fbbf24'; ctx.font='bold 11px sans-serif';
+    ctx.fillStyle='#fbbf24'; setFont(ctx, 'body', 'bold');
     ctx.textAlign='left'; ctx.textBaseline='middle';
     ctx.fillText(`⚠️ 잔존 침입자 ${carried}기`, 12, y+ch/2);
-    ctx.fillStyle='#b45309'; ctx.font='bold 9px sans-serif'; ctx.textAlign='right';
+    ctx.fillStyle='#b45309'; setFont(ctx, 'body', 'bold'); ctx.textAlign='right';
     ctx.fillText('지난 웨이브에 못 막은 적이 경로 위에서 계속 옵니다', CW-12, y+ch/2+1);
     ctx.textAlign='left'; ctx.textBaseline='top';
     y += ch + 5;
@@ -1821,7 +1821,7 @@ function renderBriefing(ctx, gs, top) {
   // ── 아레나 스폰 풀 ───────────────────────────────────────────────────────
   const panelH = 74;
   uiPanel(ctx, 6,y,CW-12,panelH,7, '#0a1019', '#3f1d1d', 1);
-  ctx.fillStyle='#f87171'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle='#f87171'; setFont(ctx, 'body', 'bold'); ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillText('⚔️ 아레나 — 60초 내내 리젠 · 갈수록 촘촘하고 강해집니다', 12, y+7);
   // 🗺 이 층의 지형 배치 — 편성을 바꿀 판단거리라 들어가기 전에 알려준다.
   // (미로면 원거리가 손해, 호수면 근접이 돌아가야 한다.)
@@ -1830,7 +1830,7 @@ function renderBriefing(ctx, gs, top) {
     const L = (_tier > 0 && typeof arenaLayoutFor === 'function')
             ? arenaLayoutFor(_tier, gs.runSeed) : null;
     if (L) {
-      ctx.textAlign='right'; ctx.fillStyle='#7dd3fc'; ctx.font='bold 9px sans-serif';
+      ctx.textAlign='right'; ctx.fillStyle='#7dd3fc'; setFont(ctx, 'body', 'bold');
       ctx.fillText(`${L.icon} ${L.name}`, CW-12, y+7);
       ctx.textAlign='left';
     }
@@ -1845,9 +1845,9 @@ function renderBriefing(ctx, gs, top) {
     uiPanel(ctx, px,y+22,pw,44,4, '#140c0c', '#5b2121', 1);
     ctx.fillStyle='#e2e8f0'; ctx.font='16px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
     ctx.fillText(t.icon, px+pw/2, y+26);
-    ctx.fillStyle='#94a3b8'; ctx.font='bold 8px sans-serif';
+    ctx.fillStyle='#94a3b8'; setFont(ctx, 'body', 'bold');
     ctx.fillText(`${Math.round(w/total*100)}%`, px+pw/2, y+47);
-    ctx.fillStyle='#475569'; ctx.font='7px sans-serif';
+    ctx.fillStyle='#475569'; setFont(ctx, 'body');
     ctx.fillText(t.name, px+pw/2, y+57);
   });
   y += panelH + 6;
@@ -1855,11 +1855,11 @@ function renderBriefing(ctx, gs, top) {
   // ── 상단 침입자 ──────────────────────────────────────────────────────────
   const dh = 52;
   uiPanel(ctx, 6,y,CW-12,dh,7, '#0a1019', '#1e3a5f', 1);
-  ctx.fillStyle='#60a5fa'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle='#60a5fa'; setFont(ctx, 'body', 'bold'); ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillText('🏰 상단 침입자 — 기지에 닿으면 HP 손실', 12, y+7);
   const hasAir = def.defenseEnemies.some(d => (ENEMY_TYPES[d.type]||{}).flying);
   if (hasAir) {
-    ctx.textAlign='right'; ctx.fillStyle='#c084fc'; ctx.font='bold 10px sans-serif';
+    ctx.textAlign='right'; ctx.fillStyle='#c084fc'; setFont(ctx, 'body', 'bold');
     ctx.fillText('🔺 비행 — 항로로 가로질러 옵니다', CW-14, y+7);
     ctx.textAlign='left';
   }
@@ -1872,9 +1872,9 @@ function renderBriefing(ctx, gs, top) {
     const col = i % perRow;
     const ex = 12 + col*104;
     const cls = MOB_CLASSES[t.cls] || MOB_CLASSES.medium;
-    ctx.fillStyle=t.color; ctx.font='bold 10px sans-serif'; ctx.textAlign='left';
+    ctx.fillStyle=t.color; setFont(ctx, 'body', 'bold'); ctx.textAlign='left';
     ctx.fillText(`● ${t.name} ×${n}`, ex, y+26);
-    ctx.fillStyle=cls.color; ctx.font='bold 8px sans-serif';
+    ctx.fillStyle=cls.color; setFont(ctx, 'body', 'bold');
     ctx.fillText(`[${cls.tag}] ${cls.name}`, ex, y+38);
   });
   y += dh + 6;
@@ -1882,7 +1882,7 @@ function renderBriefing(ctx, gs, top) {
   // ── 내 편성 ──────────────────────────────────────────────────────────────
   const mh = 78;
   uiPanel(ctx, 6,y,CW-12,mh,7, '#0a1019', '#1e3a2f', 1);
-  ctx.fillStyle='#34d399'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle='#34d399'; setFont(ctx, 'body', 'bold'); ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillText('🛡 내 편성', 12, y+7);
 
   const hired = gs.battle.ourTeam.filter(u=>!u.isHero);
@@ -1891,12 +1891,12 @@ function renderBriefing(ctx, gs, top) {
     for (const u of hired) {
       ctx.fillStyle='#e2e8f0'; ctx.font='15px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
       ctx.fillText(u.icon, ux, y+23);
-      ctx.fillStyle='#64748b'; ctx.font='bold 8px sans-serif';
+      ctx.fillStyle='#64748b'; setFont(ctx, 'body', 'bold');
       ctx.fillText(`${Math.ceil(u.hp)}`, ux, y+41);
       ux += 26;
     }
   } else {
-    ctx.fillStyle='#f87171'; ctx.font='bold 10px sans-serif';
+    ctx.fillStyle='#f87171'; setFont(ctx, 'body', 'bold');
     ctx.fillText('⚠️ 병력 없음 — 마을 › 출전준비에서 고용하세요', 12, y+27);
   }
 
@@ -1904,22 +1904,22 @@ function renderBriefing(ctx, gs, top) {
                 : gs.hero.placement==='defense' ? '👑 상단 배치'
                 : gs.hero.placement==='battle'  ? '👑 하단 배치' : '👑 미배치';
   ctx.fillStyle = gs.hero.dead ? '#f87171' : gs.hero.placement==='none' ? '#64748b' : COLORS.hero;
-  ctx.font='bold 10px sans-serif'; ctx.textAlign='right'; ctx.textBaseline='top';
+  setFont(ctx, 'body', 'bold'); ctx.textAlign='right'; ctx.textBaseline='top';
   ctx.fillText(`${heroTxt}  Lv.${gs.hero.level}`, CW-14, y+7);
-  ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif';
+  ctx.fillStyle='#64748b'; setFont(ctx, 'body', 'bold');
   ctx.fillText(`🏹 타워 ${gs.towers.length}기`, CW-14, y+23);
   ctx.fillText(`🗿 케이브 Lv.${caveLevelOf(gs)}`, CW-14, y+36);
 
-  ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle='#475569'; setFont(ctx, 'body', 'bold'); ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillText('강화', 12, y+56);
   const icons = (gs.activeUpgrades||[]).map(id=>(UPGRADE_CARDS.find(c=>c.id===id)||{}).icon||'').join(' ');
-  ctx.fillStyle='#a5b4fc'; ctx.font='10px sans-serif';
+  ctx.fillStyle='#a5b4fc'; setFont(ctx, 'body');
   ctx.fillText(icons ? icons.slice(0,64) : '— 웨이브를 클리어하면 강화를 고를 수 있습니다', 40, y+56);
   y += mh + 8;
 
   // ── 버튼 ─────────────────────────────────────────────────────────────────
   // 이 화면은 확인용이다 — 편성·배치·현상수배는 전부 🏰마을에서 한다.
-  ctx.fillStyle='#334155'; ctx.font='bold 9px sans-serif';
+  ctx.fillStyle='#334155'; setFont(ctx, 'body', 'bold');
   ctx.textAlign='center'; ctx.textBaseline='top';
   ctx.fillText('타워 배치 · 병력 고용 · 현상수배는 🏰마을에서 합니다', CW/2, y);
   y += 14;
@@ -1946,7 +1946,7 @@ function renderBriefing(ctx, gs, top) {
   y += bh2 + 6;
 
 
-  ctx.font='9px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
+  setFont(ctx, 'body'); ctx.textAlign='center'; ctx.textBaseline='top';
   ctx.fillStyle='#22c55e';
   ctx.fillText(`★ 완주 +${clearBonusGold(gs.wave)}💰 · 성벽 +${clearRepair(gs.wave)}HP    `, CW/2-52, y);
   ctx.fillStyle='#f87171';
@@ -3064,7 +3064,7 @@ function _renderCharmBar(ctx, gs, y) {
   const h = 92 + (bag.length ? rows*30 : 0);
   uiPanel(ctx, 10,y,CW-20,h,7, '#140f22', '#4c1d95', 1);
   ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillStyle='#c4b5fd'; ctx.font='bold 10px sans-serif';
+  ctx.fillStyle='#c4b5fd'; setFont(ctx, 'body', 'bold');
   ctx.fillText('🎴 부적 — 이번 판에만 붙고 사라집니다', 18, y+9);
 
   // 장착 칸 2개
@@ -3077,13 +3077,13 @@ function _renderCharmBar(ctx, gs, y) {
     if (d) {
       ctx.textAlign='left'; ctx.textBaseline='middle';
       ctx.font='16px sans-serif'; ctx.fillStyle='#e2e8f0'; ctx.fillText(d.icon, cx+8, cy+chh/2);
-      ctx.font='bold 9px sans-serif'; ctx.fillStyle=GRADE_COLOR[d.grade]||'#c4b5fd';
+      setFont(ctx, 'body', 'bold'); ctx.fillStyle=GRADE_COLOR[d.grade]||'#c4b5fd';
       ctx.fillText(d.name, cx+30, cy+chh/2-8);
-      ctx.font='8px sans-serif'; ctx.fillStyle='#94a3b8';
+      setFont(ctx, 'body'); ctx.fillStyle='#94a3b8';
       ctx.fillText(d.desc.length>22?d.desc.slice(0,21)+'…':d.desc, cx+30, cy+chh/2+7);
     } else {
       ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.font='bold 10px sans-serif'; ctx.fillStyle='#475569';
+      setFont(ctx, 'body', 'bold'); ctx.fillStyle='#475569';
       ctx.fillText('빈 칸 — 아래에서 선택', cx+cw2/2, cy+chh/2);
     }
     gs.ui.charmSlotBtns.push({x:cx,y:cy,w:cw2,h:chh,idx:i});
@@ -3094,14 +3094,14 @@ function _renderCharmBar(ctx, gs, y) {
   uiPanel(ctx, rx,ry,Math.max(60,rw),chh,6, canRoll?'#2a1a05':'#12161f', canRoll?'#f59e0b':'#293040', canRoll?2:1);
   ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.font='15px sans-serif'; ctx.fillText('🎰', rx+Math.max(60,rw)/2, ry+14);
-  ctx.font='bold 9px sans-serif'; ctx.fillStyle=canRoll?'#fbbf24':'#475569';
+  setFont(ctx, 'body', 'bold'); ctx.fillStyle=canRoll?'#fbbf24':'#475569';
   ctx.fillText(`💎${CHARM_ROLL_COST}`, rx+Math.max(60,rw)/2, ry+32);
   gs.ui.charmRollBtn={x:rx,y:ry,w:Math.max(60,rw),h:chh};
 
   // 보관함
   gs.ui.charmCards=[];
   ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif';
+  ctx.fillStyle='#64748b'; setFont(ctx, 'body', 'bold');
   ctx.fillText(`보관함 ${bag.length}/${CHARM_BAG_MAX}  ·  탭하면 끼웁니다 · 💰를 누르면 팝니다`, 18, y+74);
   gs.ui.charmSellBtns=[];
   if (bag.length) {
@@ -3279,7 +3279,7 @@ function renderLobbySortie(ctx, gs) {
   uiPanel(ctx, 10,y,CW-20,rh,8, open ? '#1a1033' : '#0c1220', open ? '#7c3aed' : '#1e293b', 1);
 
   if (open) {
-    ctx.fillStyle='#8b7bb8'; ctx.font='bold 9px sans-serif';
+    ctx.fillStyle='#8b7bb8'; setFont(ctx, 'body', 'bold');
     ctx.fillText(`최고 도달 층  /  ${ABYSS_FINAL_FLOOR}`, 18, y+10);
     ctx.fillStyle='#c4b5fd'; ctx.font='bold 30px sans-serif';
     ctx.fillText(`${best}`, 18, y+24);
@@ -3291,13 +3291,13 @@ function renderLobbySortie(ctx, gs) {
     const nextGate = Math.min(ABYSS_FINAL_FLOOR, (Math.floor(best/10)+1)*10);
     const atEnd = best >= ABYSS_FINAL_FLOOR;
     ctx.textAlign='right';
-    ctx.fillStyle='#fbbf24'; ctx.font='bold 10px sans-serif';
+    ctx.fillStyle='#fbbf24'; setFont(ctx, 'body', 'bold');
     ctx.fillText(atEnd ? '👹 마왕층 도달' : `다음 관문 ${nextGate}층`, CW-18, y+12);
-    ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif';
+    ctx.fillStyle='#475569'; setFont(ctx, 'body', 'bold');
     ctx.fillText(atEnd ? `🌑 악몽 ${nightmareOpenLevel()}단계까지 개방`
                        : `돌파 시 💎+${ENDLESS_GATE_BONUS + Math.floor(nextGate/10)*ENDLESS_GATE_BONUS_STEP}`,
                  CW-18, y+28);
-    ctx.fillStyle='#334155'; ctx.font='9px sans-serif';
+    ctx.fillStyle='#334155'; setFont(ctx, 'body');
     ctx.fillText(`관문 ${(gs.clearedGates||[]).length}개 돌파`, CW-18, y+44);
     ctx.textAlign='left';
     // 진행 바 — 100층 결승선까지
@@ -3305,22 +3305,23 @@ function renderLobbySortie(ctx, gs) {
     ctx.fillStyle='#1e293b'; ctx.fillRect(18, y+rh-9, pw, 4);
     ctx.fillStyle= atEnd ? '#fbbf24' : '#a78bfa'; ctx.fillRect(18, y+rh-9, pw*prog, 4);
   } else {
-    ctx.fillStyle='#64748b'; ctx.font='bold 11px sans-serif';
+    ctx.fillStyle='#64748b'; setFont(ctx, 'body', 'bold');
     ctx.fillText('∞ 심연 — 아직 잠겨 있습니다', 18, y+13);
-    ctx.fillStyle='#475569'; ctx.font='10px sans-serif';
+    ctx.fillStyle='#475569'; setFont(ctx, 'body');
     ctx.fillText('훈련을 한 판 치르면 열립니다 — 완주하지 않아도 됩니다.', 18, y+32);
-    ctx.fillStyle='#334155'; ctx.font='9px sans-serif';
-    ctx.fillText('심연이 본편입니다 — 훈련은 손에 익히는 곳입니다.', 18, y+48);
+    // 세 번째 줄('심연이 본편입니다…')은 지웠다. 바로 위 두 줄이 이미 같은 말을
+    // 하고 있었고, 13px로 올리자 아래 [건너뛰기] 버튼과 겹쳤다.
 
     // ⏭ 훈련 건너뛰기 — 훈련을 아는 사람에게 같은 6웨이브를 다시 시키는 것은 값이 아니라 벌이다.
     // 완주해서 벌었을 만큼(최대 4)에 가까운 3보석을 주고 심연을 바로 연다.
-    const skw = 150, skh = 30, skx = CW - 18 - skw, sky = y + rh - skh - 8;
+    // 부제까지 담아야 하므로 높이를 30 → 42로 키운다 — 30에서는 부제가 밖으로 샜다.
+    const skw = 170, skh = 42, skx = CW - 18 - skw, sky = y + rh - skh - 8;
     uiPanel(ctx, skx, sky, skw, skh, 6, '#2a1a05', '#f59e0b', 1.5);
     ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillStyle='#fbbf24'; ctx.font='bold 11px sans-serif';
-    ctx.fillText(`⏭ 훈련 건너뛰기 💎+${TRAIN_SKIP_GEMS}`, skx+skw/2, sky+skh/2-5);
-    ctx.fillStyle='#a16207'; ctx.font='8px sans-serif';
-    ctx.fillText('바로 심연으로', skx+skw/2, sky+skh/2+8);
+    ctx.fillStyle='#fbbf24'; setFont(ctx, 'body', 'bold');
+    ctx.fillText(`⏭ 훈련 건너뛰기 💎+${TRAIN_SKIP_GEMS}`, skx+skw/2, sky+skh/2-8);
+    ctx.fillStyle='#a16207'; setFont(ctx, 'body');
+    ctx.fillText('바로 심연으로', skx+skw/2, sky+skh/2+11);
     gs.ui.trainSkipBtn = { x:skx, y:sky, w:skw, h:skh };
     ctx.textAlign='left'; ctx.textBaseline='top';
   }
@@ -3334,13 +3335,13 @@ function renderLobbySortie(ctx, gs) {
   // 해금된 편성
   const th = 84;
   uiPanel(ctx, 10,y,CW-20,th,7, '#0c1220', '#1e293b', 1);
-  ctx.fillStyle='#f59e0b'; ctx.font='bold 10px sans-serif'; ctx.textBaseline='top';
+  ctx.fillStyle='#f59e0b'; setFont(ctx, 'body', 'bold'); ctx.textBaseline='top';
   ctx.fillText('🔓 사용 가능', 18, y+9);
 
   const tws = unlockedTowers(), uns = unlockedUnits();
   // 잠긴 것도 회색으로 자리를 지킨다 — 무엇이 남았는지 보여야 목표가 된다
   const drawSlots = (label, ids, table, ty) => {
-    ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillStyle='#64748b'; setFont(ctx, 'body', 'bold'); ctx.textAlign='left'; ctx.textBaseline='top';
     ctx.fillText(label, 18, ty+8);
     ids.forEach((id, i) => {
       const t = table[id], on = isUnlocked(id);
@@ -3354,7 +3355,7 @@ function renderLobbySortie(ctx, gs) {
       if (!on) {
         ctx.fillStyle='#0d1220';
         ctx.fillRect(sx+16, ty+16, 11, 11);
-        ctx.fillStyle='#f59e0b'; ctx.font='bold 8px sans-serif';
+        ctx.fillStyle='#f59e0b'; setFont(ctx, 'body', 'bold');
         ctx.fillText(`${unlockCost(id)}`, sx+21, ty+22);
       }
     });
@@ -3362,7 +3363,7 @@ function renderLobbySortie(ctx, gs) {
   };
   drawSlots('타워', TOWER_ORDER, TOWER_TYPES, y+22);
   drawSlots('병력', UNIT_ORDER,  UNIT_TYPES,  y+50);
-  ctx.textAlign='right'; ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif';
+  ctx.textAlign='right'; ctx.fillStyle='#475569'; setFont(ctx, 'body', 'bold');
   ctx.fillText(`${tws.length}/${TOWER_ORDER.length} · ${uns.length}/${UNIT_ORDER.length}`, CW-18, y+9);
   ctx.textAlign='left';
   y += th + gap;
@@ -3372,9 +3373,9 @@ function renderLobbySortie(ctx, gs) {
   const sh = 62;
   roundRect(ctx,10,y,CW-20,sh,7);
   ctx.fillStyle='#0c1220'; ctx.fill(); ctx.strokeStyle='#1e293b'; ctx.stroke();
-  ctx.fillStyle='#a78bfa'; ctx.font='bold 10px sans-serif';
+  ctx.fillStyle='#a78bfa'; setFont(ctx, 'body', 'bold');
   ctx.fillText('🌳 적용 중인 스킬', 18, y+9);
-  ctx.textAlign='right'; ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif';
+  ctx.textAlign='right'; ctx.fillStyle='#475569'; setFont(ctx, 'body', 'bold');
   ctx.fillText(`${sp.owned}/${sp.total}`, CW-18, y+9);
   ctx.textAlign='left';
   const lvd = [];
@@ -3386,15 +3387,15 @@ function renderLobbySortie(ctx, gs) {
   if (lvd.length) {
     let sx = 18;
     for (const [sk, lv] of lvd) {
-      if (sx > CW-46) { ctx.fillStyle='#475569'; ctx.font='9px sans-serif'; ctx.fillText('…', sx, y+30); break; }
+      if (sx > CW-46) { ctx.fillStyle='#475569'; setFont(ctx, 'body'); ctx.fillText('…', sx, y+30); break; }
       ctx.font='13px sans-serif'; ctx.fillStyle='#e2e8f0';
       ctx.fillText(sk.icon, sx, y+24);
-      ctx.font='bold 8px sans-serif'; ctx.fillStyle='#a78bfa';
+      setFont(ctx, 'body', 'bold'); ctx.fillStyle='#a78bfa';
       ctx.fillText(String(lv), sx+2, y+38);
       sx += 22;
     }
   } else {
-    ctx.fillStyle='#475569'; ctx.font='10px sans-serif';
+    ctx.fillStyle='#475569'; setFont(ctx, 'body');
     ctx.fillText('아직 없습니다 — 🌳 스킬 탭에서 보석을 쓰세요', 18, y+30);
   }
   // 진행 바
@@ -3412,25 +3413,25 @@ function renderLobbySortie(ctx, gs) {
   roundRect(ctx,10,y,CW-20,ph,7);
   ctx.fillStyle = pacts.length ? '#1a0d14' : '#0c1220'; ctx.fill();
   ctx.strokeStyle = pacts.length ? '#7f1d3a' : '#1e293b'; ctx.stroke();
-  ctx.fillStyle='#f43f5e'; ctx.font='bold 10px sans-serif';
+  ctx.fillStyle='#f43f5e'; setFont(ctx, 'body', 'bold');
   ctx.fillText('📜 서약', 18, y+9);
   ctx.textAlign='right';
-  ctx.fillStyle = pacts.length ? '#fda4af' : '#475569'; ctx.font='bold 11px sans-serif';
+  ctx.fillStyle = pacts.length ? '#fda4af' : '#475569'; setFont(ctx, 'body', 'bold');
   ctx.fillText(`보석 ×${pactGemMult().toFixed(2)}`, CW-18, y+9);
   ctx.textAlign='left';
   if (pacts.length) {
-    ctx.fillStyle='#fda4af'; ctx.font='9px sans-serif';
+    ctx.fillStyle='#fda4af'; setFont(ctx, 'body');
     let py = y+28;
     for (const p of pacts.slice(0,3)) { ctx.fillText(`${p.icon} ${p.name} — ${p.desc}`, 18, py); py += 12; }
     if (pacts.length > 3) ctx.fillText(`외 ${pacts.length-3}개`, 18, py);
   } else {
-    ctx.fillStyle='#475569'; ctx.font='10px sans-serif';
+    ctx.fillStyle='#475569'; setFont(ctx, 'body');
     ctx.fillText('없음 — 🔓 해금 탭에서 난이도를 올리고 보석을 더 받을 수 있습니다', 18, y+30);
   }
   y += ph + gap;
 
   // 진행 상황
-  ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif';
+  ctx.fillStyle='#64748b'; setFont(ctx, 'body', 'bold');
   ctx.fillText(`관문 ${(gs.clearedGates||[]).length}개 돌파 · 누적 처치 ${gs.stats.totalKills||0} · 누적 보석 ${gs.stats.totalGems||0}`, 14, y);
   y += 12 + gap;
 
@@ -3438,33 +3439,33 @@ function renderLobbySortie(ctx, gs) {
   const nextUnlock = UNLOCK_DEFS.find(u => !isUnlocked(u.id));
   const gh = 74;
   uiPanel(ctx, 10,y,CW-20,gh,7, '#0c1220', '#1e293b', 1);
-  ctx.fillStyle='#22c55e'; ctx.font='bold 10px sans-serif';
+  ctx.fillStyle='#22c55e'; setFont(ctx, 'body', 'bold');
   ctx.fillText('🎯 다음 목표', 18, y+9);
   let gy = y+28;
   if (nextUnlock) {
     const short = gs.soulStones < nextUnlock.cost;
-    ctx.fillStyle = short ? '#64748b' : '#86efac'; ctx.font='10px sans-serif';
+    ctx.fillStyle = short ? '#64748b' : '#86efac'; setFont(ctx, 'body');
     ctx.fillText(`${nextUnlock.icon} ${nextUnlock.name} 해금`, 18, gy);
     ctx.textAlign='right';
-    ctx.fillStyle = short ? '#f59e0b' : '#22c55e'; ctx.font='bold 10px sans-serif';
+    ctx.fillStyle = short ? '#f59e0b' : '#22c55e'; setFont(ctx, 'body', 'bold');
     ctx.fillText(short ? `💎 ${nextUnlock.cost - gs.soulStones} 더 필요` : `💎 ${nextUnlock.cost} — 지금 열 수 있습니다`, CW-18, gy);
     ctx.textAlign='left';
     gy += 17;
   }
   if (sp.owned < sp.total) {
-    ctx.fillStyle='#94a3b8'; ctx.font='10px sans-serif';
+    ctx.fillStyle='#94a3b8'; setFont(ctx, 'body');
     ctx.fillText(`🌳 스킬 ${sp.total - sp.owned}레벨 남음`, 18, gy);
-    ctx.textAlign='right'; ctx.fillStyle='#64748b'; ctx.font='bold 10px sans-serif';
+    ctx.textAlign='right'; ctx.fillStyle='#64748b'; setFont(ctx, 'body', 'bold');
     ctx.fillText(`💎 ${sp.totalCost - sp.spent}`, CW-18, gy);
     ctx.textAlign='left';
     gy += 17;
   }
   if (!nextUnlock && sp.owned >= sp.total) {
-    ctx.fillStyle='#86efac'; ctx.font='10px sans-serif';
+    ctx.fillStyle='#86efac'; setFont(ctx, 'body');
     ctx.fillText('스킬·해금을 전부 올렸습니다 — 📜 서약으로 더 깊이 내려가세요', 18, gy);
     gy += 17;
   }
-  ctx.fillStyle='#475569'; ctx.font='9px sans-serif';
+  ctx.fillStyle='#475569'; setFont(ctx, 'body');
   ctx.fillText(`이번 하강 예상 보석 배율 ×${pactGemMult().toFixed(2)}`, 18, gy);
   _lobbyBottom = gy + 20;
   fitSortieGap();
@@ -5705,7 +5706,7 @@ function renderTownPage(ctx, gs) {
 
   // Back button
   uiPanel(ctx, 8,8,74,34,7, '#1e293b', '#475569', 1);
-  ctx.fillStyle='#94a3b8'; ctx.font='bold 11px sans-serif';
+  ctx.fillStyle='#94a3b8'; setFont(ctx, 'body', 'bold');
   ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('← 전투',45,25);
   gs.ui.townPageBackBtn={x:8,y:8,w:74,h:34};
 
@@ -5725,7 +5726,7 @@ function renderTownPage(ctx, gs) {
     const tx=4+i*tabW,ty=54,th=34;
     const active=gs.town.tab===tab.id;
     uiPanel(ctx, tx,ty,tabW-4,th,5, active?'#1e3a5f':'#0f172a', active?'#60a5fa':'#1e293b', 1.5);
-    ctx.fillStyle=active?'#e2e8f0':'#64748b'; ctx.font='bold 11px sans-serif';
+    ctx.fillStyle=active?'#e2e8f0':'#64748b'; setFont(ctx, 'body', 'bold');
     ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(tab.label,tx+(tabW-4)/2,ty+th/2);
     if (tab.id==='town') gs.ui.tabTownBtn={x:tx,y:ty,w:tabW-4,h:th};
     else if (tab.id==='army') gs.ui.tabArmyBtn={x:tx,y:ty,w:tabW-4,h:th};
@@ -5797,15 +5798,15 @@ function renderTownPageBuildingGrid(ctx, gs, startY) {
     uiPanel(ctx, bx,by,bw,bh,8, built?'#0d1929':'#080d18', built?def.color:'#334155', built?2:1);
 
     ctx.font='32px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top'; drawItemIcon(ctx, def, bx+10, by+10, 34);
-    ctx.fillStyle=built?def.color:'#64748b'; ctx.font='bold 12px sans-serif'; ctx.fillText(def.name,bx+50,by+10);
+    ctx.fillStyle=built?def.color:'#64748b'; setFont(ctx, 'title', 'bold'); ctx.fillText(def.name,bx+50,by+9);
 
     if (built) {
       const curLv=bs.level||0;
-      ctx.fillStyle='#60a5fa'; ctx.font='bold 9px sans-serif';
+      ctx.fillStyle='#60a5fa'; setFont(ctx, 'body', 'bold');
       ctx.fillText(`Lv.${curLv+1}/${BUILDING_MAX_LEVEL}`,bx+50,by+26);
     }
 
-    ctx.fillStyle='#94a3b8'; ctx.font='bold 10px sans-serif'; ctx.textBaseline='top'; ctx.fillText(def.desc,bx+10,by+52);
+    ctx.fillStyle='#94a3b8'; setFont(ctx, 'body', 'bold'); ctx.textBaseline='top'; ctx.fillText(def.desc,bx+10,by+52);
 
     if (built) {
       const curLv=bs.level||0;
@@ -5817,7 +5818,7 @@ function renderTownPageBuildingGrid(ctx, gs, startY) {
       const cap=fin.reduce((a,t)=>a+trackCapAt(t,curLv),0);
       const got=fin.reduce((a,t)=>a+(bs.upgrades[t.id]||0),0);
       const inf=open.filter(t=>trackIsInfinite(t)).reduce((a,t)=>a+(bs.upgrades[t.id]||0),0);
-      ctx.fillStyle=(cap>0&&got>=cap)?'#22c55e':'#94a3b8'; ctx.font='bold 9px sans-serif';
+      ctx.fillStyle=(cap>0&&got>=cap)?'#22c55e':'#94a3b8'; setFont(ctx, 'body', 'bold');
       ctx.fillText(`강화 ${got}/${cap}${inf?`  ♾️×${inf}`:''}`,bx+10,by+68);
     }
 
@@ -5827,11 +5828,11 @@ function renderTownPageBuildingGrid(ctx, gs, startY) {
       const canAff=gs.gold>=def.buildCost;
       ctx.fillStyle=canAff?'#1e3a5f':'#1a1a2e'; ctx.fill();
       ctx.strokeStyle=canAff?'#22c55e':'#334155'; ctx.lineWidth=1; ctx.stroke();
-      ctx.fillStyle=canAff?'#22c55e':'#64748b'; ctx.font='bold 10px sans-serif';
+      ctx.fillStyle=canAff?'#22c55e':'#64748b'; setFont(ctx, 'body', 'bold');
       ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(`건설 ${def.buildCost}💰`,bx+10+btnW/2,btnY+btnH/2);
     } else {
       ctx.fillStyle='#0f2040'; ctx.fill(); ctx.strokeStyle=def.color; ctx.lineWidth=1; ctx.stroke();
-      ctx.fillStyle=def.color; ctx.font='bold 10px sans-serif';
+      ctx.fillStyle=def.color; setFont(ctx, 'body', 'bold');
       ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('입장 →',bx+10+btnW/2,btnY+btnH/2);
     }
     gs.ui.buildingCards.push({x:bx,y:by,w:bw,h:bh,id:def.id,built});
@@ -5848,9 +5849,9 @@ function renderTownPageBuildingGrid(ctx, gs, startY) {
   const wrCost = wallRepairCost(gs.wallRepairs);
   const wrAff  = !full && gs.gold >= wrCost;
 
-  ctx.fillStyle='#94a3b8'; ctx.font='bold 11px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle='#94a3b8'; setFont(ctx, 'body', 'bold'); ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillText('🧱 성벽 보수', 12, wrY+8);
-  ctx.fillStyle='#475569'; ctx.font='9px sans-serif';
+  ctx.fillStyle='#475569'; setFont(ctx, 'body');
   ctx.fillText(full ? '성벽이 온전합니다'
                     : `기지 HP +${WALL_REPAIR_AMOUNT} · 보수할수록 비싸집니다 (${gs.wallRepairs}회)`, 12, wrY+26);
 
@@ -5859,12 +5860,12 @@ function renderTownPageBuildingGrid(ctx, gs, startY) {
   ctx.fillStyle='#1e293b'; ctx.fillRect(hbX, wrY+9, hbW, 7);
   const hr = gs.baseHP / baseHpMax();
   ctx.fillStyle = hpColor(hr); ctx.fillRect(hbX, wrY+9, hbW*Math.max(0,Math.min(1,hr)), 7);
-  ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif'; ctx.textAlign='left';
+  ctx.fillStyle='#64748b'; setFont(ctx, 'body', 'bold'); ctx.textAlign='left';
   ctx.fillText(`${Math.ceil(gs.baseHP)}/${baseHpMax()}`, hbX+hbW+6, wrY+9);
 
   const wbW=112, wbH=28, wbX=CW-12-wbW, wbY=wrY+(wrH-wbH)/2;
   uiPanel(ctx, wbX,wbY,wbW,wbH,5, wrAff ? '#14532d' : '#1a1a2e', wrAff ? '#22c55e' : '#334155', 1);
-  ctx.fillStyle = wrAff ? '#22c55e' : '#64748b'; ctx.font='bold 10px sans-serif';
+  ctx.fillStyle = wrAff ? '#22c55e' : '#64748b'; setFont(ctx, 'body', 'bold');
   ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.fillText(full ? '온전함' : `보수 ${wrCost}💰`, wbX+wbW/2, wbY+wbH/2);
   gs.ui.wallRepairBtn = full ? null : {x:wbX,y:wbY,w:wbW,h:wbH};
@@ -5875,14 +5876,14 @@ function renderTownPageBuildingGrid(ctx, gs, startY) {
   uiPanel(ctx, 6,stripY,CW-12,44,6, '#0a0d1a', '#1e293b', 1);
   const pool=waveDefFor(gs.wave)?.arenaPool||[];
   const totalW=pool.reduce((a,[,w])=>a+w,0)||1;
-  ctx.fillStyle='#64748b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
+  ctx.fillStyle='#64748b'; setFont(ctx, 'body', 'bold'); ctx.textAlign='left'; ctx.textBaseline='middle';
   ctx.fillText(`웨이브 ${gs.wave+1} 아레나 스폰:`,12,stripY+14);
   pool.forEach(([type,w],i)=>{
     const mt=BATTLE_MOB_TYPES[type]; if (!mt) return;
     const ix=12+i*44;
     ctx.font='15px sans-serif'; ctx.textAlign='left'; ctx.fillStyle='#e2e8f0';
     ctx.fillText(mt.icon,ix,stripY+30);
-    ctx.font='bold 8px sans-serif'; ctx.fillStyle='#475569';
+    setFont(ctx, 'body', 'bold'); ctx.fillStyle='#475569';
     ctx.fillText(`${Math.round(w/totalW*100)}%`,ix+19,stripY+31);
   });
   _townBottom = stripY + 44;
@@ -6240,23 +6241,22 @@ function renderTownPageArmy(ctx, gs, startY) {
   ctx.fillStyle='#e2e8f0';
   ctx.font='24px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillText(hero.dead?'💀':'👑',12,y+6);
-  ctx.fillStyle=hero.dead?'#f87171':COLORS.hero; ctx.font='bold 12px sans-serif';
-  ctx.fillText(hero.dead?`전사 — ${heroDownLabel(hero)}`:`영웅  Lv.${hero.level}`,44,y+6);
-  ctx.fillStyle='#cbd5e1'; ctx.font='bold 10px sans-serif';
-  ctx.fillText(`ATK ${Math.round((lv.atk+BONUSES.heroAtk)*BONUSES.heroStatMult*BONUSES.sigilHeroAtkMult)}   HP ${Math.ceil(hero.hp)}/${hMax}   DEF ${Math.round((lv.def+BONUSES.heroAura)*BONUSES.heroStatMult)}`,44,y+22);
-  // 지금 걸린 각인 — 캠프에서 바꾼 게 여기 반영됐는지 바로 보이게
+  ctx.fillStyle=hero.dead?'#f87171':COLORS.hero; setFont(ctx, 'title', 'bold');
+  ctx.fillText(hero.dead?`전사 — ${heroDownLabel(hero)}`:`영웅  Lv.${hero.level}`,44,y+5);
+  ctx.fillStyle='#cbd5e1'; setFont(ctx, 'body', 'bold');
+  ctx.fillText(`ATK ${Math.round((lv.atk+BONUSES.heroAtk)*BONUSES.heroStatMult*BONUSES.sigilHeroAtkMult)}   HP ${Math.ceil(hero.hp)}/${hMax}   DEF ${Math.round((lv.def+BONUSES.heroAura)*BONUSES.heroStatMult)}`,44,y+25);
+  // 지금 걸린 각인 — 캠프에서 바꾼 게 여기 반영됐는지 바로 보이게.
+  // 각인이 주는 스킬 이름(8px)은 뺐다 — 카드를 누르면 나오는 상세에 있다.
   const _sg = activeSigil();
-  ctx.textAlign='right'; ctx.fillStyle=_sg.color; ctx.font='bold 9px sans-serif';
+  ctx.textAlign='right'; ctx.fillStyle=_sg.color; setFont(ctx, 'body', 'bold');
   ctx.fillText(`${_sg.icon} ${_sg.name}`, CW-12, y+6);
-  ctx.fillStyle='#475569'; ctx.font='8px sans-serif';
-  ctx.fillText(_sg.skill.name, CW-12, y+22);
   ctx.textAlign='left';
   const maxed=hero.level>=HERO_MAX_LEVEL;
   const expR=maxed?1:hero.exp/lv.expNeeded;
   ctx.fillStyle='#1e293b'; ctx.fillRect(12,y+42,CW-28,8);
   ctx.fillStyle='#f59e0b'; ctx.fillRect(12,y+42,(CW-28)*Math.min(1,expR),8);
-  ctx.fillStyle='#94a3b8'; ctx.font='8px sans-serif'; ctx.textAlign='right'; ctx.textBaseline='middle';
-  ctx.fillText(maxed?'MAX LEVEL':`EXP ${Math.floor(hero.exp)}/${lv.expNeeded}`,CW-12,y+46);
+  ctx.fillStyle='#94a3b8'; setFont(ctx, 'label', 'bold'); ctx.textAlign='right'; ctx.textBaseline='middle';
+  ctx.fillText(maxed?'MAX':`${Math.floor(hero.exp)}/${lv.expNeeded}`,CW-12,y+46);
   // 카드 전체가 상세 화면으로 가는 문이다 — 장비와 스킬은 여기서 만진다
   gs.ui.heroInfoBtn={x:6,y,w:CW-12,h:58};
   const _gear = heroGear(gs);
@@ -6264,14 +6264,14 @@ function renderTownPageArmy(ctx, gs, startY) {
   const _skN  = skillSlotCount(gs);
   const _skOn = _gear.skillSlots.filter((u,i)=>i<_skN && u!=null).length;
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillStyle='#fbbf24'; ctx.font='bold 8px sans-serif';
-  ctx.fillText(`🎒 장비 ${_eqN}/${EQUIP_SLOTS.length}  ·  🧬 패시브 ${_skOn}/${_skN}  ·  탭하여 장착·스킬`, CW/2, y+69);
+  ctx.fillStyle='#fbbf24'; setFont(ctx, 'body', 'bold');
+  ctx.fillText(`🎒 ${_eqN}/${EQUIP_SLOTS.length}  ·  🧬 ${_skOn}/${_skN}  ·  탭하여 장착`, CW/2, y+70);
   ctx.textAlign='left'; ctx.textBaseline='top';
   y+=84;
 
   // ── 영웅 배치 ────────────────────────────────────────────────────────────
-  ctx.fillStyle='#64748b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText('영웅 배치',6,y); y+=14;
+  ctx.fillStyle='#94a3b8'; setFont(ctx, 'body', 'bold'); ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText('영웅 배치',6,y); y+=19;
   const btnW2=(CW-20)/2,btnH2=44;
   const pDef=hero.placement==='defense',pBat=hero.placement==='battle';
   drawBtn(ctx,6,y,btnW2,btnH2,pDef?'✅ 상단 방어 배치':'상단 방어 배치',pDef?'#064e3b':'#1e293b',pDef?'#34d399':'#60a5fa',!hero.dead);
@@ -6280,16 +6280,16 @@ function renderTownPageArmy(ctx, gs, startY) {
   gs.ui.heroBatBtn={x:6+btnW2+8,y,w:btnW2,h:btnH2};
   // 어느 쪽이든 반대쪽 몫도 들어온다 — 고르는 것은 비중이지 포기가 아니다
   ctx.textAlign='center'; ctx.textBaseline='top';
-  ctx.fillStyle='#64748b'; ctx.font='8px sans-serif';
-  ctx.fillText('EXP 많이 · 골드 조금', 6+btnW2/2, y+btnH2+3);
-  ctx.fillText('골드 많이 · EXP 조금', 6+btnW2+8+btnW2/2, y+btnH2+3);
+  ctx.fillStyle='#94a3b8'; setFont(ctx, 'body', 'bold');
+  ctx.fillText('EXP↑ 골드↓', 6+btnW2/2, y+btnH2+6);
+  ctx.fillText('골드↑ EXP↓', 6+btnW2+8+btnW2/2, y+btnH2+6);
   ctx.textAlign='left';
-  y+=btnH2+20;
+  y+=btnH2+24;
 
   // ── 병력 고용 (5종, 2열 그리드) ─────────────────────────────────────────
-  ctx.fillStyle='#64748b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText('병력 고용 — 탭하여 편성',6,y); y+=14;
-  const cols=3, cardW=(CW-12-(cols-1)*6)/cols, cardH=64;
+  ctx.fillStyle='#94a3b8'; setFont(ctx, 'body', 'bold'); ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText('병력 고용 — 탭하여 편성',6,y); y+=19;
+  const cols=3, cardW=(CW-12-(cols-1)*6)/cols, cardH=86;   // 글자를 키운 만큼
   gs.ui.hireCards=[];
   const roster = UNIT_ORDER;
   roster.forEach((id,i)=>{
@@ -6303,20 +6303,20 @@ function renderTownPageArmy(ctx, gs, startY) {
     ctx.globalAlpha=unlocked?(canAff?1:0.55):0.32;
     ctx.fillStyle='#e2e8f0'; ctx.font='20px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
     ctx.fillText(ut.icon,cx+cardW/2,cy2+4);
-    ctx.fillStyle=canAff?'#f1f5f9':'#64748b'; ctx.font='bold 11px sans-serif';
-    ctx.fillText(ut.name,cx+cardW/2,cy2+27);
-    ctx.fillStyle='#94a3b8'; ctx.font='bold 8px sans-serif';
-    ctx.fillText(`ATK ${Math.round(ut.atk+BONUSES.unitAtk)} · HP ${Math.round((ut.hp+BONUSES.unitHp)*(BONUSES.pactUnitHpMult||1))}`,cx+cardW/2,cy2+40);
+    ctx.fillStyle=canAff?'#f1f5f9':'#64748b'; setFont(ctx, 'body', 'bold');
+    ctx.fillText(ut.name,cx+cardW/2,cy2+29);
+    ctx.fillStyle='#94a3b8'; setFont(ctx, 'body', 'bold');
+    ctx.fillText(`ATK ${Math.round(ut.atk+BONUSES.unitAtk)} · HP ${Math.round((ut.hp+BONUSES.unitHp)*(BONUSES.pactUnitHpMult||1))}`,cx+cardW/2,cy2+47);
     ctx.globalAlpha=1;
     if (unlocked) {
       ctx.globalAlpha=canAff?1:0.55;
-      ctx.fillStyle=canAff?COLORS.gold:'#64748b'; ctx.font='bold 10px sans-serif';
-      ctx.fillText(`💰${cost}`,cx+cardW/2,cy2+50);
+      ctx.fillStyle=canAff?COLORS.gold:'#64748b'; setFont(ctx, 'title', 'bold');
+      ctx.fillText(`💰${cost}`,cx+cardW/2,cy2+62);
       ctx.globalAlpha=1;
       gs.ui.hireCards.push({x:cx,y:cy2,w:cardW,h:cardH,typeId:id});
     } else {
-      ctx.fillStyle='#f59e0b'; ctx.font='bold 9px sans-serif';
-      ctx.fillText(`🔒 캠프 💎${unlockCost(id)}`,cx+cardW/2,cy2+50);
+      ctx.fillStyle='#f59e0b'; setFont(ctx, 'body', 'bold');
+      ctx.fillText(`🔒 💎${unlockCost(id)}`,cx+cardW/2,cy2+62);
     }
   });
   y += Math.ceil(roster.length/cols)*(cardH+6) + 6;
@@ -6331,24 +6331,24 @@ function renderTownPageArmy(ctx, gs, startY) {
   gs.ui.specialCards=[];
 
   ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillStyle='#f472b6'; ctx.font='bold 10px sans-serif';
+  ctx.fillStyle='#f472b6'; setFont(ctx, 'body', 'bold');
   ctx.fillText('🏨 여관 손님 — 이번 웨이브에만',6,y);
-  ctx.textAlign='right'; ctx.fillStyle= spUsed>=spMax ? '#f87171' : '#94a3b8'; ctx.font='bold 9px sans-serif';
-  ctx.fillText(innLv<0 ? '여관 미건설' : `전용 슬롯 ${spUsed}/${spMax}`, CW-6, y);
+  ctx.textAlign='right'; ctx.fillStyle= spUsed>=spMax ? '#f87171' : '#94a3b8'; setFont(ctx, 'body', 'bold');
+  ctx.fillText(innLv<0 ? '여관 미건설' : `슬롯 ${spUsed}/${spMax}`, CW-6, y);
   ctx.textAlign='left';
-  y+=14;
+  y+=20;
 
   const spH=58;
   if (innLv < 0) {
     uiPanel(ctx, 6,y,CW-12,spH,6, '#0c1220', '#1e293b', 1);
-    ctx.fillStyle='#64748b'; ctx.font='10px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle='#64748b'; setFont(ctx, 'body'); ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText('🏨 마을에 여관을 지으면 특수 용병이 찾아옵니다', CW/2, y+spH/2);
     ctx.textAlign='left'; ctx.textBaseline='top';
   } else if (!offers.length) {
     uiPanel(ctx, 6,y,CW-12,spH,6, '#140d18', '#3f2447', 1);
-    ctx.fillStyle='#6b5b7a'; ctx.font='10px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle='#6b5b7a'; setFont(ctx, 'body'); ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText('이번 웨이브에는 아무도 오지 않았습니다', CW/2, y+spH/2-7);
-    ctx.fillStyle='#4c3a5a'; ctx.font='bold 9px sans-serif';
+    ctx.fillStyle='#4c3a5a'; setFont(ctx, 'body', 'bold');
     ctx.fillText(`여관 Lv.${innLv+1} · 자리 ${specialSeats(innLv)} · 등장 확률 ${Math.round(specialChance(innLv)*100)}%`, CW/2, y+spH/2+9);
     ctx.textAlign='left'; ctx.textBaseline='top';
   } else {
@@ -6363,14 +6363,14 @@ function renderTownPageArmy(ctx, gs, startY) {
       ctx.textAlign='center'; ctx.textBaseline='top';
       ctx.fillStyle='#e2e8f0'; ctx.font='19px sans-serif';
       ctx.fillText(ut.icon,sx+sw/2,y+4);
-      ctx.fillStyle=ut.color; ctx.font='bold 11px sans-serif';
+      ctx.fillStyle=ut.color; setFont(ctx, 'body', 'bold');
       ctx.fillText(ut.name,sx+sw/2,y+25);
-      ctx.fillStyle='#94a3b8'; ctx.font='bold 8px sans-serif';
+      ctx.fillStyle='#94a3b8'; setFont(ctx, 'body', 'bold');
       ctx.fillText(`ATK ${Math.round(ut.atk+BONUSES.unitAtk)} · HP ${Math.round((ut.hp+BONUSES.unitHp)*(BONUSES.pactUnitHpMult||1))}`,sx+sw/2,y+38);
-      ctx.fillStyle=canAff?COLORS.gold:'#64748b'; ctx.font='bold 10px sans-serif';
+      ctx.fillStyle=canAff?COLORS.gold:'#64748b'; setFont(ctx, 'body', 'bold');
       ctx.fillText(roomy?`💰${cost}`:'슬롯 없음',sx+sw/2,y+47);
       ctx.globalAlpha=1;
-      ctx.fillStyle=ut.color; ctx.font='bold 8px sans-serif'; ctx.textAlign='left';
+      ctx.fillStyle=ut.color; setFont(ctx, 'body', 'bold'); ctx.textAlign='left';
       ctx.fillText('★',sx+4,y+3);
       ctx.textAlign='left';
       gs.ui.specialCards.push({x:sx,y:y,w:sw,h:spH,typeId:id});
@@ -6394,7 +6394,7 @@ function renderTownPageArmy(ctx, gs, startY) {
         ctx.fillStyle='#e2e8f0'; ctx.font='17px sans-serif';
         ctx.fillText(u.icon,sx+ssW/2,y+15);
         drawHPBar(ctx,sx+5,ssH+y-13,ssW-10,4,u.hp/u.maxHp);
-        ctx.fillStyle='#ef4444'; ctx.font='bold 9px sans-serif';
+        ctx.fillStyle='#ef4444'; setFont(ctx, 'body', 'bold');
         ctx.fillText('✕',sx+ssW-10,y+8);
       } else {
         ctx.fillStyle='#3f2447'; ctx.font='18px sans-serif';
@@ -6408,7 +6408,7 @@ function renderTownPageArmy(ctx, gs, startY) {
 
   // ── 편성 슬롯 ────────────────────────────────────────────────────────────
   const hired=battle.ourTeam.filter(u=>!u.isHero && !(UNIT_TYPES[u.typeId]||{}).special);
-  ctx.fillStyle='#64748b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle='#64748b'; setFont(ctx, 'body', 'bold'); ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillText(`편성된 병력 (${hired.length}/${battle.maxSlots})  ·  탭하면 해고`,6,y); y+=14;
   // 슬롯이 늘어나면 한 줄에 다 넣지 않고 다음 줄로 내린다.
   // 강화로 슬롯을 최대치까지 올리면 예전에는 화면 오른쪽으로 그대로 넘어갔다.
@@ -6427,9 +6427,9 @@ function renderTownPageArmy(ctx, gs, startY) {
       ctx.font='19px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
       ctx.fillText(unit.icon,sx+slotW/2,sy+19);
       drawHPBar(ctx,sx+5,sy+slotH-17,slotW-10,4,unit.hp/unit.maxHp);
-      ctx.fillStyle='#94a3b8'; ctx.font='bold 8px sans-serif'; ctx.textBaseline='bottom';
+      ctx.fillStyle='#94a3b8'; setFont(ctx, 'body', 'bold'); ctx.textBaseline='bottom';
       ctx.fillText(`${Math.ceil(unit.hp)}/${unit.maxHp}`,sx+slotW/2,sy+slotH-3);
-      ctx.fillStyle='#ef4444'; ctx.font='bold 10px sans-serif'; ctx.textBaseline='top';
+      ctx.fillStyle='#ef4444'; setFont(ctx, 'body', 'bold'); ctx.textBaseline='top';
       ctx.fillText('✕',sx+slotW-11,sy+3);
     } else {
       ctx.fillStyle='#334155'; ctx.font='22px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
@@ -6447,9 +6447,9 @@ function renderTownPageArmy(ctx, gs, startY) {
   const bh3 = 36;
   uiPanel(ctx, 6, y, CW-12, bh3, 7, on ? '#3b2a08' : left > 0 ? '#141c2e' : '#0e1017', on ? '#fbbf24' : left > 0 ? '#a16207' : '#252b38', on ? 2 : 1);
   ctx.textAlign='left'; ctx.textBaseline='middle';
-  ctx.fillStyle = (left > 0 || on) ? '#fbbf24' : '#475569'; ctx.font='bold 11px sans-serif';
+  ctx.fillStyle = (left > 0 || on) ? '#fbbf24' : '#475569'; setFont(ctx, 'body', 'bold');
   ctx.fillText(on ? '💰 현상수배 예약됨 — 탭하여 취소' : '💰 현상수배 소환', 14, y+bh3/2-5);
-  ctx.font='bold 9px sans-serif';
+  setFont(ctx, 'body', 'bold');
   if (on) {
     ctx.fillStyle='#fde68a';
     ctx.fillText(`처치 시 💎+${bountyGems(gs.bountyUsed-1)} · 놓치면 성벽에 큰 피해`, 14, y+bh3/2+9);
@@ -6470,9 +6470,9 @@ function renderTownPageArmy(ctx, gs, startY) {
   const eOn      = gs.elitePending;
   uiPanel(ctx, 6, y, CW-12, bh3, 7, eOn ? '#2a1f08' : eLeft > 0 ? '#141c2e' : '#0e1017', eOn ? '#fbbf24' : eLeft > 0 ? '#a16207' : '#252b38', eOn ? 2 : 1);
   ctx.textAlign='left'; ctx.textBaseline='middle';
-  ctx.fillStyle = (eLeft > 0 || eOn) ? '#fbbf24' : '#475569'; ctx.font='bold 11px sans-serif';
+  ctx.fillStyle = (eLeft > 0 || eOn) ? '#fbbf24' : '#475569'; setFont(ctx, 'body', 'bold');
   ctx.fillText(eOn ? '⚔️ 정예 예약됨 — 탭하여 취소' : '⚔️ 아레나 정예 소환', 14, y+bh3/2-5);
-  ctx.font='bold 9px sans-serif';
+  setFont(ctx, 'body', 'bold');
   if (eOn) {
     ctx.fillStyle='#fde68a';
     ctx.fillText(`처치 시 💎+${eliteGems((gs.eliteUsed||1)-1)} · 부대가 정면으로 이겨야 합니다`, 14, y+bh3/2+9);
@@ -6502,7 +6502,7 @@ function renderTownPageArmy(ctx, gs, startY) {
       ctx.textAlign='left'; ctx.textBaseline='middle';
       ctx.fillStyle='#fca5a5'; ctx.font='bold 12px sans-serif';
       ctx.fillText(title, 14, y+14);
-      ctx.fillStyle='#94a3b8'; ctx.font='bold 9px sans-serif';
+      ctx.fillStyle='#94a3b8'; setFont(ctx, 'body', 'bold');
       ctx.fillText('어디서 맞이할지 고르세요 — 반대쪽에는 적이 나오지 않습니다', 14, y+29);
 
       const opts = [
@@ -6516,9 +6516,9 @@ function renderTownPageArmy(ctx, gs, startY) {
         const on = (gs.bossPick || 'random') === o.id;
         uiPanel(ctx, ox, oy, ow, oh, 5, on ? '#2a1206' : '#0b1220', on ? o.color : '#2a3140', on ? 2 : 1);
         ctx.textAlign='center'; ctx.textBaseline='middle';
-        ctx.fillStyle = on ? o.color : '#64748b'; ctx.font='bold 10px sans-serif';
+        ctx.fillStyle = on ? o.color : '#64748b'; setFont(ctx, 'body', 'bold');
         ctx.fillText(o.label, ox+ow/2, oy+11);
-        ctx.fillStyle = on ? '#94a3b8' : '#334155'; ctx.font='bold 8px sans-serif';
+        ctx.fillStyle = on ? '#94a3b8' : '#334155'; setFont(ctx, 'body', 'bold');
         ctx.fillText(o.sub, ox+ow/2, oy+22);
         gs.ui.bossPickBtns.push({ x:ox, y:oy, w:ow, h:oh, id:o.id });
       });
@@ -6534,13 +6534,13 @@ function renderTownPageArmy(ctx, gs, startY) {
       const top  = side === 'defense';
       uiPanel(ctx, 6, y, CW-12, 44, 6, '#1a1206', '#fb923c', 1.5);
       ctx.textAlign='left'; ctx.textBaseline='middle';
-      ctx.fillStyle='#fdba74'; ctx.font='bold 11px sans-serif';
+      ctx.fillStyle='#fdba74'; setFont(ctx, 'body', 'bold');
       ctx.fillText(`🐲 ${midBossName(tier)}`, 14, y+14);
-      ctx.fillStyle = top ? '#f97316' : '#a855f7'; ctx.font='bold 11px sans-serif';
+      ctx.fillStyle = top ? '#f97316' : '#a855f7'; setFont(ctx, 'body', 'bold');
       ctx.textAlign='right';
       ctx.fillText(top ? '🗼 상단에 나옵니다' : '⚔️ 하단에 나옵니다', CW-14, y+14);
       ctx.textAlign='left';
-      ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif';
+      ctx.fillStyle='#64748b'; setFont(ctx, 'body', 'bold');
       ctx.fillText(top ? '60초를 돌다가 성으로 들어갑니다 — 그 안에 잡으세요'
                        : '가끔 바닥에 장판을 깝니다 — 비켜서면 안 맞습니다', 14, y+30);
       ctx.textBaseline='middle';
@@ -6568,9 +6568,11 @@ function renderTownPageArmy(ctx, gs, startY) {
   // 편성이 늘면 이 상자가 화면 밖으로 밀려 아예 안 보였다 — 이제는 페이지가 스크롤되므로
   // 높이를 내용에 맞춰 고정한다.
   {
-    const boxH = 176;
+    // 글자를 13px로 올리면서 안의 줄들이 이 높이를 넘겼다 — 마지막 두 줄이
+    // 상자 테두리를 뚫고 서로 겹쳤다. 내용에 맞춰 다시 잡는다.
+    const boxH = 214;
     uiPanel(ctx, 6,y,CW-12,boxH,7, '#080d18', '#161f30', 1);
-    ctx.fillStyle='#94a3b8'; ctx.font='bold 11px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillStyle='#94a3b8'; setFont(ctx, 'body', 'bold'); ctx.textAlign='left'; ctx.textBaseline='top';
     ctx.fillText('전투력 요약',14,y+9);
 
     const totAtk=battle.ourTeam.reduce((a,u)=>a+u.atk,0);
@@ -6584,9 +6586,9 @@ function renderTownPageArmy(ctx, gs, startY) {
     ];
     let ry=y+30;
     for (const [label,val,col] of rows) {
-      ctx.fillStyle='#64748b'; ctx.font='10px sans-serif'; ctx.textAlign='left';
+      ctx.fillStyle='#64748b'; setFont(ctx, 'body'); ctx.textAlign='left';
       ctx.fillText(label,18,ry);
-      ctx.fillStyle=col; ctx.font='bold 11px sans-serif'; ctx.textAlign='right';
+      ctx.fillStyle=col; setFont(ctx, 'body', 'bold'); ctx.textAlign='right';
       ctx.fillText(val,CW-18,ry);
       ry+=18;
     }
@@ -6595,40 +6597,55 @@ function renderTownPageArmy(ctx, gs, startY) {
     ry+=14;
 
     // 획득 강화
-    ctx.fillStyle='#64748b'; ctx.font='10px sans-serif'; ctx.textAlign='left';
+    ctx.fillStyle='#64748b'; setFont(ctx, 'body'); ctx.textAlign='left';
     ctx.fillText('획득 강화',18,ry);
     const upIcons=(gs.activeUpgrades||[]).map(id=>(UPGRADE_CARDS.find(c=>c.id===id)||{}).icon||'').join(' ');
-    ctx.fillStyle='#a5b4fc'; ctx.font='11px sans-serif'; ctx.textAlign='right';
+    ctx.fillStyle='#a5b4fc'; setFont(ctx, 'body'); ctx.textAlign='right';
     ctx.fillText(upIcons?upIcons.slice(0,40):'—',CW-18,ry);
     ry+=18;
 
     // 다음 웨이브 미리보기
     const nd=waveDefFor(gs.wave);
     if (nd) {
-      ctx.fillStyle='#64748b'; ctx.font='10px sans-serif'; ctx.textAlign='left';
+      ctx.fillStyle='#64748b'; setFont(ctx, 'body'); ctx.textAlign='left';
       ctx.fillText('다음 웨이브',18,ry);
       const mobIcons=(nd.arenaPool||[]).map(([t])=>(BATTLE_MOB_TYPES[t]||{}).icon||'').join(' ');
-      ctx.fillStyle='#f87171'; ctx.font='11px sans-serif'; ctx.textAlign='right';
+      ctx.fillStyle='#f87171'; setFont(ctx, 'body'); ctx.textAlign='right';
       ctx.fillText(mobIcons.slice(0,34),CW-18,ry);
       ry+=18;
     }
 
-    ctx.fillStyle='#3f4a5c'; ctx.font='9px sans-serif'; ctx.textAlign='left';
-    ctx.fillText('하단은 실시간 아레나입니다. A로 자동/수동을 전환하세요.',18,ry+2);
-    ry+=13;
-    ctx.fillText('웨이브를 클리어하면 강화 카드 3장 중 1장을 고릅니다.',18,ry+2);
+    ctx.fillStyle='#64748b'; setFont(ctx, 'body'); ctx.textAlign='left';
+    ctx.fillText('하단은 실시간 아레나입니다. A로 자동/수동을 전환하세요.',18,ry+4);
+    ry+=19;
+    ctx.fillText('웨이브를 클리어하면 강화 카드 3장 중 1장을 고릅니다.',18,ry+4);
     _townBottom = y + boxH;
   }
 }
 
+// 주어진 폭을 넘으면 …로 자른다. 글자 수로 자르면 폭이 바뀔 때마다 어긋난다 —
+// 재서 자르면 카드 크기를 고쳐도 따라온다.
+function _ellipsize(ctx, text, maxW) {
+  const t = String(text);
+  if (ctx.measureText(t).width <= maxW) return t;
+  let lo = 0, hi = t.length;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (ctx.measureText(t.slice(0, mid) + '…').width <= maxW) lo = mid; else hi = mid - 1;
+  }
+  return lo > 0 ? t.slice(0, lo) + '…' : '';
+}
+
 function renderTownPageTowers(ctx, gs, startY) {
   // ── 타워 종류 팔레트 ─────────────────────────────────────────────────────
-  ctx.fillStyle='#60a5fa'; ctx.font='bold 11px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
+  ctx.fillStyle='#60a5fa'; setFont(ctx, 'body', 'bold'); ctx.textAlign='center'; ctx.textBaseline='top';
   ctx.fillText('타워를 고르고 → 빈 셀을 탭하면 ◎사거리를 보여줍니다 → 확인 후 배치', CW/2, startY);
 
   // 타워 5종 — 한 줄에 안 들어가므로 3열 그리드로. 등급 상성을 카드에 같이 띄운다.
   const pcols = 3, pgap = 5;
-  const pw = Math.floor((CW - 8 - (pcols-1)*pgap) / pcols), ph = 62;
+  // 13px로 올리면서 62px 카드 안에서 이름·상성·설명·값이 서로 겹쳤다.
+  // 카드를 키우고 각 줄의 자리를 다시 잡는다.
+  const pw = Math.floor((CW - 8 - (pcols-1)*pgap) / pcols), ph = 92;
   const px0 = 4, py0 = startY + 16;
   gs.ui.towerTypeBtns = [];
   TOWER_ORDER.forEach((id,i) => {
@@ -6642,46 +6659,50 @@ function renderTownPageTowers(ctx, gs, startY) {
     uiPanel(ctx, bx,by,pw,ph,6, sel?'#152b45' : afford?'#111c2e':'#0e1017', sel?tpl.color : afford?'#334155':'#252b38', sel?2:1);
 
     ctx.globalAlpha = unlocked?(afford?1:0.55):0.32;
-    ctx.fillStyle='#e2e8f0'; ctx.font='15px sans-serif';
+    ctx.fillStyle='#e2e8f0'; setFont(ctx, 'title');
     ctx.textAlign='left'; ctx.textBaseline='top';
-    ctx.fillText(tpl.icon, bx+6, by+5);
-    ctx.fillStyle = sel?tpl.color:'#cbd5e1'; ctx.font='bold 11px sans-serif';
-    ctx.fillText(tpl.name, bx+26, by+6);
+    ctx.fillText(tpl.icon, bx+6, by+6);
+    ctx.fillStyle = sel?tpl.color:'#cbd5e1'; setFont(ctx, 'body', 'bold');
+    ctx.fillText(tpl.name, bx+28, by+8);
 
     // 등급 상성 4칸 — 강/약이 한눈에
     const aff = TOWER_AFFINITY[id] || {};
     const cw2 = (pw-12)/4;
     MOB_CLASS_ORDER.forEach((ck,ci) => {
       const cls = MOB_CLASSES[ck];
-      const ax = bx+6+ci*cw2, ay = by+23;
+      const ax = bx+6+ci*cw2, ay = by+30;
       const m  = aff[ck] !== undefined ? aff[ck] : 1;
       const lab = affinityLabel(m);
-      ctx.fillStyle='#0b1220'; ctx.fillRect(ax, ay, cw2-2, 15);
-      ctx.fillStyle=cls.color; ctx.font='bold 8px sans-serif';
+      ctx.fillStyle='#0b1220'; ctx.fillRect(ax, ay, cw2-2, 18);
+      // 한 칸에 태그(S/M/L/A)와 배율이 같이 들어간다. 자리는 28.5px인데
+      // label(11)로는 `S`+`1.25`가 28.7px이라 딱 0.2px 넘쳐 붙어 보였다.
+      // 이건 문장이 아니라 한 글자 태그와 숫자다 — micro가 맡는 자리다.
+      ctx.fillStyle=cls.color; setFont(ctx, 'micro', 'bold');
       ctx.textAlign='left'; ctx.textBaseline='top';
-      ctx.fillText(cls.tag, ax+3, ay+4);
-      ctx.fillStyle=lab.color; ctx.font='bold 8px sans-serif'; ctx.textAlign='right';
-      ctx.fillText(m.toFixed(2).replace('0.','.'), ax+cw2-4, ay+4);
+      ctx.fillText(cls.tag, ax+3, ay+5);
+      ctx.fillStyle=lab.color; setFont(ctx, 'micro', 'bold'); ctx.textAlign='right';
+      ctx.fillText(m.toFixed(2).replace('0.','.'), ax+cw2-4, ay+5);
     });
 
+    // 설명은 카드 폭에 맞춰 자른다 — 12자로 못 박아 두면 폭이 바뀔 때 삐져나온다
     ctx.textAlign='left';
-    ctx.fillStyle='#64748b'; ctx.font='8px sans-serif';
-    ctx.fillText(tpl.desc.slice(0,12), bx+6, by+42);
+    ctx.fillStyle='#94a3b8'; setFont(ctx, 'body');
+    ctx.fillText(_ellipsize(ctx, tpl.desc, pw-12), bx+6, by+52);
     // ◎ 사거리 — 몇 칸까지 닿는지. 고르기 전에 견줄 수 있어야 한다.
-    ctx.fillStyle='#7dd3fc'; ctx.font='bold 8px sans-serif';
-    ctx.fillText(`◎${(tpl.range / CELL_W).toFixed(1)}칸`, bx+6, by+52);
+    ctx.fillStyle='#7dd3fc'; setFont(ctx, 'body', 'bold');
+    ctx.fillText(`◎${(tpl.range / CELL_W).toFixed(1)}칸`, bx+6, by+72);
     ctx.globalAlpha=1;
 
     if (unlocked) {
       ctx.globalAlpha = afford?1:0.55;
-      ctx.fillStyle = afford?COLORS.gold:'#64748b'; ctx.font='bold 10px sans-serif';
+      ctx.fillStyle = afford?COLORS.gold:'#64748b'; setFont(ctx, 'body', 'bold');
       ctx.textAlign='right';
-      ctx.fillText(`${cost}💰`, bx+pw-6, by+42);
+      ctx.fillText(`${cost}💰`, bx+pw-6, by+72);
       ctx.globalAlpha=1;
       gs.ui.towerTypeBtns.push({x:bx,y:by,w:pw,h:ph,typeId:id});
     } else {
-      ctx.fillStyle='#f59e0b'; ctx.font='bold 8px sans-serif'; ctx.textAlign='right';
-      ctx.fillText(`🔒💎${unlockCost(id)}`, bx+pw-6, by+42);
+      ctx.fillStyle='#f59e0b'; setFont(ctx, 'body', 'bold'); ctx.textAlign='right';
+      ctx.fillText(`🔒💎${unlockCost(id)}`, bx+pw-6, by+72);
     }
   });
   const palRows   = Math.ceil(TOWER_ORDER.length / pcols);
@@ -6728,13 +6749,13 @@ function renderTownPageTowers(ctx, gs, startY) {
         ctx.font=`${Math.floor(mCW*0.55)}px sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
         ctx.fillText(TOWER_TYPES[tower.typeId].icon,x+mCW/2,y+mCH/2);
         if ((tower.level||1)>1) {
-          ctx.fillStyle='#fbbf24'; ctx.font='bold 7px sans-serif'; ctx.textBaseline='bottom';
+          ctx.fillStyle='#fbbf24'; setFont(ctx, 'body', 'bold'); ctx.textBaseline='bottom';
           ctx.fillText('★'.repeat((tower.level||1)-1), x+mCW/2, y+mCH-1);
         }
         // ★5 분기를 골랐으면 무엇으로 갔는지 칸 위에서 바로 읽혀야 한다
         const _mb = towerBranchOf(tower);
         if (_mb) {
-          ctx.font='8px sans-serif'; ctx.textAlign='right'; ctx.textBaseline='top';
+          setFont(ctx, 'body'); ctx.textAlign='right'; ctx.textBaseline='top';
           ctx.fillText(_mb.icon, x+mCW-1, y+1);
           ctx.textAlign='center';
         }
@@ -6785,14 +6806,14 @@ function renderTownPageTowers(ctx, gs, startY) {
     ctx.fillText(tpl2.icon, 14, panelY+20);
     ctx.fillStyle='#f1f5f9'; ctx.font='bold 12px sans-serif';
     ctx.fillText(`${tpl2.name}  →  ${_plan.col+1}열 ${_plan.row+1}행`, 42, panelY+13);
-    ctx.fillStyle='#7dd3fc'; ctx.font='bold 10px sans-serif';
+    ctx.fillStyle='#7dd3fc'; setFont(ctx, 'body', 'bold');
     ctx.fillText(`ATK ${st2.dmg}   ${st2.spd.toFixed(2)}/s   ◎ ${(st2.range/CELL_W).toFixed(1)}칸`, 42, panelY+29);
     // 이 자리에서 경로를 몇 칸이나 덮는지 — 사거리 원보다 이 숫자가 더 정직하다
     const covered = pathCellsInRange(_plan.col, _plan.row, st2.range);
     ctx.textAlign='right';
-    ctx.fillStyle = covered > 0 ? '#4ade80' : '#ef4444'; ctx.font='bold 10px sans-serif';
+    ctx.fillStyle = covered > 0 ? '#4ade80' : '#ef4444'; setFont(ctx, 'body', 'bold');
     ctx.fillText(covered > 0 ? `경로 ${covered}칸 사정권` : '경로에 닿지 않습니다', CW-14, panelY+13);
-    ctx.fillStyle = can2 ? COLORS.gold : '#ef4444'; ctx.font='bold 11px sans-serif';
+    ctx.fillStyle = can2 ? COLORS.gold : '#ef4444'; setFont(ctx, 'body', 'bold');
     ctx.fillText(`${cost2}💰`, CW-14, panelY+29);
     ctx.textAlign='left';
     const cbw=150, cbh=26;
@@ -6804,7 +6825,7 @@ function renderTownPageTowers(ctx, gs, startY) {
     drawBtn(ctx, xbx, panelY+42, xbw, cbh, '✕ 취소', '#3f1515', '#f87171');
     gs.ui.planCancelBtn={x:xbx,y:panelY+42,w:xbw,h:cbh};
     ctx.textAlign='left'; ctx.textBaseline='middle';
-    ctx.fillStyle='#475569'; ctx.font='8px sans-serif';
+    ctx.fillStyle='#475569'; setFont(ctx, 'body');
     ctx.fillText('다른 칸을 탭하면 그리로 옮겨집니다', 168, panelY+55);
     _townBottom = panelY + ph2 + 10;
     ctx.textAlign='left'; ctx.textBaseline='top';
@@ -6841,10 +6862,10 @@ function renderTownPageTowers(ctx, gs, startY) {
       ctx.fillText(nameTxt,42,panelY+13);
       if (br) {   // 고른 분기를 이름 옆에 붙인다 — 이 타워가 무엇이 됐는지
         const nw=ctx.measureText(nameTxt).width;
-        ctx.fillStyle=br.color; ctx.font='bold 10px sans-serif';
+        ctx.fillStyle=br.color; setFont(ctx, 'body', 'bold');
         ctx.fillText(`${br.icon} ${br.name}`, 42+nw+8, panelY+13);
       }
-      ctx.fillStyle='#94a3b8'; ctx.font='bold 10px sans-serif';
+      ctx.fillStyle='#94a3b8'; setFont(ctx, 'body', 'bold');
       if (gs.ui.towerMove && gs.ui.towerMove.col===tower.col && gs.ui.towerMove.row===tower.row) {
         ctx.fillStyle='#a5b4fc';
         ctx.fillText(`옮길 칸을 고르세요 — 빈 칸 ${towerMoveCost(tower)}💰 · 타워끼리 교환은 두 배`,42,panelY+29);
@@ -6863,18 +6884,18 @@ function renderTownPageTowers(ctx, gs, startY) {
         for (const id of _pk) {
           const d = towerPerkDef(id); if (!d) continue;
           const label = `${d.icon}${d.name}`;
-          ctx.font='bold 8px sans-serif';
+          setFont(ctx, 'body', 'bold');
           const w = ctx.measureText(label).width + 8;
           if (pxx + w > CW - 14) break;
           uiPanel(ctx, pxx, panelY+35, w, 13, 3, '#1b1533', '#7c5cd6', 1);
-          ctx.fillStyle='#c4b5fd'; ctx.font='bold 8px sans-serif';
+          ctx.fillStyle='#c4b5fd'; setFont(ctx, 'body', 'bold');
           ctx.fillText(label, pxx+4, panelY+42);
           pxx += w + 3;
         }
       }
       // 분기를 타도 종류별 단련은 그대로 살아 있다 — 그것을 눈으로 확인하는 자리
       if (_campLine) {
-        ctx.fillStyle='#fb923c'; ctx.font='bold 8px sans-serif';
+        ctx.fillStyle='#fb923c'; setFont(ctx, 'body', 'bold');
         ctx.textAlign='left'; ctx.textBaseline='middle';
         ctx.fillText(_campLine, 42, panelY+42+_pkShift);
       }
@@ -6887,9 +6908,9 @@ function renderTownPageTowers(ctx, gs, startY) {
         const m = aff[ck] !== undefined ? aff[ck] : 1;
         const lab = affinityLabel(m);
         ctx.textAlign='right';
-        ctx.fillStyle = lab.color; ctx.font='bold 10px sans-serif';
+        ctx.fillStyle = lab.color; setFont(ctx, 'body', 'bold');
         ctx.fillText(`${Math.round(st.dmg * m)}`, ax2, panelY+13);
-        ctx.fillStyle = cls.color; ctx.font='bold 8px sans-serif';
+        ctx.fillStyle = cls.color; setFont(ctx, 'body', 'bold');
         ctx.fillText(cls.tag, ax2, panelY+26);
         ax2 -= 30;
       }
@@ -6910,7 +6931,7 @@ function renderTownPageTowers(ctx, gs, startY) {
                 can?'#2a1f05':'#1e293b', can?'#fbbf24':'#64748b', can);
         if (can) gs.ui.towerPromoteBtn={x:10,y:ubY,w:bw2,h:bh2};
       } else {
-        ctx.fillStyle='#f59e0b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
+        ctx.fillStyle='#f59e0b'; setFont(ctx, 'body', 'bold'); ctx.textAlign='left'; ctx.textBaseline='middle';
         ctx.fillText('★ 최고 레벨',12,panelY+55+_cShift);
       }
       // 🔀 이설 — 경로가 바뀌었을 때 배치를 통째로 다시 하지 않아도 되게
@@ -6935,7 +6956,7 @@ function renderTownPageTowers(ctx, gs, startY) {
         const bY = panelY + 74 + _cShift;
         const cost = br ? towerRebranchCost(tower) : towerBranchCost(tower);
         ctx.textAlign='left'; ctx.textBaseline='middle';
-        ctx.fillStyle=br?'#64748b':'#fbbf24'; ctx.font='bold 9px sans-serif';
+        ctx.fillStyle=br?'#64748b':'#fbbf24'; setFont(ctx, 'body', 'bold');
         ctx.fillText(br ? `★${TOWER_BRANCH_LEVEL} 분기 — 갈아타기 ${cost}💰 (한 번에 하나만)`
                         : `★${TOWER_BRANCH_LEVEL} 분기 — 하나를 고르세요 ${cost}💰`, 12, bY+5);
         const bw3=(CW-20-2*5)/3, bh3=68, byy=bY+12;
@@ -6948,16 +6969,16 @@ function renderTownPageTowers(ctx, gs, startY) {
           ctx.globalAlpha = (on || can) ? 1 : 0.45;
           ctx.fillStyle='#e2e8f0'; ctx.font='14px sans-serif';
           ctx.fillText(d.icon, bx3+bw3/2, byy+4);
-          ctx.fillStyle=d.color; ctx.font='bold 10px sans-serif';
+          ctx.fillStyle=d.color; setFont(ctx, 'body', 'bold');
           ctx.fillText(d.name, bx3+bw3/2, byy+22);
-          ctx.fillStyle='#7c8ba1'; ctx.font='bold 7px sans-serif';
+          ctx.fillStyle='#7c8ba1'; setFont(ctx, 'body', 'bold');
           // 세 줄까지 — 두 줄로 자르면 "받는 피해 +30%" 같은 핵심이 잘려 나간다
           wrapLines(ctx, d.desc, bw3-8).slice(0,3).forEach((ln,k)=>{
             ctx.fillText(ln, bx3+bw3/2, byy+34+k*9);
           });
           ctx.globalAlpha = 1;
           if (on) {
-            ctx.fillStyle=d.color; ctx.font='bold 7px sans-serif';
+            ctx.fillStyle=d.color; setFont(ctx, 'body', 'bold');
             ctx.fillText('◆ 선택됨', bx3+bw3/2, byy+bh3-10);
           }
           gs.ui.towerBranchBtns.push({x:bx3,y:byy,w:bw3,h:bh3,branchId:d.id});
@@ -6968,11 +6989,11 @@ function renderTownPageTowers(ctx, gs, startY) {
   } else {
     const tpl=TOWER_TYPES[gs.selectedTowerType]||TOWER_TYPES.arrow;
     uiPanel(ctx, 6,panelY,CW-12,72,7, '#080d18', '#1e293b', 1);
-    ctx.fillStyle='#94a3b8'; ctx.font='bold 11px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle='#94a3b8'; setFont(ctx, 'body', 'bold'); ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(`선택: ${tpl.icon} ${tpl.name} — ${towerBuildCost(gs.selectedTowerType, gs.towers)}💰`,CW/2,panelY+20);
-    ctx.fillStyle='#64748b'; ctx.font='bold 10px sans-serif';
+    ctx.fillStyle='#64748b'; setFont(ctx, 'body', 'bold');
     ctx.fillText(tpl.desc,CW/2,panelY+38);
-    ctx.fillStyle='#475569'; ctx.font='10px sans-serif';
+    ctx.fillStyle='#475569'; setFont(ctx, 'body');
     ctx.fillText('빈 셀 탭 = 건설 / 세운 타워 탭 = 강화·이동·판매',CW/2,panelY+56);
     gs.ui.towerUpgradeBtn=null; gs.ui.towerRemoveBtn=null; gs.ui.towerMoveBtn=null;
   }
@@ -6983,7 +7004,7 @@ function renderTownPageTowers(ctx, gs, startY) {
   const infoH=Math.max(150, 60 + Object.keys(
     gs.towers.reduce((m,t)=>{ m[t.typeId]=1; return m; }, {})).length*20 + 70);
   uiPanel(ctx, 6,infoY,CW-12,infoH,7, '#080d18', '#161f30', 1);
-  ctx.fillStyle='#94a3b8'; ctx.font='bold 11px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle='#94a3b8'; setFont(ctx, 'body', 'bold'); ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillText('배치 현황',14,infoY+9);
 
   const counts={};
@@ -6996,18 +7017,22 @@ function renderTownPageTowers(ctx, gs, startY) {
   for (const id of TOWER_ORDER) {
     const n=counts[id]||0;
     const tpl=TOWER_TYPES[id];
-    ctx.fillStyle = n>0?'#e2e8f0':'#3f4a5c'; ctx.font='11px sans-serif'; ctx.textAlign='left';
+    ctx.fillStyle = n>0?'#e2e8f0':'#3f4a5c'; setFont(ctx, 'body'); ctx.textAlign='left';
     ctx.fillText(`${tpl.icon} ${tpl.name}`,18,ry);
-    ctx.fillStyle = n>0?tpl.color:'#3f4a5c'; ctx.font='bold 11px sans-serif'; ctx.textAlign='right';
-    ctx.fillText(`${n}기`,CW-58,ry);
-    ctx.fillStyle='#475569'; ctx.font='9px sans-serif';
-    ctx.fillText(`다음 ${towerBuildCost(id, gs.towers)}💰`,CW-18,ry+1);
-    ry+=20;
+    // `N기`가 CW-58에서 끝나는데 `다음 N💰`은 13px에서 그보다 왼쪽까지 뻗는다 —
+    // 두 값이 겹쳐 `0기음 5💰`처럼 읽혔다. 값 자리를 재서 띄운다.
+    const nextTxt = `다음 ${towerBuildCost(id, gs.towers)}💰`;
+    ctx.fillStyle='#94a3b8'; setFont(ctx, 'body'); ctx.textAlign='right';
+    ctx.fillText(nextTxt, CW-18, ry);
+    const nextW = ctx.measureText(nextTxt).width;
+    ctx.fillStyle = n>0?tpl.color:'#3f4a5c'; setFont(ctx, 'body', 'bold');
+    ctx.fillText(`${n}기`, CW-24-nextW, ry);
+    ry+=22;
   }
   ctx.strokeStyle='#1e293b'; ctx.lineWidth=1;
   ctx.beginPath(); ctx.moveTo(16,ry+4); ctx.lineTo(CW-16,ry+4); ctx.stroke();
   ry+=16;
-  ctx.fillStyle='#64748b'; ctx.font='bold 10px sans-serif'; ctx.textAlign='left';
+  ctx.fillStyle='#64748b'; setFont(ctx, 'body', 'bold'); ctx.textAlign='left';
   ctx.fillText(`총 ${gs.towers.length}기 · 누적 처치 ${totalKills} · 투자 ${totalInvest}💰`,18,ry);
   ry+=18;
   // ★5 분기를 고른 타워가 있으면 어느 갈래에 몇 기인지 한 줄로 접어 보여준다
@@ -7015,7 +7040,7 @@ function renderTownPageTowers(ctx, gs, startY) {
   for (const t of gs.towers) if (t.branch) brCount[t.branch] = (brCount[t.branch] || 0) + 1;
   const brKeys = Object.keys(brCount);
   if (brKeys.length) {
-    ctx.fillStyle='#7c8ba1'; ctx.font='bold 9px sans-serif';
+    ctx.fillStyle='#7c8ba1'; setFont(ctx, 'body', 'bold');
     const parts = brKeys.map(k => {
       const d = TOWER_ORDER.map(tt => branchDef(tt, k)).find(Boolean);
       return d ? `${d.icon}${d.name} ${brCount[k]}` : null;
@@ -7025,7 +7050,7 @@ function renderTownPageTowers(ctx, gs, startY) {
     }
     ry += 4;
   }
-  ctx.fillStyle='#475569'; ctx.font='9px sans-serif';
+  ctx.fillStyle='#475569'; setFont(ctx, 'body');
   ctx.fillText('같은 종류를 많이 지을수록 건설비가 오릅니다.',18,ry);
   ry+=13;
   ctx.fillText('∞ 경로는 같은 칸을 두 번 지나므로 교차 지점이 가장 효율적입니다.',18,ry);
