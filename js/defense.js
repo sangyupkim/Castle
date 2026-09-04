@@ -123,6 +123,7 @@ function towerStats(t) {
     stunChance:  sp.stunChance || 0,
     stunDur:     sp.stunDur    || 0,
     corrode:     sp.corrode    || 0,
+    frail:       sp.frail      || 0,   // 🧊 냉기 취약 — 감속 대상이 받는 피해 증가
     overloaded
   };
   // ✦ ★6부터 붙은 특수능력을 얹는다. 분기(sp) 위에 더해지므로
@@ -206,6 +207,8 @@ function makeDefenseEnemy(typeId, waveIndex, opts) {
     // 🌱 재생 — 심층 변형. 상단 적이 초당 최대체력의 일부를 되돌린다.
     regen: mods ? (mods.regen || 0) : 0,
     slowTimer: 0, slowFactor: 0,
+    corrodeUntil: 0, corrodeAmt: 0,
+    frailUntil: 0,   frailAmt: 0,
     hitFlash: 0,
     dead: false,
     reached: false
@@ -265,7 +268,9 @@ function makeProjectile(sx, sy, target, dmg, color, opts) {
 function defDamage(enemy, dmg, pierceArmor, affinity, pierce) {
   // 🧪 부식 장판 위에서는 방어력이 지워지고 받는 피해가 늘어난다
   const corroded = (enemy.corrodeUntil || 0) > 0;
-  const base = dmg * (affinity === undefined ? 1 : affinity) * (corroded ? 1 + enemy.corrodeAmt : 1);
+  // 🧊 냉기 취약(혹한) — 받는 피해가 늘어난다. 부식과 달리 방어력은 그대로 둔다.
+  const frail = (enemy.frailUntil || 0) > 0 ? (1 + (enemy.frailAmt || 0)) : 1;
+  const base = dmg * (affinity === undefined ? 1 : affinity) * (corroded ? 1 + enemy.corrodeAmt : 1) * frail;
   if (pierceArmor || corroded) return Math.max(1, Math.round(base));
   // 관통은 두 겹이다. 비율(towerPiercePct)이 먼저 방어력을 깎고, 그 뒤에 정액이 빠진다.
   // 정액만 있던 시절엔 60층 몹 방어력이 세 자리라 '방어 12 무시'가 사실상 0이었다.
@@ -273,7 +278,11 @@ function defDamage(enemy, dmg, pierceArmor, affinity, pierce) {
   // 🪨 중간보스의 단단해짐 — 잠깐 방어가 두꺼워진다
   const hard  = (enemy.hardenUntil || 0) > 0 ? 1.6 : 1;
   const armor = Math.max(0, (enemy.armor || 0) * hard * (1 - pct) - (pierce || 0));
-  return Math.max(1, Math.round(base - armor));
+  // 🛡 비율 감소 — 빼기가 아니다. 왜 바꿨는지는 constants.js의 DEF_ARMOR_K 참고.
+  // 한 발의 크기와 무관하게 같은 비율만 깎이므로, 얇게 자주 때리는 분기가
+  // 구조적으로 죽지 않는다. 관통은 여전히 의미가 있다 — 방어력을 먼저 깎고
+  // 그 줄어든 값으로 비율을 낸다.
+  return Math.max(1, Math.round(base * DEF_ARMOR_K / (armor + DEF_ARMOR_K)));
 }
 
 // 👹 기믹이 이 적에게 걸려 있나 — 보스 본인에게만 적용된다.
@@ -317,6 +326,7 @@ function updateDefenseEnemies(enemies, dt) {
     if (e.hardenUntil > 0) e.hardenUntil = Math.max(0, e.hardenUntil - dt);
     // 🧪 부식 — 장판을 벗어나면 곧 풀린다 (장판이 매 프레임 다시 채워 준다)
     if (e.corrodeUntil > 0) { e.corrodeUntil = Math.max(0, e.corrodeUntil - dt); if (!e.corrodeUntil) e.corrodeAmt = 0; }
+    if (e.frailUntil   > 0) { e.frailUntil   = Math.max(0, e.frailUntil   - dt); if (!e.frailUntil)   e.frailAmt   = 0; }
     // 🌱 재생 — 꾸준히 깎지 못하면 원점으로 돌아간다. 단발 화력보다 지속 화력을 요구한다.
     if (e.regen > 0 && e.hp < e.maxHp) e.hp = Math.min(e.maxHp, e.hp + e.maxHp * e.regen * dt);
     if (e.markedUntil > 0) e.markedUntil = Math.max(0, e.markedUntil - dt);
@@ -448,7 +458,7 @@ function updateTowers(towers, enemies, projectiles, dt) {
       critChance: st.critChance, critMult: st.critMult, execute: st.execute,
       piercePct: st.piercePct || 0,
       vsSlowed: st.vsSlowed, stunChance: st.stunChance, stunDur: st.stunDur,
-      corrode: st.corrode
+      corrode: st.corrode, frail: st.frail
     });
     proj._enemies = enemies;
     projectiles.push(proj);
@@ -505,7 +515,11 @@ function updatePoisonPools(enemies, onKill, dt) {
       if (e._poisonAccum < 1) continue;
       const tick = Math.floor(e._poisonAccum);
       e._poisonAccum -= tick;
-      const dealt = hurtDefenseEnemy(e, tick, false, victim => {
+      // ☠️ 장판은 **방어력을 무시한다.** 이게 독탑의 정체성이다 —
+      // 한 발이 약하고 느린 대신, 갑옷이 두꺼워져도 자리에 남긴 값은 그대로 든다.
+      // (예전에는 이게 우연이었다: 누적기가 1씩만 넣어서 max(1, 1-방어)에 걸렸다.
+      //  뜻이 아니라 반올림이 만든 결과여서, 값이 조금만 커져도 갑자기 무너졌다.)
+      const dealt = hurtDefenseEnemy(e, tick, true, victim => {
         if (q.owner) q.owner.kills++;
         if (onKill) onKill(victim, q.owner);
       }, 1, q.pierce);
@@ -611,6 +625,12 @@ function updateProjectiles(projectiles, onKill, dt) {
     if (p.slow > 0 && !bossImmune(tgt, 'unslow')) {
       tgt.slowFactor = Math.max(tgt.slowFactor, p.slow);
       tgt.slowTimer  = Math.max(tgt.slowTimer, p.slowDur);
+      // 🧊 얼어붙은 것은 무르다 — 취약은 감속과 같은 시간만큼 간다.
+      // 혹한 혼자서는 값이 안 나오고, 옆에 선 타워 전부를 세게 만든다.
+      if (p.frail > 0) {
+        tgt.frailUntil = Math.max(tgt.frailUntil || 0, p.slowDur);
+        tgt.frailAmt   = Math.max(tgt.frailAmt   || 0, p.frail);
+      }
     }
 
     if (p.splash > 0) {
@@ -626,6 +646,10 @@ function updateProjectiles(projectiles, onKill, dt) {
           if (p.slow > 0 && !bossImmune(e, 'unslow')) {
             e.slowFactor = Math.max(e.slowFactor, p.slow);
             e.slowTimer  = Math.max(e.slowTimer, p.slowDur);
+            if (p.frail > 0) {
+              e.frailUntil = Math.max(e.frailUntil || 0, p.slowDur);
+              e.frailAmt   = Math.max(e.frailAmt   || 0, p.frail);
+            }
           }
         }
       }

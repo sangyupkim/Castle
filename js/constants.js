@@ -401,7 +401,12 @@ function affinityLabel(mult) {
 
 // ─── Tower Types ─────────────────────────────────────────────────────────────
 // ─── ☠️ 독탑 ─────────────────────────────────────────────────────────────────
-const POISON_POOL_DPS    = 0.55;  // 장판이 초당 주는 피해 = 탑 실효 공격력 × 이 값
+// ☠️ 장판은 **방어력을 무시한다**(defense.js의 updatePoisonPools 참고).
+// 다른 타워가 100층에서 방어력에 51%를 깎일 때 독탑만 그대로 다 넣으므로,
+// 원 수치는 그만큼 낮아야 공평하다. 안 그러면 층이 깊어질수록 독탑만 세진다 —
+// 실측에서 실제로 그랬다(10층 56 → 100층 311 DPS. 같은 구간 대포는 57 → 158).
+// 0.55 → 0.30. 초반에는 대포·번개보다 얌전하고, 후반에 나란해진다.
+const POISON_POOL_DPS    = 0.30;  // 장판이 초당 주는 피해 = 탑 실효 공격력 × 이 값
 const POISON_POOL_RADIUS = 34;    // 장판 반경(px)
 const POISON_POOL_DUR    = 4.0;   // 장판 지속(초)
 const POISON_POOL_MAX    = 24;    // 동시에 깔릴 수 있는 장판 수 — 프레임을 지키는 상한
@@ -454,7 +459,7 @@ const TOWER_TYPES = {
     dmg:5, spd:0.45, range: CELL_W * 2.2,
     poolDps: POISON_POOL_DPS, poolRadius: POISON_POOL_RADIUS, poolDur: POISON_POOL_DUR,
     color:'#84cc16', projColor:'#bef264', icon:'☠️',
-    desc:'착탄점에 독 장판'
+    desc:'착탄점에 독 장판 · 장판은 방어 무시'
   }
 };
 const TOWER_ORDER = ['arrow', 'frost', 'cannon', 'sniper', 'tesla', 'poison'];
@@ -516,11 +521,20 @@ const TOWER_BRANCHES = {
       note:'못 잡던 대형을 잡는다 — 소형은 포기한다' },
   ],
   frost: [
+    // 🧊 혹한 — 실측에서 **분기 없는 서리탑과 DPS가 완전히 같았다**(모든 층 ×1.0).
+    // 144골드를 내고 고르는데 피해가 1도 안 변하니, 감속만 놓고 보면 고를 이유가 약했다.
+    // 이제 값을 확실히 갈라 놓는다: 한 발은 더 약해지고(0.85 → 0.62),
+    // 대신 **얼어붙은 것은 무르다** — 감속이 걸린 동안 그 적이 받는 모든 피해가 늘어난다.
+    // 혼자 세우면 여전히 약하다. 옆에 선 타워 전부를 세게 만드는 것이 값어치다
+    // (부식과 같은 자리, 다른 방식 — 부식은 방어를 지우고 혹한은 시간을 벌며 무르게 한다).
+    // 취약을 붙였는데도 처음엔 아무 값이 없었다(대포 옆에 세워 168 vs 167).
+    // 한 번에 **한 마리만** 얼리니, 옆 타워가 그 한 마리를 때릴 확률이 낮았다.
+    // 지원 분기는 판에 닿는 넓이가 값어치다 — 착탄 범위에 냉기를 퍼뜨린다.
     { id:'f_deep', name:'혹한', icon:'🧊', color:'#38bdf8',
-      mult:{ dmg:0.85, spd:1.10 },
-      special:{ slow:0.70, slowDurMult:1.70 },
-      desc:'감속 70% · 지속 1.7배',
-      note:'피해를 포기하고 시간을 산다' },
+      mult:{ dmg:0.62, spd:1.10 },
+      special:{ slow:0.70, slowDurMult:1.70, frail:0.25, splash:44 },
+      desc:'착탄 범위 감속 70% · 지속 1.7배 · 얼어붙은 적이 받는 피해 +25%',
+      note:'혼자서는 약하다 — 판을 통째로 느리고 무르게 만든다' },
     { id:'f_shatter', name:'서릿발', icon:'💎', color:'#a5b4fc',
       mult:{ dmg:1.65, spd:0.90 },
       special:{ slow:0.30, vsSlowed:1.70 },
@@ -546,18 +560,27 @@ const TOWER_BRANCHES = {
       special:{ splash:22, pierceArmor:true },
       desc:'방어 무시 · 범위↓ · 대형에 더 강하게',
       note:'심층의 두꺼운 갑옷을 무시한다' },
+    // 🚀 박격 — 실측에서 40·100층 모두 **분기를 안 고른 대포보다 약했다**(×0.7).
+    // 원시 DPS가 1.25 × 0.65 = 0.81이라, 대공을 사려고 지상을 19% 내준 셈이었다.
+    // 특화가 '안 고르느니만 못한 선택'이 되면 그건 특화가 아니다.
+    // 지상을 거의 본전(0.95)까지 올린다 — 대공은 그대로 압도적이다.
     { id:'c_mortar', name:'박격', icon:'🚀', color:'#c084fc',
-      mult:{ dmg:1.25, spd:0.65, range:1.75 },
+      mult:{ dmg:1.40, spd:0.68, range:1.75 },
+      special:{ splash:62 },
       aff:{ air:3.83 },
       desc:'사거리 1.75배 · 비행을 잡을 수 있게',
       note:'대공 0.30 → 1.15. 화력이 아니라 사각을 산다' },
   ],
   sniper: [
+    // 🎯 헤드샷 — 기대 배율이 1.20 × (0.68 + 0.32×2.6) = **×1.81**이었다.
+    // 다른 둘은 얻는 만큼 내주는데(연사는 사거리 0.6, 대물은 공속 0.52) 헤드샷만
+    // **순증**이라, 세 층 모두에서 1위였다. '흔들림'은 한 웨이브를 놓고 보면 대가가 아니다.
+    // 한 발을 낮춰 기대값을 ×1.29로 맞춘다 — 굴림이 흔들리는 맛은 그대로 남는다.
     { id:'s_head', name:'헤드샷', icon:'🎯', color:'#f0abfc',
-      mult:{ dmg:1.20 },
+      mult:{ dmg:0.85 },
       special:{ critChance:0.32, critMult:2.6 },
-      desc:'32% 확률로 ×2.6 치명타',
-      note:'평균은 ×1.8 — 대신 굴림이 흔들린다' },
+      desc:'한 발 ↓ · 32% 확률로 ×2.6 치명타',
+      note:'평균은 ×1.29 — 대신 굴림이 흔들린다' },
     { id:'s_auto', name:'연사 저격', icon:'🔫', color:'#fbbf24',
       mult:{ dmg:0.50, spd:2.40, range:0.60 },
       desc:'사거리↓ 공격력↓ 공속↑↑',
@@ -575,11 +598,15 @@ const TOWER_BRANCHES = {
       special:{ chain:5, chainRangeMult:1.35 },
       desc:'연쇄 2 → 5회 · 연쇄 사거리 1.35배',
       note:'뭉쳐 오면 한 발이 다섯 발이 된다' },
+    // 🔋 과충전 — 100층 실측에서 소·중·대 전부 **분기를 안 고른 번개탑보다 약했다**
+    // (92·55·29 vs 135·96·51). 연쇄 2회는 뭉친 무리에서 실효 ×2.2쯤인데,
+    // 그걸 통째로 버리고 받는 대가가 1.75 × 0.68 = ×1.19뿐이었다.
+    // 단일 화력을 사는 분기라면 그 값을 제대로 치러야 한다.
     { id:'t_over', name:'과충전', icon:'🔋', color:'#facc15',
-      mult:{ dmg:1.75, spd:0.68 },
-      special:{ chain:0, stunChance:0.18, stunDur:0.5 },
-      desc:'연쇄 없음 · 한 발이 무겁게 · 18% 감전(0.5초 정지)',
-      note:'연쇄를 버리고 단일 화력을 산다' },
+      mult:{ dmg:2.60, spd:0.72 },
+      special:{ chain:0, stunChance:0.22, stunDur:0.5 },
+      desc:'연쇄 없음 · 한 발이 아주 무겁게 · 22% 감전(0.5초 정지)',
+      note:'연쇄를 버리고 단일 화력을 산다 — 보스와 대형에 몰아친다' },
     { id:'t_aa', name:'대공 관제', icon:'🛩️', color:'#818cf8',
       mult:{ dmg:1.15, spd:0.90, range:1.45 },
       aff:{ small:0.60, medium:0.75, large:0.75, air:1.40 },
@@ -589,8 +616,8 @@ const TOWER_BRANCHES = {
   poison: [
     { id:'p_virul', name:'맹독', icon:'☠️', color:'#84cc16',
       mult:{ dmg:1.10 },
-      special:{ poolDpsMult:2.00, poolDurMult:0.65 },
-      desc:'장판 피해 2배 · 지속 0.65배',
+      special:{ poolDpsMult:1.55, poolDurMult:0.65 },
+      desc:'장판 피해 1.55배 · 지속 0.65배',
       note:'짧고 진하게 — 스쳐 가도 아프다' },
     { id:'p_spread', name:'확산', icon:'🌫️', color:'#a3e635',
       mult:{ spd:1.15 },
@@ -919,6 +946,37 @@ const GRID_ROW_HP_COMP = 1.06;
 // 웨이브가 오를수록 상단 적도 강해진다
 const DEF_WAVE_HP_SCALE    = 0.22;
 const DEF_WAVE_ARMOR_EVERY = 5;
+
+// ─── 🛡 방어력이 피해를 깎는 방식 ────────────────────────────────────────────
+// 예전에는 **빼기**였다: 피해 = 공격 − 방어. 이게 후반이 무너진 두 번째 원인이다.
+// 빼기는 "한 발이 얇을수록 비율로 더 많이 깎는다". 100층(방어 21)에서 실측:
+//
+//   저격탑  0% 깎임 (방어 무시)      대포탑 27%      번개탑 42%
+//   독탑   66%                      화살탑 94%      서리탑 91%
+//
+// 같은 방어력인데 타워마다 0%에서 94%까지 갈렸다. 그래서 얇게 자주 때리는
+// 분기(속사·혹한)는 무엇을 해도 구조적으로 죽었고, 한 발이 무거운 쪽만 살아남았다.
+// 공속 강화도 마찬가지다 — 공격력을 안 올리고 공속만 올리면 후반에 아무 의미가 없다.
+//
+// 이제 요즘 RPG·AOS가 쓰는 **비율 감소**로 바꾼다:
+//
+//   감소율 = 방어 / (방어 + K)
+//
+// 비율이므로 한 발의 크기와 무관하다. 얇은 타워도 두꺼운 타워와 **같은 비율**만
+// 깎인다. 방어력이 아무리 높아도 100%가 되지 않으니 바닥(1 피해)에 눌리지도 않는다.
+//
+// 같은 식을 뒤집으면 **"방어력 1점 = 최대 체력 +(100/K)%"** 다:
+//
+//   실질 체력 = 체력 × (1 + 방어 / K)
+//
+// K=20이므로 방어 1점이 실질 체력 5%다. 100층 몹은 방어 21 → 실질 체력 2.05배.
+// 이쪽이 값을 잡을 때 훨씬 읽기 쉽다 — "이 층 몹은 체력이 두 배인 셈"으로 생각하면 된다.
+//
+// K = 20을 고른 이유: 이 값에서 전체 화력 총합이 지금의 98%로 거의 그대로다
+// (K=10이면 85%로 너무 어려워지고 K=40이면 109%로 물러진다).
+// 그 층 감소율 — 1층 5% · 25층 23% · 60층 39% · 100층 51% · 120층 56%
+// (= 실질 체력 1.05배 · 1.30배 · 1.65배 · 2.05배 · 2.25배).
+const DEF_ARMOR_K = 20;
 const DEF_WAVE_COUNT_SCALE = 0.07;
 
 // ─── 하단 아레나 레이아웃 ─────────────────────────────────────────────────────
@@ -1888,6 +1946,13 @@ const DECO_FRAMES = 8;     // terrain/deco.png 안의 그림 수
 const DECO_W      = 16;    // 원본 크기 그대로 — 유닛(반지름 9~11)과 나란히 놓일 크기다
 const DECO_H      = 32;
 const DECO_CLEAR  = 16;    // 지형 사각형에서 이만큼 떨어뜨린다
+// 🛢 어디에 놓는가 — 장식은 판정이 없어서 유닛이 통 위로 걸어 지나간다.
+// 막게 만들 수도 있었지만, 그러면 '장식'이 전투 판정을 바꾸는 물건이 되고
+// 통 하나에 부대가 끼는 사고가 난다. 대신 **싸움이 벌어지는 곳을 피한다** —
+// 네 귀퉁이에만 놓으면 유닛과 겹칠 일이 거의 없다.
+const DECO_CORNER_W = 0.26;   // 좌우 가장자리에서 이 비율 안쪽까지가 '구석'
+const DECO_CORNER_H = 0.24;   // 위아래도 같은 방식
+const DECO_COMBAT_R_PCT = 0.40;   // 짧은 변의 이 비율 = 중앙 전투권. 여기엔 아무것도 안 놓는다
 
 function generateArenaDeco(tier, seed, terrain) {
   const t = Math.max(0, tier | 0);
@@ -1896,15 +1961,27 @@ function generateArenaDeco(tier, seed, terrain) {
   const ter = terrain || [];
   const n   = Math.max(3, 9 - ter.length);
   const cx  = ARENA_X + ARENA_W / 2, cy = ARENA_Y + ARENA_H / 2;
+  const DECO_COMBAT_R = Math.min(ARENA_W, ARENA_H) * DECO_COMBAT_R_PCT;
   const out = [];
+  // 네 귀퉁이 상자 — 여기 안에만 놓는다
+  const bw = ARENA_W * DECO_CORNER_W, bh = ARENA_H * DECO_CORNER_H;
+  const CORNERS = [
+    { x: ARENA_X + 12,                 y: ARENA_Y + 26 },
+    { x: ARENA_X + ARENA_W - 12 - bw,  y: ARENA_Y + 26 },
+    { x: ARENA_X + 12,                 y: ARENA_Y + ARENA_H - 8 - bh },
+    { x: ARENA_X + ARENA_W - 12 - bw,  y: ARENA_Y + ARENA_H - 8 - bh },
+  ];
   let salt = 6100;
   for (let i = 0; i < n; i++) {
     for (let tries = 0; tries < 24; tries++) {
       salt++;
-      const x = ARENA_X + 14 + endlessRand(t, salt, seed) * (ARENA_W - 28);
-      const y = ARENA_Y + 24 + endlessRand(t, salt + 700, seed) * (ARENA_H - 34);
-      // 아군이 시작하는 한가운데는 비워 둔다 — 부대에 가려 보이지도 않는다
-      if (Math.hypot(cx - x, cy - y) < TERRAIN_SAFE_R * 0.8) continue;
+      // 귀퉁이를 돌아가며 채운다 — 한 구석에 몰리면 그것대로 어색하다
+      const q = CORNERS[(i + tries) % 4];
+      const x = q.x + endlessRand(t, salt, seed) * bw;
+      const y = q.y + endlessRand(t, salt + 700, seed) * bh;
+      // 싸움이 벌어지는 한가운데는 통째로 비운다. 귀퉁이 상자의 안쪽 모서리가
+      // 여기 걸리는 경우가 있어서(전수 검사에서 4.6%), 반경으로 한 번 더 자른다.
+      if (Math.hypot(cx - x, cy - y) < DECO_COMBAT_R) continue;
       // 지형 위나 바로 옆에 놓으면 "이것도 막히나?" 하고 헷갈린다
       let bad = false;
       for (const r of ter) {
