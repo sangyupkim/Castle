@@ -399,6 +399,11 @@ self.SPRITE_SHEETS = {
   //          그래서 fps를 낮게 잡았다. 빠르면 함정이 아니라 지직거림으로 보인다.
   'terrain.spikes': { file:'terrain/spikes.png', fw:16, fh:16, frames:5, fps:5 },
   'terrain.water':  { file:'terrain/water.png',  fw:16, fh:16, frames:5, fps:4 },
+  // 🐊 수렁 — 같은 물 프레임을 늪의 누런 초록으로 색만 돌려 구워 뒀다.
+  // 실행 중에 곱하기로 물들여 봤더니 무늬가 뭉개져 단색 판이 됐다.
+  // 미리 만들어 두면 밝고 어두운 결이 그대로 남는다. fps를 물의 절반으로 떨어뜨려
+  // '흐르는 물'과 '고인 물'을 가른다.
+  'terrain.bog':    { file:'terrain/bog.png',    fw:16, fh:16, frames:5, fps:2 },
 
   // 🔥 화톳불 — 같은 팩의 fire_animation2. 원본은 32px 격자에 가로=불꽃 크기 3종 /
   // 세로=6프레임이라, **제일 큰 0열만** 가로로 펴 왔다. 몸통이 흰색이라

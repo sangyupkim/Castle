@@ -394,6 +394,24 @@ function renderDefense(ctx, gs) {
     }
   }
 
+  // 🌨️ 감속 오라 — 쏘지 않는 타워라서, 어디까지 닿는지 보이지 않으면
+  // 플레이어가 그 타워가 일하고 있는지조차 알 수 없다. 늘 그려 둔다.
+  for (const t of gs.towers) {
+    const sa = towerStats(t);
+    if (!(sa.auraSlow > 0)) continue;
+    const c = cellCenter(t.col, t.row);
+    const ph = (Date.now() % 2400) / 2400;
+    ctx.save();
+    ctx.beginPath(); ctx.arc(c.x, c.y, sa.auraRadius, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(125,211,252,0.10)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(186,230,253,0.42)'; ctx.lineWidth = 1.2; ctx.stroke();
+    // 안쪽으로 조여드는 고리 하나 — '빨아들이고 있다'가 읽힌다
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, sa.auraRadius * (1 - ph * 0.75), 0, Math.PI*2);
+    ctx.strokeStyle = `rgba(186,230,253,${0.34 * ph})`; ctx.lineWidth = 1; ctx.stroke();
+    ctx.restore();
+  }
+
   for (const t of gs.towers) renderTower(ctx, t);
   for (const p of gs.projectiles) {
     // 그림이 있으면 날아가는 방향으로 돌려 그린다. 없으면 예전처럼 색 점.
@@ -805,7 +823,9 @@ function renderDefEnemy(ctx, e) {
   if (!drew) drew = drawMobActor(ctx, e, ey, false);
   if (!drew) {
   ctx.beginPath(); ctx.arc(e.x,ey,e.radius,0,Math.PI*2);
-  ctx.fillStyle = e.hitFlash>0 ? '#ffffff' : (slowed ? '#7dd3fc' : ENEMY_TYPES[e.typeId].color);
+  ctx.fillStyle = e.hitFlash>0 ? '#ffffff'
+                : (e.frozenUntil||0) > 0 ? '#67d4ff'
+                : (slowed ? '#7dd3fc' : ENEMY_TYPES[e.typeId].color);
   ctx.fill();
   ctx.strokeStyle = e.isBounty ? '#fbbf24' : e.flying ? '#e9d5ff' : (e.armor||0)>0 ? '#cbd5e1' : '#fff';
   ctx.lineWidth = (e.isBounty || (e.armor||0)>0) ? 2 : 1;
@@ -814,6 +834,22 @@ function renderDefEnemy(ctx, e) {
 
   // 그림을 쓰면 몸이 원보다 위로 솟으므로 표시들도 그만큼 올린다
   const top = drew ? mobArtTop(e, ey, false) : ey - e.radius;
+
+  // 💎 빙결 — 몸을 감싼 얼음. 멈춰 있는 동안만 보인다.
+  if ((e.frozenUntil || 0) > 0) {
+    const R = e.radius + 3;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(186,230,253,0.95)'; ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    for (let k = 0; k < 6; k++) {
+      const a = k * Math.PI / 3 - Math.PI / 2;
+      const x1 = e.x + Math.cos(a) * R, y1 = ey + Math.sin(a) * R;
+      if (k === 0) ctx.moveTo(x1, y1); else ctx.lineTo(x1, y1);
+    }
+    ctx.closePath(); ctx.stroke();
+    ctx.fillStyle = 'rgba(125,211,252,0.22)'; ctx.fill();
+    ctx.restore();
+  }
 
   // 🎯 사냥 표식 — 상단은 초 단위 타이머다
   if ((e.markedUntil || 0) > 0) drawHuntMark(ctx, e.x, ey, e.radius);
@@ -1938,6 +1974,11 @@ function drawHuntMark(ctx, x, y, r) {
 const TERRAIN_TILE_KEY = {
   water: { key:'terrain.water',  frames:5, fps:4 },
   spike: { key:'terrain.spikes', frames:5, fps:5 },
+  // 🐊 수렁 — 물 타일을 흐린 초록으로 물들여 쓴다. 파일을 하나 더 두는 것보다
+  // 이쪽이 정확하다: 수렁은 '멈춘 물'이라 같은 결이어야 하고,
+  // **fps를 물의 절반으로** 떨어뜨리면 흐르는 물과 고인 물이 저절로 갈린다.
+  // (예전에는 손으로 그린 물결선이라 물·가시만 타일이고 여기만 낙서로 남아 있었다)
+  mud:   { key:'terrain.bog',    frames:5, fps:2 },
   // 🧱 바위 = 던전 벽돌. 미로·회랑의 벽이 단색 판이 아니라 진짜 벽으로 보인다.
   // 벽 두께가 12~14px밖에 안 되므로 타일을 16px로 잘게 깐다 — 20px로 깔면
   // 벽돌 한 줄이 통째로 잘려서 무늬가 안 읽힌다.
@@ -2283,6 +2324,8 @@ function drawMobActor(ctx, e, drawY, arena) {
   const opts = { flip: f.flip, phase: (e.id || 0) * 0.7 };
   // 맞은 순간은 하얗게 튄다 — 원으로 그릴 때의 hitFlash를 그림에서도 살린다
   if (e.hitFlash > 0)      { opts.tint = '#ffffff'; opts.tintAmt = 1; }
+  // 💎 빙결은 감속보다 진하게 — '느리다'와 '멈췄다'가 한눈에 갈려야 한다
+  else if ((e.frozenUntil||0) > 0) { opts.tint = '#67d4ff'; opts.tintAmt = 1; }
   else if (e.slowTimer > 0){ opts.tint = '#8fd6ff'; opts.tintAmt = 0.75; }
   else if (def.tint)       { opts.tint = def.tint; }
   const anim = 'Walk';
@@ -6577,8 +6620,13 @@ function renderTownPageTowers(ctx, gs, startY) {
                            plannedTowerRange(_plan.typeId), TOWER_TYPES[_plan.typeId].color, true);
   else if (gs.ui.towerAction) {
     const _sel = gs.towers.find(tw=>tw.col===gs.ui.towerAction.col&&tw.row===gs.ui.towerAction.row);
-    if (_sel) drawMiniRange(ctx, _mg, _sel.col, _sel.row,
-                            towerStats(_sel).range, TOWER_TYPES[_sel.typeId].color, false);
+    if (_sel) {
+      const _ss = towerStats(_sel);
+      // 🌨️ 오라 타워는 쏘지 않는다 — 보여줄 원은 사거리가 아니라 오라 반경이다
+      drawMiniRange(ctx, _mg, _sel.col, _sel.row,
+                    _ss.auraSlow > 0 ? _ss.auraRadius : _ss.range,
+                    TOWER_TYPES[_sel.typeId].color, false);
+    }
   }
 
   // ── 배치 확인 패널 ───────────────────────────────────────────────────────
@@ -6663,7 +6711,11 @@ function renderTownPageTowers(ctx, gs, startY) {
         ctx.fillStyle='#a5b4fc';
         ctx.fillText(`옮길 칸을 고르세요 — 빈 칸 ${towerMoveCost(tower)}💰 · 타워끼리 교환은 두 배`,42,panelY+29);
       } else {
-        ctx.fillText(`ATK ${st.dmg}   ${st.spd.toFixed(2)}/s   사거리 ${Math.round(st.range)}px   처치 ${tower.kills}`,42,panelY+29);
+        // 🌨️ 오라 타워는 쏘지 않는다 — ATK 0 · 공속 1.0을 적어 봐야 거짓말이다
+        if (st.auraSlow > 0)
+          ctx.fillText(`감속 오라 ${Math.round(st.auraSlow*100)}%   반경 ${Math.round(st.auraRadius)}px   공격 없음`,42,panelY+29);
+        else
+          ctx.fillText(`ATK ${st.dmg}   ${st.spd.toFixed(2)}/s   사거리 ${Math.round(st.range)}px   처치 ${tower.kills}`,42,panelY+29);
       }
       // ✦ ★6부터 붙은 능력 — 이 타워가 다른 같은 타워와 무엇이 다른가
       const _pk = towerPerks(tower);

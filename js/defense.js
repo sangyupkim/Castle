@@ -112,7 +112,8 @@ function towerStats(t) {
     poolDps:     (tpl.poolDps || 0)    * (sp.poolDpsMult || 1),
     poolRadius:  (tpl.poolRadius || 0) * (sp.poolRadiusMult || 1),
     poolDur:     (tpl.poolDur || 0)    * (sp.poolDurMult || 1),
-    targetMode:  tpl.targetMode || 'nearest',
+    // 분기가 표적 고르는 법을 바꿀 수 있다 — 💎서릿발은 제일 센 놈을 붙잡는다
+    targetMode:  sp.targetMode || tpl.targetMode || 'nearest',
     chain:       sp.chain !== undefined ? sp.chain : (tpl.chain || 0),
     chainRange:  (tpl.chainRange || 0) * (sp.chainRangeMult || 1),
     // 분기 고유 — 발사체가 그대로 들고 간다
@@ -124,8 +125,15 @@ function towerStats(t) {
     stunDur:     sp.stunDur    || 0,
     corrode:     sp.corrode    || 0,
     frail:       sp.frail      || 0,   // 🧊 냉기 취약 — 감속 대상이 받는 피해 증가
+    // 💎 빙결 — 이미 느려진 적만 얼린다. 조건은 명중 처리에서 본다.
+    freezeChance: sp.freezeChance || 0,
+    freezeDur:    sp.freezeDur    || 0,
+    // 🌨️ 감속 오라 — 쏘지 않고 사거리 안을 계속 느리게 만든다
+    auraSlow:     sp.auraSlow     || 0,
     overloaded
   };
+  // 오라 반경은 사거리에서 나온다 — 사거리 강화가 그대로 따라온다
+  st.auraRadius = st.auraSlow > 0 ? st.range * (sp.auraRadiusMult || 0.72) : 0;
   // ✦ ★6부터 붙은 특수능력을 얹는다. 분기(sp) 위에 더해지므로
   // "저격탑 대공 분기 + 연쇄 + 처형" 같은 조합이 나온다.
   applyTowerPerks(t, st);
@@ -209,6 +217,7 @@ function makeDefenseEnemy(typeId, waveIndex, opts) {
     slowTimer: 0, slowFactor: 0,
     corrodeUntil: 0, corrodeAmt: 0,
     frailUntil: 0,   frailAmt: 0,
+    frozenUntil: 0,
     hitFlash: 0,
     dead: false,
     reached: false
@@ -342,6 +351,11 @@ function updateDefenseEnemies(enemies, dt) {
       mult = 1 - e.slowFactor;
       if (e.slowTimer === 0) e.slowFactor = 0;
     }
+    // 💎 빙결 — 감속과 달리 완전히 멈춘다. 감속 위에 덮어써야 하므로 뒤에 둔다.
+    if (e.frozenUntil > 0) {
+      e.frozenUntil = Math.max(0, e.frozenUntil - dt);
+      mult = 0;
+    }
     // 👑 영웅이 몸으로 막고 있다 — 서리와 겹쳐도 더 느려지지, 서로 덮어쓰지 않는다
     if (e.heroBlockUntil > 0) {
       e.heroBlockUntil = Math.max(0, e.heroBlockUntil - dt);
@@ -398,7 +412,7 @@ function pickTarget(enemies, center, range, mode) {
 // 아직 들어오지 않은(시간차 대기 중인) 적은 없는 것으로 친다
 function enemyActive(e) { return !e.dead && !e.reached && !(e.spawnDelay > 0); }
 
-function pickTargetSmart(enemies, center, range, mode, towerTypeId, branchId) {
+function pickTargetSmart(enemies, center, range, mode, towerTypeId, branchId, preferSlowed) {
   let best = null, bestScore = -Infinity;
   for (const e of enemies) {
     // 아직 들어오지 않은 적에게 쏘면 그 탄은 버려진다 — enemyActive와 기준을 맞춘다
@@ -415,6 +429,10 @@ function pickTargetSmart(enemies, center, range, mode, towerTypeId, branchId) {
     if (mode === 'strongest') score += Math.min(60, Math.log10(Math.max(1, e.hp)) * 12);
     else                      score += (range - d) * 0.02;
     if (e.isBounty) score += 40;          // 현상수배는 놓치면 손해가 크다
+    // 💎 서릿발 — 얼릴 수 있는 놈을 노린다. 빙결 조건이 '이미 느려진 적'인데
+    // 표적을 아무렇게나 고르면 조건을 만족하는 적이 사정권에 있어도 놓친다.
+    // 실제로 그랬다 — 무리 48마리 중 20마리가 느려져 있는데 빙결은 0이었다.
+    if (preferSlowed && (e.slowTimer > 0 || (e.frozenUntil || 0) > 0)) score += 90;
     if (score > bestScore) { bestScore = score; best = e; }
   }
   return best;
@@ -431,11 +449,31 @@ function updateTowers(towers, enemies, projectiles, dt) {
     // 그 타워는 영영 쏘지 않는다. 값이 오염될 경로를 다 막기보다 매 프레임 제자리로 돌린다.
     if (!(tower.cooldown >= 0) || tower.cooldown > 60) tower.cooldown = 0;
     tower.cooldown = Math.max(0, tower.cooldown - dt);
+
+    const stA = towerStats(tower);
+    // 🌨️ 감속 오라 — 쏘는 대신 사거리 안을 계속 얼린다. 쿨다운과 무관하게 매 프레임.
+    // 지속을 짧게(0.3초) 주고 매 프레임 갱신하므로, 범위를 벗어나면 곧 풀린다.
+    if (stA.auraSlow > 0) {
+      const c = cellCenter(tower.col, tower.row);
+      const r2 = stA.auraRadius * stA.auraRadius;
+      for (const e of enemies) {
+        if (e.dead || e.reached || !enemyActive(e)) continue;
+        const dx = e.x - c.x, dy = e.y - c.y;
+        if (dx*dx + dy*dy > r2) continue;
+        if (bossImmune(e, 'unslow')) continue;
+        e.slowFactor = Math.max(e.slowFactor, stA.auraSlow);
+        e.slowTimer  = Math.max(e.slowTimer, 0.30);
+      }
+      tower.muzzle = 0;
+      continue;                       // 발사체를 만들지 않는다
+    }
+
     if (tower.cooldown > 0) continue;
 
-    const st     = towerStats(tower);
+    const st     = stA;
     const center = cellCenter(tower.col, tower.row);
-    const best   = pickTargetSmart(enemies, center, st.range, st.targetMode, tower.typeId, st.branch);
+    const best   = pickTargetSmart(enemies, center, st.range, st.targetMode, tower.typeId, st.branch,
+                                   st.freezeChance > 0);
     if (!best) continue;
 
     // spd가 0이나 NaN이면 1/spd가 Infinity·NaN이 되어 그 타워가 멈춘다
@@ -458,7 +496,8 @@ function updateTowers(towers, enemies, projectiles, dt) {
       critChance: st.critChance, critMult: st.critMult, execute: st.execute,
       piercePct: st.piercePct || 0,
       vsSlowed: st.vsSlowed, stunChance: st.stunChance, stunDur: st.stunDur,
-      corrode: st.corrode, frail: st.frail
+      corrode: st.corrode, frail: st.frail,
+      freezeChance: st.freezeChance, freezeDur: st.freezeDur
     });
     proj._enemies = enemies;
     projectiles.push(proj);
@@ -562,9 +601,13 @@ function updateProjectiles(projectiles, onKill, dt) {
     const aff   = p.towerTypeId ? affinityOf(p.towerTypeId, tgt, p.branchId) : 1;
 
     // ── ★5 분기 고유 ────────────────────────────────────────────────────
+    // 💎 빙결의 조건은 '**이미** 느려진 적'이다. 서릿발 자신도 감속(30%)을 거니까,
+    // 제 감속이 붙기 전에 여기서 붙들어 둬야 한다. 안 그러면 늘 스스로 조건을
+    // 만족시켜 '조건부'라는 말이 뜻을 잃는다.
+    const wasSlowed = (tgt.slowTimer > 0 || tgt.heroBlockUntil > 0);
     let dmg = p.dmg, crit = false;
     // 💎 서릿발 — 이미 느려진 적에게만 값을 낸다. 혼자 두면 감속이 약해 손해다.
-    if (p.vsSlowed > 1 && (tgt.slowTimer > 0 || tgt.heroBlockUntil > 0)) dmg *= p.vsSlowed;
+    if (p.vsSlowed > 1 && wasSlowed) dmg *= p.vsSlowed;
     // 🎯 헤드샷 — 평균은 ×1.8이지만 한 발 한 발이 흔들린다
     if (p.critChance > 0 && Math.random() < p.critChance) { dmg *= p.critMult; crit = true; }
 
@@ -631,6 +674,14 @@ function updateProjectiles(projectiles, onKill, dt) {
         tgt.frailUntil = Math.max(tgt.frailUntil || 0, p.slowDur);
         tgt.frailAmt   = Math.max(tgt.frailAmt   || 0, p.frail);
       }
+    }
+    // 💎 빙결 — 이미 느려져 있던 적만. 감속이 아니라 **정지**라서 따로 센다.
+    if (p.freezeChance > 0 && wasSlowed && !tgt.dead
+        && !bossImmune(tgt, 'unslow') && Math.random() < p.freezeChance) {
+      tgt.frozenUntil = Math.max(tgt.frozenUntil || 0, p.freezeDur);
+      if (typeof FX !== 'undefined') FX.ring(tgt.x, tgt.y, '#bae6fd', 12);
+      if (typeof spawnFloaty === 'function' && Math.random() < 0.4)
+        spawnFloaty('💎 빙결', tgt.x, tgt.y - (tgt.radius || 8) - 10, '#bae6fd');
     }
 
     if (p.splash > 0) {
