@@ -288,9 +288,11 @@ function renderDefense(ctx, gs) {
       ctx.fillText('🔺', s0.x, s0.y);
     }
     // 항로는 ∞ 경로와 겹치지 않는다 — 경로에만 붙여 지으면 하늘은 못 잡는다
+    // 왼쪽에 두면 성벽 띠의 '기지 HP' 글자와 겹친다 — 띠의 오른쪽은 비어 있다.
     ctx.fillStyle = 'rgba(192,132,252,0.62)'; ctx.font = 'bold 9px sans-serif';
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    ctx.fillText('🔺 하늘길 — 저격·번개가 잘 듣습니다', CW - 8, DEFENSE_H - 11);
     ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-    ctx.fillText('🔺 하늘길 — 저격·번개가 잘 듣습니다', 5, DEFENSE_H - 13);
   }
 
   drawPathFlow(ctx, THE_PATH, 'rgba(120,40,30,0.22)');
@@ -7442,6 +7444,43 @@ function renderGuideBook(ctx, gs) {
         y += Math.max(17, rh + 4);
       }
       y += 8;
+
+    } else if (b.fig) {                          // 🖼 삽화 — 진짜 게임 화면
+      // 그림 파일이 아니라 렌더러를 불러 그린 것이다(guidescene.js).
+      // 못 그렸으면 통째로 건너뛴다 — 삽화가 없다고 문서를 못 읽으면 안 된다.
+      const img = (typeof guideScene === 'function') ? guideScene(b.fig) : null;
+      if (img) {
+        y += 2;
+        // 화면 그대로임을 알리는 테 — 문서 안의 '창'으로 읽히게 한다
+        const ix = Math.round((CW - img.width) / 2);   // 줄여 넣은 장면은 가운데로
+        ctx.fillStyle = '#0b1220'; ctx.fillRect(0, y, CW, img.height + 8);
+        ctx.drawImage(img, ix, y + 4);
+        ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, y + 0.5); ctx.lineTo(CW, y + 0.5);
+        ctx.moveTo(0, y + img.height + 7.5); ctx.lineTo(CW, y + img.height + 7.5);
+        ctx.stroke();
+        if (ix > 0) { ctx.strokeRect(ix - 0.5, y + 3.5, img.width + 1, img.height + 1); }
+        y += img.height + 14;
+        // 번호 풀이 — 그림 위의 핀과 같은 번호를 단다
+        const leg = (typeof guideSceneLegend === 'function') ? guideSceneLegend(b.fig) : [];
+        leg.forEach(([lab, txt], i) => {
+          const bx2 = 16, by2 = y + 6.5, r2 = 8;
+          ctx.beginPath(); ctx.arc(bx2 + r2, by2, r2, 0, Math.PI*2);
+          ctx.fillStyle = '#fbbf24'; ctx.fill();
+          ctx.fillStyle = '#1c1206'; ctx.font = 'bold 10px sans-serif';
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(String(i+1), bx2 + r2, by2 + 0.5);
+          ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+          ctx.fillStyle = '#fbbf24'; ctx.font = 'bold 10px sans-serif';
+          ctx.fillText(lab, bx2 + r2*2 + 7, y + 1);
+          const lw2 = ctx.measureText(lab).width;
+          const tx3 = bx2 + r2*2 + 7 + lw2 + 7;
+          const hh2 = _patchWrapDraw(ctx, txt, tx3, y + 1, CW - tx3 - 12, 14, '#94a3b8', '#e2e8f0');
+          y += Math.max(18, hh2 + 5);
+        });
+        y += 6;
+      }
 
     } else if (b.miss) {                         // 자주 하는 실수
       const [bad, fix] = b.miss;
