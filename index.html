@@ -68,9 +68,37 @@ body {
 <script>
 // 서비스 워커 — 오프라인 실행과 설치를 가능하게 한다.
 // file://로 열었을 때(데스크톱 Electron 포함)는 등록되지 않으므로 조건을 건다.
+//
+// 새 워커가 자리를 넘겨받으면 **한 번 새로고침한다.**
+// sw.js는 install에서 skipWaiting을 부르므로 새 배포가 뜨면 곧바로 새 워커가
+// 컨트롤러가 된다. 그런데 이미 열려 있는 페이지는 그 순간에도 옛 코드를
+// 그대로 돌리고 있다 — 탭을 계속 켜 두거나 설치형으로 쓰면 몇 주가 지나도
+// 옛 화면을 본다. 사람이 알아서 강제 새로고침해 주기를 기다릴 수는 없다.
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  // 처음 등록되는 순간에도 controllerchange가 뜬다. 그때 새로고침하면
+  // 첫 방문자가 이유 없이 한 번 깜빡인다 — 원래 컨트롤러가 있었을 때만 센다.
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloading) return;
+    reloading = true;
+    // 한창 판을 굴리는 중에 화면이 새로고침되면, 세이브가 남더라도 그 판을
+    // 빼앗긴 것처럼 느껴진다. 새 배포는 급할 것이 없다 — 로비로 나오는
+    // 순간에 갈아탄다. 판 밖이면 곧바로 간다.
+    const idle = () => { try { return !(window.gs && gs.inRun); } catch (e) { return true; } };
+    if (idle()) { location.reload(); return; }
+    const t = setInterval(() => { if (idle()) { clearInterval(t); location.reload(); } }, 2000);
+  });
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      // 탭을 오래 열어 두는 사람을 위해 이따금 새 배포가 있는지 물어본다.
+      // 브라우저는 탐색할 때만 sw.js를 다시 보므로, 안 물어보면 안 바뀐다.
+      const poke = () => { try { reg.update(); } catch (e) {} };
+      setInterval(poke, 30 * 60 * 1000);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') poke();
+      });
+    }).catch(() => {});
   });
 }
 </script>

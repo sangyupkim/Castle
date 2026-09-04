@@ -99,13 +99,15 @@ export function rankSort(a, b) {
 // ── 저장 ─────────────────────────────────────────────────────────────────────
 function store() { return getStore('leaderboard'); }
 
+// 읽기 실패는 **반드시 던진다.** 삼켜서 []를 돌려주면 부르는 쪽은 "표가 비었다"로
+// 읽고, 그 뒤 saveBoard가 기록 하나로 순위표를 통째로 덮어쓴다 —
+// 저장소가 잠깐 흔들린 것뿐인데 남의 기록이 전부 사라진다.
+// 없는 키는 null이고 실패는 예외다. 그 둘을 갈라 두는 것이 여기서 할 일의 전부다.
 export async function loadBoard(board) {
-  try {
-    const v = await store().get(`board/${board}`, { type: 'json' });
-    return Array.isArray(v) ? v : [];
-  } catch (e) {
-    return [];
-  }
+  const v = await store().get(`board/${board}`, { type: 'json' });
+  if (v === null || v === undefined) return [];    // 아직 아무도 안 올린 표
+  if (!Array.isArray(v)) throw new Error('순위표가 배열이 아닙니다');
+  return v;
 }
 
 export async function saveBoard(board, rows) {

@@ -1,7 +1,7 @@
 // GET /api/rank?board=abyss&limit=50 — 순위 조회
 //
 // cid(기기 식별자)는 밖으로 내보내지 않는다. 표에 필요한 것만 골라 준다.
-import { BOARDS, loadBoard, json } from './_lib/board.js';
+import { BOARDS, loadBoard, json } from './_lib/board.mjs';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT     = 100;

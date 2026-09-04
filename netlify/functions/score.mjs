@@ -3,7 +3,7 @@
 // 날짜는 **서버가 찍는다**. 클라이언트가 보낸 시각을 쓰면 조작되기도 하고
 // 시간대가 섞여서 표가 뒤죽박죽이 된다. 여기서 받은 순간이 그 기록의 시각이다.
 import { checkRecord, loadBoard, saveBoard, mergeRecord, rateLimited, json }
-  from './_lib/board.js';
+  from './_lib/board.mjs';
 
 export default async (req, context) => {
   if (req.method !== 'POST') return json({ ok: false, err: 'POST만 받습니다' }, 405);
