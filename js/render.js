@@ -775,6 +775,47 @@ function renderTower(ctx, t) {
   }
 }
 
+// ─── 🐲 중간보스 표식 ─────────────────────────────────────────────────────────
+// 👹마왕은 혼자 오니까 붉은 파문만으로도 "저게 그거"가 읽힌다. 중간보스는 다르다 —
+// **잡몹 사이에 섞여 온다.** 몸집이 1.7배라지만 대형 잡몹도 크고, 스무 마리가
+// 겹쳐 있으면 그 차이가 안 보인다. 그래서 이름을 직접 붙인다.
+//
+// 파문은 "센 것이 있다", 이름표는 "그게 이것이고 이름은 이거다"를 맡는다.
+// 둘 다 필요하다 — 파문만 있으면 정예와 헷갈리고, 이름표만 있으면 난전에서
+// 글자가 어느 몸에 붙은 건지 모른다.
+function drawMidBossAura(ctx, x, y, radius) {
+  const t0 = (Date.now() % 1100) / 1100;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(x, y, radius + 2, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(136,19,55,0.34)'; ctx.fill();
+  for (let k = 0; k < 2; k++) {
+    const t = (t0 + k * 0.5) % 1;
+    ctx.beginPath(); ctx.arc(x, y, radius + 3 + t * 16, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(244,63,94,${0.8 * (1 - t)})`;
+    ctx.lineWidth = 2.5; ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// topY — 이 y보다 **위에** 붙인다 (몸·체력바·등급표를 가리지 않는 선)
+function drawMidBossTag(ctx, x, topY, name) {
+  const label = '🐲 ' + (name || '중간보스');
+  ctx.save();
+  ctx.font = 'bold 10px sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const w = Math.min(CW - 8, ctx.measureText(label).width + 14), h = 15;
+  // 가장자리를 걸어오는 동안에도 이름이 잘리면 안 된다 — 화면 안으로 민다
+  const bx = Math.max(4, Math.min(CW - w - 4, x - w / 2));
+  const by = Math.max(2, topY - h);
+  // uiPanel은 크면 9슬라이스 그림으로 갈아타 색을 무시한다. 여긴 색이 신호다.
+  roundRect(ctx, bx, by, w, h, 4);
+  ctx.fillStyle = 'rgba(76,5,25,0.92)'; ctx.fill();
+  ctx.strokeStyle = '#f43f5e'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.fillStyle = '#fecdd3';
+  ctx.fillText(label, bx + w / 2, by + h / 2 + 0.5);
+  ctx.restore();
+}
+
 function renderDefEnemy(ctx, e) {
   const slowed = e.slowTimer > 0 || e.auraTimer > 0;   // 오라 감속도 파랗게 보여야 한다
   const bob    = e.flying ? Math.sin(Date.now()/220 + e.id) * 2.5 : 0;
@@ -801,6 +842,9 @@ function renderDefEnemy(ctx, e) {
     ctx.beginPath(); ctx.arc(e.x, ey, e.radius + 3, 0, Math.PI*2);
     ctx.fillStyle = 'rgba(127,29,29,0.45)'; ctx.fill();
   }
+
+  // 🐲 중간보스 — 진홍 파문. 마왕(붉은색)과 색을 갈라 둔다.
+  if (e.isMidBoss) drawMidBossAura(ctx, e.x, ey, e.radius);
 
   // 현상수배는 금색 링으로 즉시 눈에 띄게
   if (e.isBounty) {
@@ -868,6 +912,9 @@ function renderDefEnemy(ctx, e) {
     ctx.fillText(cls.tag, e.x, drew ? top-13 : ey+0.5);
     ctx.shadowBlur=0;
   }
+
+  // 🐲 이름표는 맨 위 — 체력바(top-6)와 등급표(top-13)를 가리지 않는 선부터
+  if (e.isMidBoss) drawMidBossTag(ctx, e.x, top - 20, e.name);
 }
 
 // 전사한 영웅이 언제 돌아오는지 — 화면마다 같은 말을 쓰기 위해 한곳에 둔다
@@ -2364,6 +2411,9 @@ function renderArenaEntity(ctx, e, alpha) {
     ctx.strokeStyle = COLORS.shield; ctx.lineWidth = 2; ctx.stroke();
   }
 
+  // 🐲 중간보스 — 진홍 파문을 몸 **아래**에 깐다. 위에 그리면 그림을 덮는다.
+  if (e.isMidBoss) drawMidBossAura(ctx, e.x, e.y, r);
+
   // 아군은 밝은 링을 상시 두른다 — 28마리가 겹쳐도 내 편을 즉시 찾을 수 있게
   if (e.isPlayer) {
     ctx.beginPath(); ctx.arc(e.x, e.y, r + 2.5, 0, Math.PI*2);
@@ -2399,17 +2449,25 @@ function renderArenaEntity(ctx, e, alpha) {
   ctx.fillText(e.icon, e.x, e.y+0.5);
   }
 
-  // 엘리트·보스는 바깥 링으로 한눈에 구분
+  // 엘리트·보스는 바깥 링으로 한눈에 구분.
+  // 중간보스도 isElite라 같은 링이 붙는다 — 굵기를 올려 정예와 갈라 놓는다.
   if (e.isElite || e.isBoss) {
     ctx.beginPath(); ctx.arc(e.x, e.y, r+3.5, 0, Math.PI*2);
     ctx.strokeStyle = e.isBoss ? '#fbbf24' : '#f43f5e';
-    ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.lineWidth = e.isMidBoss ? 3 : 1.5; ctx.stroke();
   }
 
-  // HP 바 — 다쳤을 때만 (평상시 화면을 깨끗하게)
-  if (e.hp < e.maxHp) {
+  // HP 바 — 다쳤을 때만 (평상시 화면을 깨끗하게).
+  // 중간보스는 얼마나 깎였는지가 그 층의 진행도라 늘 보여 준다.
+  if (e.hp < e.maxHp || e.isMidBoss) {
     const bw = r*2 + 4;
-    drawHPBar(ctx, e.x - bw/2, e.y + r + 2.5, bw, 3, e.hp / e.maxHp);
+    drawHPBar(ctx, e.x - bw/2, e.y + r + 2.5, bw, e.isMidBoss ? 4 : 3, e.hp / e.maxHp);
+  }
+
+  // 🐲 이름표 — 그림 꼭대기 위. 난전에서 어느 몸이 그것인지 짚어 준다.
+  if (e.isMidBoss) {
+    const artTop = drewArt ? (e.y + r - r * ARENA_ART_H_MULT) : (e.y - r);
+    drawMidBossTag(ctx, e.x, Math.max(artTop, e.y - r * 2.4) - 3, e.name);
   }
   ctx.globalAlpha = 1;
 }
