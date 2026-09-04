@@ -263,6 +263,17 @@ function updateArena(gs, dt) {
   for (const m of mobs)   updateMob(gs, m, allies, dt);
 
   separate(allies.concat(mobs), dt);
+  // 🪨 막는 지형 밖으로 밀어낸다.
+  // resolveTerrainCollision은 예전부터 있었는데 **아무도 부르지 않았다** —
+  // 그래서 바위가 blocksMove:true 인데도 실제로는 통과됐고, 지형이
+  // '느려지는 칸 + 아픈 칸'뿐이라 판마다 달라지는 느낌이 거의 없었다.
+  // 분리(separate) 뒤에 밀어야 한다. 순서가 반대면 서로 밀다가 벽에 박힌다.
+  if (a.terrain && a.terrain.length) {
+    for (const u of allies) resolveTerrainCollision(a.terrain, u);
+    for (const m of mobs)   resolveTerrainCollision(a.terrain, m);
+    for (const u of allies) clampToArena(u, u.radius);
+    for (const m of mobs)   clampToArena(m, m.radius);
+  }
   updateShots(gs, dt);
   updateDrops(gs, allies, dt);
   updateArenaSpawn(gs, dt);
@@ -1075,7 +1086,12 @@ function startArena(gs, waveIndex) {
   if (typeof releaseManualSpeed === 'function') releaseManualSpeed();
   a.goldCollected = 0;
   // 지형은 층마다 새로 생성된다 (훈련에는 없다 — 배우는 곳이므로 판을 비워둔다)
-  a.terrain = (endlessTier(waveIndex) > 0) ? generateArenaTerrain(endlessTier(waveIndex)) : [];
+  // 층마다 이름 있는 배치를 하나 뽑는다 — 브리핑에서 미리 보여주려고 id도 남긴다
+  const _tier = endlessTier(waveIndex);
+  a.layout  = _tier > 0 ? arenaLayoutFor(_tier, gs.runSeed).id : 'open';
+  a.terrain = _tier > 0 ? generateArenaTerrain(_tier, gs.runSeed) : [];
+  // 🛢 바닥 장식 — 판정에 관여하지 않는다. 지형과 같은 시드라 층마다 자리가 고정된다.
+  a.deco    = _tier > 0 ? generateArenaDeco(_tier, gs.runSeed, a.terrain) : [];
 
   const allies = gs.battle.ourTeam.filter(u => !u.dead);
   allies.forEach((u, i) => spawnAllyIntoArena(a, u, i, allies.length));

@@ -33,6 +33,10 @@ self.SPRITE_FILES = {
   'tile.field.19': 'tiles/field_19.png',
 
   // 길 — 밭 사이로 난 잔디 길. 에셋을 만든 사람의 테스트 이미지가 딱 이 구성이다.
+  // 🧱 던전 벽돌 — 바위 지형(미로·회랑 벽)을 이걸로 깐다.
+  // 상하좌우 이음새가 맞는 칸을 골랐으므로 몇 장을 이어 붙여도 격자가 안 보인다.
+  'terrain.wall': 'terrain/wall.png',
+
   'tile.path':  'tiles/grass.png',
   'tile.start': 'tiles/grass.png',
 
@@ -355,6 +359,10 @@ self.SPRITE_FILES = {
   'item.c_tome':    'items/c_tome.png',
   'item.c_eye':     'items/c_eye.png',
 
+  // 🪨 던전 돌바닥 — 아레나 바닥에 깐다. 상단은 밭, 하단은 던전으로 갈라
+  // 두 전선이 다른 곳으로 보이게 한다.
+  'tile.dungeon': 'terrain/floor.png',
+
   // 🖼 UI — Cryo's Mini GUI에서 잘라낸 9슬라이스 판과 막대 채움.
   // 패널은 8px 모서리 기준으로 늘린다(drawPanel9). 막대는 가로로 늘리면 된다.
   'ui.panel.dark':  'ui/panel_dark.png',    // 검정 + 옅은 남색 테두리 — 기본
@@ -383,6 +391,24 @@ self.SPRITE_SHEETS = {
   'fx.burst':  { file:'fx/burst.png',  fw:64, fh:64, frames:10, fps:24 },  // 꽃처럼 터지는 폭발
   'fx.rune':   { file:'fx/rune.png',   fw:64, fh:64, frames:13, fps:20 },  // 마법진
   'fx.streak': { file:'fx/streak.png', fw:64, fh:64, frames:11, fps:26 },  // 길게 늘어지는 섬광
+
+  // 🗺 아레나 지형 타일 — free 2D top-down pixel dungeon 팩(16px 격자).
+  // 손으로 그린 물결·톱니 대신 진짜 타일을 깐다. 둘 다 애니메이션이라
+  // '지금 위험하다'가 움직임으로 읽힌다.
+  //   가시 — 5프레임: 바닥 구멍 → 창이 솟았다가 다시 들어간다.
+  //          그래서 fps를 낮게 잡았다. 빠르면 함정이 아니라 지직거림으로 보인다.
+  'terrain.spikes': { file:'terrain/spikes.png', fw:16, fh:16, frames:5, fps:5 },
+  'terrain.water':  { file:'terrain/water.png',  fw:16, fh:16, frames:5, fps:4 },
+
+  // 🔥 화톳불 — 같은 팩의 fire_animation2. 원본은 32px 격자에 가로=불꽃 크기 3종 /
+  // 세로=6프레임이라, **제일 큰 0열만** 가로로 펴 왔다. 몸통이 흰색이라
+  // 그릴 때 주황을 곱해 쓴다(흰 그림이 tint를 제일 잘 받는다).
+  'fx.fire': { file:'fx/fire.png', fw:32, fh:32, frames:6, fps:9 },
+
+  // 🛢 바닥 장식 — 같은 팩의 Objects. 통·상자·항아리·금무더기 8종을
+  // 16×32 칸에 **바닥 정렬**해 담았다. 그래서 발밑 y 하나만 주면 놓인다.
+  // 판정에는 관여하지 않는다 — 빈 바닥이 덜 심심해 보이라고 두는 것뿐이다.
+  'terrain.deco': { file:'terrain/deco.png', fw:16, fh:32, frames:8, fps:0 },
 };
 
 // ── 배우 (방향 × 동작 × 프레임) ─────────────────────────────────────────────
