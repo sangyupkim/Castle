@@ -33,6 +33,10 @@ self.SPRITE_FILES = {
   'tile.field.19': 'tiles/field_19.png',
 
   // 길 — 밭 사이로 난 잔디 길. 에셋을 만든 사람의 테스트 이미지가 딱 이 구성이다.
+  // 🧱 던전 벽돌 — 바위 지형(미로·회랑 벽)을 이걸로 깐다.
+  // 상하좌우 이음새가 맞는 칸을 골랐으므로 몇 장을 이어 붙여도 격자가 안 보인다.
+  'terrain.wall': 'terrain/wall.png',
+
   'tile.path':  'tiles/grass.png',
   'tile.start': 'tiles/grass.png',
 
@@ -395,6 +399,16 @@ self.SPRITE_SHEETS = {
   //          그래서 fps를 낮게 잡았다. 빠르면 함정이 아니라 지직거림으로 보인다.
   'terrain.spikes': { file:'terrain/spikes.png', fw:16, fh:16, frames:5, fps:5 },
   'terrain.water':  { file:'terrain/water.png',  fw:16, fh:16, frames:5, fps:4 },
+
+  // 🔥 화톳불 — 같은 팩의 fire_animation2. 원본은 32px 격자에 가로=불꽃 크기 3종 /
+  // 세로=6프레임이라, **제일 큰 0열만** 가로로 펴 왔다. 몸통이 흰색이라
+  // 그릴 때 주황을 곱해 쓴다(흰 그림이 tint를 제일 잘 받는다).
+  'fx.fire': { file:'fx/fire.png', fw:32, fh:32, frames:6, fps:9 },
+
+  // 🛢 바닥 장식 — 같은 팩의 Objects. 통·상자·항아리·금무더기 8종을
+  // 16×32 칸에 **바닥 정렬**해 담았다. 그래서 발밑 y 하나만 주면 놓인다.
+  // 판정에는 관여하지 않는다 — 빈 바닥이 덜 심심해 보이라고 두는 것뿐이다.
+  'terrain.deco': { file:'terrain/deco.png', fw:16, fh:32, frames:8, fps:0 },
 };
 
 // ── 배우 (방향 × 동작 × 프레임) ─────────────────────────────────────────────

@@ -1855,7 +1855,7 @@ function arenaFloorCanvas() {
   c.width = ARENA_W * 2; c.height = ARENA_H * 2;      // 화면이 DPR 2로 그려지므로 두 배로 굽는다
   const x = c.getContext('2d');
   x.scale(2, 2);
-  const TS = dungeon ? 24 : ARENA_TILE;               // 던전 타일은 16px 원본이라 잘게 깐다
+  const TS = dungeon ? 32 : ARENA_TILE;               // 던전 바닥은 32px 2×2 블록 — 그대로 깐다
   for (let ty = 0; ty * TS < ARENA_H; ty++) {
     for (let tx = 0; tx * TS < ARENA_W; tx++) {
       if (dungeon) Sprites.draw(x, 'tile.dungeon', tx*TS, ty*TS, TS, TS);
@@ -1864,7 +1864,7 @@ function arenaFloorCanvas() {
   }
   // 밤 장막 — 이 정도로 눌러야 체력바와 아이콘이 읽힌다.
   // 던전 바닥은 원래 어두워서 덜 눌러도 된다.
-  x.fillStyle = dungeon ? 'rgba(6,10,20,0.30)' : 'rgba(8,16,28,0.70)';
+  x.fillStyle = dungeon ? 'rgba(6,10,20,0.42)' : 'rgba(8,16,28,0.70)';
   x.fillRect(0, 0, ARENA_W, ARENA_H);
   return (_arenaFloor = c);
 }
@@ -1921,13 +1921,55 @@ function drawHuntMark(ctx, x, y, r) {
 const TERRAIN_TILE_KEY = {
   water: { key:'terrain.water',  frames:5, fps:4 },
   spike: { key:'terrain.spikes', frames:5, fps:5 },
+  // 🧱 바위 = 던전 벽돌. 미로·회랑의 벽이 단색 판이 아니라 진짜 벽으로 보인다.
+  // 벽 두께가 12~14px밖에 안 되므로 타일을 16px로 잘게 깐다 — 20px로 깔면
+  // 벽돌 한 줄이 통째로 잘려서 무늬가 안 읽힌다.
+  rock:  { key:'terrain.wall',   frames:1, fps:0, px:16 },
 };
 // 16px 원본을 그대로 깔면 조각 하나에 100장이 넘는다. 20px로 늘려 수를 줄인다.
 const TERRAIN_TILE_PX  = 20;
 
+// 🔥 화톳불 — 화산(가시밭) 위에 얹는다. 가시만으로는 "왜 여기가 뜨거운가"가
+// 안 읽혀서, 불을 몇 점 놓아 배치 이름과 그림을 맞춘다.
+// 자리는 조각의 좌표에서 뽑으므로 매 프레임 같은 곳에 선다(흔들리지 않는다).
+// 🌋 배치가 화산일 때만 얹는다. 돌밭에 흩어진 작은 가시밭까지 불이 붙으면
+// '가시'와 '불'이 같은 것으로 보여서, 지형 이름이 뜻을 잃는다.
+const FIRE_PER_AREA = 2600;   // 이 넓이당 하나
+const FIRE_MAX      = 4;
+const FIRE_BUDGET   = 10;     // 한 프레임에 그릴 불의 총량 — 그라디언트가 싸지는 않다
+let _fireBudget = 0;
+function renderTerrainFire(ctx, t, on) {
+  if (!on || t.kind !== 'spike') return;
+  if (typeof Sprites === 'undefined' || !Sprites.has('fx.fire')) return;
+  const n = Math.min(FIRE_MAX, _fireBudget,
+                     Math.max(1, Math.round(t.w * t.h / FIRE_PER_AREA)));
+  if (n <= 0) return;
+  _fireBudget -= n;
+  const sec = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+  for (let i = 0; i < n; i++) {
+    // 결정적 난수 — 조각의 x·y와 번호만으로 자리를 정한다
+    const h1 = Math.abs(Math.sin((t.x + i * 37.1) * 12.9898 + (t.y + i * 78.2) * 4.1414)) % 1;
+    const h2 = Math.abs(Math.sin((t.y + i * 19.3) * 39.3468 + (t.x + i * 51.7) * 7.7231)) % 1;
+    const fx = t.x + 10 + h1 * Math.max(1, t.w - 20);
+    const fy = t.y + 12 + h2 * Math.max(1, t.h - 20);
+    const S  = 34;   // 원본 32px 중 불꽃이 차지하는 건 절반쯤이라 이만큼은 키워야 보인다
+    // 바닥의 열기 — 불만 그리면 공중에 떠 보인다
+    const g = ctx.createRadialGradient(fx, fy - 3, 1, fx, fy - 3, S * 0.55);
+    g.addColorStop(0, 'rgba(255,140,50,0.30)');
+    g.addColorStop(1, 'rgba(255,120,40,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.ellipse(fx, fy - 3, S * 0.55, S * 0.34, 0, 0, Math.PI * 2); ctx.fill();
+    // 흰 불꽃이라 주황을 곱해야 불로 보인다. 개체마다 위상을 어긋내 따로 탄다.
+    Sprites.frame(ctx, 'fx.fire', Sprites.frameAt('fx.fire', sec, i * 2),
+                  fx - S / 2, fy - S * 0.86, S, S, { tint:'#ff8a3d', tintAmt:0.85 });
+  }
+}
+
 function renderArenaTerrain(ctx, a) {
   const ter = a.terrain;
   if (!ter || !ter.length) return;
+  const fire = a.layout === 'volcano';
+  _fireBudget = FIRE_BUDGET;
   for (const t of ter) {
     const d = TERRAIN_DEFS[t.kind] || TERRAIN_DEFS.rock;
     uiPanel(ctx, t.x, t.y, t.w, t.h, 5, d.fill, d.edge, 1.5);
@@ -1940,15 +1982,30 @@ function renderArenaTerrain(ctx, a) {
     // 조각 전체가 한 박자로 뛰면 격자무늬가 도드라지므로, 칸마다 위상을 어긋낸다.
     const tile = TERRAIN_TILE_KEY[t.kind];
     if (tile && typeof Sprites !== 'undefined' && Sprites.has(tile.key)) {
-      const TS = TERRAIN_TILE_PX;
-      const base = Math.floor(Date.now() / (1000 / tile.fps));
-      for (let ty = 0; ty * TS < t.h; ty++) {
+      const TS = tile.px || TERRAIN_TILE_PX;
+      // 세로로 잘라 깔면 무늬가 안 읽힌다. 미로 벽은 두께가 12~14px뿐이라
+      // 벽돌 한 줄이 위쪽 모르타르만 남고 잘려서 **회색 막대**로 보였다.
+      // 조각이 타일보다 얇으면 타일을 그 두께에 맞춰 눌러 한 줄로 깐다.
+      const rows = Math.max(1, Math.round(t.h / TS));
+      const TSY  = t.h / rows;
+      // 정지 타일(벽돌)은 프레임 계산을 하지 않는다 — fps 0으로 나누면 무한대가 된다
+      const anim = tile.frames > 1 && tile.fps > 0;
+      const base = anim ? Math.floor(Date.now() / (1000 / tile.fps)) : 0;
+      for (let ty = 0; ty < rows; ty++) {
         for (let tx = 0; tx * TS < t.w; tx++) {
-          const fi = (base + tx + ty * 2) % tile.frames;
-          Sprites.frame(ctx, tile.key, fi, t.x + tx * TS, t.y + ty * TS, TS, TS);
+          const dx = t.x + tx * TS, dy = t.y + ty * TSY;
+          if (anim) Sprites.frame(ctx, tile.key, (base + tx + ty * 2) % tile.frames, dx, dy, TS, TSY);
+          else      Sprites.draw(ctx, tile.key, dx, dy, TS, TSY);
         }
       }
+      // 바위는 바닥보다 어두워야 "막힌 곳"으로 읽힌다 — 판석 바닥이 밝아진 만큼 눌러 준다
+      if (t.kind === 'rock') { ctx.fillStyle = 'rgba(4,6,12,0.34)'; ctx.fillRect(t.x, t.y, t.w, t.h); }
       ctx.restore();
+      ctx.save();
+      ctx.strokeStyle = d.edge; ctx.globalAlpha = 0.85; ctx.lineWidth = 1.5;
+      roundRect(ctx, t.x, t.y, t.w, t.h, 5); ctx.stroke();
+      ctx.restore();
+      renderTerrainFire(ctx, t, fire);   // 불은 조각 밖으로도 솟아야 해서 clip 밖에서 그린다
       continue;
     }
 
@@ -1991,7 +2048,25 @@ function renderArenaTerrain(ctx, a) {
       ctx.stroke();
     }
     ctx.restore();
+    renderTerrainFire(ctx, t, fire);
   }
+}
+
+// 🛢 바닥 장식 — 유닛 아래, 지형 위. 판정에는 없는 것이므로 살짝 눌러 그린다.
+// (진하게 두면 플레이어가 "저건 뭐지, 밟으면 안 되나" 하고 신경을 쓴다)
+function renderArenaDeco(ctx, a) {
+  const deco = a && a.deco;
+  if (!deco || !deco.length) return;
+  if (typeof Sprites === 'undefined' || !Sprites.has('terrain.deco')) return;
+  ctx.save();
+  ctx.globalAlpha = 0.82;
+  for (const d of deco) {
+    // 바닥 그림자 — 이게 없으면 물건이 공중에 떠 보인다
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath(); ctx.ellipse(d.x, d.y - 1, DECO_W * 0.46, 3.2, 0, 0, Math.PI * 2); ctx.fill();
+    Sprites.frame(ctx, 'terrain.deco', d.f, d.x - DECO_W / 2, d.y - DECO_H, DECO_W, DECO_H);
+  }
+  ctx.restore();
 }
 
 function renderArenaPhase(ctx, gs) {
@@ -2025,6 +2100,7 @@ function renderArenaPhase(ctx, gs) {
   ctx.beginPath(); ctx.rect(ARENA_X, ARENA_Y, ARENA_W, ARENA_H); ctx.clip();
 
   renderArenaTerrain(ctx, a);
+  renderArenaDeco(ctx, a);
 
   // 집결 지점
   if (a.mode==='manual' && a.rally) {

@@ -1090,6 +1090,8 @@ function startArena(gs, waveIndex) {
   const _tier = endlessTier(waveIndex);
   a.layout  = _tier > 0 ? arenaLayoutFor(_tier, gs.runSeed).id : 'open';
   a.terrain = _tier > 0 ? generateArenaTerrain(_tier, gs.runSeed) : [];
+  // 🛢 바닥 장식 — 판정에 관여하지 않는다. 지형과 같은 시드라 층마다 자리가 고정된다.
+  a.deco    = _tier > 0 ? generateArenaDeco(_tier, gs.runSeed, a.terrain) : [];
 
   const allies = gs.battle.ourTeam.filter(u => !u.dead);
   allies.forEach((u, i) => spawnAllyIntoArena(a, u, i, allies.length));

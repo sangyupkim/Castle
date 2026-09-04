@@ -1877,6 +1877,51 @@ const ARENA_LAYOUTS = [
     } },
 ];
 
+// ─── 🛢 바닥 장식 ────────────────────────────────────────────────────────────
+// 판정에 전혀 관여하지 않는다 — 통·상자·항아리·금무더기를 바닥에 몇 개 놓을 뿐이다.
+// 그런데 이게 없으면 아레나가 "무늬 깔린 빈 직사각형"으로 보인다. 지형이 없는
+// 개활지에서 특히 그렇다. 그래서 **지형이 적은 배치일수록 장식을 더 놓는다.**
+//
+// 지형과 같은 시드를 쓰므로 같은 층은 늘 같은 자리에 놓인다 — 판이 리셋돼도
+// 배경이 안 바뀌어서, 다시 봐도 "그 층"으로 읽힌다.
+const DECO_FRAMES = 8;     // terrain/deco.png 안의 그림 수
+const DECO_W      = 16;    // 원본 크기 그대로 — 유닛(반지름 9~11)과 나란히 놓일 크기다
+const DECO_H      = 32;
+const DECO_CLEAR  = 16;    // 지형 사각형에서 이만큼 떨어뜨린다
+
+function generateArenaDeco(tier, seed, terrain) {
+  const t = Math.max(0, tier | 0);
+  if (t <= 0) return [];                        // 훈련장은 비워 둔다
+  // 지형이 빽빽하면 장식까지 얹을 자리가 없다
+  const ter = terrain || [];
+  const n   = Math.max(3, 9 - ter.length);
+  const cx  = ARENA_X + ARENA_W / 2, cy = ARENA_Y + ARENA_H / 2;
+  const out = [];
+  let salt = 6100;
+  for (let i = 0; i < n; i++) {
+    for (let tries = 0; tries < 24; tries++) {
+      salt++;
+      const x = ARENA_X + 14 + endlessRand(t, salt, seed) * (ARENA_W - 28);
+      const y = ARENA_Y + 24 + endlessRand(t, salt + 700, seed) * (ARENA_H - 34);
+      // 아군이 시작하는 한가운데는 비워 둔다 — 부대에 가려 보이지도 않는다
+      if (Math.hypot(cx - x, cy - y) < TERRAIN_SAFE_R * 0.8) continue;
+      // 지형 위나 바로 옆에 놓으면 "이것도 막히나?" 하고 헷갈린다
+      let bad = false;
+      for (const r of ter) {
+        if (x > r.x - DECO_CLEAR && x < r.x + r.w + DECO_CLEAR &&
+            y > r.y - DECO_CLEAR && y < r.y + r.h + DECO_CLEAR) { bad = true; break; }
+      }
+      if (bad) continue;
+      // 서로 겹치지 않게
+      if (out.some(o => Math.abs(o.x - x) < 20 && Math.abs(o.y - y) < 20)) continue;
+      out.push({ f: Math.floor(endlessRand(t, salt + 1400, seed) * DECO_FRAMES) % DECO_FRAMES,
+                 x, y });
+      break;
+    }
+  }
+  return out;
+}
+
 function arenaLayoutById(id) { return ARENA_LAYOUTS.find(l => l.id === id) || ARENA_LAYOUTS[0]; }
 
 // 이 층의 배치. 층과 런 시드로 정해지므로 브리핑에서 미리 보여줄 수 있다.
