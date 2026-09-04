@@ -2125,6 +2125,33 @@ function resolveTerrainCollision(terrain, e) {
   }
 }
 
+// ─── 👁 시야 — 두 점 사이를 바위가 가로막는가 ────────────────────────────────
+// 투사체는 매 프레임 제 위치를 검사하므로 저절로 막힌다. 그런데 **반경으로 재는
+// 피해**(광역 스킬)는 검사할 위치가 없다 — 중심에서 거리만 재고 끝난다.
+// 그래서 아군 광역은 벽을 그냥 통과했고, 몹의 원거리는 투사체라 막혔다.
+// 한쪽만 벽을 무시하면 '원거리가 손해인 미로'라는 설계가 아군에게만 반대로 선다.
+//
+// 선분을 4px 간격으로 훑는다. 벽 두께가 12px(미로)·14px(회랑)이므로 이 간격이면
+// 어떤 각도로 지나가도 최소 두 번은 안에 찍힌다.
+const LOS_STEP = 4;
+function losBlocked(terrain, ax, ay, bx, by) {
+  if (!terrain || !terrain.length) return false;
+  const dx = bx - ax, dy = by - ay;
+  const d  = Math.hypot(dx, dy);
+  if (d < 1) return false;
+  const n = Math.ceil(d / LOS_STEP);
+  for (let k = 0; k <= n; k++) {
+    const t = k / n;
+    if (terrainBlocksShot(terrain, ax + dx * t, ay + dy * t)) return true;
+  }
+  return false;
+}
+// 아레나의 지형을 알아서 집어 온다 — 부르는 쪽마다 gs.arena.terrain을 넘기지 않게
+function arenaLosBlocked(ax, ay, bx, by) {
+  const ter = (typeof gs !== 'undefined' && gs && gs.arena) ? gs.arena.terrain : null;
+  return losBlocked(ter, ax, ay, bx, by);
+}
+
 // 투사체가 바위에 막히는지
 function terrainBlocksShot(terrain, x, y) {
   if (!terrain) return false;

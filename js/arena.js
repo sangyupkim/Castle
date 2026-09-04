@@ -502,6 +502,9 @@ function allySkill(gs, u, mobs, allies) {
     let hits = 0;
     for (const m of mobs) {
       if (dist(m, u) > rad + m.radius) continue;
+      // 🪨 벽 너머는 못 때린다. 반경만 재면 미로 벽을 통과해서, 몹의 원거리는
+      // 막히는데 아군 광역만 들어가는 한쪽짜리 판이 된다.
+      if (arenaLosBlocked(u.x, u.y, m.x, m.y)) continue;
       // 🔥 화염 폭발은 맞은 적을 둔화시킨다 — 술사가 거리를 유지할 수 있는 이유
       if (kind === 'nova') m.slowUntil = Math.max(m.slowUntil || 0, 2.0);
       hurtMob(gs, m, arenaDamage(u.skillAtk, m.def), u.skillColor);
@@ -598,7 +601,9 @@ function updateMob(gs, m, allies, dt) {
       // 마왕 — 광역 내려찍기
       const rad = 52;
       for (const t of allies) {
-        if (dist(t, m) <= rad) hurtAlly(gs, t, arenaDamage(m.atk, t.def), '#db2777', m);
+        if (dist(t, m) > rad) continue;
+        if (arenaLosBlocked(m.x, m.y, t.x, t.y)) continue;   // 벽 너머는 못 때린다 — 아군 광역과 같은 규칙
+        hurtAlly(gs, t, arenaDamage(m.atk, t.def), '#db2777', m);
       }
       gs.arena.bursts.push({ x: m.x, y: m.y, r: rad, color: '#db2777', t: 0, dur: 0.4 });
       if (typeof FX !== 'undefined') FX.shake(3, 0.15);

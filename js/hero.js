@@ -725,6 +725,15 @@ function castSheet(key, x, y, size, color, dur) {
 }
 // 영웅이 지금 서 있는 화면 좌표. 하단에 있으면 아레나의 영웅 유닛,
 // 상단이면 방어 격자 위의 좌표, 둘 다 없으면 아레나 한가운데.
+// 벽에 가리지 않은 것만. 전부 가려져 있으면 **빈 배열**이다 —
+// 부르는 쪽은 그때 시전을 접는다(break). 아무 일도 안 하는 것처럼 보이지만
+// MP와 쿨다운을 쓰지 않으므로 손해가 아니고, 자리를 옮겨 다시 누르면 된다.
+// 벽 너머로 때려 주는 것보다 이쪽이 낫다 — 그게 이 버그의 시작이었다.
+function losVisible(mobs) {
+  const c = heroSpot(gs);
+  return mobs.filter(m => !arenaLosBlocked(c.x, c.y, m.x, m.y));
+}
+
 function heroSpot(gs) {
   const h = gs.battle && gs.battle.ourTeam ? gs.battle.ourTeam.find(u => u.isHero && !u.dead) : null;
   if (h) return { x:h.x, y:h.y };
@@ -798,7 +807,11 @@ function castHeroActive(gs, id, opts) {
     }
     case 'a_smite': {
       if (!mobs.length) break;
-      const t = mobs.reduce((a, m) => (m.hp > a.hp ? m : a), mobs[0]);
+      // 🪨 벽 뒤는 후보에서 뺀다. 전부 가려져 있으면 그냥 원래대로 —
+      // 큰 버튼을 눌렀는데 아무 일도 안 나는 것이 제일 나쁘다.
+      const _sc = losVisible(mobs);
+      if (!_sc.length) break;
+      const t = _sc.reduce((a, m) => (m.hp > a.hp ? m : a), _sc[0]);
       const dmg = arenaDamage(atk * 4.5, t.def);
       hurtMob(gs, t, dmg, '#fbbf24');
       castFx('pillar', { x:t.x, y:t.y + 8, h:130, w:30, color:'#fbbf24', dur:0.5 });
@@ -829,6 +842,8 @@ function castHeroActive(gs, id, opts) {
       const cx = h ? h.x : arenaCenter().x, cy = h ? h.y : arenaCenter().y;
       let n = 0;
       for (const m of mobs) {
+        // 🪨 벽 너머는 끌어오지도, 때리지도 않는다 (반경 제한이 아예 없던 자리다)
+        if (arenaLosBlocked(cx, cy, m.x, m.y)) continue;
         const d = Math.hypot(m.x - cx, m.y - cy);
         if (d > 4) { m.x += (cx - m.x) * 0.55; m.y += (cy - m.y) * 0.55; clampToArena(m, m.radius); }
         hurtMob(gs, m, arenaDamage(atk * 1.6, m.def), '#a5b4fc');
@@ -842,7 +857,7 @@ function castHeroActive(gs, id, opts) {
     // ⚔️ 검성 전용 ───────────────────────────────────────────────────────
     case 'a_whirl': {
       const c = heroSpot(gs), R = 92;
-      const hit = mobs.filter(m => Math.hypot(m.x - c.x, m.y - c.y) <= R);
+      const hit = mobs.filter(m => Math.hypot(m.x - c.x, m.y - c.y) <= R && !arenaLosBlocked(c.x, c.y, m.x, m.y));
       if (!hit.length) break;
       for (const m of hit) {
         hurtMob(gs, m, arenaDamage(atk * 2.2, m.def), '#f87171');
@@ -859,7 +874,9 @@ function castHeroActive(gs, id, opts) {
     case 'a_exec': {
       if (!mobs.length) break;
       // 가장 약해진 놈부터 — '깎아 둔 것을 끊는' 스킬이라 체력 비율로 고른다
-      const t = mobs.reduce((a, m) => ((m.hp / m.maxHp) < (a.hp / a.maxHp) ? m : a), mobs[0]);
+      const _ec = losVisible(mobs);
+      if (!_ec.length) break;
+      const t = _ec.reduce((a, m) => ((m.hp / m.maxHp) < (a.hp / a.maxHp) ? m : a), _ec[0]);
       const low = (t.hp / t.maxHp) <= 0.25;
       const dmg = low ? t.hp : arenaDamage(atk * 6, t.def);
       hurtMob(gs, t, dmg, '#f43f5e');
@@ -924,7 +941,7 @@ function castHeroActive(gs, id, opts) {
     // 🔮 술사 전용 ────────────────────────────────────────────────────────
     case 'a_nova': {
       const c = heroSpot(gs), R = 130;
-      const hit = mobs.filter(m => Math.hypot(m.x - c.x, m.y - c.y) <= R);
+      const hit = mobs.filter(m => Math.hypot(m.x - c.x, m.y - c.y) <= R && !arenaLosBlocked(c.x, c.y, m.x, m.y));
       if (!hit.length) break;
       for (const m of hit) {
         hurtMob(gs, m, arenaDamage(atk * 2.4, m.def), '#67e8f9');
@@ -944,8 +961,11 @@ function castHeroActive(gs, id, opts) {
         let bi = 0, bd = Infinity;
         for (let i = 0; i < rest.length; i++) {
           const d = Math.hypot(rest[i].x - from.x, rest[i].y - from.y);
+          // 🪨 벽 너머로는 안 튄다 — 매 홉마다 본다
+          if (arenaLosBlocked(from.x, from.y, rest[i].x, rest[i].y)) continue;
           if (d < bd) { bd = d; bi = i; }
         }
+        if (bd === Infinity) break;
         const m = rest.splice(bi, 1)[0];
         if (typeof FX !== 'undefined') FX.spark(from.x, from.y, m.x, m.y, '#c4b5fd');
         castFx('beam', { x1:from.x, y1:from.y, x2:m.x, y2:m.y, w:7, color:'#c4b5fd', dur:0.3 });
@@ -976,7 +996,9 @@ function castHeroActive(gs, id, opts) {
     case 'a_arrows': {
       if (!mobs.length) break;
       const dmg = arenaDamage(atk * 1.9, 0);
+      const _ac = heroSpot(gs);
       for (const m of mobs) {
+        if (arenaLosBlocked(_ac.x, _ac.y, m.x, m.y)) continue;   // 🪨 벽 너머는 안 맞는다
         hurtMob(gs, m, arenaDamage(atk * 1.9, m.def), '#86efac', true, null);
         castSheet('fx.nova', m.x, m.y, 46, '#86efac', 0.4);
       }
@@ -997,7 +1019,8 @@ function castHeroActive(gs, id, opts) {
         const t = ((m.x-c.x)*(ex-c.x) + (m.y-c.y)*(ey-c.y)) / ((ex-c.x)**2 + (ey-c.y)**2);
         if (t < 0) return false;
         const px = c.x + (ex-c.x)*Math.min(1,t), py = c.y + (ey-c.y)*Math.min(1,t);
-        return Math.hypot(m.x-px, m.y-py) <= 22 + m.radius;
+        if (Math.hypot(m.x-px, m.y-py) > 22 + m.radius) return false;
+        return !arenaLosBlocked(c.x, c.y, m.x, m.y);   // 🪨 벽에서 멈춘다
       });
       if (!hit.length) break;
       for (const m of hit) {
