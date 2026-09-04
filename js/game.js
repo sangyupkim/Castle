@@ -160,6 +160,7 @@ function newState() {
     lobbyScroll: 0,     // 캠프 기록 탭 스크롤
     patchScroll: 0,     // 📋 업데이트 소식 스크롤
     guideScroll: 0,     // 📖 게임 가이드 스크롤
+    sheetScroll: 0,     // 📄 상세 시트 스크롤
     guideChapter: 0,    // 📖 보고 있는 장
     wallRepairs:0,      // 이번 런에서 성벽을 몇 번 보수했는지 (비용 체증)
     bossPick:'random',  // 👹 보스를 어디서 맞이할지 (준비 화면에서 고른다)
@@ -199,7 +200,7 @@ function newState() {
          pauseResumeBtn:null, pauseGiveUpBtn:null,
          titlePatchBtn:null, patchCloseBtn:null,
          backupExportBtn:null, backupImportBtn:null, backupMsg:null,
-         tutReplayBtn:null, achBtns:[], achClaimAllBtn:null, tutResetTipBtn:null, guideReplayBtn:null, campBtns:[], campGroupBtns:[], relicBtns:[], relicSellBtns:[], cardMetaBtns:[], cardCatBtns:[], cardBanBtns:[], cardBackBtn:null,
+         tutReplayBtn:null, achBtns:[], achClaimAllBtn:null, tutResetTipBtn:null, guideReplayBtn:null, campBtns:[], campGroupBtns:[], campRowBtns:[], relicBtns:[], relicSellBtns:[], cardMetaBtns:[], cardCatBtns:[], cardBanBtns:[], cardBackBtn:null,
          rankSubmitBtn:null, rankBoardBtns:[], rankReloadBtn:null,
          pauseCardsBtn:null, runCardsCloseBtn:null, runCardsScroll:null, towerPromoteBtn:null, forgeAutoBtns:[],
          bossPickBtns:[], bgmToggleBtn:null, sfxToggleBtn:null,
@@ -450,6 +451,11 @@ let _drag = null;      // { y0, scroll0, region }
 let _didDrag = false;
 
 function scrollRegionAt(p) {
+  // 📄 상세 시트가 열려 있으면 화면 전체가 그 문서다. 가이드보다도 위에 있다 —
+  // 가이드 안에서 시트를 열 일은 없지만, 순서를 못 박아 두면 나중에 헷갈리지 않는다.
+  if (typeof sheetOpen === 'function' && sheetOpen()) {
+    return { x:0, y:SHEET_HEAD_H, w:CW, h:CH-SHEET_HEAD_H, max: sheetScrollMax(), kind:'sheet' };
+  }
   // 📖 가이드가 열려 있으면 화면 전체가 그 문서다. 장 탭 아래만 굴린다.
   if (_guideOpen && typeof guideScrollMax === 'function') {
     return { x:0, y:84, w:CW, h:CH-84, max: guideScrollMax(), kind:'guide' };
@@ -477,12 +483,14 @@ function beginDrag(p) {
   _pressAt = { x: p.x, y: p.y };
   const r = scrollRegionAt(p);
   _drag = r ? { y0: p.y, x0: p.x, max: r.max, axis: r.axis === 'x' ? 'x' : 'y',
-                kind: r.kind === 'guide'      ? 'guide'
+                kind: r.kind === 'sheet'      ? 'sheet'
+                    : r.kind === 'guide'      ? 'guide'
                     : r.kind === 'patch'      ? 'patch'
                     : r === gs.ui.pickScroll  ? 'pick'
                     : r === gs.ui.briefScroll ? 'brief'
                     : r === gs.ui.lobbyScroll ? 'lobby' : 'town',
-                scroll0: r.kind === 'guide'      ? (gs.guideScroll||0)
+                scroll0: r.kind === 'sheet'      ? (gs.sheetScroll||0)
+                       : r.kind === 'guide'      ? (gs.guideScroll||0)
                        : r.kind === 'patch'      ? (gs.patchScroll||0)
                        : r === gs.ui.pickScroll  ? (gs.pickScroll||0)
                        : r === gs.ui.briefScroll ? (gs.briefScroll||0)
@@ -499,7 +507,8 @@ function moveDrag(p) {
   const d = _drag.axis === 'x' ? (p.x - _drag.x0) : (p.y - _drag.y0);
   if (!_didDrag) return;
   const v = Math.max(0, Math.min(_drag.max, _drag.scroll0 - d));
-  if      (_drag.kind === 'guide') gs.guideScroll = v;
+  if      (_drag.kind === 'sheet') gs.sheetScroll = v;
+  else if (_drag.kind === 'guide') gs.guideScroll = v;
   else if (_drag.kind === 'patch') gs.patchScroll = v;
   else if (_drag.kind === 'pick')  gs.pickScroll  = v;
   else if (_drag.kind === 'brief') gs.briefScroll = v;
@@ -543,7 +552,8 @@ window.addEventListener('wheel', e=>{
   if (!r) return;
   e.preventDefault();
   // 가로 띠는 세로 휠로도 밀리게 한다 — 마우스에 가로 휠이 없는 쪽이 흔하다
-  if      (r.kind === 'guide')      gs.guideScroll = Math.max(0, Math.min(r.max, (gs.guideScroll||0) + e.deltaY));
+  if      (r.kind === 'sheet')      gs.sheetScroll = Math.max(0, Math.min(r.max, (gs.sheetScroll||0) + e.deltaY));
+  else if (r.kind === 'guide')      gs.guideScroll = Math.max(0, Math.min(r.max, (gs.guideScroll||0) + e.deltaY));
   else if (r.kind === 'patch')      gs.patchScroll = Math.max(0, Math.min(r.max, (gs.patchScroll||0) + e.deltaY));
   else if (r === gs.ui.pickScroll)  gs.pickScroll  = Math.max(0, Math.min(r.max, (gs.pickScroll||0) + (e.deltaX || e.deltaY)));
   else if (r === gs.ui.briefScroll) gs.briefScroll = Math.max(0, Math.min(r.max, (gs.briefScroll||0) + e.deltaY));
@@ -670,6 +680,14 @@ function tapsLocked() { return (typeof performance !== 'undefined' ? performance
 
 function tap({x,y}) {
   if (_assetsLoading) return;   // 로딩 화면에서는 아무것도 안 받는다
+  // 📄 상세 시트가 열려 있으면 화면이 무엇이든 이것만 받는다.
+  // 시트는 목록 위에 덮여 있어서, 뒤 버튼이 살아 있으면 설명을 읽다가
+  // 그 아래 있던 [강화] 같은 것을 눌러 골드를 쓰게 된다.
+  if (typeof sheetOpen === 'function' && sheetOpen()) {
+    SFX.unlock();
+    if (hitTest(x, y, gs.ui.sheetCloseBtn || {})) { closeSheet(); SFX.click(); }
+    return;
+  }
   // 📖 가이드가 열려 있으면 화면이 무엇이든 이것만 받는다 —
   // 뒤의 버튼이 살아 있으면 읽다가 판이 시작되거나 보석을 쓰게 된다.
   if (_guideOpen) {
@@ -1205,6 +1223,11 @@ function handleLobbyTap(x, y) {
         spawnFloaty(`실패 — +${r.after} 그대로`, CW/2, 300, '#94a3b8'); SFX.denied();
       }
       return;
+    }
+    // 📄 줄 아무 데나 누르면 상세가 열린다. [단련] 버튼을 **먼저** 봤으므로
+    // 굴리려다 시트가 열리는 일은 없다 — 버튼 밖을 눌렀을 때만 여기 온다.
+    for (const b of gs.ui.campRowBtns||[]) {
+      if (hitTest(x, ry, b)) { campTrackSheet(gs, b.id); SFX.click(); return; }
     }
     return;
   }
@@ -2703,6 +2726,10 @@ function frame(ts) {
   // 📖 가이드는 타이틀에서도 캠프에서도 열린다 — 맨 위에 덮는다
   if (_guideOpen && typeof renderGuideBook === 'function') {
     renderGuideBook(ctx, gs);
+  }
+  // 📄 상세 시트는 그보다도 위 — 목록에서 카드를 눌러 연 것이라 가장 앞이다
+  if (typeof sheetOpen === 'function' && sheetOpen() && typeof renderSheet === 'function') {
+    renderSheet(ctx, gs);
   }
   // 배경음 — 화면과 상황에 맞는 곡으로. 같은 곡이면 아무 일도 하지 않는다.
   if (!_titleScreen) { try { BGM.sync(gs, wm); } catch (e) {} }

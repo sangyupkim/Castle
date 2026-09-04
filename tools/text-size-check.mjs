@@ -81,6 +81,25 @@ const report = await pg.evaluate(({ scale, minPx, minLen }) => {
                               d.battle.phase = 'fighting'; renderArenaPhase(cx, d); },
     '전투 · 조작':     () => { const d = st({ page:'battle', inRun:true, waveActive:true });
                               d.battle.phase = 'fighting'; renderBattleControls(cx, d); },
+    // ── 2단계 · 목록 화면 ──────────────────────────────────────────────
+    '준비 브리핑':      () => { const d = st({ page:'battle', inRun:true });
+                              d.battle.phase = 'hire'; renderBriefing(cx, d, BATTLE_Y); },
+    '마을':            () => renderTownPage(cx, st({ page:'town', gold:420 })),
+    '마을 · 병력':      () => renderTownPageArmy(cx, st({ page:'town', gold:420 }), 92),
+    '마을 · 타워':      () => renderTownPageTowers(cx, st({ page:'town', gold:420 }), 92),
+    '캠프':            () => renderLobbyCamp(cx, st({ page:'lobby' })),
+    '출전 준비':        () => renderLobbySortie(cx, st({ page:'lobby' })),
+    // 📄 상세 시트 — 목록에서 걷어낸 설명이 전부 여기로 오므로,
+    // 여기가 작으면 옮긴 의미가 없다. 같은 기준으로 잰다.
+    '상세 시트':        () => { const d = st({ page:'lobby', soulStones:340 });
+                              const tk = campTracks().filter(t => t.group === 'tower')[0];
+                              if (!tk) return;
+                              campTrackSheet(d, tk.id);
+                              renderSheet(cx, d);
+                              closeSheet(); },
+    '📖 가이드북':      () => { const d = st({ page:'lobby' });
+                              d.guideChapter = 6;   // 계산식이 가장 많은 '규칙' 장
+                              renderGuideBook(cx, d); },
   };
   const out = [];
   for (const [name, fn] of Object.entries(screens)) {

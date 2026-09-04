@@ -3525,28 +3525,77 @@ function renderLobbySkill(ctx, gs) {
 //
 // 항목이 34개(성벽 1 · 타워 6 · 분기 18 · 용병 6 · 특수 3)라 한 화면에 다 펼치면
 // 아무것도 못 찾는다. 무리별로 접어 두고 고른 무리만 편다.
+// 🔥 단련 한 줄의 상세 — 줄에서 걷어낸 것이 전부 여기로 온다.
+// 줄에 있을 때는 8px이라 아무도 못 읽던 값들이다.
+function campTrackSheet(gs, id) {
+  const tr = campTracks().find(t => t.id === id);
+  if (!tr) return;
+  const lv    = campLevel(gs, id);
+  const maxed = lv >= CAMP_MAX_LV;
+  const cost  = campCost(gs, id);
+  const odds  = campOdds(gs, id);
+  const fail  = campFailOdds(gs, id);
+  const floorLv = campSafeFloor(gs, id);
+  const blocks = [];
+
+  blocks.push({ h: '지금' });
+  blocks.push({ steps: [[`+${lv}`, tr.desc(lv * tr.per)]] });
+  if (!maxed) {
+    blocks.push({ h: '한 단 더 올리면' });
+    blocks.push({ steps: [[`+${lv+1}`, tr.desc((lv+1) * tr.per)]] });
+  }
+
+  // 🌟 분기는 종류별 단련 **위에** 곱해진다. 그 합계를 적어야
+  // "분기를 타면 앞의 강화가 날아간다"는 오해가 생기지 않는다.
+  if (tr.group === 'branch' && tr.parentType) {
+    const parentLv = campLevel(gs, 'tw_' + tr.parentType);
+    const bd = campTowerBreakdown(gs, tr.parentType, tr.branchId);
+    blocks.push({ h: '합쳐서' });
+    blocks.push({ p: `${tr.parent} 단련 **+${parentLv}**과 이 갈래 **+${lv}**이 곱해져 ` +
+                     `공격력 **+${Math.round((bd.dmg-1)*1000)/10}%**입니다. ` +
+                     `분기를 타도 종류별 단련은 사라지지 않습니다.` });
+  }
+
+  if (!maxed) {
+    blocks.push({ h: `굴리면 — 💎${cost}` });
+    const rows = [['성공', `${Math.round(odds*100)}%  ·  +${lv} → +${lv+1}`]];
+    if (fail.keep > 0.001) rows.push(['실패 · 유지', `${Math.round(fail.keep*100)}%  ·  +${lv} 그대로`]);
+    if (fail.down > 0.001) rows.push(['실패 · 하락', `${Math.round(fail.down*100)}%  ·  +${lv-1}로 내려갑니다`]);
+    if (fail.brk  > 0.001) rows.push(['실패 · 파괴', `${Math.round(fail.brk*100)}%  ·  +${floorLv}까지 무너집니다`]);
+    blocks.push({ table: { head: ['결과', '확률'], rows } });
+    blocks.push({ tip: `${CAMP_SAFE_STEP}단마다 안전지대가 있어, 무너져도 **+${floorLv}** 아래로는 내려가지 않습니다.` });
+  } else {
+    blocks.push({ h: '끝까지 단련했습니다' });
+    blocks.push({ p: '더 올릴 것이 없습니다. 보석은 다른 줄에 쓰세요.' });
+  }
+
+  const st = campState(gs);
+  if ((st.tries||0) > 0) {
+    blocks.push({ p: `지금까지 전체 **${st.tries}번** 굴려 **${st.breaks||0}번** 무너졌습니다.` });
+  }
+  openSheet(`${tr.icon} ${tr.name}`, tr.parent ? `${tr.parent}의 갈래 · +${lv} / ${CAMP_MAX_LV}` : `+${lv} / ${CAMP_MAX_LV}`, blocks);
+}
+
 function renderLobbyCamp(ctx, gs) {
-  gs.ui.campBtns = []; gs.ui.campGroupBtns = [];
+  gs.ui.campBtns = []; gs.ui.campGroupBtns = []; gs.ui.campRowBtns = [];
   const L = gs.lobby;
   if (!L.campGroup) L.campGroup = 'tower';
   let y = LOBBY_BODY_Y + 10;
 
   ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillStyle='#fb923c'; ctx.font='bold 12px sans-serif';
-  ctx.fillText('🔥 단련 — 보석을 걸고 굴립니다', 14, y);
-  ctx.textAlign='right'; ctx.fillStyle=COLORS.gem; ctx.font='bold 11px sans-serif';
+  ctx.fillStyle='#fb923c'; setFont(ctx, 'title', 'bold');
+  ctx.fillText('🔥 단련', 14, y);
+  ctx.textAlign='right'; ctx.fillStyle=COLORS.gem; setFont(ctx, 'title', 'bold');
   ctx.fillText(`💎 ${gs.soulStones||0}`, CW-14, y);
-  y += 17;
-  ctx.textAlign='left'; ctx.fillStyle='#64748b'; ctx.font='9px sans-serif';
-  ctx.fillText(`대상마다 따로 오릅니다 · 실패하면 그대로거나 내려갑니다 · ${CAMP_SAFE_STEP}단마다 안전지대`, 14, y);
-  y += 15;
+  y += 24;
+  // 규칙 설명(9px 한 줄)은 지웠다. 줄마다 딸려 오던 실패 내역도 마찬가지다 —
+  // 전부 각 줄을 눌러 여는 시트로 옮겼다. 여기 남기면 어느 것도 못 읽는다.
+  ctx.textAlign='left'; ctx.fillStyle='#64748b'; setFont(ctx, 'body');
   const stC = campState(gs);
-  if ((stC.tries||0) > 0) {
-    ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif';
-    ctx.fillText(`지금까지 ${stC.tries}번 굴려 ${stC.breaks||0}번 무너졌습니다`, 14, y);
-    y += 14;
-  }
-  y += 2;
+  ctx.fillText((stC.tries||0) > 0
+      ? `${stC.tries}번 굴려 ${stC.breaks||0}번 무너졌습니다 · 줄을 누르면 자세히`
+      : '보석을 걸고 굴립니다 · 줄을 누르면 자세히', 14, y);
+  y += 18;
 
   // ── 무리 고르기 ──
   const nG = CAMP_GROUPS.length;
@@ -3581,88 +3630,70 @@ function renderLobbyCamp(ctx, gs) {
     const fail  = campFailOdds(gs, tr.id);
     const floorLv = campSafeFloor(gs, tr.id);
     const aff   = !maxed && cost != null && (gs.soulStones||0) >= cost;
-    const rowH  = 74;
+    const rowH  = 88;   // 글자를 키운 만큼 줄도 높아진다
     // 분기 행은 부모 타워의 단련 단수를 함께 읽는다 — 그 값이 이 갈래에 곱해지고 있다
     const parentLv = tr.parentType ? campLevel(gs, 'tw_' + tr.parentType) : 0;
 
     uiPanel(ctx, 8, y, CW-16, rowH, 7, maxed?'#0f2a1a':'#0b1220', maxed?'#22c55e':tr.color, maxed?2:1.5);
 
+    // 줄에 남기는 것은 **지금 정할 것**뿐이다 — 무엇인지, 몇 단인지, 지금 무슨
+    // 효과인지, 굴리면 얼마이고 될 확률이 얼마인지. 나머지(다음 단계 효과,
+    // 실패 내역, 합계, 무너지는 바닥)는 줄을 누르면 열리는 시트로 옮겼다.
     ctx.textAlign='left'; ctx.textBaseline='top';
-    ctx.font='15px sans-serif'; ctx.fillText(tr.icon, 15, y+8);
-    ctx.fillStyle=tr.color; ctx.font='bold 11px sans-serif';
-    ctx.fillText(tr.name, 36, y+9);
+    setFont(ctx, 'title'); ctx.fillText(tr.icon, 15, y+8);
+    ctx.fillStyle=tr.color; setFont(ctx, 'body', 'bold');
+    ctx.fillText(tr.name, 40, y+11);
     if (tr.parent) {   // 분기는 어느 타워의 갈래인지 — 그리고 그 타워의 단련이 얼마인지
-      const px = 36 + ctx.measureText(tr.name).width + 26;
-      ctx.font='bold 8px sans-serif';
+      const px = 40 + ctx.measureText(tr.name).width + 10;
+      setFont(ctx, 'label', 'bold');
       ctx.fillStyle = parentLv > 0 ? '#22c55e' : '#475569';
-      ctx.fillText(parentLv > 0 ? `${tr.parent} +${parentLv}` : tr.parent, px, y+11);
+      ctx.fillText(parentLv > 0 ? `${tr.parent} +${parentLv}` : tr.parent, px, y+13);
     }
     ctx.textAlign='right';
-    ctx.fillStyle = maxed?'#86efac':'#e2e8f0'; ctx.font='bold 12px sans-serif';
-    ctx.fillText(`+${lv}`, CW-18, y+8);
-    ctx.fillStyle='#475569'; ctx.font='bold 8px sans-serif';
-    ctx.fillText(`/ ${CAMP_MAX_LV}`, CW-18, y+22);
+    ctx.fillStyle = maxed?'#86efac':'#e2e8f0'; setFont(ctx, 'title', 'bold');
+    ctx.fillText(`+${lv}`, CW-18, y+9);
 
-    ctx.textAlign='left';
-    ctx.fillStyle='#94a3b8'; ctx.font='bold 8px sans-serif';
-    ctx.fillText(tr.desc(lv * tr.per), 36, y+24);
-    if (!maxed) {
-      ctx.fillStyle='#4ade80'; ctx.font='bold 8px sans-serif';
-      ctx.fillText(`▲ ${tr.desc((lv+1) * tr.per)}`, 36, y+35);
-    }
-    // 🌟 분기는 종류별 단련 **위에** 곱해진다. 그 합계를 적어야
-    // "분기를 타면 앞의 강화가 날아간다"는 오해가 생기지 않는다.
-    if (tr.group === 'branch' && (lv > 0 || parentLv > 0)) {
-      const bd = campTowerBreakdown(gs, tr.parentType, tr.branchId);
-      ctx.fillStyle = '#fb923c'; ctx.font='bold 8px sans-serif';
-      ctx.textAlign='right';
-      ctx.fillText(`합계 공격력 +${Math.round((bd.dmg-1)*1000)/10}%`, CW-18, y+35);
+    // 아직 안 올린 줄은 `공격력 +0% · 공속 +0% · 사거리 +0%`을 적고 있었다.
+    // 여섯 줄이 전부 그 문장이라 화면의 큰 몫을 0으로 채우고 있었던 셈이다.
+    // 0은 정보가 아니다 — 오른쪽 `+0`과 빈 막대가 이미 같은 말을 한다.
+    if (lv > 0) {
       ctx.textAlign='left';
+      ctx.fillStyle='#94a3b8'; setFont(ctx, 'body', 'bold');
+      ctx.fillText(tr.desc(lv * tr.per), 40, y+30);
     }
 
     // 단계 막대 — 안전지대에 눈금
-    const bx=15, bw=CW-30, seg=bw/CAMP_MAX_LV, by=y+47;
+    const bx=15, bw=CW-30, seg=bw/CAMP_MAX_LV, by=y+49;
     ctx.fillStyle='#1a2333'; ctx.fillRect(bx, by, bw, 4);
     ctx.fillStyle=tr.color;  ctx.fillRect(bx, by, bw * (lv/CAMP_MAX_LV), 4);
     ctx.fillStyle='rgba(8,13,24,0.8)';
     for (let i=CAMP_SAFE_STEP;i<CAMP_MAX_LV;i+=CAMP_SAFE_STEP) ctx.fillRect(bx + seg*i, by, 1, 4);
 
     if (maxed) {
-      ctx.textAlign='center'; ctx.fillStyle='#22c55e'; ctx.font='bold 10px sans-serif';
-      ctx.fillText('★ 끝까지 단련했습니다', CW/2, y+56);
+      ctx.textAlign='center'; ctx.fillStyle='#22c55e'; setFont(ctx, 'body', 'bold');
+      ctx.fillText('★ 끝까지 단련했습니다', CW/2, y+58);
     } else {
-      const bw2=98, bh2=20, bx2=CW-16-bw2, by2=y+52;
-      uiPanel(ctx, bx2, by2, bw2, bh2, 4, aff?'#2a1f08':'#12161f', aff?'#f59e0b':'#2a3140', 1);
-      ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillStyle=aff?'#fbbf24':'#475569'; ctx.font='bold 10px sans-serif';
-      ctx.fillText(`🎲 단련 💎${cost}`, bx2+bw2/2, by2+bh2/2);
+      const bw2=112, bh2=24, bx2=CW-16-bw2, by2=y+58;
+      drawBtn(ctx, bx2, by2, bw2, bh2, `🎲 단련 💎${cost}`,
+              aff?'#2a1f08':'#12161f', aff?'#fbbf24':'#475569', aff);
       if (aff) gs.ui.campBtns.push({x:bx2,y:by2,w:bw2,h:bh2,id:tr.id});
 
       ctx.textAlign='left'; ctx.textBaseline='middle';
-      ctx.fillStyle='#22c55e'; ctx.font='bold 9px sans-serif';
-      ctx.fillText(`성공 ${Math.round(odds*100)}%`, 15, by2+5);
-      const parts = [];
-      if (fail.keep > 0.001) parts.push(`유지 ${Math.round(fail.keep*100)}%`);
-      if (fail.down > 0.001) parts.push(`하락 ${Math.round(fail.down*100)}%`);
-      if (fail.brk  > 0.001) parts.push(`파괴 ${Math.round(fail.brk*100)}%`);
-      ctx.fillStyle = fail.brk > 0.001 ? '#f87171' : '#64748b';
-      ctx.font='bold 8px sans-serif';
-      ctx.fillText(`실패 ${parts.join(' · ')}`, 15, by2+16);
-      if (lv > CAMP_SAFE_STEP) {
-        ctx.fillStyle='#475569'; ctx.font='bold 8px sans-serif'; ctx.textAlign='right';
-        ctx.fillText(`무너져도 +${floorLv}`, bx2-8, by2+16);
-      }
+      ctx.fillStyle='#22c55e'; setFont(ctx, 'body', 'bold');
+      ctx.fillText(`성공 ${Math.round(odds*100)}%`, 15, by2+bh2/2);
     }
+    // 줄 전체가 시트를 여는 자리다 (단련 버튼은 위에서 먼저 잡는다)
+    gs.ui.campRowBtns.push({ x:8, y, w:CW-16, h:rowH, id:tr.id });
     ctx.textAlign='left'; ctx.textBaseline='top';
     y += rowH + 6;
   }
 
-  ctx.fillStyle='#334155'; ctx.font='9px sans-serif';
+  ctx.fillStyle='#64748b'; setFont(ctx, 'body');
   ctx.fillText(L.campGroup === 'tower'
-      ? '🏹 종류별 단련은 ★5 분기를 탄 뒤에도 그대로 남고, 분기 단련과 곱해집니다.'
+      ? '🏹 분기를 타도 이 단련은 남습니다'
     : L.campGroup === 'branch'
-      ? '🌟 분기 단련은 그 타워 종류의 단련 위에 곱해집니다 — 둘 다 올릴수록 세집니다.'
-      : '보석은 캠프에서만 씁니다 — 여기서 올린 것은 판이 끝나도 남습니다.', 14, y+2);
+      ? '🌟 타워 종류 단련 위에 곱해집니다'
+      : '💎 여기서 올린 것은 판이 끝나도 남습니다', 14, y+2);
   _lobbyBottom = y + 20;
 }
 
@@ -7313,7 +7344,9 @@ function _patchWrapDraw(ctx, text, x, y, maxW, lineH, color, boldColor) {
   for (const sp of spans) {
     // 한글은 단어 경계가 드물어 글자 단위로 접는다
     for (const ch of sp.t) {
-      ctx.font = sp.bold ? 'bold 10px sans-serif' : '10px sans-serif';
+      // 📋소식 · 📖가이드북 · 📄상세 시트의 **모든 문단**이 이 한 줄을 지나간다.
+      // 10px으로 박혀 있었고, 폰에서는 7.5px이었다 — 읽으라고 쓴 글이 그랬다.
+      setFont(ctx, 'body', sp.bold ? 'bold' : '');
       const w = ctx.measureText(ch).width;
       if (cx + w > x + maxW) { cx = x; cy += lineH; }
       ctx.fillStyle = sp.bold ? boldColor : color;
@@ -7406,6 +7439,186 @@ function renderPatchNotes(ctx, gs) {
 }
 function patchScrollMax() { return Math.max(0, _patchBottom - (CH - 46)); }
 
+// ─── 📄 문서 블록 ─────────────────────────────────────────────────────────────
+// 📖가이드북이 쓰던 블록 렌더러를 밖으로 뺐다. 이제 **상세 시트**도 같은 것을 쓴다.
+//
+// 목록 화면(마을·캠프)에서 글자를 키우려면 줄마다 붙은 설명을 걷어내야 하는데,
+// 걷어낸 설명이 갈 곳이 있어야 한다. 그 자리가 시트다 — 카드를 누르면 열리고,
+// 여기서는 자리가 넉넉하니 큰 글자로 마음껏 적을 수 있다.
+//
+// 블록 종류: {h} 소제목 · {p} 문단 · {tip} 요령 · {steps} 흐름 · {table} 표
+//            {miss} 자주 하는 실수 · {fig} 삽화(가이드북 전용)
+const DOC_LH = 19;   // 본문 행간 — body(13)에 맞춘 값
+
+function renderDocBlocks(ctx, blocks, y) {
+  for (const b of blocks || []) {
+    if (b.h) {                                   // 소제목
+      y += 6;
+      ctx.fillStyle='#7dd3fc'; setFont(ctx,'body','bold');
+      ctx.fillText(b.h, 14, y);
+      y += 18;
+
+    } else if (b.p) {                            // 문단
+      y += _patchWrapDraw(ctx, b.p, 14, y, CW-28, DOC_LH, '#94a3b8', '#e2e8f0') + 8;
+
+    } else if (b.tip) {                          // 💡 요령 — 왼쪽 금색 선
+      const h = _patchMeasure(ctx, b.tip, CW-28-16, DOC_LH);
+      uiPanel(ctx, 12, y-4, CW-24, h+10, 5, '#1a1608', '#7c5e18', 1);
+      ctx.fillStyle='#fbbf24'; ctx.fillRect(12, y-4, 2.5, h+10);
+      _patchWrapDraw(ctx, '💡 ' + b.tip, 22, y+1, CW-28-16, DOC_LH, '#c9a961', '#fbbf24');
+      y += h + 16;
+
+    } else if (b.steps) {                        // 번호 없는 흐름
+      for (const [lab, txt] of b.steps) {
+        setFont(ctx,'label','bold');
+        const lw = Math.max(52, ctx.measureText(lab).width + 12);
+        uiPanel(ctx, 14, y-2, lw, 17, 4, '#0d1b2e', '#2563eb', 1);
+        ctx.fillStyle='#60a5fa'; ctx.textAlign='center';
+        ctx.fillText(lab, 14+lw/2, y+2);
+        ctx.textAlign='left';
+        const tx2 = 14 + lw + 8;
+        const hh = _patchWrapDraw(ctx, txt, tx2, y+1, CW - tx2 - 14, DOC_LH, '#94a3b8', '#e2e8f0');
+        y += Math.max(22, hh + 7);
+      }
+      y += 4;
+
+    } else if (b.table) {                        // 표
+      const cols = b.table.head.length;
+      // 첫 칸은 좁게, 마지막 칸이 설명을 받는다
+      const w0 = cols === 2 ? 104 : 78;
+      const ws = cols === 2 ? [w0, CW-28-w0]
+                            : [w0, (CW-28-w0)*0.42, (CW-28-w0)*0.58];
+      setFont(ctx,'label','bold'); ctx.fillStyle='#475569';
+      let cx = 14;
+      b.table.head.forEach((hd, i) => { ctx.fillText(hd, cx, y); cx += ws[i]; });
+      y += 14;
+      ctx.strokeStyle='rgba(71,85,105,0.5)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(14, y-3.5); ctx.lineTo(CW-14, y-3.5); ctx.stroke();
+      for (const row of b.table.rows) {
+        let rh = 0; cx = 14;
+        row.forEach((cell, i) => {
+          const h = _patchWrapDraw(ctx, cell, cx, y, ws[i]-8, DOC_LH,
+                                   i === 0 ? '#cbd5e1' : '#94a3b8', '#e2e8f0');
+          rh = Math.max(rh, h); cx += ws[i];
+        });
+        y += Math.max(17, rh + 4);
+      }
+      y += 8;
+
+    } else if (b.fig) {                          // 🖼 삽화 — 진짜 게임 화면
+      // 그림 파일이 아니라 렌더러를 불러 그린 것이다(guidescene.js).
+      // 못 그렸으면 통째로 건너뛴다 — 삽화가 없다고 문서를 못 읽으면 안 된다.
+      const img = (typeof guideScene === 'function') ? guideScene(b.fig) : null;
+      if (img) {
+        y += 2;
+        // 화면 그대로임을 알리는 테 — 문서 안의 '창'으로 읽히게 한다
+        const ix = Math.round((CW - img.width) / 2);   // 줄여 넣은 장면은 가운데로
+        ctx.fillStyle = '#0b1220'; ctx.fillRect(0, y, CW, img.height + 8);
+        ctx.drawImage(img, ix, y + 4);
+        ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, y + 0.5); ctx.lineTo(CW, y + 0.5);
+        ctx.moveTo(0, y + img.height + 7.5); ctx.lineTo(CW, y + img.height + 7.5);
+        ctx.stroke();
+        if (ix > 0) { ctx.strokeRect(ix - 0.5, y + 3.5, img.width + 1, img.height + 1); }
+        y += img.height + 14;
+        // 번호 풀이 — 그림 위의 핀과 같은 번호를 단다
+        const leg = (typeof guideSceneLegend === 'function') ? guideSceneLegend(b.fig) : [];
+        leg.forEach(([lab, txt], i) => {
+          const bx2 = 16, by2 = y + 6.5, r2 = 8;
+          ctx.beginPath(); ctx.arc(bx2 + r2, by2, r2, 0, Math.PI*2);
+          ctx.fillStyle = '#fbbf24'; ctx.fill();
+          ctx.fillStyle = '#1c1206'; ctx.font = 'bold 10px sans-serif';
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(String(i+1), bx2 + r2, by2 + 0.5);
+          ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+          ctx.fillStyle = '#fbbf24'; ctx.font = 'bold 10px sans-serif';
+          ctx.fillText(lab, bx2 + r2*2 + 7, y + 1);
+          const lw2 = ctx.measureText(lab).width;
+          const tx3 = bx2 + r2*2 + 7 + lw2 + 7;
+          const hh2 = _patchWrapDraw(ctx, txt, tx3, y + 1, CW - tx3 - 12, 14, '#94a3b8', '#e2e8f0');
+          y += Math.max(18, hh2 + 5);
+        });
+        y += 6;
+      }
+
+    } else if (b.miss) {                         // 자주 하는 실수
+      const [bad, fix] = b.miss;
+      ctx.fillStyle='#f87171'; setFont(ctx,'label','bold');
+      ctx.fillText('✗ ' + bad, 14, y);
+      y += 15;
+      y += _patchWrapDraw(ctx, fix, 24, y, CW-38, DOC_LH, '#94a3b8', '#e2e8f0') + 11;
+    }
+  }
+  return y;
+}
+
+// ─── 📄 상세 시트 ─────────────────────────────────────────────────────────────
+// 목록 화면의 카드에서 걷어낸 설명이 가는 곳.
+//
+// 카드 한 줄에 이름·수치·설명·조건을 다 넣으려면 8px까지 내려가야 한다. 그러면
+// 셋 다 못 읽는다. 카드에는 **이름과 지금 정할 수치 하나**만 두고, 나머지는
+// 여기로 옮긴다 — 시트는 화면 전체를 쓰므로 자리를 아낄 이유가 없다.
+//
+// 열려 있는 동안 뒤 화면의 탭은 전부 막는다(game.js). 읽다가 보석을 쓰면 안 된다.
+let _sheet = null;          // { title, sub, blocks }
+let _sheetBottom = 0;
+
+function openSheet(title, sub, blocks) {
+  _sheet = { title, sub, blocks: blocks || [] };
+  if (typeof gs !== 'undefined' && gs) gs.sheetScroll = 0;
+}
+function closeSheet() { _sheet = null; }
+function sheetOpen()  { return !!_sheet; }
+function sheetScrollMax() {
+  return Math.max(0, _sheetBottom - (CH - SHEET_HEAD_H));
+}
+
+const SHEET_HEAD_H = 52;
+
+function renderSheet(ctx, gs) {
+  if (!_sheet) return;
+  gs.ui.sheetCloseBtn = null;
+
+  ctx.fillStyle = '#070b12'; ctx.fillRect(0, 0, CW, CH);
+
+  // 머리 — 무엇을 보고 있는지와 닫기. 스크롤해도 늘 남는다.
+  ctx.fillStyle = '#0b1220'; ctx.fillRect(0, 0, CW, SHEET_HEAD_H);
+  ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, SHEET_HEAD_H-0.5); ctx.lineTo(CW, SHEET_HEAD_H-0.5); ctx.stroke();
+
+  const cbw = 58, cbh = 30, cbx = CW - cbw - 10, cby = (SHEET_HEAD_H - cbh) / 2;
+  ctx.textAlign='left'; ctx.textBaseline='middle';
+  ctx.fillStyle='#fbbf24'; setFont(ctx, 'title', 'bold');
+  ctx.fillText(_sheet.title, 14, _sheet.sub ? SHEET_HEAD_H/2 - 8 : SHEET_HEAD_H/2);
+  if (_sheet.sub) {
+    ctx.fillStyle='#94a3b8'; setFont(ctx, 'body');
+    ctx.fillText(_sheet.sub, 14, SHEET_HEAD_H/2 + 12);
+  }
+  drawBtn(ctx, cbx, cby, cbw, cbh, '닫기', '#1e293b', '#cbd5e1', true);
+  gs.ui.sheetCloseBtn = { x:cbx, y:cby, w:cbw, h:cbh };
+
+  // 본문
+  const top = SHEET_HEAD_H;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, top, CW, CH - top); ctx.clip();
+  ctx.translate(0, -(gs.sheetScroll || 0));
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  let y = renderDocBlocks(ctx, _sheet.blocks, top + 14);
+  ctx.restore();
+  _sheetBottom = y + (gs.sheetScroll || 0) - top + 20;
+
+  // 스크롤 막대
+  const view = CH - top;
+  if (_sheetBottom > view) {
+    const th = Math.max(30, view * (view / _sheetBottom));
+    const maxS = _sheetBottom - view;
+    const sy = top + (view - th) * Math.min(1, (gs.sheetScroll || 0) / Math.max(1, maxS));
+    ctx.fillStyle='rgba(148,163,184,0.30)';
+    roundRect(ctx, CW-5, sy, 3, th, 1.5); ctx.fill();
+  }
+}
+
 // ─── 📖 게임 가이드 ───────────────────────────────────────────────────────────
 // 소식(patch)과 같은 뼈대를 쓰되 한 가지가 다르다 — **장 탭**이 있다.
 // 여덟 장을 한 줄로 이어 붙이면 480px 폭에서 스크롤이 끝없이 길어져,
@@ -7484,107 +7697,9 @@ function renderGuideBook(ctx, gs) {
   y += 21;
   if (ch.lede) y += _patchWrapDraw(ctx, ch.lede, 14, y, CW-28, 14, '#64748b', '#94a3b8') + 8;
 
-  for (const b of ch.blocks) {
-    if (b.h) {                                   // 소제목
-      y += 6;
-      ctx.fillStyle='#7dd3fc'; ctx.font='bold 11px sans-serif';
-      ctx.fillText(b.h, 14, y);
-      y += 18;
+  y = renderDocBlocks(ctx, ch.blocks, y);
 
-    } else if (b.p) {                            // 문단
-      y += _patchWrapDraw(ctx, b.p, 14, y, CW-28, 15, '#94a3b8', '#e2e8f0') + 8;
-
-    } else if (b.tip) {                          // 💡 요령 — 왼쪽 금색 선
-      const h = _patchMeasure(ctx, b.tip, CW-28-16, 15);
-      uiPanel(ctx, 12, y-4, CW-24, h+10, 5, '#1a1608', '#7c5e18', 1);
-      ctx.fillStyle='#fbbf24'; ctx.fillRect(12, y-4, 2.5, h+10);
-      _patchWrapDraw(ctx, '💡 ' + b.tip, 22, y+1, CW-28-16, 15, '#c9a961', '#fbbf24');
-      y += h + 16;
-
-    } else if (b.steps) {                        // 번호 없는 흐름
-      for (const [lab, txt] of b.steps) {
-        ctx.font='bold 10px sans-serif';
-        const lw = Math.max(52, ctx.measureText(lab).width + 12);
-        uiPanel(ctx, 14, y-2, lw, 17, 4, '#0d1b2e', '#2563eb', 1);
-        ctx.fillStyle='#60a5fa'; ctx.textAlign='center';
-        ctx.fillText(lab, 14+lw/2, y+2);
-        ctx.textAlign='left';
-        const tx2 = 14 + lw + 8;
-        const hh = _patchWrapDraw(ctx, txt, tx2, y+1, CW - tx2 - 14, 14, '#94a3b8', '#e2e8f0');
-        y += Math.max(22, hh + 7);
-      }
-      y += 4;
-
-    } else if (b.table) {                        // 표
-      const cols = b.table.head.length;
-      // 첫 칸은 좁게, 마지막 칸이 설명을 받는다
-      const w0 = cols === 2 ? 104 : 78;
-      const ws = cols === 2 ? [w0, CW-28-w0]
-                            : [w0, (CW-28-w0)*0.42, (CW-28-w0)*0.58];
-      ctx.font='bold 9px sans-serif'; ctx.fillStyle='#475569';
-      let cx = 14;
-      b.table.head.forEach((hd, i) => { ctx.fillText(hd, cx, y); cx += ws[i]; });
-      y += 14;
-      ctx.strokeStyle='rgba(71,85,105,0.5)'; ctx.lineWidth=1;
-      ctx.beginPath(); ctx.moveTo(14, y-3.5); ctx.lineTo(CW-14, y-3.5); ctx.stroke();
-      for (const row of b.table.rows) {
-        let rh = 0; cx = 14;
-        row.forEach((cell, i) => {
-          const h = _patchWrapDraw(ctx, cell, cx, y, ws[i]-8, 14,
-                                   i === 0 ? '#cbd5e1' : '#94a3b8', '#e2e8f0');
-          rh = Math.max(rh, h); cx += ws[i];
-        });
-        y += Math.max(17, rh + 4);
-      }
-      y += 8;
-
-    } else if (b.fig) {                          // 🖼 삽화 — 진짜 게임 화면
-      // 그림 파일이 아니라 렌더러를 불러 그린 것이다(guidescene.js).
-      // 못 그렸으면 통째로 건너뛴다 — 삽화가 없다고 문서를 못 읽으면 안 된다.
-      const img = (typeof guideScene === 'function') ? guideScene(b.fig) : null;
-      if (img) {
-        y += 2;
-        // 화면 그대로임을 알리는 테 — 문서 안의 '창'으로 읽히게 한다
-        const ix = Math.round((CW - img.width) / 2);   // 줄여 넣은 장면은 가운데로
-        ctx.fillStyle = '#0b1220'; ctx.fillRect(0, y, CW, img.height + 8);
-        ctx.drawImage(img, ix, y + 4);
-        ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(0, y + 0.5); ctx.lineTo(CW, y + 0.5);
-        ctx.moveTo(0, y + img.height + 7.5); ctx.lineTo(CW, y + img.height + 7.5);
-        ctx.stroke();
-        if (ix > 0) { ctx.strokeRect(ix - 0.5, y + 3.5, img.width + 1, img.height + 1); }
-        y += img.height + 14;
-        // 번호 풀이 — 그림 위의 핀과 같은 번호를 단다
-        const leg = (typeof guideSceneLegend === 'function') ? guideSceneLegend(b.fig) : [];
-        leg.forEach(([lab, txt], i) => {
-          const bx2 = 16, by2 = y + 6.5, r2 = 8;
-          ctx.beginPath(); ctx.arc(bx2 + r2, by2, r2, 0, Math.PI*2);
-          ctx.fillStyle = '#fbbf24'; ctx.fill();
-          ctx.fillStyle = '#1c1206'; ctx.font = 'bold 10px sans-serif';
-          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-          ctx.fillText(String(i+1), bx2 + r2, by2 + 0.5);
-          ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-          ctx.fillStyle = '#fbbf24'; ctx.font = 'bold 10px sans-serif';
-          ctx.fillText(lab, bx2 + r2*2 + 7, y + 1);
-          const lw2 = ctx.measureText(lab).width;
-          const tx3 = bx2 + r2*2 + 7 + lw2 + 7;
-          const hh2 = _patchWrapDraw(ctx, txt, tx3, y + 1, CW - tx3 - 12, 14, '#94a3b8', '#e2e8f0');
-          y += Math.max(18, hh2 + 5);
-        });
-        y += 6;
-      }
-
-    } else if (b.miss) {                         // 자주 하는 실수
-      const [bad, fix] = b.miss;
-      ctx.fillStyle='#f87171'; ctx.font='bold 10px sans-serif';
-      ctx.fillText('✗ ' + bad, 14, y);
-      y += 15;
-      y += _patchWrapDraw(ctx, fix, 24, y, CW-38, 14, '#94a3b8', '#e2e8f0') + 11;
-    }
-  }
-
-  ctx.fillStyle='#334155'; ctx.font='9px sans-serif';
+  ctx.fillStyle='#475569'; setFont(ctx, 'body');
   ctx.fillText('위 탭으로 장을 옮깁니다.', 14, y);
   y += 26;
   ctx.restore();
