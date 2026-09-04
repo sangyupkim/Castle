@@ -67,9 +67,28 @@ const report = await pg.evaluate(({ scale, minPx, minLen }) => {
   const cx = c.getContext('2d');
   let log = [];
   const orig = cx.fillText.bind(cx);
+  // 글자 하나를 그릴 때마다 **실제로 차지하는 사각형**을 같이 적어 둔다.
+  // 크기만 봐서는 "13px인데 서로 겹쳐서 못 읽는" 경우를 못 잡는다 —
+  // 사용자가 스크린샷으로 알려 준 문제가 전부 그것이었다.
   cx.fillText = function (t, x, y, m) {
     const px = parseInt((this.font.match(/(\d+)px/) || [])[1] || 0, 10);
-    log.push([px, String(t)]);
+    const s = String(t);
+    let box = null;
+    try {
+      const mt = this.measureText(s);
+      const w  = mt.width;
+      const asc = mt.actualBoundingBoxAscent  || px * 0.8;
+      const des = mt.actualBoundingBoxDescent || px * 0.2;
+      const al = this.textAlign, bl = this.textBaseline;
+      const x0 = al === 'center' ? x - w / 2 : (al === 'right' || al === 'end') ? x - w : x;
+      // 세로는 baseline마다 기준이 다르다. 실제 잉크가 닿는 위쪽/아래쪽을 잡는다.
+      let yTop;
+      if (bl === 'top' || bl === 'hanging')            yTop = y;
+      else if (bl === 'middle')                        yTop = y - (asc + des) / 2;
+      else                                             yTop = y - asc;   // alphabetic·bottom
+      box = { x: x0, y: yTop, w, h: asc + des };
+    } catch (e) {}
+    log.push([px, s, box]);
     return orig(t, x, y, m);
   };
   const st = (patch) => { const d = newState(); d.battle = createBattle(); Object.assign(d, patch || {}); return d; };
@@ -97,9 +116,11 @@ const report = await pg.evaluate(({ scale, minPx, minLen }) => {
                               campTrackSheet(d, tk.id);
                               renderSheet(cx, d);
                               closeSheet(); },
-    '📖 가이드북':      () => { const d = st({ page:'lobby' });
-                              d.guideChapter = 6;   // 계산식이 가장 많은 '규칙' 장
-                              renderGuideBook(cx, d); },
+    // 가이드북은 장마다 짜임새가 다르다 — 전 장을 잰다
+    ...Object.fromEntries(GUIDE_CHAPTERS.map((chp, i) => [
+      `📖 가이드북 · ${chp.tab || chp.title || i}`,
+      () => { const d = st({ page:'lobby' }); d.guideChapter = i; renderGuideBook(cx, d); },
+    ])),
     // ── 3·4단계 · 나머지 전부 ─────────────────────────────────────────
     '결과 화면':        () => { const d = st({ page:'result' });
                               d.runSummary = { endless:true, endlessTier:30, gems:120, kills:900,
@@ -120,6 +141,16 @@ const report = await pg.evaluate(({ scale, minPx, minLen }) => {
     '로비 · 서약':      () => renderLobbyPact(cx, st({ page:'lobby', soulStones:5000 })),
     '로비 · 기록':      () => renderLobbyRecord(cx, st({ page:'lobby' })),
     '📋 소식':         () => renderPatchNotes(cx, st({ page:'lobby' })),
+    // 하단 고정 출전 바 — 두 상태 모두 잰다. 잠긴 상태가 한 줄에 두 문구를 얹고 있었다.
+    '출전 바 · 잠김':    () => renderSortieBar(cx, st({ page:'lobby' })),
+    '출전 바 · 열림':    () => { const d = st({ page:'lobby' });
+                              d.stats.bestEndless = 12; d.stats.trainCleared = true;
+                              renderSortieBar(cx, d); },
+    // 6장 전부를 잰다 — 장마다 줄 수가 달라 한 장만 봐서는 겹침을 놓친다
+    ...Object.fromEntries(TUTORIAL_STEPS.map((_, i) => [
+      `📘 기본 설명 ${i+1}/${TUTORIAL_STEPS.length}`,
+      () => { tut.active = true; tut.tip = null; tut.step = i; renderTutorial(cx, tut); },
+    ])),
     '타이틀':          () => renderTitleScreen(cx, 1),
     '일시정지':         () => renderPauseOverlay(cx),
     '이번 판 카드':      () => { const d = st({ page:'battle', inRun:true, runCardsOpen:true });
@@ -132,7 +163,34 @@ const report = await pg.evaluate(({ scale, minPx, minLen }) => {
     const rows = log.filter(r => r[0] > 0 && r[1].trim().length >= minLen);
     const bad = rows.filter(r => r[0] * scale < minPx)
                     .map(r => ({ px: r[0], on: +(r[0] * scale).toFixed(1), text: r[1] }));
-    out.push({ name, sentences: rows.length, bad, chars: log.reduce((a, r) => a + r[1].length, 0) });
+
+    // ── 겹침 ────────────────────────────────────────────────────────────
+    // 글자 상자 둘이 실제로 포개지면 둘 다 못 읽는다. 다만 **일부러** 포개는
+    // 것도 있다(아이콘 위에 숫자를 얹는 칩 같은 것). 그래서 조금 스치는 것은
+    // 넘기고, 한쪽 넓이의 상당 부분을 먹는 것만 문제로 센다.
+    // 한글은 단어 경계가 드물어 _patchWrapDraw가 **글자 단위로** 그린다.
+    // 그 조각들끼리는 원래 붙어 있는 것이라 볼 필요가 없다 — 문장만 본다.
+    const drawn = log.filter(r => r[2] && r[1].trim().length >= 3 && r[2].w > 1 && r[2].h > 1);
+    const overlaps = [];
+    for (let i = 0; i < drawn.length; i++) {
+      for (let j = i + 1; j < drawn.length; j++) {
+        const a = drawn[i][2], b = drawn[j][2];
+        const ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+        const oy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+        // 가로로 겹치는데 세로가 붙어 있으면 — 실제로 포개지지 않아도 못 읽는다.
+        // 사용자가 "글자가 너무 붙어 보인다"고 한 것이 이 경우다.
+        const hOver = ox > 0 ? ox / Math.min(a.w, b.w) : 0;
+        if (ox > 0.5 && oy > 0.5) {
+          const frac = (ox * oy) / Math.min(a.w * a.h, b.w * b.h);
+          if (frac < 0.06) continue;                  // 아주 살짝 스치는 것은 넘긴다
+          overlaps.push({ a: drawn[i][1], b: drawn[j][1], frac: +(frac*100).toFixed(0), kind:'겹침' });
+        } else if (hOver > 0.35 && oy > -1.5 && oy <= 0.5) {
+          overlaps.push({ a: drawn[i][1], b: drawn[j][1], frac: +(-oy).toFixed(1), kind:'붙음' });
+        }
+      }
+    }
+    out.push({ name, sentences: rows.length, bad, overlaps,
+               chars: log.reduce((a, r) => a + r[1].length, 0) });
   }
   return out;
 }, { scale: PHONE_SCALE, minPx: MIN_ON_PHONE, minLen: MIN_SENTENCE });
@@ -144,11 +202,21 @@ console.log(`\n기준: 360px 폰(배율 ${PHONE_SCALE}) 기준 ${MIN_ON_PHONE}px
 let fails = 0;
 for (const r of report) {
   if (r.err) { console.log(`❌ ${r.name} — 렌더 실패: ${r.err}`); fails++; continue; }
-  if (!r.bad.length) { console.log(`✅ ${r.name.padEnd(16)} 문장 ${String(r.sentences).padStart(3)}개 · 전부 통과 (총 ${r.chars}자)`); continue; }
-  fails += r.bad.length;
-  console.log(`❌ ${r.name.padEnd(16)} 문장 ${String(r.sentences).padStart(3)}개 중 ${r.bad.length}개가 너무 작다`);
-  for (const b of r.bad.slice(0, 8)) console.log(`     ${String(b.px).padStart(2)}px → ${String(b.on).padStart(4)}px  ${b.text}`);
-  if (r.bad.length > 8) console.log(`     … 외 ${r.bad.length - 8}개`);
+  const nSmall = r.bad.length, nOver = r.overlaps.length;
+  if (!nSmall && !nOver) {
+    console.log(`✅ ${r.name.padEnd(16)} 문장 ${String(r.sentences).padStart(3)}개 · 전부 통과 (총 ${r.chars}자)`);
+    continue;
+  }
+  fails += nSmall + nOver;
+  const bits = [];
+  if (nSmall) bits.push(`${nSmall}개가 너무 작다`);
+  if (nOver)  bits.push(`${nOver}쌍이 겹친다`);
+  console.log(`❌ ${r.name.padEnd(16)} ${bits.join(' · ')}`);
+  for (const b of r.bad.slice(0, 6)) console.log(`     작음  ${String(b.px).padStart(2)}px → ${String(b.on).padStart(4)}px  ${b.text}`);
+  if (nSmall > 6) console.log(`     … 외 ${nSmall - 6}개`);
+  for (const o of r.overlaps.slice(0, 8))
+    console.log(`     ${o.kind}  ${o.kind === '겹침' ? o.frac + '%' : o.frac + 'px'}  「${o.a}」 ↔ 「${o.b}」`);
+  if (nOver > 8) console.log(`     … 외 ${nOver - 8}쌍`);
 }
 console.log(fails === 0 ? '\n✅ 전부 통과\n' : `\n❌ ${fails}건\n`);
 process.exit(fails ? 1 : 0);

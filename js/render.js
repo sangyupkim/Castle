@@ -150,7 +150,12 @@ function wrapLines(ctx, text, maxW) {
   return out;
 }
 
-function drawBtn(ctx, x, y, w, h, label, bg, fg, on) {
+// sub를 주면 두 줄짜리 버튼이 된다.
+//
+// 두 줄 버튼이 화면마다 손으로 만들어져 있었고, 줄 간격이 전부 10px 시절 값(13px)
+// 이었다. 글자를 13px로 올리자 두 줄이 그대로 맞닿아 둘 다 못 읽게 됐다.
+// 간격을 한 군데서 정하면 다시는 어긋나지 않는다.
+function drawBtn(ctx, x, y, w, h, label, bg, fg, on, sub, subCol) {
   const live = on !== false;
   // 팩의 9슬라이스 틀을 깔고 그 위에 원래 색을 옅게 얹는다.
   // 색을 통째로 그림에 넘기면 초록=준비 / 빨강=위험 같은 신호가 사라진다 —
@@ -172,11 +177,23 @@ function drawBtn(ctx, x, y, w, h, label, bg, fg, on) {
   // 자리에 맞춰 무한정 줄이면 결국 원래대로 돌아가므로 micro에서 멈춘다.
   ctx.textAlign='center'; ctx.textBaseline='middle';
   const room = w - 12;
-  for (const size of ['body', 'label', 'micro']) {
-    setFont(ctx, size, 'bold');
-    if (ctx.measureText(label).width <= room || size === 'micro') break;
+  const fit = (t) => {
+    for (const size of ['body', 'label', 'micro']) {
+      setFont(ctx, size, 'bold');
+      if (ctx.measureText(t).width <= room || size === 'micro') break;
+    }
+  };
+  if (!sub) {
+    fit(label);
+    ctx.fillText(label, x+w/2, y+h/2);
+  } else {
+    // 두 줄은 가운데에서 위아래로 10px씩 — 13px 글자가 서로 닿지 않는 최소 간격이다
+    fit(label);
+    ctx.fillText(label, x+w/2, y+h/2-10);
+    ctx.fillStyle = live ? (subCol || '#94a3b8') : '#4b5563';
+    fit(sub);
+    ctx.fillText(sub, x+w/2, y+h/2+10);
   }
-  ctx.fillText(label, x+w/2, y+h/2);
 }
 
 // ─── Defense Zone ─────────────────────────────────────────────────────────────
@@ -1467,7 +1484,7 @@ function renderUIBar(ctx, gs, wm) {
   // 이 화면에서 유일하게 '지금 쓸 수 있는 것'이라 가장 크게 둔다
   ctx.fillStyle=COLORS.gold; setFont(ctx, 'hero', 'bold');
   ctx.textAlign='center';
-  ctx.fillText(`💰 ${Math.floor(gs.gold)}`, CW/2, cy-9);
+  ctx.fillText(`💰 ${Math.floor(gs.gold)}`, CW/2, cy-11);
 
   // 전투 적립 골드
   const bp = gs.battle.phase;
@@ -1485,7 +1502,7 @@ function renderUIBar(ctx, gs, wm) {
                 : bp==='fighting'||bp==='won' ? '#22c55e'
                 : bp.includes('defeat')||bp==='lost' ? '#ef4444' : COLORS.textDim;
   setFont(ctx, 'body', 'bold'); ctx.textAlign='center';
-  ctx.fillText(bLabel, CW/2, cy+12);
+  ctx.fillText(bLabel, CW/2, cy+16);   // 22px 골드와 13px 국면 표시가 맞닿지 않게 벌린다
 
   // 웨이브 시작 버튼
   const bw=110, bh=38, bx=CW-bw-6, by2=UIBAR_Y+(UIBAR_H-bh)/2;
@@ -1819,7 +1836,7 @@ function renderBriefing(ctx, gs, top) {
   }
 
   // ── 아레나 스폰 풀 ───────────────────────────────────────────────────────
-  const panelH = 74;
+  const panelH = 90;   // 아이콘 + 비율 + 이름 세 줄이 13px로 겹치지 않는 높이
   uiPanel(ctx, 6,y,CW-12,panelH,7, '#0a1019', '#3f1d1d', 1);
   ctx.fillStyle='#f87171'; setFont(ctx, 'body', 'bold'); ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillText('⚔️ 아레나 — 60초 내내 리젠 · 갈수록 촘촘하고 강해집니다', 12, y+7);
@@ -1842,18 +1859,18 @@ function renderBriefing(ctx, gs, top) {
   pool.forEach(([id,w],i) => {
     const t = BATTLE_MOB_TYPES[id]; if (!t) return;
     const px = 12 + i*(pw+5);
-    uiPanel(ctx, px,y+22,pw,44,4, '#140c0c', '#5b2121', 1);
+    uiPanel(ctx, px,y+22,pw,62,4, '#140c0c', '#5b2121', 1);
     ctx.fillStyle='#e2e8f0'; ctx.font='16px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
     ctx.fillText(t.icon, px+pw/2, y+26);
     ctx.fillStyle='#94a3b8'; setFont(ctx, 'body', 'bold');
     ctx.fillText(`${Math.round(w/total*100)}%`, px+pw/2, y+47);
     ctx.fillStyle='#475569'; setFont(ctx, 'body');
-    ctx.fillText(t.name, px+pw/2, y+57);
+    ctx.fillText(t.name, px+pw/2, y+65);
   });
   y += panelH + 6;
 
   // ── 상단 침입자 ──────────────────────────────────────────────────────────
-  const dh = 52;
+  const dh = 62;   // 이름 줄과 등급 태그 줄이 13px로 붙지 않는 높이
   uiPanel(ctx, 6,y,CW-12,dh,7, '#0a1019', '#1e3a5f', 1);
   ctx.fillStyle='#60a5fa'; setFont(ctx, 'body', 'bold'); ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillText('🏰 상단 침입자 — 기지에 닿으면 HP 손실', 12, y+7);
@@ -1875,7 +1892,7 @@ function renderBriefing(ctx, gs, top) {
     ctx.fillStyle=t.color; setFont(ctx, 'body', 'bold'); ctx.textAlign='left';
     ctx.fillText(`● ${t.name} ×${n}`, ex, y+26);
     ctx.fillStyle=cls.color; setFont(ctx, 'body', 'bold');
-    ctx.fillText(`[${cls.tag}] ${cls.name}`, ex, y+38);
+    ctx.fillText(`[${cls.tag}] ${cls.name}`, ex, y+44);
   });
   y += dh + 6;
 
@@ -1908,7 +1925,7 @@ function renderBriefing(ctx, gs, top) {
   ctx.fillText(`${heroTxt}  Lv.${gs.hero.level}`, CW-14, y+7);
   ctx.fillStyle='#64748b'; setFont(ctx, 'body', 'bold');
   ctx.fillText(`🏹 타워 ${gs.towers.length}기`, CW-14, y+23);
-  ctx.fillText(`🗿 케이브 Lv.${caveLevelOf(gs)}`, CW-14, y+36);
+  ctx.fillText(`🗿 케이브 Lv.${caveLevelOf(gs)}`, CW-14, y+44);   // 이모지가 붙은 13px 줄은 20px 넘게 띄워야 안 닿는다
 
   ctx.fillStyle='#475569'; setFont(ctx, 'body', 'bold'); ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillText('강화', 12, y+56);
@@ -1946,15 +1963,20 @@ function renderBriefing(ctx, gs, top) {
   y += bh2 + 6;
 
 
+  // 세 줄을 한 줄에 우겨넣던 자리다 — 13px에서는 좌우로도 위아래로도 겹쳐서
+  // 각자 한 줄씩 내려 쓴다. 어차피 이 아래는 스크롤 여백이다.
   setFont(ctx, 'body'); ctx.textAlign='center'; ctx.textBaseline='top';
   ctx.fillStyle='#22c55e';
-  ctx.fillText(`★ 완주 +${clearBonusGold(gs.wave)}💰 · 성벽 +${clearRepair(gs.wave)}HP    `, CW/2-52, y);
+  ctx.fillText(`★ 완주 +${clearBonusGold(gs.wave)}💰 · 성벽 +${clearRepair(gs.wave)}HP`, CW/2, y);
+  y += 22;
   ctx.fillStyle='#f87171';
-  ctx.fillText(`   🛡 후퇴 = 남은 시간 × ${RETREAT_DPS} 만큼 성벽 피해`, CW/2+78, y);
-  y += 12;
+  ctx.fillText(`🛡 후퇴 = 남은 시간 × ${RETREAT_DPS} 만큼 성벽 피해`, CW/2, y);
+  y += 22;
   ctx.fillStyle='#3f4a5c';
-  ctx.fillText('Space 시작 · A 자동/수동 · 방향키 부대 이동 · R 후퇴 · T 마을', CW/2, y);
-  _briefBottom = y + 14;
+  ctx.fillText('Space 시작 · A 자동/수동 · 방향키 부대 이동', CW/2, y);
+  y += 16;
+  ctx.fillText('R 후퇴 · T 마을', CW/2, y);
+  _briefBottom = y + 16;
 }
 
 // ─── 실시간 아레나 ───────────────────────────────────────────────────────────
@@ -2665,7 +2687,7 @@ function renderUpgradePick(ctx, gs) {
   ctx.fillText(`웨이브 ${gs.wave+1} 완료`, CW/2, 45);
 
   const cards = gs.upgradePick.cards;
-  const cardW=130, cardH=212, gap=12;
+  const cardW=130, cardH=236, gap=12;   // 설명 줄 간격을 13px→18px로 벌린 만큼 카드도 키운다
   const totalW = cards.length * cardW + (cards.length-1)*gap;
   const startY = 70;
 
@@ -2740,21 +2762,22 @@ function renderUpgradePick(ctx, gs) {
     for (const w of words) {
       const test = line ? line+' '+w : w;
       if (ctx.measureText(test).width > cardW-12) {
-        ctx.fillText(line, cx+cardW/2, lineY); line=w; lineY+=13;
+        ctx.fillText(line, cx+cardW/2, lineY); line=w; lineY+=18;
       } else { line=test; }
     }
     if (line) ctx.fillText(line, cx+cardW/2, lineY);
 
     // ★영웅 카드의 대가 — 좋은 것만 적으면 고민이 없다. 붉은 줄로 따로 세운다.
     if (card.bane) {
-      const byy = cy + cardH - 66;
+      // 설명이 세 줄까지 늘어나므로 고정 자리에 두면 그 위에 겹쳐 앉는다
+      const byy = Math.max(cy + cardH - 74, lineY + 24);
       ctx.strokeStyle='rgba(248,113,113,0.35)'; ctx.lineWidth=1;
       ctx.beginPath(); ctx.moveTo(cx+12, byy-5); ctx.lineTo(cx+cardW-12, byy-5); ctx.stroke();
       ctx.fillStyle='#f87171'; setFont(ctx, 'body');
       let bl='', bly=byy+1;
       for (const w of ('▼ ' + card.bane).split(' ')) {
         const t2 = bl ? bl+' '+w : w;
-        if (ctx.measureText(t2).width > cardW-14) { ctx.fillText(bl, cx+cardW/2, bly); bl=w; bly+=12; }
+        if (ctx.measureText(t2).width > cardW-14) { ctx.fillText(bl, cx+cardW/2, bly); bl=w; bly+=18; }
         else bl = t2;
       }
       if (bl) ctx.fillText(bl, cx+cardW/2, bly);
@@ -2824,7 +2847,7 @@ function renderUpgradePick(ctx, gs) {
   ctx.fillText('이번 런에서 고른 강화', 22, by2);
   ctx.textAlign='right'; ctx.fillStyle='#475569'; setFont(ctx, 'body', 'bold');
   ctx.fillText(`${(gs.activeUpgrades||[]).length}개`, CW-22, by2+1);
-  by2 += 17;
+  by2 += 21;
 
   const taken = (gs.activeUpgrades||[]).map(id => UPGRADE_CARDS.find(c=>c.id===id)).filter(Boolean);
   if (taken.length) {
@@ -2834,7 +2857,7 @@ function renderUpgradePick(ctx, gs) {
       const hit = counted.find(e => e.card.id === c.id);
       if (hit) hit.n++; else counted.push({ card:c, n:1 });
     }
-    const rowH = 17, perCol = 6, colW = (CW-44)/2;
+    const rowH = 20, perCol = 6, colW = (CW-44)/2;
     counted.slice(0, perCol*2).forEach((e, i) => {
       const col = Math.floor(i / perCol), row = i % perCol;
       const ex = 22 + col*colW, ey = by2 + row*rowH;
@@ -2869,7 +2892,7 @@ function renderUpgradePick(ctx, gs) {
     const nTier = endlessTier(nextIdx);
     const nMid  = (gs.mode === 'endless') && isMidBossTier(nTier);
     const nSide = nMid ? midBossSide(nTier) : null;
-    const npY = by2 + 6*17 + 16;
+    const npY = by2 + 6*20 + 16;
     const npH = nMid ? 100 : 78;
     uiPanel(ctx, 20, npY, CW-40, npH, 7, nMid ? '#180a10' : '#0a0f1a', nMid ? '#7f1d3a' : '#1e293b', nMid ? 1.5 : 1);
 
@@ -2924,7 +2947,7 @@ function renderUpgradePick(ctx, gs) {
   }
 
   // 현재 상태 요약
-  const sy = CH - 74;
+  const sy = CH - 80;   // 이름 줄과 값 줄을 18px 벌린 만큼 위로 올린다
   ctx.strokeStyle='#151b28'; ctx.lineWidth=1;
   ctx.beginPath(); ctx.moveTo(22, sy-12); ctx.lineTo(CW-22, sy-12); ctx.stroke();
   const stats = [
@@ -2941,7 +2964,7 @@ function renderUpgradePick(ctx, gs) {
     ctx.fillStyle='#334155'; setFont(ctx, 'body', 'bold');
     ctx.fillText(st[0], sx, sy);
     ctx.fillStyle=st[2]; setFont(ctx, 'body', 'bold');
-    ctx.fillText(st[1], sx, sy+14);
+    ctx.fillText(st[1], sx, sy+18);
   });
 }
 
@@ -3333,36 +3356,36 @@ function renderLobbySortie(ctx, gs) {
   if (open) y = _renderNightmareLadder(ctx, gs, y);
 
   // 해금된 편성
-  const th = 84;
+  const th = 126;   // 26px 칸에 13px 값을 우겨넣어 글자가 칸 밖으로 삐져나왔다
   uiPanel(ctx, 10,y,CW-20,th,7, '#0c1220', '#1e293b', 1);
   ctx.fillStyle='#f59e0b'; setFont(ctx, 'body', 'bold'); ctx.textBaseline='top';
   ctx.fillText('🔓 사용 가능', 18, y+9);
 
   const tws = unlockedTowers(), uns = unlockedUnits();
   // 잠긴 것도 회색으로 자리를 지킨다 — 무엇이 남았는지 보여야 목표가 된다
+  // 값은 칸 **안 아래쪽**에 한 줄로 따로 적는다 — 아이콘 위에 겹쳐 놓으면 둘 다 안 읽힌다
   const drawSlots = (label, ids, table, ty) => {
     ctx.fillStyle='#64748b'; setFont(ctx, 'body', 'bold'); ctx.textAlign='left'; ctx.textBaseline='top';
-    ctx.fillText(label, 18, ty+8);
+    ctx.fillText(label, 18, ty+12);
     ids.forEach((id, i) => {
       const t = table[id], on = isUnlocked(id);
-      const sx = 50 + i*32;
-      uiPanel(ctx, sx, ty, 26, 26, 5, on ? '#152238' : '#0e131e', on ? '#334155' : '#1a2130', 1);
-      ctx.globalAlpha = on ? 1 : 0.28;
-      ctx.font='14px sans-serif'; ctx.fillStyle='#e2e8f0';
+      const sx = 50 + i*42;
+      uiPanel(ctx, sx, ty, 36, 40, 5, on ? '#152238' : '#0e131e', on ? '#334155' : '#1a2130', 1);
+      ctx.globalAlpha = on ? 1 : 0.32;
+      // 잠긴 칸은 값 한 줄을 더 이고 있으므로 아이콘을 한 치수 줄인다
+      ctx.font = (on ? '18px' : '14px') + ' sans-serif'; ctx.fillStyle='#e2e8f0';
       ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText(t.icon, sx+13, ty+13);
+      ctx.fillText(t.icon, sx+18, on ? ty+20 : ty+12);
       ctx.globalAlpha = 1;
       if (!on) {
-        ctx.fillStyle='#0d1220';
-        ctx.fillRect(sx+16, ty+16, 11, 11);
-        ctx.fillStyle='#f59e0b'; setFont(ctx, 'body', 'bold');
-        ctx.fillText(`${unlockCost(id)}`, sx+21, ty+22);
+        ctx.fillStyle='#f59e0b'; setFont(ctx, 'label', 'bold');
+        ctx.fillText(`💎${unlockCost(id)}`, sx+18, ty+31);
       }
     });
     ctx.textAlign='left'; ctx.textBaseline='top';
   };
-  drawSlots('타워', TOWER_ORDER, TOWER_TYPES, y+22);
-  drawSlots('병력', UNIT_ORDER,  UNIT_TYPES,  y+50);
+  drawSlots('타워', TOWER_ORDER, TOWER_TYPES, y+28);
+  drawSlots('병력', UNIT_ORDER,  UNIT_TYPES,  y+76);
   ctx.textAlign='right'; ctx.fillStyle='#475569'; setFont(ctx, 'body', 'bold');
   ctx.fillText(`${tws.length}/${TOWER_ORDER.length} · ${uns.length}/${UNIT_ORDER.length}`, CW-18, y+9);
   ctx.textAlign='left';
@@ -3437,7 +3460,7 @@ function renderLobbySortie(ctx, gs) {
 
   // 다음 목표 — 보석을 어디에 쓰면 좋을지 한 줄로 짚어준다
   const nextUnlock = UNLOCK_DEFS.find(u => !isUnlocked(u.id));
-  const gh = 74;
+  const gh = 92;   // 목표 세 줄이 13px로 겹치지 않는 높이
   uiPanel(ctx, 10,y,CW-20,gh,7, '#0c1220', '#1e293b', 1);
   ctx.fillStyle='#22c55e'; setFont(ctx, 'body', 'bold');
   ctx.fillText('🎯 다음 목표', 18, y+9);
@@ -3450,7 +3473,7 @@ function renderLobbySortie(ctx, gs) {
     ctx.fillStyle = short ? '#f59e0b' : '#22c55e'; setFont(ctx, 'body', 'bold');
     ctx.fillText(short ? `💎 ${nextUnlock.cost - gs.soulStones} 더 필요` : `💎 ${nextUnlock.cost} — 지금 열 수 있습니다`, CW-18, gy);
     ctx.textAlign='left';
-    gy += 17;
+    gy += 20;
   }
   if (sp.owned < sp.total) {
     ctx.fillStyle='#94a3b8'; setFont(ctx, 'body');
@@ -3458,12 +3481,12 @@ function renderLobbySortie(ctx, gs) {
     ctx.textAlign='right'; ctx.fillStyle='#64748b'; setFont(ctx, 'body', 'bold');
     ctx.fillText(`💎 ${sp.totalCost - sp.spent}`, CW-18, gy);
     ctx.textAlign='left';
-    gy += 17;
+    gy += 20;
   }
   if (!nextUnlock && sp.owned >= sp.total) {
     ctx.fillStyle='#86efac'; setFont(ctx, 'body');
     ctx.fillText('스킬·해금을 전부 올렸습니다 — 📜 서약으로 더 깊이 내려가세요', 18, gy);
-    gy += 17;
+    gy += 20;
   }
   ctx.fillStyle='#475569'; setFont(ctx, 'body');
   ctx.fillText(`이번 하강 예상 보석 배율 ×${pactGemMult().toFixed(2)}`, 18, gy);
@@ -3613,8 +3636,8 @@ function renderLobbyCamp(ctx, gs) {
     ctx.textAlign='center'; ctx.textBaseline='middle';
     setFont(ctx, 'body'); ctx.fillStyle = on ? '#e2e8f0' : '#475569';
     ctx.fillText(g.icon, gx+gw/2, y+10);
-    ctx.fillStyle = on ? g.color : '#64748b'; ctx.font='bold 8px sans-serif';
-    ctx.fillText(lvs > 0 ? `${g.short} +${lvs}` : g.short, gx+gw/2, y+22);
+    ctx.fillStyle = on ? g.color : '#64748b'; setFont(ctx, 'label', 'bold');
+    ctx.fillText(lvs > 0 ? `${g.short} +${lvs}` : g.short, gx+gw/2, y+24);
     gs.ui.campGroupBtns.push({ x:gx, y, w:gw, h:gh, id:g.id });
   });
   ctx.textAlign='left'; ctx.textBaseline='top';
@@ -3834,10 +3857,10 @@ function renderLobbyCardMeta(ctx, gs) {
   ctx.fillText('🎴 패 — 무엇이 나올지를 삽니다', 14, y);
   ctx.textAlign='right'; ctx.fillStyle=COLORS.gem; setFont(ctx, 'body', 'bold');
   ctx.fillText(`💎 ${gs.soulStones||0}`, CW-14, y);
-  y += 17;
+  y += 20;
   ctx.textAlign='left'; ctx.fillStyle='#64748b'; setFont(ctx, 'body');
   ctx.fillText('단련과 달리 굴리지 않습니다 — 값을 내면 그대로 오릅니다', 14, y);
-  y += 16;
+  y += 20;
 
   // ── 기피 목록 고르는 화면 ────────────────────────────────────────────────
   if (L.cardCat) { _renderCardBanPicker(ctx, gs, y); return; }
@@ -4084,7 +4107,7 @@ function renderLobbyUnlock(ctx, gs) {
   ctx.textAlign='left';
   y += 18;
 
-  const rowH = 40;
+  const rowH = 52;   // 40px에 13px 두 줄(이름 + 종류·설명)을 넣으니 y+12와 y+25가 맞닿았다
   for (const d of UNLOCK_DEFS) {
     const owned = isUnlocked(d.id);
     const can   = !owned && gs.soulStones >= d.cost;
@@ -4093,18 +4116,18 @@ function renderLobbyUnlock(ctx, gs) {
     ctx.globalAlpha = owned || can ? 1 : 0.5;
     ctx.font='17px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
     ctx.fillStyle='#e2e8f0';
-    ctx.fillText(d.icon, 20, y+18);
+    ctx.fillText(d.icon, 20, y+24);
     setFont(ctx, 'body', 'bold');
     ctx.fillStyle = owned ? '#86efac' : '#e2e8f0';
-    ctx.fillText(d.name, 46, y+12);
+    ctx.fillText(d.name, 46, y+16);
     setFont(ctx, 'body'); ctx.fillStyle='#64748b';
-    ctx.fillText(`${d.kind==='tower'?'타워':'병력'} · ${d.desc}`, 46, y+25);
+    ctx.fillText(`${d.kind==='tower'?'타워':'병력'} · ${d.desc}`, 46, y+34);
 
     ctx.textAlign='right'; setFont(ctx, 'body', 'bold');
-    if (owned) { ctx.fillStyle='#22c55e'; ctx.fillText('✓ 해금', CW-20, y+18); }
+    if (owned) { ctx.fillStyle='#22c55e'; ctx.fillText('✓ 해금', CW-20, y+24); }
     else {
       ctx.fillStyle = can ? '#f59e0b' : '#475569';
-      ctx.fillText(`💎 ${d.cost}`, CW-20, y+18);
+      ctx.fillText(`💎 ${d.cost}`, CW-20, y+24);
       gs.ui.unlockBtns.push({x:10,y:y,w:CW-20,h:rowH-4,id:d.id,icon:d.icon});
     }
     ctx.globalAlpha = 1;
@@ -4114,7 +4137,7 @@ function renderLobbyUnlock(ctx, gs) {
   // ── ♾️ 승천 — 끝이 없는 사용처 ────────────────────────────────────────────
   y += 8;
   const an = ascendLevel(gs), ac = ascendCost(gs), acan = gs.soulStones >= ac;
-  const ah = 104;   // 제목 + 두 줄 + 버튼이 13px로 들어가는 높이
+  const ah = 116;   // 제목 + 두 줄 + 버튼이 13px로 들어가는 높이
   uiPanel(ctx, 10,y,CW-20,ah,8, '#150f26', acan ? '#a78bfa' : '#3b2a5e', acan ? 2 : 1);
   ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillStyle='#c4b5fd'; setFont(ctx, 'body', 'bold');
@@ -4122,9 +4145,9 @@ function renderLobbyUnlock(ctx, gs) {
   ctx.textAlign='right'; ctx.fillStyle='#a78bfa'; setFont(ctx, 'title', 'bold');
   ctx.fillText(`${an}단계`, CW-20, y+8);
   ctx.textAlign='left'; ctx.fillStyle='#94a3b8'; setFont(ctx, 'body');
-  ctx.fillText(`현재 — 타워·아군 공격력 +${(an*ASCEND_DMG*100).toFixed(1)}% · 체력 +${(an*ASCEND_HP*100).toFixed(1)}%`, 20, y+34);
+  ctx.fillText(`현재 — 타워·아군 공격력 +${(an*ASCEND_DMG*100).toFixed(1)}% · 체력 +${(an*ASCEND_HP*100).toFixed(1)}%`, 20, y+36);
   ctx.fillStyle='#64748b'; setFont(ctx, 'body');
-  ctx.fillText('한 단계마다 값이 12%씩 오릅니다 — 남는 보석이 갈 곳', 20, y+53);
+  ctx.fillText('한 단계마다 값이 12%씩 오릅니다 — 남는 보석이 갈 곳', 20, y+58);
   const abw=CW-40, abh=28, aby=y+ah-abh-9;
   uiPanel(ctx, 20,aby,abw,abh,5, acan ? '#2a1a05' : '#12161f', acan ? '#f59e0b' : '#293040', 1);
   ctx.textAlign='center'; ctx.textBaseline='middle';
@@ -4369,7 +4392,7 @@ function renderLobbyRecord(ctx, gs) {
     ctx.textAlign='right'; ctx.fillStyle='#475569'; setFont(ctx, 'body', 'bold');
     ctx.fillText(`${doneN}/${ACHIEVEMENTS.length}`, CW-14, y+1);
     ctx.textAlign='left';
-    y += 17;
+    y += 22;
 
     // 받을 것이 있으면 한꺼번에 받는 줄을 띄운다 — 열여덟 번 누르게 하지 않는다
     if (ready.length) {
@@ -4389,11 +4412,13 @@ function renderLobbyRecord(ctx, gs) {
       if (!rows.length) continue;
       ctx.fillStyle='#475569'; setFont(ctx, 'body', 'bold');
       ctx.fillText(`${cat.icon} ${cat.name}`, 14, y);
-      y += 13;
+      y += 20;
       for (const a of rows) {
         const goal = achGoal(a), val = Math.min(goal, achValue(gs, a));
         const done = achDone(gs, a), got = achClaimed(gs, a);
-        const rowH = 34;
+        // 34px에 13px 두 줄(이름 + 설명)을 넣으니 y+11과 y+24가 맞닿았다.
+        // 두 줄 사이가 0px이면 글자가 서로 달라붙어 둘 다 못 읽는다.
+        const rowH = 48;
         uiPanel(ctx, 10, y, CW-20, rowH, 5,
                 got ? '#0f1a12' : done ? '#2a1f05' : '#0b1220',
                 got ? '#22c55e' : done ? '#fbbf24' : '#1e293b', done && !got ? 1.5 : 1);
@@ -4402,21 +4427,21 @@ function renderLobbyRecord(ctx, gs) {
         ctx.font='13px sans-serif'; ctx.fillStyle='#e2e8f0';
         ctx.fillText(a.icon, 17, y+rowH/2);
         setFont(ctx, 'body', 'bold'); ctx.fillStyle = got ? '#86efac' : done ? '#fbbf24' : '#94a3b8';
-        ctx.fillText(a.name, 36, y+11);
-        setFont(ctx, 'body'); ctx.fillStyle='#64748b';
-        ctx.fillText(a.desc, 36, y+24);
+        ctx.fillText(a.name, 38, y+15);
+        setFont(ctx, 'body'); ctx.fillStyle='#94a3b8';
+        ctx.fillText(a.desc, 38, y+33);
         ctx.globalAlpha = 1;
 
         // 진행 막대 — 얼마나 남았는지가 보여야 눈금 구실을 한다
-        const pbx = 150, pbw = CW - 150 - 74;
-        ctx.fillStyle='#111827'; roundRect(ctx, pbx, y+20, pbw, 5, 2.5); ctx.fill();
+        const pbx = 180, pbw = CW - 180 - 78;
+        ctx.fillStyle='#111827'; roundRect(ctx, pbx, y+31, pbw, 6, 3); ctx.fill();
         const frac = goal > 0 ? Math.min(1, val / goal) : 0;
         if (frac > 0) {
           ctx.fillStyle = done ? '#22c55e' : '#f59e0b';
-          roundRect(ctx, pbx, y+20, Math.max(3, pbw*frac), 5, 2.5); ctx.fill();
+          roundRect(ctx, pbx, y+31, Math.max(3, pbw*frac), 6, 3); ctx.fill();
         }
-        ctx.textAlign='right'; ctx.fillStyle='#475569'; setFont(ctx, 'body', 'bold');
-        ctx.fillText(`${val.toLocaleString()} / ${goal.toLocaleString()}`, pbx+pbw, y+11);
+        ctx.textAlign='right'; ctx.fillStyle='#94a3b8'; setFont(ctx, 'body', 'bold');
+        ctx.fillText(`${val.toLocaleString()} / ${goal.toLocaleString()}`, pbx+pbw, y+15);
 
         // 받기 버튼 / 상태
         const cbw=58, cbx=CW-10-cbw-4, cby=y+(rowH-22)/2;
@@ -4488,18 +4513,13 @@ function renderLobbyRecord(ctx, gs) {
   // 기록이 이 브라우저 안에만 있다는 걸 알려 주고, 빠져나갈 길을 준다.
   ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillStyle='#60a5fa'; setFont(ctx, 'body', 'bold');
-  ctx.fillText('\uD83D\uDCBE 세이브 백업', 14, y); y += 17;
+  ctx.fillText('\uD83D\uDCBE 세이브 백업', 14, y); y += 20;
   ctx.fillStyle='#475569'; setFont(ctx, 'body');
-  ctx.fillText('기록은 이 브라우저에만 저장됩니다. 캐시를 지우면 사라집니다.', 14, y); y += 15;
+  ctx.fillText('기록은 이 브라우저에만 저장됩니다. 캐시를 지우면 사라집니다.', 14, y); y += 20;
 
-  const kw = (CW-30)/2, kh = 34;
+  const kw = (CW-30)/2, kh = 48;
   const mk = (bx2, label, sub, col, dim) => {
-    uiPanel(ctx, bx2,y,kw,kh,6, dim ? '#0a0e18' : '#111c2e', dim ? '#1e293b' : col, 1);
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillStyle = dim ? '#334155' : col; setFont(ctx, 'body', 'bold');
-    ctx.fillText(label, bx2+kw/2, y+12);
-    ctx.fillStyle = dim ? '#1e293b' : '#475569'; setFont(ctx, 'body');
-    ctx.fillText(sub, bx2+kw/2, y+25);
+    drawBtn(ctx, bx2, y, kw, kh, label, dim ? '#0a0e18' : '#111c2e', col, !dim, sub);
     ctx.textAlign='left'; ctx.textBaseline='top';
     return {x:bx2,y:y,w:kw,h:kh};
   };
@@ -4519,22 +4539,17 @@ function renderLobbyRecord(ctx, gs) {
   // 설명은 처음 한 번만 뜬다. 게임이 바뀌면 그때 읽은 내용이 옛것이 되는데,
   // 다시 볼 길이 없으면 초기화 말고는 방법이 없었다.
   ctx.fillStyle='#60a5fa'; setFont(ctx, 'body', 'bold');
-  ctx.fillText('📖 게임 안내', 14, y); y += 17;
+  ctx.fillText('📖 게임 안내', 14, y); y += 20;
   ctx.fillStyle='#475569'; setFont(ctx, 'body');
   const left = (typeof tipsRemaining === 'function') ? tipsRemaining() : 0;
   ctx.fillText(left > 0 ? `아직 안 뜬 쪽지 ${left}개 — 해당 상황에서 뜹니다`
-                        : '쪽지를 모두 봤습니다. 다시 보려면 아래를 누르세요.', 14, y); y += 15;
+                        : '쪽지를 모두 봤습니다. 다시 보려면 아래를 누르세요.', 14, y); y += 20;
   // 안내가 세 가지(글 6장 · 상황별 쪽지 · 🧭 손가락)라 한 줄에 셋을 놓는다.
   // 처음엔 밑에 한 줄을 더 달았는데, 그 줄이 로비 하단 고정 출격 바(y749~) 밑으로
   // 들어가 아예 누를 수 없었다 — 스크롤로도 닿지 않는 자리였다.
   const kw3 = (CW - 36) / 3;
   const mk3 = (bx2, label, sub, col, dim) => {
-    uiPanel(ctx, bx2,y,kw3,kh,6, dim ? '#0a0e18' : '#111c2e', dim ? '#1e293b' : col, 1);
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillStyle = dim ? '#334155' : col; setFont(ctx, 'body', 'bold');
-    ctx.fillText(label, bx2+kw3/2, y+12);
-    ctx.fillStyle = dim ? '#1e293b' : '#475569'; setFont(ctx, 'body');
-    ctx.fillText(sub, bx2+kw3/2, y+25);
+    drawBtn(ctx, bx2, y, kw3, kh, label, dim ? '#0a0e18' : '#111c2e', col, !dim, sub);
     ctx.textAlign='left'; ctx.textBaseline='top';
     return {x:bx2,y:y,w:kw3,h:kh};
   };
@@ -4580,11 +4595,12 @@ function renderSortieBar(ctx, gs) {
     // 아직 훈련을 못 끝냈다 — 선택지를 만들지 않는다
     const bw = CW-24, bx = 12;
     uiPanel(ctx, bx,byy,bw,bh,8, '#14532d', '#22c55e', 2);
+    // 글자를 13px로 올린 뒤 두 문구가 한 줄에서 서로를 파고들었다 — 위아래로 나눈다
     ctx.fillStyle='#fff'; ctx.font='bold 15px sans-serif';
     ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText('⚔️  훈련 시작', CW/2 - 40, byy+bh/2);
+    ctx.fillText('⚔️  훈련 시작', CW/2, byy+bh/2-8);
     ctx.fillStyle='#86efac'; setFont(ctx, 'body', 'bold');
-    ctx.fillText('한 판 치르면 ∞ 심연이 열립니다', CW/2 + 82, byy+bh/2+1);
+    ctx.fillText('한 판 치르면 ∞ 심연이 열립니다', CW/2, byy+bh/2+11);
     gs.ui.sortieBtn = {x:bx,y:byy,w:bw,h:bh};
     gs.ui.trainBtn  = null;
     return;
@@ -4601,12 +4617,12 @@ function renderSortieBar(ctx, gs) {
   uiPanel(ctx, 12,byy,endW,bh,8, lv > 0 ? '#2a0a1e' : '#2e1065', col, 2);
   ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.fillStyle='#fff'; ctx.font='bold 15px sans-serif';
-  ctx.fillText(lv > 0 ? `\ud83c\udf11 \uc545\ubabd ${lv}\ub2e8\uacc4` : '\u221e  \uc2ec\uc5f0 \ud558\uac15', 12+endW/2, byy+bh/2-6);
+  ctx.fillText(lv > 0 ? `\ud83c\udf11 \uc545\ubabd ${lv}\ub2e8\uacc4` : '\u221e  \uc2ec\uc5f0 \ud558\uac15', 12+endW/2, byy+bh/2-8);
   const best = gs.stats.bestEndless || 0;
   ctx.fillStyle = lv > 0 ? '#f9a8d4' : '#c4b5fd'; setFont(ctx, 'body', 'bold');
   ctx.fillText(lv > 0 ? `\uc11c\uc57d ${lv}\uac1c \u00b7 ${ABYSS_FINAL_FLOOR}\uce35 \ub9c8\uc655\uae4c\uc9c0`
                       : (best > 0 ? `\ucd5c\uace0 ${best}\uce35 \u2014 ${ABYSS_FINAL_FLOOR}\uce35 \ub9c8\uc655\uae4c\uc9c0` : '\uccab \ud558\uac15'),
-               12+endW/2, byy+bh/2+11);
+               12+endW/2, byy+bh/2+12);
   gs.ui.sortieBtn = {x:12,y:byy,w:endW,h:bh};
 
   // \u267e\ufe0f \ubb34\ud55c \u2014 \uc545\ubabd 10\ub2e8\uacc4\ub97c \uae68\uc57c \uc5f4\ub9b0\ub2e4
@@ -4614,9 +4630,9 @@ function renderSortieBar(ctx, gs) {
   if (unb) {
     uiPanel(ctx, nx,byy,unbW,bh,8, '#2a1a05', '#fbbf24', 1.5);
     ctx.fillStyle='#fbbf24'; ctx.font='bold 14px sans-serif';
-    ctx.fillText('\u267e\ufe0f \ubb34\ud55c', nx+unbW/2, byy+bh/2-6);
+    ctx.fillText('\u267e\ufe0f \ubb34\ud55c', nx+unbW/2, byy+bh/2-8);
     ctx.fillStyle='#a16207'; setFont(ctx, 'body', 'bold');
-    ctx.fillText('\uac00\uc7a5 \uc5b4\ub835\ub2e4', nx+unbW/2, byy+bh/2+10);
+    ctx.fillText('\uac00\uc7a5 \uc5b4\ub835\ub2e4', nx+unbW/2, byy+bh/2+12);
     gs.ui.unboundedBtn = {x:nx,y:byy,w:unbW,h:bh};
     nx += unbW + gap;
   } else {
@@ -4627,9 +4643,9 @@ function renderSortieBar(ctx, gs) {
   const tx = nx;
   uiPanel(ctx, tx,byy,trainW,bh,8, '#0f1e17', '#22c55e', 1);
   ctx.fillStyle='#4ade80'; setFont(ctx, 'body', 'bold');
-  ctx.fillText('\u2694\ufe0f \ud6c8\ub828', tx+trainW/2, byy+bh/2-6);
+  ctx.fillText('\u2694\ufe0f \ud6c8\ub828', tx+trainW/2, byy+bh/2-8);
   ctx.fillStyle='#166534'; setFont(ctx, 'body', 'bold');
-  ctx.fillText(unb ? '\uc5f0\uc2b5' : `${TRAINING_WAVES}\uc6e8\uc774\ube0c \u00b7 \uc5f0\uc2b5`, tx+trainW/2, byy+bh/2+10);
+  ctx.fillText(unb ? '\uc5f0\uc2b5' : `${TRAINING_WAVES}\uc6e8\uc774\ube0c \u00b7 \uc5f0\uc2b5`, tx+trainW/2, byy+bh/2+12);
   gs.ui.trainBtn = {x:tx,y:byy,w:trainW,h:bh};
 }
 
@@ -4703,10 +4719,10 @@ function renderResult(ctx, gs) {
     const sx = 20 + i*sw;
     ctx.fillStyle='#64748b'; setFont(ctx, 'body', 'bold');
     ctx.fillText(st[0], sx+sw/2, y);
-    ctx.fillStyle='#e2e8f0'; ctx.font='bold 13px sans-serif';
-    ctx.fillText(st[1], sx+sw/2, y+14);
+    ctx.fillStyle='#e2e8f0'; setFont(ctx, 'title', 'bold');
+    ctx.fillText(st[1], sx+sw/2, y+19);   // 13px 이름 아래 17px 값 — 5px 간격으로는 붙는다
   });
-  y += 48;
+  y += 56;
 
   // 보석 정산 내역
   // 판 도중에 이미 받은 보석도 같은 상자에 적는다 — 안 적으면 "안 줬다"로 읽힌다
@@ -4781,7 +4797,7 @@ function renderResult(ctx, gs) {
     for (const sk of SKILL_TREES[tid].skills)
       if (skillCanBuy(gs, tid, sk).ok) buyable.push(sk);
 
-  const ph = 96;
+  const ph = 110;   // 제목 + 세 줄을 13px로 담는 높이
   uiPanel(ctx, 20,y,CW-40,ph,8, '#0c1220', '#1e293b', 1);
   ctx.textAlign='left';
   ctx.fillStyle='#22c55e'; setFont(ctx, 'body', 'bold');
@@ -4804,11 +4820,11 @@ function renderResult(ctx, gs) {
     ctx.fillStyle='#86efac'; setFont(ctx, 'body');
     ctx.fillText('🔓 모두 해금 완료', 32, py);
   }
-  py += 19;
+  py += 22;
 
   ctx.fillStyle = buyable.length ? '#c4b5fd' : '#475569'; setFont(ctx, 'body');
   ctx.fillText(buyable.length ? `🌳 스킬 ${buyable.length}개를 지금 찍을 수 있습니다` : '🌳 지금 찍을 수 있는 스킬 없음', 32, py);
-  py += 19;
+  py += 22;
 
   const pactCount = PACT_DEFS.filter(p=>isPactOn(p.id)).length;
   ctx.fillStyle='#64748b'; setFont(ctx, 'body');
@@ -4867,7 +4883,7 @@ function _renderSkillTree(ctx, gs, treeId, startY) {
   // 13px로 올리자 112×78 안에서 이름·레벨·설명·값이 서로 뭉갰다.
   // 3열은 유지한다(한 화면에 트리 모양이 보여야 한다). 대신 세로로 늘리고
   // 이름과 레벨을 같은 줄에 붙이지 않는다 — `정밀 조준100`처럼 읽혔다.
-  const nodeW=148, nodeH=104, hGap=8, vGap=22;
+  const nodeW=148, nodeH=104, hGap=8, vGap=32;   // 줄 사이 게이트 딱지가 윗 노드의 값 줄에 붙어서 벌렸다
   const totalW = 3*nodeW + 2*hGap;
   const offX = (CW - totalW) / 2;
   const getPos = (row, col) => ({ x: offX + col*(nodeW+hGap), y: startY + row*(nodeH+vGap) });
@@ -5490,7 +5506,7 @@ function drawShopTabs(ctx, gs, y) {
   tabs.forEach((t,i)=>{
     const tx = x0 + i*(tw+8), on = cur===t.id;
     uiPanel(ctx, tx,y,tw,th,4, on?'#2d1b69':'#0f172a', on?'#a78bfa':'#1e293b', 1);
-    ctx.fillStyle = on?'#c4b5fd':'#64748b'; ctx.font='bold 11px sans-serif';
+    ctx.fillStyle = on?'#c4b5fd':'#64748b'; setFont(ctx, 'body', 'bold');
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(t.label, tx+tw/2, y+th/2);
     if (t.id==='buy') gs.ui.shopTabBuy = {x:tx,y,w:tw,h:th};
@@ -5782,15 +5798,16 @@ function drawScrollHint(ctx, top, viewH, scroll, maxScroll) {
     const g = ctx.createLinearGradient(0, top+viewH-26, 0, top+viewH);
     g.addColorStop(0, 'rgba(8,13,24,0)'); g.addColorStop(1, 'rgba(8,13,24,0.92)');
     ctx.fillStyle = g; ctx.fillRect(0, top+viewH-26, CW, 26);
-    ctx.fillStyle='#64748b'; ctx.font='bold 9px sans-serif';
+    ctx.fillStyle='#64748b'; setFont(ctx, 'body', 'bold');
     ctx.textAlign='center'; ctx.textBaseline='bottom';
-    ctx.fillText('▼ 아래로 밀어서 더 보기', CW/2, top+viewH-4);
+    ctx.fillText('▼ 아래로 밀어서 더 보기', CW/2, top+viewH-5);
     ctx.textAlign='left'; ctx.textBaseline='top';
   }
 }
 
 function renderTownPageBuildingGrid(ctx, gs, startY) {
-  const bw=228,bh=118,gap=8,ml=6;
+  // 13px로 올린 뒤 성채처럼 긴 설명이 카드 밖으로 잘려 나갔다 — 두 줄까지 접는다
+  const bw=228,bh=140,gap=8,ml=6;
   gs.ui.buildingCards=[];
 
   TOWN_BUILDINGS.forEach((def,i)=>{
@@ -5810,7 +5827,8 @@ function renderTownPageBuildingGrid(ctx, gs, startY) {
       ctx.fillText(`Lv.${curLv+1}/${BUILDING_MAX_LEVEL}`,bx+50,by+26);
     }
 
-    ctx.fillStyle='#94a3b8'; setFont(ctx, 'body', 'bold'); ctx.textBaseline='top'; ctx.fillText(def.desc,bx+10,by+52);
+    ctx.fillStyle='#94a3b8'; setFont(ctx, 'body', 'bold'); ctx.textBaseline='top';
+    wrapLines(ctx, def.desc, bw-20).slice(0,2).forEach((ln,li)=>ctx.fillText(ln,bx+10,by+52+li*18));
 
     if (built) {
       const curLv=bs.level||0;
@@ -5823,10 +5841,10 @@ function renderTownPageBuildingGrid(ctx, gs, startY) {
       const got=fin.reduce((a,t)=>a+(bs.upgrades[t.id]||0),0);
       const inf=open.filter(t=>trackIsInfinite(t)).reduce((a,t)=>a+(bs.upgrades[t.id]||0),0);
       ctx.fillStyle=(cap>0&&got>=cap)?'#22c55e':'#94a3b8'; setFont(ctx, 'body', 'bold');
-      ctx.fillText(`강화 ${got}/${cap}${inf?`  ♾️×${inf}`:''}`,bx+10,by+68);
+      ctx.fillText(`강화 ${got}/${cap}${inf?`  ♾️×${inf}`:''}`,bx+10,by+92);
     }
 
-    const btnY=by+bh-28,btnH=22,btnW=bw-20;
+    const btnY=by+bh-30,btnH=24,btnW=bw-20;
     roundRect(ctx,bx+10,btnY,btnW,btnH,5);
     if (!built) {
       const canAff=gs.gold>=def.buildCost;
@@ -5846,7 +5864,7 @@ function renderTownPageBuildingGrid(ctx, gs, startY) {
   // 건물이 늘어나면 행 수도 늘어난다 — 고정 2행으로 두면 아래 칸과 겹친다
   const bRows = Math.ceil(TOWN_BUILDINGS.length / 2);
   const wrY = startY+bRows*(bh+gap)+4;
-  const wrH = 46;
+  const wrH = 54;   // 제목 + 설명 두 줄이 13px로 들어가는 높이
   uiPanel(ctx, 6,wrY,CW-12,wrH,6, '#0a0d1a', '#2a3f5f', 1);
 
   const full   = gs.baseHP >= baseHpMax();
@@ -5857,7 +5875,7 @@ function renderTownPageBuildingGrid(ctx, gs, startY) {
   ctx.fillText('🧱 성벽 보수', 12, wrY+8);
   ctx.fillStyle='#475569'; setFont(ctx, 'body');
   ctx.fillText(full ? '성벽이 온전합니다'
-                    : `기지 HP +${WALL_REPAIR_AMOUNT} · 보수할수록 비싸집니다 (${gs.wallRepairs}회)`, 12, wrY+26);
+                    : `기지 HP +${WALL_REPAIR_AMOUNT} · 보수할수록 비싸집니다 (${gs.wallRepairs}회)`, 12, wrY+30);
 
   // 기지 HP 바
   const hbX=150, hbW=110;
@@ -5877,20 +5895,20 @@ function renderTownPageBuildingGrid(ctx, gs, startY) {
   gs.ui.researchBtn = null;   // 병기 연구는 없앴다 — 강화는 건물 안에서 한다
 
   const stripY = wrY + wrH + 5;
-  uiPanel(ctx, 6,stripY,CW-12,44,6, '#0a0d1a', '#1e293b', 1);
+  uiPanel(ctx, 6,stripY,CW-12,52,6, '#0a0d1a', '#1e293b', 1);
   const pool=waveDefFor(gs.wave)?.arenaPool||[];
   const totalW=pool.reduce((a,[,w])=>a+w,0)||1;
   ctx.fillStyle='#64748b'; setFont(ctx, 'body', 'bold'); ctx.textAlign='left'; ctx.textBaseline='middle';
-  ctx.fillText(`웨이브 ${gs.wave+1} 아레나 스폰:`,12,stripY+14);
+  ctx.fillText(`웨이브 ${gs.wave+1} 아레나 스폰:`,12,stripY+15);
   pool.forEach(([type,w],i)=>{
     const mt=BATTLE_MOB_TYPES[type]; if (!mt) return;
-    const ix=12+i*44;
+    const ix=12+i*52;
     ctx.font='15px sans-serif'; ctx.textAlign='left'; ctx.fillStyle='#e2e8f0';
-    ctx.fillText(mt.icon,ix,stripY+30);
+    ctx.fillText(mt.icon,ix,stripY+37);
     setFont(ctx, 'body', 'bold'); ctx.fillStyle='#475569';
-    ctx.fillText(`${Math.round(w/totalW*100)}%`,ix+19,stripY+31);
+    ctx.fillText(`${Math.round(w/totalW*100)}%`,ix+22,stripY+38);
   });
-  _townBottom = stripY + 44;
+  _townBottom = stripY + 52;
 }
 
 // ─── 👑 영웅 상세 (출전준비 › 영웅 정보) ─────────────────────────────────────
@@ -6296,7 +6314,7 @@ function renderTownPageArmy(ctx, gs, startY) {
   // ── 병력 고용 (5종, 2열 그리드) ─────────────────────────────────────────
   ctx.fillStyle='#94a3b8'; setFont(ctx, 'body', 'bold'); ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillText('병력 고용 — 탭하여 편성',6,y); y+=19;
-  const cols=3, cardW=(CW-12-(cols-1)*6)/cols, cardH=86;   // 글자를 키운 만큼
+  const cols=3, cardW=(CW-12-(cols-1)*6)/cols, cardH=96;   // 아이콘·이름·능력치·값 네 줄이 13px로 안 붙는 높이
   gs.ui.hireCards=[];
   const roster = UNIT_ORDER;
   roster.forEach((id,i)=>{
@@ -6311,19 +6329,19 @@ function renderTownPageArmy(ctx, gs, startY) {
     ctx.fillStyle='#e2e8f0'; ctx.font='20px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
     ctx.fillText(ut.icon,cx+cardW/2,cy2+4);
     ctx.fillStyle=canAff?'#f1f5f9':'#64748b'; setFont(ctx, 'body', 'bold');
-    ctx.fillText(ut.name,cx+cardW/2,cy2+29);
+    ctx.fillText(ut.name,cx+cardW/2,cy2+33);
     ctx.fillStyle='#94a3b8'; setFont(ctx, 'body', 'bold');
-    ctx.fillText(`ATK ${Math.round(ut.atk+BONUSES.unitAtk)} · HP ${Math.round((ut.hp+BONUSES.unitHp)*(BONUSES.pactUnitHpMult||1))}`,cx+cardW/2,cy2+47);
+    ctx.fillText(`ATK ${Math.round(ut.atk+BONUSES.unitAtk)} · HP ${Math.round((ut.hp+BONUSES.unitHp)*(BONUSES.pactUnitHpMult||1))}`,cx+cardW/2,cy2+52);
     ctx.globalAlpha=1;
     if (unlocked) {
       ctx.globalAlpha=canAff?1:0.55;
       ctx.fillStyle=canAff?COLORS.gold:'#64748b'; setFont(ctx, 'title', 'bold');
-      ctx.fillText(`💰${cost}`,cx+cardW/2,cy2+62);
+      ctx.fillText(`💰${cost}`,cx+cardW/2,cy2+70);
       ctx.globalAlpha=1;
       gs.ui.hireCards.push({x:cx,y:cy2,w:cardW,h:cardH,typeId:id});
     } else {
       ctx.fillStyle='#f59e0b'; setFont(ctx, 'body', 'bold');
-      ctx.fillText(`🔒 💎${unlockCost(id)}`,cx+cardW/2,cy2+62);
+      ctx.fillText(`🔒 💎${unlockCost(id)}`,cx+cardW/2,cy2+70);
     }
   });
   y += Math.ceil(roster.length/cols)*(cardH+6) + 6;
@@ -6451,21 +6469,21 @@ function renderTownPageArmy(ctx, gs, startY) {
   const charges = bountyCharges(gs.wave);
   const left    = Math.max(0, charges - gs.bountyUsed);
   const on      = gs.bountyPending;
-  const bh3 = 36;
+  const bh3 = 48;   // 제목 줄과 조건 줄이 13px로 겹치던 자리 — 두 줄 몫으로 키운다
   uiPanel(ctx, 6, y, CW-12, bh3, 7, on ? '#3b2a08' : left > 0 ? '#141c2e' : '#0e1017', on ? '#fbbf24' : left > 0 ? '#a16207' : '#252b38', on ? 2 : 1);
   ctx.textAlign='left'; ctx.textBaseline='middle';
   ctx.fillStyle = (left > 0 || on) ? '#fbbf24' : '#475569'; setFont(ctx, 'body', 'bold');
-  ctx.fillText(on ? '💰 현상수배 예약됨 — 탭하여 취소' : '💰 현상수배 소환', 14, y+bh3/2-5);
+  ctx.fillText(on ? '💰 현상수배 예약됨 — 탭하여 취소' : '💰 현상수배 소환', 14, y+bh3/2-11);
   setFont(ctx, 'body', 'bold');
   if (on) {
     ctx.fillStyle='#fde68a';
-    ctx.fillText(`처치 시 💎+${bountyGems(gs.bountyUsed-1)} · 놓치면 성벽에 큰 피해`, 14, y+bh3/2+9);
+    ctx.fillText(`처치 시 💎+${bountyGems(gs.bountyUsed-1)} · 놓치면 성벽에 큰 피해`, 14, y+bh3/2+10);
   } else if (left > 0) {
     ctx.fillStyle='#94a3b8';
-    ctx.fillText(`남은 기회 ${left} · 처치 시 💎+${bountyGems(gs.bountyUsed)} · 대형에 강한 타워가 필요합니다`, 14, y+bh3/2+9);
+    ctx.fillText(`남은 기회 ${left} · 처치 시 💎+${bountyGems(gs.bountyUsed)} · 대형에 강한 타워가 필요합니다`, 14, y+bh3/2+10);
   } else {
     ctx.fillStyle='#475569';
-    ctx.fillText('기회를 다 썼습니다 — 더 진행하면 다시 생깁니다', 14, y+bh3/2+9);
+    ctx.fillText('기회를 다 썼습니다 — 더 진행하면 다시 생깁니다', 14, y+bh3/2+10);
   }
   gs.ui.bountyBtn = (left > 0 || on) ? {x:6,y,w:CW-12,h:bh3} : null;
   y += bh3 + 6;
@@ -6478,17 +6496,17 @@ function renderTownPageArmy(ctx, gs, startY) {
   uiPanel(ctx, 6, y, CW-12, bh3, 7, eOn ? '#2a1f08' : eLeft > 0 ? '#141c2e' : '#0e1017', eOn ? '#fbbf24' : eLeft > 0 ? '#a16207' : '#252b38', eOn ? 2 : 1);
   ctx.textAlign='left'; ctx.textBaseline='middle';
   ctx.fillStyle = (eLeft > 0 || eOn) ? '#fbbf24' : '#475569'; setFont(ctx, 'body', 'bold');
-  ctx.fillText(eOn ? '⚔️ 정예 예약됨 — 탭하여 취소' : '⚔️ 아레나 정예 소환', 14, y+bh3/2-5);
+  ctx.fillText(eOn ? '⚔️ 정예 예약됨 — 탭하여 취소' : '⚔️ 아레나 정예 소환', 14, y+bh3/2-11);
   setFont(ctx, 'body', 'bold');
   if (eOn) {
     ctx.fillStyle='#fde68a';
-    ctx.fillText(`처치 시 💎+${eliteGems((gs.eliteUsed||1)-1)} · 부대가 정면으로 이겨야 합니다`, 14, y+bh3/2+9);
+    ctx.fillText(`처치 시 💎+${eliteGems((gs.eliteUsed||1)-1)} · 부대가 정면으로 이겨야 합니다`, 14, y+bh3/2+10);
   } else if (eLeft > 0) {
     ctx.fillStyle='#94a3b8';
-    ctx.fillText(`남은 기회 ${eLeft} · 처치 시 💎+${eliteGems(gs.eliteUsed||0)} · 골드도 크게 떨어집니다`, 14, y+bh3/2+9);
+    ctx.fillText(`남은 기회 ${eLeft} · 처치 시 💎+${eliteGems(gs.eliteUsed||0)} · 골드도 크게 떨어집니다`, 14, y+bh3/2+10);
   } else {
     ctx.fillStyle='#475569';
-    ctx.fillText('기회를 다 썼습니다 — 더 진행하면 다시 생깁니다', 14, y+bh3/2+9);
+    ctx.fillText('기회를 다 썼습니다 — 더 진행하면 다시 생깁니다', 14, y+bh3/2+10);
   }
   gs.ui.eliteBtn = (eLeft > 0 || eOn) ? {x:6,y,w:CW-12,h:bh3} : null;
   y += bh3 + 8;
@@ -7041,7 +7059,7 @@ function renderTownPageTowers(ctx, gs, startY) {
   ry+=16;
   ctx.fillStyle='#64748b'; setFont(ctx, 'body', 'bold'); ctx.textAlign='left';
   ctx.fillText(`총 ${gs.towers.length}기 · 누적 처치 ${totalKills} · 투자 ${totalInvest}💰`,18,ry);
-  ry+=18;
+  ry+=22;
   // ★5 분기를 고른 타워가 있으면 어느 갈래에 몇 기인지 한 줄로 접어 보여준다
   const brCount = {};
   for (const t of gs.towers) if (t.branch) brCount[t.branch] = (brCount[t.branch] || 0) + 1;
@@ -7053,13 +7071,13 @@ function renderTownPageTowers(ctx, gs, startY) {
       return d ? `${d.icon}${d.name} ${brCount[k]}` : null;
     }).filter(Boolean);
     for (const ln of wrapLines(ctx, '★5 분기 — ' + parts.join('  ·  '), CW-36)) {
-      ctx.fillText(ln, 18, ry); ry += 12;
+      ctx.fillText(ln, 18, ry); ry += 18;
     }
     ry += 4;
   }
   ctx.fillStyle='#475569'; setFont(ctx, 'body');
   ctx.fillText('같은 종류를 많이 지을수록 건설비가 오릅니다.',18,ry);
-  ry+=13;
+  ry+=18;   // 13px 글줄은 18px씩 내려야 위아래가 안 붙는다
   ctx.fillText('∞ 경로는 같은 칸을 두 번 지나므로 교차 지점이 가장 효율적입니다.',18,ry);
   _townBottom = Math.max(infoY + infoH, ry + 16);
 }
@@ -7157,7 +7175,7 @@ function renderTutorial(ctx, tut) {
 
   ctx.fillStyle='rgba(0,0,0,0.68)'; ctx.fillRect(0,0,CW,CH);
   const lines = step.text.split('\n');
-  const cw=340, ch=Math.max(150, 58 + lines.length*17 + 34), cx=(CW-cw)/2, cy=(CH-ch)/2;
+  const cw=340, ch=Math.max(158, 58 + lines.length*20 + 46), cx=(CW-cw)/2, cy=(CH-ch)/2;
   uiPanel(ctx, cx,cy,cw,ch,10, '#0f172a', isTip?'#22d3ee':'#6366f1', 2);
 
   // 쪽지는 본 튜토리얼과 구분되게 딱지를 붙인다 — "또 시작인가" 소리를 안 듣게
@@ -7170,30 +7188,31 @@ function renderTutorial(ctx, tut) {
   ctx.textAlign='center'; ctx.textBaseline='top';
   ctx.fillText(step.title,CW/2,cy+(isTip?21:13));
   ctx.fillStyle='#e2e8f0'; setFont(ctx, 'body');
-  lines.forEach((line,i)=>ctx.fillText(line,CW/2,cy+(isTip?44:36)+i*17));
+  lines.forEach((line,i)=>ctx.fillText(line,CW/2,cy+(isTip?44:36)+i*20));
 
   if (!isTip) {
     for (let i=0;i<TUTORIAL_STEPS.length;i++) {
-      ctx.beginPath(); ctx.arc(CW/2-(TUTORIAL_STEPS.length-1)*9+i*18,cy+ch-16,4,0,Math.PI*2);
+      ctx.beginPath(); ctx.arc(CW/2-(TUTORIAL_STEPS.length-1)*9+i*18,cy+ch-28,4,0,Math.PI*2);
       ctx.fillStyle=i===tut.step?'#6366f1':'#334155'; ctx.fill();
     }
   }
   ctx.fillStyle='#64748b'; setFont(ctx, 'body');
   ctx.textBaseline='bottom';
-  ctx.fillText(isTip ? '탭하여 닫기' : '탭하여 계속 ▶', CW/2, cy+ch-3);
+  ctx.fillText(isTip ? '탭하여 닫기' : '탭하여 계속 ▶', CW/2, cy+ch-6);
 
   // 이전 / 건너뛰기 — 카드 바깥에 둬서 본문 탭(=다음)과 겹치지 않게 한다.
   // 건너뛰기는 남은 쪽지까지 전부 끈다. 쪽지가 층마다 계속 뜨면
   // 플레이어에겐 튜토리얼이 안 꺼진 것과 같다.
-  const bw=126, bh=28, by=cy+ch+12;
+  // 126×28에 13px 두 줄을 넣으니 아래위로도 좌우로도 넘쳤다 — 버튼을 키운다
+  const bw=176, bh=46, by=cy+ch+12;
   const left = tipsRemaining();
   if (!isTip && tut.step > 0) {
     const bx=cx;
-    uiPanel(ctx, bx,by,78,bh,6, '#111827', '#334155', 1);
+    uiPanel(ctx, bx,by,84,bh,6, '#111827', '#334155', 1);
     ctx.fillStyle='#94a3b8'; setFont(ctx, 'body', 'bold');
     ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText('◀ 이전', bx+39, by+bh/2);
-    gs.ui.tutBackBtn={x:bx,y:by,w:78,h:bh};
+    ctx.fillText('◀ 이전', bx+42, by+bh/2);
+    gs.ui.tutBackBtn={x:bx,y:by,w:84,h:bh};
   }
   const sx=cx+cw-bw;
   uiPanel(ctx, sx,by,bw,bh,6, '#1c1420', '#4b5563', 1);
@@ -7202,20 +7221,22 @@ function renderTutorial(ctx, tut) {
   const rewardable = typeof tutorialEverSeen === 'function' && !tutorialEverSeen();
   if (rewardable) {
     ctx.fillStyle='#fbbf24'; setFont(ctx, 'body', 'bold');
-    ctx.fillText(`⏭ 건너뛰기 💎+${TUTORIAL_SKIP_GEMS}`, sx+bw/2, by+bh/2-5);
+    ctx.fillText(`⏭ 건너뛰기 💎+${TUTORIAL_SKIP_GEMS}`, sx+bw/2, by+bh/2-11);
     ctx.fillStyle='#64748b'; setFont(ctx, 'body');
-    ctx.fillText('안내는 다시 뜨지 않습니다', sx+bw/2, by+bh/2+8);
+    ctx.fillText('다시 뜨지 않습니다', sx+bw/2, by+bh/2+11);
   } else {
-    ctx.fillText('✕ 안내 전부 끄기', sx+bw/2, by+bh/2-5);
+    ctx.fillText('✕ 안내 전부 끄기', sx+bw/2, by+bh/2-11);
     ctx.fillStyle='#64748b'; setFont(ctx, 'body');
-    ctx.fillText(left ? `남은 안내 ${left}장까지` : '다시 안 뜹니다', sx+bw/2, by+bh/2+8);
+    ctx.fillText(left ? `남은 안내 ${left}장까지` : '다시 안 뜹니다', sx+bw/2, by+bh/2+11);
   }
   gs.ui.tutSkipBtn={x:sx,y:by,w:bw,h:bh};
 
   if (!isTip) {
+    // 버튼이 커지면서 CW/2가 건너뛰기 버튼 밑으로 들어갔다 — 두 버튼 사이 빈 자리에 둔다
+    const gapL = tut.step > 0 ? cx + 84 : cx;
     ctx.fillStyle='#334155'; setFont(ctx, 'body');
     ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(`${tut.step+1} / ${TUTORIAL_STEPS.length}`, CW/2, by+bh/2);
+    ctx.fillText(`${tut.step+1} / ${TUTORIAL_STEPS.length}`, (gapL + sx) / 2, by+bh/2);
   }
   ctx.textAlign='left'; ctx.textBaseline='top';
 }
@@ -7231,8 +7252,8 @@ function renderLoadingScreen(ctx, p) {
   const bw = 220, bh = 5, bx = (CW-bw)/2, by = CH/2;
   ctx.fillStyle = '#1e293b'; ctx.fillRect(bx, by, bw, bh);
   ctx.fillStyle = '#6366f1'; ctx.fillRect(bx, by, bw * Math.max(0, Math.min(1, p)), bh);
-  ctx.fillStyle = '#64748b'; ctx.font = 'bold 10px sans-serif';
-  ctx.fillText(`그림 불러오는 중 ${Math.round(p*100)}%`, CW/2, by + 22);
+  ctx.fillStyle = '#64748b'; setFont(ctx, 'body', 'bold');
+  ctx.fillText(`그림 불러오는 중 ${Math.round(p*100)}%`, CW/2, by + 24);
   ctx.textAlign = 'left'; ctx.textBaseline = 'top';
 }
 
@@ -7502,15 +7523,15 @@ function renderDocBlocks(ctx, blocks, y) {
 
     } else if (b.steps) {                        // 번호 없는 흐름
       for (const [lab, txt] of b.steps) {
-        setFont(ctx,'label','bold');
-        const lw = Math.max(52, ctx.measureText(lab).width + 12);
-        uiPanel(ctx, 14, y-2, lw, 17, 4, '#0d1b2e', '#2563eb', 1);
+        setFont(ctx,'body','bold');
+        const lw = Math.max(58, ctx.measureText(lab).width + 14);
+        uiPanel(ctx, 14, y-3, lw, 22, 4, '#0d1b2e', '#2563eb', 1);
         ctx.fillStyle='#60a5fa'; ctx.textAlign='center';
         ctx.fillText(lab, 14+lw/2, y+2);
         ctx.textAlign='left';
         const tx2 = 14 + lw + 8;
         const hh = _patchWrapDraw(ctx, txt, tx2, y+1, CW - tx2 - 14, DOC_LH, '#94a3b8', '#e2e8f0');
-        y += Math.max(22, hh + 7);
+        y += Math.max(26, hh + 8);
       }
       y += 4;
 
@@ -7520,10 +7541,10 @@ function renderDocBlocks(ctx, blocks, y) {
       const w0 = cols === 2 ? 104 : 78;
       const ws = cols === 2 ? [w0, CW-28-w0]
                             : [w0, (CW-28-w0)*0.42, (CW-28-w0)*0.58];
-      setFont(ctx,'label','bold'); ctx.fillStyle='#475569';
+      setFont(ctx,'body','bold'); ctx.fillStyle='#475569';
       let cx = 14;
       b.table.head.forEach((hd, i) => { ctx.fillText(hd, cx, y); cx += ws[i]; });
-      y += 14;
+      y += 20;
       ctx.strokeStyle='rgba(71,85,105,0.5)'; ctx.lineWidth=1;
       ctx.beginPath(); ctx.moveTo(14, y-3.5); ctx.lineTo(CW-14, y-3.5); ctx.stroke();
       for (const row of b.table.rows) {
@@ -7533,7 +7554,7 @@ function renderDocBlocks(ctx, blocks, y) {
                                    i === 0 ? '#cbd5e1' : '#94a3b8', '#e2e8f0');
           rh = Math.max(rh, h); cx += ws[i];
         });
-        y += Math.max(17, rh + 4);
+        y += Math.max(20, rh + 5);
       }
       y += 8;
 
@@ -7557,28 +7578,28 @@ function renderDocBlocks(ctx, blocks, y) {
         // 번호 풀이 — 그림 위의 핀과 같은 번호를 단다
         const leg = (typeof guideSceneLegend === 'function') ? guideSceneLegend(b.fig) : [];
         leg.forEach(([lab, txt], i) => {
-          const bx2 = 16, by2 = y + 6.5, r2 = 8;
+          const bx2 = 16, by2 = y + 8, r2 = 9;
           ctx.beginPath(); ctx.arc(bx2 + r2, by2, r2, 0, Math.PI*2);
           ctx.fillStyle = '#fbbf24'; ctx.fill();
-          ctx.fillStyle = '#1c1206'; ctx.font = 'bold 10px sans-serif';
+          ctx.fillStyle = '#1c1206'; setFont(ctx, 'label', 'bold');
           ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
           ctx.fillText(String(i+1), bx2 + r2, by2 + 0.5);
           ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-          ctx.fillStyle = '#fbbf24'; ctx.font = 'bold 10px sans-serif';
+          ctx.fillStyle = '#fbbf24'; setFont(ctx, 'body', 'bold');
           ctx.fillText(lab, bx2 + r2*2 + 7, y + 1);
           const lw2 = ctx.measureText(lab).width;
           const tx3 = bx2 + r2*2 + 7 + lw2 + 7;
-          const hh2 = _patchWrapDraw(ctx, txt, tx3, y + 1, CW - tx3 - 12, 14, '#94a3b8', '#e2e8f0');
-          y += Math.max(18, hh2 + 5);
+          const hh2 = _patchWrapDraw(ctx, txt, tx3, y + 1, CW - tx3 - 12, DOC_LH, '#94a3b8', '#e2e8f0');
+          y += Math.max(23, hh2 + 6);
         });
         y += 6;
       }
 
     } else if (b.miss) {                         // 자주 하는 실수
       const [bad, fix] = b.miss;
-      ctx.fillStyle='#f87171'; setFont(ctx,'label','bold');
+      ctx.fillStyle='#f87171'; setFont(ctx,'body','bold');
       ctx.fillText('✗ ' + bad, 14, y);
-      y += 15;
+      y += 20;
       y += _patchWrapDraw(ctx, fix, 24, y, CW-38, DOC_LH, '#94a3b8', '#e2e8f0') + 11;
     }
   }
@@ -7658,7 +7679,7 @@ function renderSheet(ctx, gs) {
 // 한 번에 한 장만 굴리면 된다.
 let _guideBottom = 0;
 const GUIDE_HEAD_H = 46;
-const GUIDE_TAB_H  = 38;
+const GUIDE_TAB_H  = 46;   // 아이콘 줄 + 13px 이름 줄
 
 function guideChapter(gs) {
   const i = Math.max(0, Math.min(GUIDE_CHAPTERS.length - 1, gs.guideChapter || 0));
@@ -7687,7 +7708,7 @@ function renderGuideBook(ctx, gs) {
   const cbw=54, cbh=26, cbx=CW-cbw-10, cby=(GUIDE_HEAD_H-cbh)/2;
   uiPanel(ctx, cbx, cby, cbw, cbh, 5, '#1e293b', '#475569', 1);
   ctx.textAlign='center';
-  ctx.fillStyle='#cbd5e1'; ctx.font='bold 11px sans-serif';
+  ctx.fillStyle='#cbd5e1'; setFont(ctx, 'body', 'bold');
   ctx.fillText('닫기', cbx+cbw/2, GUIDE_HEAD_H/2);
   gs.ui.guideCloseBtn = { x:cbx, y:cby, w:cbw, h:cbh };
 
@@ -7703,11 +7724,11 @@ function renderGuideBook(ctx, gs) {
     }
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.globalAlpha = on ? 1 : 0.45;
-    ctx.font='13px sans-serif'; ctx.fillStyle='#e2e8f0';
-    ctx.fillText(c.icon, tx+tw/2, ty+13);
-    ctx.font='bold 9px sans-serif';
+    ctx.font='15px sans-serif'; ctx.fillStyle='#e2e8f0';
+    ctx.fillText(c.icon, tx+tw/2, ty+14);
+    setFont(ctx, 'body', 'bold');
     ctx.fillStyle = on ? '#fbbf24' : '#64748b';
-    ctx.fillText(c.name, tx+tw/2, ty+29);
+    ctx.fillText(c.name, tx+tw/2, ty+33);
     ctx.globalAlpha = 1;
     gs.ui.guideTabBtns.push({ x:tx, y:ty, w:tw, h:GUIDE_TAB_H, idx:i });
   });
@@ -7754,7 +7775,7 @@ function _patchMeasure(ctx, text, maxW, lineH) {
   let cx = 0, lines = 1;
   for (const sp of spans) {
     for (const c of sp.t) {
-      ctx.font = sp.bold ? 'bold 10px sans-serif' : '10px sans-serif';
+      setFont(ctx, 'body', sp.bold ? 'bold' : '');
       const w = ctx.measureText(c).width;
       if (cx + w > maxW) { cx = 0; lines++; }
       cx += w;
