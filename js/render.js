@@ -202,17 +202,33 @@ function renderDefense(ctx, gs) {
   ctx.fillStyle = COLORS.defenseBg;
   ctx.fillRect(0, DEFENSE_Y, CW, DEFENSE_H);
 
-  for (let r=0; r<GRID_ROWS; r++) {
+  // 🧱 성벽 띠 — 격자 밖 한 줄. 성이 여기 서고 기지 HP도 여기 붙는다.
+  // 배경색 그대로 두면 격자 아래가 그냥 잘린 것처럼 보인다.
+  // **격자보다 먼저** 깔아야 한다 — 나중에 깔면 성을 덮는다.
+  const wallY = DEFENSE_Y + DEFENSE_H - CASTLE_ROW_H;
+  ctx.fillStyle = '#141c2b';
+  ctx.fillRect(0, wallY, CW, CASTLE_ROW_H);
+  ctx.strokeStyle = 'rgba(148,163,184,0.22)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, wallY + 0.5); ctx.lineTo(CW, wallY + 0.5); ctx.stroke();
+
+  // 🏰 성 줄은 격자 밖(행 CASTLE_R)이다 — 루프를 한 줄 더 돌린다.
+  // 다만 그 줄은 지을 수 있는 땅이 아니므로 **성이 선 칸 하나만** 그린다.
+  // 나머지를 밭 타일로 깔면 "여기도 지을 수 있나"로 읽힌다.
+  for (let r=0; r<=CASTLE_R; r++) {
     for (let c=0; c<GRID_COLS; c++) {
+      if (r >= GRID_ROWS && c !== CASTLE_C) continue;
       const x = GRID_OX + c*CELL_W, y = GRID_OY + r*CELL_H;
       const isPath  = PATH_CELLS.has(`${c},${r}`);
-      const isStart = c===4 && r===0, isEnd = c===4 && r===6;
-      const isCross = c===4 && r>=1 && r<=4;
+      const isStart = c===CASTLE_C && r===0, isEnd = c===CASTLE_C && r===CASTLE_R;
+      const isCross = c===CASTLE_C && r>=1 && r<=4;
 
       // 그림이 있으면 타일을 깔고, 없으면 지금까지처럼 색 사각형을 그린다.
       // 한 종류만 넣어도 그 칸부터 바뀌도록 칸마다 따로 판단한다.
-      const key = tileSpriteKey(c, r, isPath, isStart, isEnd, isCross);
-      if (!(key && Sprites.draw(ctx, key, x, y, CELL_W, CELL_H))) {
+      // 성 칸만 예외 — 잔디를 깔면 어두운 성벽 띠 한가운데 초록 사각형이 남는다.
+      // 길은 격자 마지막 줄까지 이어지고, 그 끝에 성문이 있는 그림이 된다.
+      const key = (r === CASTLE_R) ? null
+                : tileSpriteKey(c, r, isPath, isStart, isEnd, isCross);
+      if (r !== CASTLE_R && !(key && Sprites.draw(ctx, key, x, y, CELL_W, CELL_H))) {
         ctx.fillStyle = isStart ? '#1e3a5f'
                       : isEnd   ? '#3f1515'
                       : isCross ? '#1a1a0a'
@@ -318,7 +334,7 @@ function renderDefense(ctx, gs) {
   // 기지 셀 - idle 상태에서 마을 입장 힌트.
   // 성 그림이 생긴 뒤로는 칸을 덮지 않고 테두리로만 알린다 — 덮으면 성이 안 보인다.
   if (wm && wm.phase==='idle') {
-    const bx2=GRID_OX+4*CELL_W+1, by2=GRID_OY+6*CELL_H+1;
+    const bx2=GRID_OX+CASTLE_C*CELL_W+1, by2=GRID_OY+CASTLE_R*CELL_H+1;
     const pulse = 0.35 + 0.25*Math.sin(Date.now()/420);
     if (Sprites.has('tile.base')) {
       ctx.strokeStyle=`rgba(165,180,252,${pulse})`; ctx.lineWidth=2;
@@ -326,21 +342,21 @@ function renderDefense(ctx, gs) {
       ctx.fillStyle=`rgba(199,210,254,${0.55+pulse*0.45})`; ctx.font='bold 8px sans-serif';
       ctx.textAlign='center'; ctx.textBaseline='top';
       ctx.shadowColor='#0b1020'; ctx.shadowBlur=3;
-      ctx.fillText('🏰 마을', GRID_OX+4*CELL_W+CELL_W/2, by2+2);
+      ctx.fillText('🏰 마을', GRID_OX+CASTLE_C*CELL_W+CELL_W/2, by2+2);
       ctx.shadowBlur=0;
     } else {
       ctx.fillStyle='rgba(99,102,241,0.35)'; ctx.fillRect(bx2,by2,CELL_W-2,CELL_H-2);
       ctx.fillStyle='#a5b4fc'; ctx.font='bold 9px sans-serif';
       ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText('🏰',GRID_OX+4*CELL_W+CELL_W/2,GRID_OY+6*CELL_H+CELL_H/2-5);
-      ctx.fillText('마을',GRID_OX+4*CELL_W+CELL_W/2,GRID_OY+6*CELL_H+CELL_H/2+7);
+      ctx.fillText('🏰',GRID_OX+CASTLE_C*CELL_W+CELL_W/2,GRID_OY+CASTLE_R*CELL_H+CELL_H/2-5);
+      ctx.fillText('마을',GRID_OX+CASTLE_C*CELL_W+CELL_W/2,GRID_OY+CASTLE_R*CELL_H+CELL_H/2+7);
     }
   }
 
   // 사거리 미리보기
   if (gs.hoveredCell) {
     const {c,r} = gs.hoveredCell;
-    if (!PATH_CELLS.has(`${c},${r}`) && !(c===4&&(r===0||r===6))) {
+    if (!PATH_CELLS.has(`${c},${r}`) && !(c===CASTLE_C&&(r===0||r===CASTLE_R))) {
       const cc = cellCenter(c,r);
       ctx.beginPath(); ctx.arc(cc.x, cc.y, TOWER_TYPES.arrow.range, 0, Math.PI*2);
       ctx.strokeStyle='rgba(99,102,241,0.4)'; ctx.lineWidth=1; ctx.stroke();
@@ -424,15 +440,16 @@ function renderDefense(ctx, gs) {
     renderHeroInDefense(ctx, gs.hero);
   }
 
-  // 기지 HP
-  const bx=8, by=DEFENSE_Y+DEFENSE_H-14;
+  // 기지 HP — 성 그림이 가운데(4열)에 서므로 옆으로 늘어놓으면 글자가 성을 밟는다.
+  // 성벽 띠가 50px이니 막대와 글자를 위아래로 쌓는다. 자릿수가 늘어도 성에 닿지 않는다.
+  const bx=8, by=wallY+12;
   // 최대치는 강화로 늘어난다 — 상수 100을 그대로 쓰면 200/100 같은 표시가 나온다
   const bMax = baseHpMax();
   ctx.fillStyle='#0f172a'; ctx.fillRect(bx-1,by-1,181,10);
   drawHPBar(ctx,bx,by,180,8,gs.baseHP/bMax);
   ctx.fillStyle=COLORS.text; ctx.font='10px sans-serif';
   ctx.textAlign='left'; ctx.textBaseline='middle';
-  ctx.fillText(`기지 HP ${Math.ceil(gs.baseHP)}/${bMax}`, bx+184, by+4);
+  ctx.fillText(`기지 HP ${Math.ceil(gs.baseHP)}/${bMax}`, bx, by+21);
 
   // 👹 마왕 — 한 마리가 곧 이 층이므로 체력이 크게 보여야 한다.
   // 일반 적의 머리 위 막대로는 "얼마나 남았나"가 안 읽힌다.
@@ -6492,14 +6509,15 @@ function renderTownPageTowers(ctx, gs, startY) {
   // ── 미니 그리드 ──────────────────────────────────────────────────────────
   const scale=0.62;
   const mCW=Math.floor(CELL_W*scale),mCH=Math.floor(CELL_H*scale);
-  const gridW=GRID_COLS*mCW,gridH=GRID_ROWS*mCH;
+  const gridW=GRID_COLS*mCW,gridH=(CASTLE_R+1)*mCH;   // 성 줄 한 칸을 더 그린다
   const offX=Math.floor((CW-gridW)/2),offY=palBottom+10;
 
-  for (let r=0;r<GRID_ROWS;r++) {
+  for (let r=0;r<=CASTLE_R;r++) {
     for (let c=0;c<GRID_COLS;c++) {
+      if (r >= GRID_ROWS && c !== CASTLE_C) continue;   // 성 줄은 성 칸만
       const x=offX+c*mCW,y=offY+r*mCH;
       const isPath=PATH_CELLS.has(`${c},${r}`);
-      const isBase=c===4&&r===6,isStart=c===4&&r===0;
+      const isBase=c===CASTLE_C&&r===CASTLE_R,isStart=c===CASTLE_C&&r===0;
       ctx.fillStyle=isBase?'#3f1515':isStart?'#1e3a5f':isPath?COLORS.pathCell:COLORS.defenseGrid;
       ctx.fillRect(x+1,y+1,mCW-2,mCH-2);
       if (!isPath && !isBase && !isStart) {

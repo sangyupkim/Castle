@@ -865,7 +865,7 @@ function tap({x,y}) {
   // 기지 탭 → 마을 진입 (idle 상태에서만)
   if (wm.phase==='idle' && y<UIBAR_Y) {
     const cell=screenToCell(x,y);
-    if (cell && cell.c===4 && cell.r===6) { gs.page='town'; return; }
+    if (cell && cell.c===CASTLE_C && cell.r===CASTLE_R) { gs.page='town'; return; }
   }
   // 마을 페이지에서는 전투 화면 탭 막기
   if (gs.page==='town') { handleTownTap(x,y); return; }
@@ -2071,7 +2071,10 @@ function hitTest(x,y,r){
 
 function screenToCell(x,y) {
   const c=Math.floor((x-GRID_OX)/CELL_W), r=Math.floor((y-GRID_OY)/CELL_H);
-  if(c<0||c>=GRID_COLS||r<0||r>=GRID_ROWS) return null;
+  if(c<0||c>=GRID_COLS||r<0) return null;
+  // 🏰 성은 격자 밖 한 줄(CASTLE_R)에 선다. 거기까지 받아야 성을 눌러 마을에 들어간다.
+  // 그 줄의 다른 칸은 땅이 아니므로 없는 칸으로 돌린다.
+  if(r>=GRID_ROWS) return (r===CASTLE_R && c===CASTLE_C) ? {c,r} : null;
   return {c,r};
 }
 
