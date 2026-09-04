@@ -100,6 +100,30 @@ const report = await pg.evaluate(({ scale, minPx, minLen }) => {
     '📖 가이드북':      () => { const d = st({ page:'lobby' });
                               d.guideChapter = 6;   // 계산식이 가장 많은 '규칙' 장
                               renderGuideBook(cx, d); },
+    // ── 3·4단계 · 나머지 전부 ─────────────────────────────────────────
+    '결과 화면':        () => { const d = st({ page:'result' });
+                              d.runSummary = { endless:true, endlessTier:30, gems:120, kills:900,
+                                gameSec:1800, wallSec:400, bossDown:false, nightmare:0,
+                                unbounded:false, gaveUp:false, gold:0, waves:30, baseHP:88,
+                                rows:[], mult:1, cards:[] };
+                              renderResult(cx, d); },
+    '강화 카드':        () => { const d = st({ page:'battle', inRun:true });
+                              d.upgradePick = { active:true, cards: rollUpgradeCards([], 3, d) };
+                              renderUpgradePick(cx, d); },
+    '대장간':          () => renderForgeScreen(cx, st({ page:'town', gold:900 })),
+    '건물 상세 · 성채':  () => renderBuildingScreen(cx, st({ page:'town', gold:900 }), 'castle'),
+    '영웅 상점':        () => renderHeroShopScreen(cx, st({ page:'town', gold:900 })),
+    '영웅 상세':        () => renderHeroDetail(cx, st({ page:'town' }), 60),
+    '로비 · 스킬':      () => renderLobbySkill(cx, st({ page:'lobby', soulStones:5000 })),
+    '로비 · 패':       () => renderLobbyCardMeta(cx, st({ page:'lobby', soulStones:5000 })),
+    '로비 · 해금':      () => renderLobbyUnlock(cx, st({ page:'lobby', soulStones:5000 })),
+    '로비 · 서약':      () => renderLobbyPact(cx, st({ page:'lobby', soulStones:5000 })),
+    '로비 · 기록':      () => renderLobbyRecord(cx, st({ page:'lobby' })),
+    '📋 소식':         () => renderPatchNotes(cx, st({ page:'lobby' })),
+    '타이틀':          () => renderTitleScreen(cx, 1),
+    '일시정지':         () => renderPauseOverlay(cx),
+    '이번 판 카드':      () => { const d = st({ page:'battle', inRun:true, runCardsOpen:true });
+                              renderRunCardsOverlay(cx, d); },
   };
   const out = [];
   for (const [name, fn] of Object.entries(screens)) {
