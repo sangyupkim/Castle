@@ -1847,19 +1847,24 @@ function arenaFloorCanvas() {
   if (_arenaFloor !== null) return _arenaFloor;
   // 위와 같은 함정 — 아직 안 온 것을 '없다'로 구워 두면 영영 바닥이 안 깔린다.
   // 로딩이 끝나기 전에는 판단을 미룬다.
-  if (!Sprites.has('tile.field.0')) return Sprites.ready ? (_arenaFloor = false) : false;
+  // 🪨 던전 돌바닥이 있으면 그것으로 깐다. 상단은 밭, 하단은 던전이라
+  // 두 전선이 다른 곳으로 보인다 — 예전에는 위아래가 같은 밭 타일이었다.
+  const dungeon = Sprites.has('tile.dungeon');
+  if (!dungeon && !Sprites.has('tile.field.0')) return Sprites.ready ? (_arenaFloor = false) : false;
   const c = document.createElement('canvas');
   c.width = ARENA_W * 2; c.height = ARENA_H * 2;      // 화면이 DPR 2로 그려지므로 두 배로 굽는다
   const x = c.getContext('2d');
   x.scale(2, 2);
-  for (let ty = 0; ty * ARENA_TILE < ARENA_H; ty++) {
-    for (let tx = 0; tx * ARENA_TILE < ARENA_W; tx++) {
-      Sprites.draw(x, fieldTileKey(tx + 11, ty + 7),
-                   tx*ARENA_TILE, ty*ARENA_TILE, ARENA_TILE, ARENA_TILE);
+  const TS = dungeon ? 24 : ARENA_TILE;               // 던전 타일은 16px 원본이라 잘게 깐다
+  for (let ty = 0; ty * TS < ARENA_H; ty++) {
+    for (let tx = 0; tx * TS < ARENA_W; tx++) {
+      if (dungeon) Sprites.draw(x, 'tile.dungeon', tx*TS, ty*TS, TS, TS);
+      else Sprites.draw(x, fieldTileKey(tx + 11, ty + 7), tx*TS, ty*TS, TS, TS);
     }
   }
-  // 밤 장막 — 이 정도로 눌러야 체력바와 아이콘이 읽힌다
-  x.fillStyle = 'rgba(8,16,28,0.70)';
+  // 밤 장막 — 이 정도로 눌러야 체력바와 아이콘이 읽힌다.
+  // 던전 바닥은 원래 어두워서 덜 눌러도 된다.
+  x.fillStyle = dungeon ? 'rgba(6,10,20,0.30)' : 'rgba(8,16,28,0.70)';
   x.fillRect(0, 0, ARENA_W, ARENA_H);
   return (_arenaFloor = c);
 }
@@ -1911,6 +1916,15 @@ function drawHuntMark(ctx, x, y, r) {
   ctx.restore();
 }
 
+// 지형 종류 → 타일 그림. 없는 종류는 예전처럼 손으로 그린 무늬로 떨어진다.
+// 프레임 수·속도를 여기 적어 둔다 — Sprites는 meta를 밖으로 내주지 않는다.
+const TERRAIN_TILE_KEY = {
+  water: { key:'terrain.water',  frames:5, fps:4 },
+  spike: { key:'terrain.spikes', frames:5, fps:5 },
+};
+// 16px 원본을 그대로 깔면 조각 하나에 100장이 넘는다. 20px로 늘려 수를 줄인다.
+const TERRAIN_TILE_PX  = 20;
+
 function renderArenaTerrain(ctx, a) {
   const ter = a.terrain;
   if (!ter || !ter.length) return;
@@ -1920,6 +1934,24 @@ function renderArenaTerrain(ctx, a) {
 
     ctx.save();
     ctx.beginPath(); roundRect(ctx, t.x, t.y, t.w, t.h, 5); ctx.clip();
+
+    // 🗺 그림 타일이 있으면 손으로 그린 무늬 대신 타일을 깐다.
+    // 물과 가시는 애니메이션이라 '지금 위험하다'가 움직임으로 읽힌다.
+    // 조각 전체가 한 박자로 뛰면 격자무늬가 도드라지므로, 칸마다 위상을 어긋낸다.
+    const tile = TERRAIN_TILE_KEY[t.kind];
+    if (tile && typeof Sprites !== 'undefined' && Sprites.has(tile.key)) {
+      const TS = TERRAIN_TILE_PX;
+      const base = Math.floor(Date.now() / (1000 / tile.fps));
+      for (let ty = 0; ty * TS < t.h; ty++) {
+        for (let tx = 0; tx * TS < t.w; tx++) {
+          const fi = (base + tx + ty * 2) % tile.frames;
+          Sprites.frame(ctx, tile.key, fi, t.x + tx * TS, t.y + ty * TS, TS, TS);
+        }
+      }
+      ctx.restore();
+      continue;
+    }
+
     ctx.strokeStyle = d.edge; ctx.globalAlpha = 0.45; ctx.lineWidth = 1;
 
     if (t.kind === 'rock') {
