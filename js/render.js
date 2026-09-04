@@ -166,7 +166,16 @@ function drawBtn(ctx, x, y, w, h, label, bg, fg, on) {
     uiPanel(ctx, x, y, w, h, 5, live ? bg : '#374151', live ? fg : '#4b5563', 1.5);
   }
   ctx.fillStyle = live ? fg : '#6b7280';
-  ctx.font='bold 10px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  // 게임의 모든 버튼이 이 한 줄을 지나간다. 10px으로 고정돼 있었고, 360px 폰에서는
+  // 7.5px으로 그려졌다 — 누를 것의 이름을 못 읽는 것은 그냥 못 쓰는 버튼이다.
+  // 기본은 body(13)로 올리고, 긴 이름이 버튼 밖으로 새면 한 단계씩만 줄인다.
+  // 자리에 맞춰 무한정 줄이면 결국 원래대로 돌아가므로 micro에서 멈춘다.
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  const room = w - 12;
+  for (const size of ['body', 'label', 'micro']) {
+    setFont(ctx, size, 'bold');
+    if (ctx.measureText(label).width <= room || size === 'micro') break;
+  }
   ctx.fillText(label, x+w/2, y+h/2);
 }
 
@@ -467,9 +476,9 @@ function renderDefense(ctx, gs) {
   const bMax = baseHpMax();
   ctx.fillStyle='#0f172a'; ctx.fillRect(bx-1,by-1,181,10);
   drawHPBar(ctx,bx,by,180,8,gs.baseHP/bMax);
-  ctx.fillStyle=COLORS.text; ctx.font='10px sans-serif';
+  ctx.fillStyle=COLORS.text; setFont(ctx, 'body', 'bold');
   ctx.textAlign='left'; ctx.textBaseline='middle';
-  ctx.fillText(`기지 HP ${Math.ceil(gs.baseHP)}/${bMax}`, bx, by+21);
+  ctx.fillText(`기지 HP ${Math.ceil(gs.baseHP)}/${bMax}`, bx, by+22);
 
   // 👹 마왕 — 한 마리가 곧 이 층이므로 체력이 크게 보여야 한다.
   // 일반 적의 머리 위 막대로는 "얼마나 남았나"가 안 읽힌다.
@@ -1402,24 +1411,31 @@ function renderUIBar(ctx, gs, wm) {
 
   const cy=UIBAR_Y+UIBAR_H/2;
 
-  // 스테이지 / 웨이브 (좌측 상·하 2줄)
+  // 스테이지 (좌측 윗줄).
+  //
+  // 예전에는 이 줄에 세 가지가 겹쳐 있었다 — `1-1` + `웨이브 1/3` + `최고 45`.
+  // 그런데 훈련의 `1-1`은 이미 "1스테이지 1웨이브"라는 뜻이다. 같은 말을
+  // 9px으로 한 번 더 적고 있었던 셈이라, 작아서 못 읽는 데다 읽어도 새 정보가 없었다.
   const si = getStageInfo(gs.wave);
-  ctx.fillStyle=COLORS.text; ctx.font='bold 12px sans-serif';
+  ctx.fillStyle=COLORS.text; setFont(ctx, 'title', 'bold');
   ctx.textAlign='left'; ctx.textBaseline='middle';
   ctx.fillText(`${si.stageLabel}`, 8, cy-13);
-  ctx.fillStyle='#94a3b8'; ctx.font='bold 9px sans-serif';
+  const lx = 8 + ctx.measureText(si.stageLabel).width + 8;   // 라벨 뒤에 붙인다
   if (si.endless) {
     const bst = gs.stats.bestEndless || 0;
-    ctx.fillStyle = si.tier > bst ? '#4ade80' : '#94a3b8';
-    ctx.fillText(si.tier > bst ? '신기록' : `최고 ${bst}`, 42, cy-12);
+    // 최고 기록은 갱신하는 순간에만 말을 건다. 평소엔 그냥 숫자라 자리만 먹는다.
+    if (si.tier > bst) {
+      ctx.fillStyle='#4ade80'; setFont(ctx, 'label', 'bold');
+      ctx.fillText('신기록', lx, cy-12);
+    }
+    // 층 이벤트는 이 층의 규칙을 바꾼다 — 지금 손을 쓸 근거라서 남긴다
     if (gs.floorEvent) {
-      ctx.font='bold 10px sans-serif';
+      setFont(ctx, 'label', 'bold');
       ctx.fillStyle = gs.floorEvent.tone === 'good' ? '#4ade80'
                     : gs.floorEvent.tone === 'bad'  ? '#f87171' : '#fbbf24';
-      ctx.fillText(`${gs.floorEvent.icon}${gs.floorEvent.name}`, 88, cy-12);
+      ctx.fillText(`${gs.floorEvent.icon}${gs.floorEvent.name}`,
+                   lx + (si.tier > bst ? 44 : 0), cy-12);
     }
-  } else {
-    ctx.fillText(`웨이브 ${si.waveInStage+1}/3`, 30, cy-12);
   }
 
   // 타이머 — 이제 "몹이 나오는 시간"이다.
@@ -1440,22 +1456,26 @@ function renderUIBar(ctx, gs, wm) {
   }
   ctx.fillStyle = cleaning ? '#22d3ee'
                 : (wm.phase==='active' && tv<=10 ? '#ef4444' : COLORS.gold);
-  ctx.font='bold 13px monospace'; ctx.textAlign='left';
-  ctx.fillText(`${cleaning?'🧹':'⏱'} ${tlabel}`, 8, cy+4);
+  setFont(ctx, 'title', 'bold mono'); ctx.textAlign='left';
+  ctx.fillText(`${cleaning?'🧹':'⏱'} ${tlabel}`, 8, cy+6);
 
-  ctx.fillStyle='#475569'; ctx.font='bold 9px sans-serif';
-  ctx.fillText(`누적 ${gs.battle.totalGoldEarned}💰 · 💎${gs.soulStones}`, 8, cy+19);
+  // 누적 골드·보석 줄(9px)은 지웠다. 이번 판 전체 수입은 **끝난 뒤에** 볼 값이지
+  // 웨이브 한가운데에서 손을 쓸 근거가 아니다. 결과 화면에 그대로 나온다.
+  // 그 자리를 비워 위의 층 이름과 타이머를 12px·13px → 17px로 키웠다.
 
   // 골드
-  ctx.fillStyle=COLORS.gold; ctx.font='bold 14px sans-serif';
+  // 이 화면에서 유일하게 '지금 쓸 수 있는 것'이라 가장 크게 둔다
+  ctx.fillStyle=COLORS.gold; setFont(ctx, 'hero', 'bold');
   ctx.textAlign='center';
-  ctx.fillText(`💰 ${Math.floor(gs.gold)}`, CW/2, cy-7);
+  ctx.fillText(`💰 ${Math.floor(gs.gold)}`, CW/2, cy-9);
 
   // 전투 적립 골드
   const bp = gs.battle.phase;
-  const earn = gs.battle.goldEarned;
+  // 적립 골드를 여기 또 적지 않는다. 바로 아래 아레나 띠에 `💰 적립액`이 이미 있고,
+  // 위의 `💰 보유액`과 나란히 놓이면 큰 숫자 둘이 붙어 어느 쪽이 무엇인지 헷갈린다.
+  // 여기는 **지금 무슨 국면인가**만 말한다.
   const bLabel = bp==='hire'          ? '병력 고용 중'
-               : bp==='fighting'      ? (earn>0 ? `⚔️ +${earn}💰 적립 중` : '⚔️ 전투 중')
+               : bp==='fighting'      ? '⚔️ 전투 중'
                : bp==='won'           ? '✅ 전투 승리'
                : bp==='retreated'     ? '🛡 후퇴 — 병력 보존'
                : bp==='idle_defeated' ? '❌ 병력 전멸'
@@ -1464,8 +1484,8 @@ function renderUIBar(ctx, gs, wm) {
   ctx.fillStyle = bp==='retreated' ? '#7dd3fc'
                 : bp==='fighting'||bp==='won' ? '#22c55e'
                 : bp.includes('defeat')||bp==='lost' ? '#ef4444' : COLORS.textDim;
-  ctx.font='bold 10px sans-serif'; ctx.textAlign='center';
-  ctx.fillText(bLabel, CW/2, cy+8);
+  setFont(ctx, 'body', 'bold'); ctx.textAlign='center';
+  ctx.fillText(bLabel, CW/2, cy+12);
 
   // 웨이브 시작 버튼
   const bw=110, bh=38, bx=CW-bw-6, by2=UIBAR_Y+(UIBAR_H-bh)/2;
@@ -1544,13 +1564,18 @@ function renderBattleControls(ctx, gs) {
     // 띠 왼쪽은 비니까 층 표시를 여기로 옮겨 준다 — 스크롤해도 늘 보이는 자리
     const st = getStageInfo(gs.wave);
     ctx.textAlign='left'; ctx.textBaseline='middle';
-    ctx.fillStyle = st.endless ? '#c4b5fd' : '#a5b4fc'; ctx.font='bold 12px sans-serif';
-    ctx.fillText(st.endless ? `∞ ${st.tier}층` : `훈련 ${st.stageLabel}`, 10, BATTLE_Y + BRIEF_CTRL_H/2);
+    ctx.fillStyle = st.endless ? '#c4b5fd' : '#a5b4fc'; setFont(ctx, 'title', 'bold');
+    const head = st.endless ? `∞ ${st.tier}층` : `훈련 ${st.stageLabel}`;
+    ctx.fillText(head, 10, BATTLE_Y + BRIEF_CTRL_H/2);
     if (st.endless) {
+      // 뒤에 붙이는 자리를 **재서** 잡는다 — 72로 못 박아 두면 세 자리 층에서 겹친다.
+      // 재는 일이 먼저다: fillText 인자 안에서 폰트를 바꾸면 인자가 다 계산된 뒤에
+      // 그려지므로, 재려고 바꾼 큰 글씨로 본문이 나가 버린다.
+      const headW = ctx.measureText(head).width;   // 아직 title 폰트다
       const fresh = st.tier > (gs.runBestAtStart || 0);
-      ctx.fillStyle = fresh ? '#4ade80' : '#8a6a33'; ctx.font='bold 9px sans-serif';
+      ctx.fillStyle = fresh ? '#4ade80' : '#8a6a33'; setFont(ctx, 'label', 'bold');
       ctx.fillText(fresh ? '★ 신기록 구간 · 💎 제값' : `되짚는 층 · 💎 ×${ENDLESS_REPEAT_MULT}`,
-                   72, BATTLE_Y + BRIEF_CTRL_H/2);
+                   10 + headW + 10, BATTLE_Y + BRIEF_CTRL_H/2);
     }
     ctx.textAlign='left'; ctx.textBaseline='top';
   }
@@ -2293,7 +2318,7 @@ function renderArenaPhase(ctx, gs) {
   // 플로티
   for (const f of b.floaties) {
     ctx.globalAlpha = Math.max(0, Math.min(1, f.life));
-    ctx.fillStyle = f.color; ctx.font = 'bold 10px sans-serif';
+    ctx.fillStyle = f.color; setFont(ctx, 'label', 'bold');
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(f.text, f.x, f.y);
   }
@@ -2313,38 +2338,48 @@ function renderArenaStatusBar(ctx, gs) {
   const a = gs.arena, b = gs.battle;
   ctx.fillStyle = '#080e18'; ctx.fillRect(0, BATTLE_Y, CW, ARENA_STATUS_H);
 
-  ctx.font='bold 10px sans-serif'; ctx.textBaseline='middle'; ctx.textAlign='left';
+  // 28px 띠에 여섯 가지가 9~10px으로 들어차 있었다. 폭 480에 여섯이면 어느 하나도
+  // 키울 수 없어서, **전투 중에 손을 쓸 근거가 되는 것만** 남기고 셋을 뺐다.
+  //
+  //   뺀 것 ⚔처치 수  — 세고 있을 뿐 이걸 보고 할 일이 없다 (결과 화면에 있다)
+  //   뺀 것 🗿몹 강화율 — 웨이브가 시작되면 못 바꾼다. 브리핑에서 볼 값이다
+  //   뺀 것 자동/수동   — 바로 아래 조작줄에 같은 이름의 **버튼**이 이미 있다
+  //
+  // 남은 넷은 자리를 재서 놓는다. 골드가 여섯 자리로 늘어나도 다음 것과 겹치지 않게.
   const cy = BATTLE_Y + ARENA_STATUS_H/2;
-  ctx.fillStyle='#fbbf24'; ctx.fillText(`💰 ${b.goldEarned}`, 8, cy);
-  ctx.fillStyle='#f87171'; ctx.fillText(`⚔ ${b.killCount}`, 66, cy);
-  // 아레나 몹 강화율 — 무한은 층 곡선, 훈련은 웨이브 선형. 둘 다 처치 누적을 얹는다.
-  const aBase = endlessTier(a.waveIndex) > 0 ? endlessArenaMult(a.waveIndex)
-                                             : (1 + (a.waveIndex||0) * WAVE_STAT_SCALE);
-  // ⛏️갱도 심화로 산 몹 강화분도 같이 보여야 한다 — 내가 올린 값이 어디에 붙었는지
-  const scalePct = Math.round((aBase * (1 + (b.killCount||0) * KILL_SCALE)
-                               * (1 + (BONUSES.mobStatMult||0)) - 1) * 100);
-  ctx.fillStyle='#7c3aed'; ctx.fillText(`🗿${caveLevelOf(gs)} 몹+${scalePct}%`, 116, cy);
+  ctx.textBaseline='middle'; ctx.textAlign='left';
+  setFont(ctx, 'body', 'bold');
+
+  let x = 8;
+  const put = (text, color) => {
+    ctx.fillStyle = color; ctx.fillText(text, x, cy);
+    x += ctx.measureText(text).width + 14;
+  };
+  put(`💰 ${b.goldEarned}`, '#fbbf24');
 
   const live = a.mobs.filter(m=>!m.dead).length;
-  ctx.fillStyle = live >= ARENA_MAX_MOBS ? '#ef4444' : '#94a3b8';
-  ctx.fillText(`👾 ${live}/${ARENA_MAX_MOBS}`, 200, cy);
+  put(`👾 ${live}/${ARENA_MAX_MOBS}`, live >= ARENA_MAX_MOBS ? '#ef4444' : '#94a3b8');
 
-  // 스폰 압력 게이지 — 간격이 짧아질수록 찬다
+  // 완주하면 받을 보너스 — 버티는 쪽에도 이유를 준다. 오른쪽 끝에 붙인다.
+  let rightEdge = CW - 8;
+  if (gs.battle.phase === 'fighting') {
+    const bonus = `★완주 +${clearBonusGold(wm.waveIndex)}`;
+    ctx.textAlign='right'; ctx.fillStyle='#22c55e';
+    ctx.fillText(bonus, rightEdge, cy);
+    rightEdge -= ctx.measureText(bonus).width + 12;
+    ctx.textAlign='left';
+  }
+
+  // 스폰 압력 게이지 — 간격이 짧아질수록 찬다. 남은 자리를 그대로 쓴다.
   const iv   = spawnInterval(a.elapsed) * (a.spawnMult||1);
   const pres = Math.max(0, Math.min(1, (SPAWN_BASE_INTERVAL - iv) / (SPAWN_BASE_INTERVAL - 0.4)));
-  const gx = 256, gw = 92;
-  ctx.fillStyle='#1e293b'; ctx.fillRect(gx, cy-4, gw, 8);
-  ctx.fillStyle = pres > 0.75 ? '#ef4444' : pres > 0.45 ? '#f59e0b' : '#22c55e';
-  ctx.fillRect(gx, cy-4, gw*pres, 8);
-
-  ctx.textAlign='right'; ctx.font='bold 9px sans-serif';
-  ctx.fillStyle = a.mode==='manual' ? '#c4b5fd' : '#475569';
-  ctx.fillText(a.mode==='manual' ? '수동' : '자동', CW-8, cy);
-
-  // 완주하면 받을 보너스를 미리 보여준다 — 버티는 쪽에도 이유를 준다
-  if (gs.battle.phase === 'fighting') {
-    ctx.textAlign='right'; ctx.fillStyle='#22c55e'; ctx.font='bold 9px sans-serif';
-    ctx.fillText(`★완주 +${clearBonusGold(wm.waveIndex)}`, CW-38, cy);
+  // 남은 자리를 다 쓰면 300px짜리 막대가 되어 띠에서 가장 눈에 띄는 것이 된다.
+  // 스폰 압력은 곁눈으로 보는 값이지 이 줄의 주인공이 아니다 — 폭을 묶어 둔다.
+  const gw = Math.max(0, Math.min(150, rightEdge - x));
+  if (gw > 16) {
+    ctx.fillStyle='#1e293b'; ctx.fillRect(x, cy-5, gw, 10);
+    ctx.fillStyle = pres > 0.75 ? '#ef4444' : pres > 0.45 ? '#f59e0b' : '#22c55e';
+    ctx.fillRect(x, cy-5, gw*pres, 10);
   }
 }
 
