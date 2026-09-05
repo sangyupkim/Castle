@@ -1332,6 +1332,81 @@ function renderMidBossHud(ctx, gs) {
 // ─── 👹 보스 HUD ─────────────────────────────────────────────────────────────
 // 화면 맨 위에 붙는 한 덩어리. 보스 체력(줄로 나뉜)·남은 바퀴/시간·영웅 체력·
 // 방금 터진 기믹을 여기서 다 읽을 수 있어야 한다.
+// ─── 🎬 보스 등장 컷 ─────────────────────────────────────────────────────────
+// 화면을 덮고 "무엇이 · 어디에" 둘만 크게 말한다. 2.6초 안에 세 마디로 끝난다:
+//   들어오고(0~0.45) · 버티고(~2.0) · 빠진다(~2.6)
+// 판은 뒤에서 계속 돌아가므로 덮개는 완전 불투명까지 가지 않는다 —
+// 무슨 일이 벌어지는지는 보이면서, 읽을 것이 앞에 서 있어야 한다.
+function renderBossIntro(ctx, gs) {
+  const b = gs && gs.bossIntro; if (!b) return;
+  const t = b.t / b.dur;                       // 0 → 1
+  const inA  = Math.min(1, b.t / 0.45);        // 들어오는 정도
+  const outA = Math.min(1, Math.max(0, (b.dur - b.t) / 0.55));
+  const a    = Math.min(inA, outA);            // 전체 불투명도
+  if (a <= 0) return;
+
+  const col  = b.lord ? '#dc2626' : '#f43f5e';
+  const glow = b.lord ? '#fca5a5' : '#fda4af';
+
+  ctx.save();
+  // 바탕 — 가운데가 더 어둡게 깔려 글자가 뜬다
+  ctx.globalAlpha = a * 0.82;
+  ctx.fillStyle = '#04060c'; ctx.fillRect(0, 0, CW, CH);
+  const g = ctx.createRadialGradient(CW/2, CH/2, 20, CW/2, CH/2, CH*0.55);
+  g.addColorStop(0, b.lord ? 'rgba(80,8,12,0.75)' : 'rgba(60,8,28,0.7)');
+  g.addColorStop(1, 'rgba(4,6,12,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, CW, CH);
+  ctx.globalAlpha = a;
+
+  const midY = CH/2;
+  // 글이 놓이는 자리 — 띠는 이 위아래 **바깥**에 선다. 안쪽에 세우면 글을 덮는다.
+  const TOP = midY - 110, BOT = midY + 80;
+
+  // 위아래 띠 — 밖에서 밀려 들어온다. 영화 자막 틀처럼 화면을 좁혀 시선을 모은다
+  const barH = 90, slide = (1 - inA) * (barH + 20);
+  ctx.fillStyle = '#07090f';
+  ctx.fillRect(0, TOP - barH - slide, CW, barH);
+  ctx.fillRect(0, BOT + slide,        CW, barH);
+  ctx.fillStyle = col;
+  ctx.fillRect(0, TOP - 2 - slide, CW, 2);
+  ctx.fillRect(0, BOT + slide,     CW, 2);
+
+  // 나타나는 쪽 절반을 물들인다 — 어디를 봐야 하는지가 글보다 먼저 읽힌다
+  {
+    const y0 = b.up ? 0 : ARENA_Y, hh = b.up ? DEFENSE_H : (CH - ARENA_Y);
+    ctx.globalAlpha = a * 0.20 * (1 - t);
+    ctx.fillStyle = col; ctx.fillRect(0, y0, CW, hh);
+    ctx.globalAlpha = a;
+  }
+
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+
+  // 무엇이 — 아이콘은 살짝 커졌다 제자리로 온다
+  const pop = 1 + (1 - inA) * 0.5;
+  ctx.save();
+  ctx.translate(CW/2, midY - 66);
+  ctx.scale(pop, pop);
+  ctx.font = '46px sans-serif';
+  ctx.fillText(b.icon, 0, 0);
+  ctx.restore();
+
+  // 등급 — 마왕과 중간보스를 한눈에 가른다
+  ctx.fillStyle = col; setFont(ctx, 'title', 'bold');
+  ctx.fillText(b.lord ? '마 왕 강 림' : '중 간 보 스 등 장', CW/2, midY - 18);
+
+  // 이름
+  ctx.fillStyle = '#f8fafc'; ctx.font = 'bold 26px sans-serif';
+  ctx.fillText(b.name, CW/2, midY + 14);
+
+  // 어디에 — 이 컷을 띄우는 진짜 이유다. 영웅을 어디 둘지가 여기서 갈린다.
+  const laneTxt = b.up ? '🗼 상단 — 타워라인에 나타납니다'
+                       : '⚔️ 하단 — 아레나에 나타납니다';
+  ctx.fillStyle = glow; setFont(ctx, 'body', 'bold');
+  ctx.fillText(laneTxt, CW/2, midY + 54);
+  ctx.restore();
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+}
+
 function renderBossHud(ctx, gs) {
   if (typeof bossActive !== 'function' || !bossActive(gs)) return 0;
   const b = gs.boss;
@@ -1839,6 +1914,38 @@ function renderBriefing(ctx, gs, top) {
     });
     ctx.textBaseline='top';
     y += ah + 5;
+  }
+
+  // ── 🧾 지난 웨이브 수입 ──────────────────────────────────────────────────
+  // 전투 중에는 가운데 큰 골드 하나만 둔다. 그 숫자가 어디서 왔는지는 여기서 가른다 —
+  // 상단을 더 지어야 할지 하단을 더 뽑아야 할지가 이 두 줄에서 갈린다.
+  {
+    const lw = gs.lastWave;
+    if (lw && lw.total >= 0) {
+      const gh2 = 80;   // 제목 · 전선 두 갈래 · 보너스 — 13px 세 줄
+      uiPanel(ctx, 6, y, CW-12, gh2, 7, '#0f1208', '#3f3a12', 1);
+      ctx.textAlign='left'; ctx.textBaseline='top';
+      ctx.fillStyle='#fbbf24'; setFont(ctx, 'body', 'bold');
+      ctx.fillText(`🧾 ${lw.idx}웨이브 수입`, 12, y+8);
+      ctx.textAlign='right'; ctx.fillStyle='#fde68a'; setFont(ctx, 'title', 'bold');
+      ctx.fillText(`+${lw.total}💰`, CW-12, y+5);
+
+      // 어디서 벌었나 — 두 전선을 나란히 놓아야 어느 쪽이 굶고 있는지 보인다
+      ctx.textAlign='left'; setFont(ctx, 'body', 'bold');
+      ctx.fillStyle='#93c5fd';
+      ctx.fillText(`🗼 상단 ${lw.top}💰`, 12, y+32);
+      ctx.fillStyle='#c4b5fd';
+      ctx.fillText(`⚔️ 하단 ${lw.bot}💰`, 128, y+32);
+
+      // 보너스는 전선과 무관한 몫이라 제 줄에 따로 적는다 —
+      // 하단 금액 옆에 붙였더니 여섯 자리에서 서로 파고들었다
+      const bonus = lw.kill + lw.win + lw.clear;
+      ctx.fillStyle='#64748b'; setFont(ctx, 'body', 'bold');
+      ctx.fillText(bonus > 0
+        ? `✨ 보너스 ${bonus}💰 — 처치 ${lw.kill} · 승리 ${lw.win} · 완주 ${lw.clear}`
+        : '✨ 보너스 없음 — 완주하면 붙습니다', 12, y+54);
+      y += gh2 + 6;
+    }
   }
 
   // ── 잔존 침입자 ──────────────────────────────────────────────────────────
@@ -2399,7 +2506,10 @@ function renderArenaStatusBar(ctx, gs) {
     ctx.fillStyle = color; ctx.fillText(text, x, cy);
     x += ctx.measureText(text).width + 14;
   };
-  put(`💰 ${b.goldEarned}`, '#fbbf24');
+  // 💰 적립액을 여기 또 적지 않는다. 바로 위 가운데에 **보유액**이 22px으로 크게
+  // 떠 있는데 그 밑에 작은 골드가 하나 더 있으면 어느 쪽이 무엇인지부터 헷갈린다.
+  // 전투 중에 필요한 숫자는 "지금 쓸 수 있는 돈" 하나다.
+  // 어디서 얼마를 벌었는지는 웨이브가 끝난 뒤 🧾정산 상자에서 갈라 보여준다.
 
   const live = a.mobs.filter(m=>!m.dead).length;
   put(`👾 ${live}/${ARENA_MAX_MOBS}`, live >= ARENA_MAX_MOBS ? '#ef4444' : '#94a3b8');

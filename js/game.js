@@ -2205,6 +2205,7 @@ function onDefenseKill(e, byHero) {
     SaveManager.save(gs);
   }
   gs.gold += gold;
+  gs.battle.goldTop += gold;
   gs.battle.totalGoldEarned += gold;
   gs.battle.runKills = (gs.battle.runKills || 0) + 1;
   gs.stats.totalKills++;
@@ -2714,6 +2715,10 @@ function frame(ts) {
     renderMidBossHud(ctx, gs);
   }
 
+  // 🎬 보스 등장 컷 — 판 위에 덮되 일시정지·안내보다는 아래
+  if (typeof renderBossIntro === 'function' && gs.page !== 'lobby' && gs.page !== 'result') {
+    renderBossIntro(ctx, gs);
+  }
   // 런 종료·갈림길 오버레이 — 전투/마을 위에 덮는다.
   // (로비 개편 때 이 호출이 빠져 게임오버 화면이 보이지 않았다)
   if (gs.page!=='lobby' && gs.page!=='result') renderHUD(ctx,gs);
@@ -2755,6 +2760,11 @@ function frame(ts) {
   // 10배속에서 창이 1/10로 줄어 사람이 누를 수 없다.
   if (!_paused && !tut.active && !_titleScreen && typeof bossParryTick === 'function') {
     try { bossParryTick(gs, dt); } catch (e) {}
+  }
+  // 🎬 보스 등장 컷은 **프레임당 한 번**만 센다. update(dt)는 배속만큼 여러 번
+  // 불리므로 그 안에서 세면 x3에서 0.9초 만에 지나가 읽을 수가 없다.
+  if (!_paused && !tut.active && !_titleScreen && typeof bossIntroUpdate === 'function') {
+    try { bossIntroUpdate(gs, dt); } catch (e) {}
   }
   if ((_paused || tut.active) && !_titleScreen && !_fadingOut) {
     FX.update(dt); updateFloaties(dt);

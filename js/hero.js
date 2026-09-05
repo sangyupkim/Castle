@@ -1087,6 +1087,8 @@ function castHeroActive(gs, id, opts) {
       const tier = Math.max(1, endlessTier(gs.wave) || (gs.wave + 1));
       const gold = Math.round((18 + tier * 9) * BONUSES.battleGoldMult);
       gs.gold += gold;
+      // 약탈은 영웅이 선 전선의 벌이로 친다 — 정산에서 어디서 났는지 남아야 한다
+      if (heroLane(gs) === 'top') gs.battle.goldTop += gold; else gs.battle.goldBot += gold;
       gs.battle.totalGoldEarned += gold;
       const pc = heroSpot(gs);
       castFx('nova', { x:pc.x, y:pc.y, r:70, color:'#fbbf24', dur:0.45 });

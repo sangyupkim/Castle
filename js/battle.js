@@ -126,6 +126,11 @@ function createBattle() {
     maxSlots: 4,
     goldEarned: 0,
     totalGoldEarned: 0,
+    // 이번 웨이브에 **어느 전선이** 벌었나 — 웨이브가 끝나면 정산에 나눠 적는다.
+    // 전투 중에는 합계 하나만 보여준다(가운데 큰 골드). 같은 값을 작게 또 적으면
+    // 어느 쪽이 보유액이고 어느 쪽이 적립액인지가 헷갈릴 뿐이다.
+    goldTop: 0,
+    goldBot: 0,
     killCount: 0,
     runKills: 0,
     log: [],

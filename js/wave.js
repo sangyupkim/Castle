@@ -91,6 +91,8 @@ function createWaveManager() {
         const b = beginBossFight(gs, this.waveIndex, bkind, gs.bossPick || 'random');
         this.midBossSide = b.side === 'top' ? 'defense' : 'arena';
         this.defenseQueues = [];       // 잡몹 없이 보스 한 마리만
+        if (typeof bossAnnounce === 'function')
+          bossAnnounce(gs, { lord:true, side:b.side, name:'마 왕', icon:'👹' });
         if (b.side === 'top') spawnDemonLord(gs, this.waveIndex);
         else { this.midBossPending = endlessTier(this.waveIndex); this.midBossKind = 'lord'; }
       }
@@ -101,6 +103,8 @@ function createWaveManager() {
         const side = midBossSide(endlessTier(this.waveIndex));
         this.midBossSide = side;
         beginMidBoss(gs, side);
+        if (typeof bossAnnounce === 'function')
+          bossAnnounce(gs, { lord:false, side, name:midBossName(endlessTier(this.waveIndex)), icon:'🐲' });
         if (side === 'defense') spawnMidBoss(gs, this.waveIndex);
         else { this.midBossPending = endlessTier(this.waveIndex); this.midBossKind = 'mid'; }
       }
@@ -320,6 +324,21 @@ function createWaveManager() {
       const evGold = fev('goldMult', 1);
       gs.gold += earned + Math.round((killBonus + winBonus + clearBonus) * evGold);
 
+      // 🧾 이번 웨이브 수입 명세 — 준비 화면에서 한 상자로 보여준다.
+      // 전투 중에는 합계 하나만 두고(가운데 큰 골드), 어디서 났는지는 여기서 가른다.
+      gs.lastWave = {
+        idx:   this.waveIndex + 1,
+        top:   Math.round(gs.battle.goldTop || 0),
+        bot:   Math.round(gs.battle.goldBot || 0),
+        kill:  Math.round(killBonus * evGold),
+        win:   Math.round(winBonus  * evGold),
+        clear: Math.round(clearBonus * evGold),
+        left:  leftover,
+        result: gs.battle.result,
+      };
+      gs.lastWave.total = gs.lastWave.top + gs.lastWave.bot
+                        + gs.lastWave.kill + gs.lastWave.win + gs.lastWave.clear;
+
       const parts = [];
       if (earned > 0)     parts.push(`드랍 +${earned}💰`);
       if (killBonus > 0)  parts.push(`처치 +${killBonus}💰`);
@@ -379,6 +398,8 @@ function createWaveManager() {
       gs.battle.phase      = 'hire';
       gs.battle.result     = null;
       gs.battle.goldEarned = 0;
+      gs.battle.goldTop    = 0;
+      gs.battle.goldBot    = 0;
       gs.battle.floaties   = [];
       recalcMaxSlots(gs);
 

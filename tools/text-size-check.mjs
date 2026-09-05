@@ -114,6 +114,14 @@ const report = await pg.evaluate(({ scale, minPx, minLen }) => {
     // ── 2단계 · 목록 화면 ──────────────────────────────────────────────
     '준비 브리핑':      () => { const d = st({ page:'battle', inRun:true });
                               d.battle.phase = 'hire'; renderBriefing(cx, d, BATTLE_Y); },
+    // 🧾 수입 상자는 웨이브를 한 번 치른 뒤에만 생긴다 — 빈 판만 재면 못 본다
+    '준비 브리핑 · 정산':  () => {
+      const d = st({ page:'battle', inRun:true, wave:23 });
+      d.battle.phase = 'hire';
+      d.lastWave = { idx:23, top:1842, bot:2571, kill:388, win:100, clear:104, left:12,
+                     result:'cleared', total:5005 };
+      renderBriefing(cx, d, BATTLE_Y);
+    },
     '마을':            () => renderTownPage(cx, st({ page:'town', gold:420 })),
     '마을 · 병력':      () => renderTownPageArmy(cx, st({ page:'town', gold:420 }), 92),
     '마을 · 타워':      () => renderTownPageTowers(cx, st({ page:'town', gold:420 }), 92),
@@ -194,6 +202,17 @@ const report = await pg.evaluate(({ scale, minPx, minLen }) => {
       () => { tut.active = true; tut.tip = null; tut.step = i; renderTutorial(cx, tut); },
     ])),
     '타이틀':          () => renderTitleScreen(cx, 1),
+    // 🎬 보스 등장 컷 — 화면을 덮는 만큼 여기 글자가 안 읽히면 컷을 띄운 뜻이 없다
+    ...Object.fromEntries([['상단','defense'], ['하단','arena']].flatMap(([nm, side]) =>
+      [['🐲 중간보스', false, '깨진 뿔의 군장'], ['👹 마왕', true, '마 왕']].map(([kind, lord, name]) => [
+        `${kind} 등장 · ${nm}`,
+        () => {
+          const d = st({ page:'battle', inRun:true });
+          bossAnnounce(d, { lord, side, name, icon: lord ? '👹' : '🐲' });
+          d.bossIntro.t = 1.2;            // 한창 떠 있는 순간
+          try { renderBossIntro(cx, d); } finally { d.bossIntro = null; }
+        },
+      ]))),
     '일시정지':         () => renderPauseOverlay(cx),
     // 정산 보석이 붙으면 안내 줄이 길어진다 — 짧은 쪽만 재면 넘치는 걸 못 본다
     '일시정지 · 정산':    () => {

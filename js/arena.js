@@ -739,6 +739,7 @@ function collectDrop(gs, dp, picker) {
   const a = gs.arena;
   if (dp.kind === 'gold') {
     gs.battle.goldEarned      += dp.amount;
+    gs.battle.goldBot         += dp.amount;
     gs.battle.totalGoldEarned += dp.amount;
     a.goldCollected           += dp.amount;
     addFloaty(gs.battle, `+${dp.amount}💰`, dp.x, dp.y, COLORS.gold);
@@ -963,6 +964,7 @@ function hurtMob(gs, m, dmg, color, fromRanged, fromShooter) {
   const amount = Math.max(1, Math.round((m.goldReward || 1) * ARENA_GOLD_SCALE
                                        * BONUSES.battleGoldMult * fev('goldMult', 1)));
   gs.battle.goldEarned      += amount;
+  gs.battle.goldBot         += amount;
   gs.battle.totalGoldEarned += amount;
   gs.arena.goldCollected    += amount;
   addFloaty(gs.battle, `+${amount}💰`, m.x, m.y - m.radius - 4, COLORS.gold);

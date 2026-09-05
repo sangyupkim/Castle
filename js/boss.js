@@ -370,6 +370,35 @@ function midBossState(gs) {
 }
 function midBossActive(gs) { return !!(gs.mid && gs.mid.active); }
 
+// ─── 🎬 등장 컷 ──────────────────────────────────────────────────────────────
+// 보스가 그냥 슬그머니 걸어 나왔다. 층을 통째로 바꾸는 존재인데 화면이
+// 아무 말도 안 하니 "언제 나온 거지"가 되고, 어느 전선에 붙었는지도
+// 한참 뒤에야 알아챈다 — 그걸 알아야 영웅을 어디 둘지가 결정이 된다.
+//
+// 그래서 잠깐 화면을 덮고 이름과 **전선**을 크게 말한다. 판은 그대로 돌아간다 —
+// 멈추면 그 사이에 성벽이 깎이는지 아닌지가 애매해지고, 되감을 곳도 마땅찮다.
+const BOSS_INTRO_DUR = 2.6;
+function bossAnnounce(gs, opts) {
+  if (!gs || !opts) return;
+  // 'defense'/'arena'와 'top'/'bottom' 두 가지 말이 코드에 섞여 있다 — 여기서 하나로 만든다
+  const up = opts.side === 'top' || opts.side === 'defense';
+  gs.bossIntro = {
+    t: 0, dur: BOSS_INTRO_DUR,
+    lord: !!opts.lord,
+    name: opts.name || (opts.lord ? '마왕' : '중간보스'),
+    icon: opts.icon || (opts.lord ? '👹' : '🐲'),
+    up,
+  };
+  if (typeof SFX !== 'undefined') { try { opts.lord ? SFX.lose() : SFX.baseHit(); } catch (e) {} }
+  if (typeof FX !== 'undefined') FX.shake(opts.lord ? 10 : 6, 0.6);
+}
+function bossIntroActive(gs) { return !!(gs && gs.bossIntro && gs.bossIntro.t < gs.bossIntro.dur); }
+function bossIntroUpdate(gs, dt) {
+  const b = gs && gs.bossIntro; if (!b) return;
+  b.t += dt;
+  if (b.t >= b.dur) gs.bossIntro = null;
+}
+
 function beginMidBoss(gs, side) {
   const m = midBossState(gs);
   m.active = true;
