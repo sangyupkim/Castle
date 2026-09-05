@@ -911,13 +911,21 @@ function tap({x,y}) {
     return;
   }
 
-  // 기지 탭 → 마을 진입 (idle 상태에서만)
+  // 마을 페이지의 탭은 마을이 먼저 가져간다.
+  //
+  // 예전에는 바로 아래 '기지 칸 → 마을 진입' 단축키가 이보다 먼저 있었다.
+  // 그 단축키는 전투 화면용인데 화면과 무관하게 걸려서, **마을 화면인데도**
+  // 기지 칸(4,8) 자리를 누르면 `gs.page='town'`(이미 town이라 아무 일도 없음)을
+  // 하고 return해 버렸다 — 그 자리에 놓인 버튼은 영영 안 눌렸다.
+  // 기지 칸 중심이 (240,430)이라 마을 › 출전준비의 **방패병 카드**가 정확히 그 위에
+  // 앉아 있었고, 테스터가 "방패병만 선택이 안 된다"고 보고한 것이 이것이다.
+  if (gs.page==='town') { handleTownTap(x,y); return; }
+
+  // 기지 탭 → 마을 진입 (전투 화면 · idle 상태에서만)
   if (wm.phase==='idle' && y<UIBAR_Y) {
     const cell=screenToCell(x,y);
     if (cell && cell.c===CASTLE_C && cell.r===CASTLE_R) { gs.page='town'; return; }
   }
-  // 마을 페이지에서는 전투 화면 탭 막기
-  if (gs.page==='town') { handleTownTap(x,y); return; }
 
   // 준비 화면의 격자는 읽기 전용이다.
   // 배치·강화·판매는 전부 🏰마을 › 타워배치에서 한다 — 준비할 곳과 확인할 곳을 갈라야

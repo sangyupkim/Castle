@@ -143,7 +143,11 @@ function autoForgeCore(gs, targetStar) {
   const gold0 = gs.gold || 0;
   let bought = 0, fused = 0, failed = 0, steps = 0;
 
-  while (forgeCores(gs, goal) < 1 && steps++ < FORGE_AUTO_MAX_STEPS) {
+  // 목표는 "한 개 더"다. 예전 조건은 `forgeCores(gs, goal) < 1`이라
+  // **이미 하나 가지고 있으면 루프가 아예 안 돌았다** — 버튼이 죽은 것처럼 보였다.
+  // 타워 여러 기에 심을 넣으려면 같은 별을 몇 개고 더 만들어야 한다.
+  const have0 = forgeCores(gs, goal);
+  while (forgeCores(gs, goal) <= have0 && steps++ < FORGE_AUTO_MAX_STEPS) {
     // 목표 아래에서 둘 이상 모인 가장 높은 별을 먼저 녹인다 —
     // 낮은 것부터 녹이면 재료가 위로 안 올라간다.
     let star = null;
@@ -161,7 +165,7 @@ function autoForgeCore(gs, targetStar) {
     if (!buyForgeCore(gs)) break;
     bought++;
   }
-  return { goal, got: forgeCores(gs, goal) > 0,
+  return { goal, got: forgeCores(gs, goal) > have0,
            bought, fused, failed, spent: gold0 - (gs.gold || 0) };
 }
 

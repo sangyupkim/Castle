@@ -5380,7 +5380,7 @@ function _renderTrackList(ctx, gs, def, bs, listTop) {
   const listBot = CH-8, listH = listBot-listTop;
   const open   = buildingTracks(def, curLv);
   const locked = (def.tracks||[]).filter(t => (t.unlockLv||0) > curLv);
-  const rowH = 56, gapH = 5, lockH = 36;   // 이름 + 설명 두 줄이 13px로
+  const rowH = 76, gapH = 5, lockH = 36;   // 이름 · 지금 효과 · ▲다음 효과 세 줄이 13px로
   const contentH = open.length*(rowH+gapH) + (locked.length ? 16 + locked.length*(lockH+3) : 0);
   const maxScroll = Math.max(0, contentH - listH);
   gs.town.scroll = Math.max(0, Math.min(maxScroll, gs.town.scroll||0));
@@ -5410,29 +5410,32 @@ function _renderTrackList(ctx, gs, def, bs, listTop) {
     ctx.textAlign='left'; ctx.textBaseline='middle';
     ctx.fillText(tr.icon,12,uy+rowH/2);
     ctx.fillStyle = inf?'#c4b5fd':'#f1f5f9'; setFont(ctx, 'body', 'bold');
-    ctx.fillText(tr.name + (inf?'  (무한)':''),30,uy+rowH/2-12);
-    // 현재 효과 → 다음 효과
+    ctx.fillText(tr.name + (inf?'  (무한)':''),30,uy+16);
+    // 지금 효과 / ▲ 다음 효과 — 예전에는 +8과 +13, 즉 5px 간격에 13px 두 줄을
+    // 얹어 글자가 통째로 겹쳐 있었다. 각자 제 줄을 쓴다.
+    // 오른쪽 값·버튼 자리까지 넘지 않게 폭도 잘라 준다.
+    const descW = CW - 30 - 128;
     const now = trackTotal(tr, n), next = trackTotal(tr, n+1);
     ctx.fillStyle='#94a3b8'; setFont(ctx, 'body', 'bold');
-    ctx.fillText(n>0 ? tr.desc(now) : tr.desc(next), 30, uy+rowH/2+8);
+    ctx.fillText(_ellipsize(ctx, n>0 ? tr.desc(now) : tr.desc(next), descW), 30, uy+37);
     if (!maxed && n>0) {
       ctx.fillStyle='#4ade80'; setFont(ctx, 'body', 'bold');
-      ctx.fillText(`▲ ${tr.desc(next)}`, 30, uy+rowH/2+13);
+      ctx.fillText(_ellipsize(ctx, `▲ ${tr.desc(next)}`, descW), 30, uy+57);
     }
     // 진행 표시 — 유한이면 점, 무한이면 횟수
     ctx.textAlign='right';
     if (inf) {
       ctx.fillStyle='#a78bfa'; setFont(ctx, 'body', 'bold');
-      ctx.fillText(`×${n}`, CW-118, uy+rowH/2);
+      ctx.fillText(`×${n}`, CW-118, uy+18);
     } else {
       // 30레벨짜리를 점으로 찍으면 읽히지 않는다 — 막대로 바꾼다.
       // 채운 칸(초록) / 지금 레벨로 살 수 있는 칸(회색) / 승급해야 열리는 칸(어둡게).
-      const bw3 = 50, bx3 = CW-118-bw3, by3 = uy+rowH/2-4;
+      const bw3 = 50, bx3 = CW-118-bw3, by3 = uy+14;
       ctx.fillStyle='#1b2230'; ctx.fillRect(bx3, by3, bw3, 5);
       ctx.fillStyle='#334155'; ctx.fillRect(bx3, by3, bw3 * (mx/hardMax), 5);
       ctx.fillStyle= capped?'#a16207':'#22c55e'; ctx.fillRect(bx3, by3, bw3 * (n/hardMax), 5);
       ctx.fillStyle = capped?'#a16207':'#475569'; setFont(ctx, 'body', 'bold'); ctx.textAlign='right';
-      ctx.fillText(`${n}/${mx}` + (capped?` (최대 ${hardMax})`:''), CW-118, uy+rowH/2+12);
+      ctx.fillText(`${n}/${mx}` + (capped?` (최대 ${hardMax})`:''), CW-118, uy+32);
     }
 
     if (!maxed) {

@@ -395,8 +395,11 @@ function createWaveManager() {
 
       // 훈련 마지막 웨이브만 강화 없이 결과로 넘긴다. 무한은 매 층 강화를 고른다.
       // 👹 마왕을 잡은 층도 마찬가지다 — 다음 층이 없는데 강화를 고르게 할 이유가 없다.
+      // 👹 마왕 층은 **잡았든 못 잡았든** 여기가 끝이다. 예전에는 `gs.bossDefeated`만
+      // 봤기 때문에, 마왕을 못 잡고 100층을 넘기면 강화 카드를 고르고 101층으로
+      // 넘어갔다 — 심연·악몽에 결승선이 사라져 죽을 때까지 굴러갔다(실측 126층).
       const atCampaignEnd = ((gs.mode !== 'endless') && (this.waveIndex + 1 >= TRAINING_WAVES))
-                          || (runHasFinish(gs) && gs.bossDefeated);
+                          || (runHasFinish(gs) && isFinalFloor(endlessTier(this.waveIndex)));
       if (!atCampaignEnd) {
         this.phase = 'upgradePick';
         // 장수는 캠프 🎴패의 폭이 정한다. 층 이벤트(🎲풍요)가 더 크면 그쪽을 쓴다.
@@ -475,13 +478,22 @@ function createWaveManager() {
       if (this.intermissionTimer <= 0) {
         const next = this.waveIndex + 1;
         // 훈련은 TRAINING_WAVES에서 끝난다 (완주 = 심연 해금).
-        // 심연·악몽은 100층 마왕에서 끝난다. ♾️ 무한만 끝이 없다.
+        // 심연·악몽은 100층에서 끝난다 — 마왕을 잡으면 클리어, 놓치면 거기까지다.
+        // ♾️ 무한만 끝이 없다.
+        const onFinal   = runHasFinish(gs) && isFinalFloor(endlessTier(this.waveIndex));
         const trainDone = gs.mode !== 'endless' && next >= TRAINING_WAVES;
-        const abyssDone = runHasFinish(gs) && gs.bossDefeated;
+        const abyssDone = onFinal && gs.bossDefeated;
         if (trainDone || abyssDone) {
           gs.stageCleared = true;
           gs.stats.clears = (gs.stats.clears || 0) + 1;
           if (abyssDone) clearAbyssRun(gs);
+          SaveManager.save(gs);
+        } else if (onFinal) {
+          // 마왕이 살아서 층을 지켰다. 101층은 없다 — 판은 여기서 끝난다.
+          gs.gameOver = true;
+          addLog(gs.battle, `👹 마왕이 ${ABYSS_FINAL_FLOOR}층을 지켰습니다 — 여기가 끝입니다`, '#ef4444');
+          if (typeof SFX !== 'undefined') SFX.lose();
+          if (typeof bankRunResult === 'function') bankRunResult();
           SaveManager.save(gs);
         } else {
           gs.wave = next;

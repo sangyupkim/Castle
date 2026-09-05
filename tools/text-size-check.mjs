@@ -152,7 +152,22 @@ const report = await pg.evaluate(({ scale, minPx, minLen }) => {
                               d.upgradePick = { active:true, cards: rollUpgradeCards([], 3, d) };
                               renderUpgradePick(cx, d); },
     '대장간':          () => renderForgeScreen(cx, st({ page:'town', gold:900 })),
-    '건물 상세 · 성채':  () => renderBuildingScreen(cx, st({ page:'town', gold:900 }), 'castle'),
+    // 건물 상세는 **강화를 하나라도 산 뒤**에 「▲ 다음 효과」 줄이 생긴다.
+    // 0강 상태만 재던 탓에 그 줄이 지금 효과 줄을 밟고 있는 것을 오래 못 봤다.
+    // 모든 건물을, 산 상태로 잰다.
+    ...Object.fromEntries(TOWN_BUILDINGS.map(def => [
+      `건물 상세 · ${def.name}`,
+      () => {
+        const d = st({ page:'town', gold:1e6 });
+        const bs = d.town.buildings[def.id]; if (!bs) return;
+        const saved = { built: bs.built, level: bs.level, upgrades: { ...bs.upgrades } };
+        bs.built = true; bs.level = 3;
+        for (const t of (def.tracks || []))
+          bs.upgrades[t.id] = trackIsInfinite(t) ? 17 : Math.min(3, trackCapAt(t, bs.level));
+        try { renderBuildingScreen(cx, d, def.id); }
+        finally { bs.built = saved.built; bs.level = saved.level; bs.upgrades = saved.upgrades; }
+      },
+    ])),
     '영웅 상점':        () => renderHeroShopScreen(cx, st({ page:'town', gold:900 })),
     '영웅 상세':        () => renderHeroDetail(cx, st({ page:'town' }), 60),
     '로비 · 스킬':      () => renderLobbySkill(cx, st({ page:'lobby', soulStones:5000 })),
