@@ -25,13 +25,18 @@ function nearestOf(list, from, range) {
 
 // 공격용 목표 선택 — 이미 죽을 만큼 피해가 예약된 적은 건너뛴다.
 // 아군 넷이 같은 고블린에 몰려 화살을 낭비하는 것을 막는다.
-function pickAttackTarget(list, from, range) {
+// needLos — 원거리는 **벽 너머를 고르지 않는다.** 고르게 두면 벽에 대고
+// 계속 쏘거나(예전에는 그게 그대로 맞았다) 아무 일도 안 하고 서 있게 된다.
+// 못 고르면 호출부가 최근접 적 쪽으로 걸어가게 하므로, 미로에서는 원거리가
+// 자리를 옮겨 시야를 확보해야 한다 — 그게 '미로는 원거리가 손해'의 뜻이다.
+function pickAttackTarget(list, from, range, needLos) {
   let best = null, bestD = range !== undefined ? range : Infinity;
   let fallback = null, fallbackD = bestD;
   for (const e of list) {
     if (e.dead || isHidden(e)) continue;
     const d = dist(e, from) - (e.radius || 0);
     if (d > (range !== undefined ? range : Infinity)) continue;
+    if (needLos && arenaLosBlocked(from.x, from.y, e.x, e.y)) continue;
     if (d < fallbackD) { fallbackD = d; fallback = e; }
     if ((e.pendingDmg || 0) >= e.hp) continue;   // 곧 죽는다 — 다른 적을 노린다
     if (d <= bestD) { bestD = d; best = e; }
@@ -325,7 +330,7 @@ function updateAlly(gs, u, mobs, allies, dt) {
   // 목표: 사거리 안에서 가장 가까운 적
   // 🌀 추방 — 영웅만 10초 동안 아무것도 못 한다
   if (u.isHero && typeof bossEffect === 'function' && bossEffect(gs, 'nohero')) return;
-  const inRange = pickAttackTarget(mobs, u, u.range);
+  const inRange = pickAttackTarget(mobs, u, u.range, !!u.ranged);
   u.target = inRange;
 
   // 공격
@@ -527,7 +532,8 @@ function allySkill(gs, u, mobs, allies) {
   }
 
   if (kind === 'volley') {
-    const targets = mobs.filter(m => dist(m, u) <= u.range && (m.pendingDmg||0) < m.hp)
+    const targets = mobs.filter(m => dist(m, u) <= u.range && (m.pendingDmg||0) < m.hp
+                                     && !arenaLosBlocked(u.x, u.y, m.x, m.y))   // 🪨 벽 너머는 안 쏜다
                         .sort((m1, m2) => dist(m1, u) - dist(m2, u))
                         .slice(0, u.skillHits || 3);
     if (!targets.length) { u.skillCdLeft = 1.0; return; }
@@ -590,7 +596,8 @@ function updateMob(gs, m, allies, dt) {
 
   // 공격
   m.atkCd -= dt;
-  if (d <= m.range && m.atkCd <= 0) {
+  if (d <= m.range && m.atkCd <= 0 &&
+      !(m.ranged && arenaLosBlocked(m.x, m.y, target.x, target.y))) {   // 🪨 몹도 벽 너머로는 못 쏜다
     m.atkCd = m.atkPeriod;
     if (m.ranged) {
       gs.arena.shots.push({
@@ -667,8 +674,23 @@ function updateShots(gs, dt) {
     const dx = s.tx - s.x, dy = s.ty - s.y;
     const d  = Math.hypot(dx, dy);
 
+    const ter = a.terrain;
+    // 🪨 벽에 막힌다. **지나온 구간 전체**를 본다 —
+    // 예전에는 이번 스텝의 끝점 한 점만 봤다. 스텝은 60fps에서 7px인데 미로 벽은
+    // 12px이라 보통은 걸렸지만, 배속(x2·x3)이나 프레임이 한 번 튀면 스텝이
+    // 14~35px이 되어 **벽을 통째로 건너뛰었다.** 테스터가 본 "일부만 맞는다"가 이것이다.
+    const wallHit = (x1, y1, x2, y2) =>
+      !!(ter && ter.length && losBlocked(ter, x1, y1, x2, y2));
+    const killShot = () => {
+      if (s.fromAlly && t) t.pendingDmg = Math.max(0, (t.pendingDmg||0) - s.dmg);
+      if (typeof FX !== 'undefined') FX.burst(s.x, s.y, '#94a3b8', 3, 6);
+      a.shots.splice(i, 1);
+    };
+
     if (d < 8 || s.life <= 0) {
-      if (t && !t.dead && d < 16) {
+      // 코앞에서 터질 때도 사이에 벽이 있으면 안 맞는다 —
+      // 벽에 딱 붙은 적이 벽 너머로 맞던 자리다.
+      if (t && !t.dead && d < 16 && !wallHit(s.x, s.y, t.x, t.y)) {
         if (s.fromAlly) { t.pendingDmg = Math.max(0, (t.pendingDmg||0) - s.dmg); hurtMob(gs, t, s.dmg, s.color, true, s.shooter); }
         else            hurtAlly(gs, t, s.dmg, s.color);
       } else if (t && s.fromAlly) {
@@ -678,16 +700,10 @@ function updateShots(gs, dt) {
       continue;
     }
     const step = Math.min(d, s.spd * dt);
-    // 바위는 화살을 막는다 — 엄폐물 뒤의 적은 돌아가서 쏴야 한다
-    const ter = a.terrain;
-    if (ter && ter.length && terrainBlocksShot(ter, s.x + dx / d * step, s.y + dy / d * step)) {
-      if (s.fromAlly && t) t.pendingDmg = Math.max(0, (t.pendingDmg||0) - s.dmg);
-      if (typeof FX !== 'undefined') FX.burst(s.x, s.y, '#94a3b8', 3, 6);
-      a.shots.splice(i, 1);
-      continue;
-    }
-    s.x += dx / d * step;
-    s.y += dy / d * step;
+    const nx = s.x + dx / d * step, ny = s.y + dy / d * step;
+    if (wallHit(s.x, s.y, nx, ny)) { killShot(); continue; }
+    s.x = nx;
+    s.y = ny;
   }
 }
 
