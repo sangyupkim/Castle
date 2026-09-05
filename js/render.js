@@ -1684,9 +1684,13 @@ function renderHeroActiveBar(ctx, gs, ctrlY, ctrlH) {
       ctx.fillStyle='#334155'; setFont(ctx, 'body', 'bold');
       ctx.fillText('빈 칸', sx+sw/2, y+bh/2);
     } else {
-      const d = a.def, cd = activeCdLeft(gs, d.id), ready = activeReady(gs, d.id);
+      const d = a.def, cd = activeCdLeft(gs, d.id);
+      // 🗼⚔️ 영웅이 선 쪽에서만 듣는 스킬이다 — 반대편에 서 있으면 아예 꺼둔다.
+      // 누를 수는 있는데 아무 일도 안 나는 버튼이 제일 나쁘다.
+      const laneOff = (typeof heroActiveLaneBlock === 'function') && !!heroActiveLaneBlock(gs, d.id);
+      const ready = !laneOff && activeReady(gs, d.id);
       const lackMp = (h.mp || 0) < d.mp;
-      ctx.fillStyle = ready ? '#2d1b69' : '#0b1220'; ctx.fill();
+      ctx.fillStyle = ready ? '#2d1b69' : laneOff ? '#0a0e18' : '#0b1220'; ctx.fill();
       if (cd > 0) {   // 쿨다운이 차오르는 것을 막대로
         ctx.save(); ctx.beginPath();
         const fullCd = Math.max(0.001, d.cd * (BONUSES.heroSkillCdMult || 1));
@@ -1694,11 +1698,14 @@ function renderHeroActiveBar(ctx, gs, ctrlY, ctrlH) {
         ctx.fillStyle='#1e1b4b'; ctx.fillRect(sx, y, sw, bh); ctx.restore();
       }
       ctx.strokeStyle = ready ? '#a78bfa' : '#233046'; ctx.lineWidth = ready ? 1.5 : 1; ctx.stroke();
+      ctx.globalAlpha = laneOff ? 0.45 : 1;
       ctx.fillStyle = ready ? '#ddd6fe' : '#64748b'; ctx.font='13px sans-serif';
       ctx.fillText(d.icon, sx+sw/2, y+bh/2-4);
       setFont(ctx, 'body', 'bold');
-      ctx.fillStyle = cd > 0 ? '#818cf8' : lackMp ? '#3b82f6' : ready ? '#c4b5fd' : '#475569';
-      ctx.fillText(cd > 0 ? `${Math.ceil(cd)}s` : lackMp ? `💧${d.mp}` : d.name, sx+sw/2, y+bh/2+8);
+      ctx.fillStyle = laneOff ? '#475569' : cd > 0 ? '#818cf8' : lackMp ? '#3b82f6' : ready ? '#c4b5fd' : '#475569';
+      ctx.fillText(laneOff ? ((d.lane === 'top') ? '🗼 전용' : '⚔️ 전용')
+                 : cd > 0 ? `${Math.ceil(cd)}s` : lackMp ? `💧${d.mp}` : d.name, sx+sw/2, y+bh/2+8);
+      ctx.globalAlpha = 1;
       gs.ui.heroActiveBtns.push({ x:sx, y, w:sw, h:bh, id:d.id });
     }
     sx += sw + gap;
@@ -6798,8 +6805,15 @@ function renderTownPageTowers(ctx, gs, startY) {
         ctx.font=`${Math.floor(mCW*0.55)}px sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
         ctx.fillText(TOWER_TYPES[tower.typeId].icon,x+mCW/2,y+mCH/2);
         if ((tower.level||1)>1) {
-          ctx.fillStyle='#fbbf24'; setFont(ctx, 'body', 'bold'); ctx.textBaseline='bottom';
-          ctx.fillText('★'.repeat((tower.level||1)-1), x+mCW/2, y+mCH-1);
+          // ★를 레벨 수만큼 찍었더니 ★5 타워가 별 넷(=52px)을 35px 칸에 그려
+          // 옆 칸까지 삐져나왔다. 별은 하나만 두고 수는 숫자로 적는다.
+          const lbl = `★${tower.level||1}`;
+          setFont(ctx, 'label', 'bold'); ctx.textBaseline='bottom'; ctx.textAlign='center';
+          const lw = ctx.measureText(lbl).width;
+          ctx.fillStyle='rgba(8,13,24,0.72)';
+          ctx.fillRect(x+mCW/2-lw/2-2, y+mCH-12, lw+4, 11);
+          ctx.fillStyle='#fbbf24';
+          ctx.fillText(lbl, x+mCW/2, y+mCH-1);
         }
         // ★5 분기를 골랐으면 무엇으로 갔는지 칸 위에서 바로 읽혀야 한다
         const _mb = towerBranchOf(tower);
@@ -6893,7 +6907,7 @@ function renderTownPageTowers(ctx, gs, startY) {
   const _pkShift = (_selTower && towerPerks(_selTower).length) ? 16 : 0;
   const _cShift = (_campLine ? 13 : 0) + _pkShift;
   panelH += _cShift;
-  if (_showBranch) panelH += 92;
+  if (_showBranch) panelH += 136;   // 분기 카드가 68 → 112px로 커진 만큼
   if (gs.ui.towerAction) {
     const ta=gs.ui.towerAction;
     const tower=_selTower;
@@ -7008,7 +7022,7 @@ function renderTownPageTowers(ctx, gs, startY) {
         ctx.fillStyle=br?'#64748b':'#fbbf24'; setFont(ctx, 'body', 'bold');
         ctx.fillText(br ? `★${TOWER_BRANCH_LEVEL} 분기 — 갈아타기 ${cost}💰 (한 번에 하나만)`
                         : `★${TOWER_BRANCH_LEVEL} 분기 — 하나를 고르세요 ${cost}💰`, 12, bY+5);
-        const bw3=(CW-20-2*5)/3, bh3=68, byy=bY+12;
+        const bw3=(CW-20-2*5)/3, bh3=112, byy=bY+12;   // 13px 세 줄이 17px 간격으로 들어가는 높이
         brs.forEach((d,i)=>{
           const bx3 = 10 + i*(bw3+5);
           const on  = tower.branch === d.id;
@@ -7016,19 +7030,20 @@ function renderTownPageTowers(ctx, gs, startY) {
           uiPanel(ctx, bx3,byy,bw3,bh3,5, on ? '#111f2e' : can ? '#0a1422' : '#080c14', on ? d.color : can ? '#2b3a52' : '#1a2130', on ? 2 : 1);
           ctx.textAlign='center'; ctx.textBaseline='top';
           ctx.globalAlpha = (on || can) ? 1 : 0.45;
-          ctx.fillStyle='#e2e8f0'; ctx.font='14px sans-serif';
-          ctx.fillText(d.icon, bx3+bw3/2, byy+4);
+          ctx.fillStyle='#e2e8f0'; ctx.font='15px sans-serif';
+          ctx.fillText(d.icon, bx3+bw3/2, byy+5);
           ctx.fillStyle=d.color; setFont(ctx, 'body', 'bold');
-          ctx.fillText(d.name, bx3+bw3/2, byy+22);
+          ctx.fillText(d.name, bx3+bw3/2, byy+24);
           ctx.fillStyle='#7c8ba1'; setFont(ctx, 'body', 'bold');
-          // 세 줄까지 — 두 줄로 자르면 "받는 피해 +30%" 같은 핵심이 잘려 나간다
+          // 세 줄까지 — 두 줄로 자르면 "받는 피해 +30%" 같은 핵심이 잘려 나간다.
+          // 간격이 9px이던 시절에는 13px 글자가 서로를 통째로 밟았다.
           wrapLines(ctx, d.desc, bw3-8).slice(0,3).forEach((ln,k)=>{
-            ctx.fillText(ln, bx3+bw3/2, byy+34+k*9);
+            ctx.fillText(ln, bx3+bw3/2, byy+44+k*17);
           });
           ctx.globalAlpha = 1;
           if (on) {
             ctx.fillStyle=d.color; setFont(ctx, 'body', 'bold');
-            ctx.fillText('◆ 선택됨', bx3+bw3/2, byy+bh3-10);
+            ctx.fillText('◆ 선택됨', bx3+bw3/2, byy+bh3-16);
           }
           gs.ui.towerBranchBtns.push({x:bx3,y:byy,w:bw3,h:bh3,branchId:d.id});
         });

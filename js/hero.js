@@ -243,16 +243,16 @@ function heroMpRegen() {
 const HERO_ACTIVE_POOL = [
   { id:'a_overload', name:'과부하 명령', icon:'⚡', grade:'epic', cost:120, mp:30, cd:24, lane:'top',
     desc:'모든 타워를 한꺼번에 과부하시킨다',
-    note:'하단에 서 있어도 상단 전체를 밀어 올린다' },
+    note:'상단에 선 영웅만 쓴다 — 타워 전부를 한 번에 켠다' },
   { id:'a_meteor',   name:'유성 낙하',   icon:'☄️', grade:'epic', cost:130, mp:35, cd:20, lane:'top',
     desc:'상단 경로의 적 전체에 영웅 공격력 ×2.2 피해',
-    note:'상단이 밀릴 때 하단에서 끊어 준다' },
+    note:'상단에 선 영웅만 쓴다 — 경로 위를 통째로 쓴다' },
   { id:'a_bulwark',  name:'성벽 결계',   icon:'🧱', grade:'rare', cost:88,  mp:25, cd:26, lane:'top',
     desc:'6초간 기지가 받는 피해를 전부 막는다',
     note:'돌진과 관문 러시를 한 번 넘긴다' },
   { id:'a_freeze',   name:'시간 정지',   icon:'🕐', grade:'epic', cost:126, mp:30, cd:22, lane:'both',
-    desc:'상·하단 적 전체를 3.5초간 크게 둔화',
-    note:'두 전선을 동시에 산다' },
+    desc:'영웅이 선 쪽 적 전체를 3.5초간 크게 둔화',
+    note:'선 자리가 곧 사정권이다 — 위에 서면 경로가, 아래 서면 아레나가 선다' },
   { id:'a_smite',    name:'심판',        icon:'💥', grade:'rare', cost:80,  mp:20, cd:12, lane:'bottom',
     desc:'아레나에서 가장 강한 적에게 영웅 공격력 ×4.5',
     note:'보스 한 마리를 지운다' },
@@ -291,8 +291,8 @@ const SIGIL_ACTIVE_POOL = [
     desc:'아레나 적을 영웅에게 끌어모으고 5초간 부대 피해 40% 감소',
     note:'뒷줄이 맞고 있을 때 앞으로 당긴다' },
   { id:'a_aegis',  sigil:'warden', name:'불굴의 방벽', icon:'🛡', grade:'epic', cost:124, mp:30, cd:26, lane:'both',
-    desc:'7초간 부대 피해 60% 감소 · 기지 피해도 함께 막는다',
-    note:'두 전선을 한꺼번에 버틴다' },
+    desc:'7초간 — 하단이면 부대 피해 60% 감소, 상단이면 기지 피해를 막는다',
+    note:'선 쪽 하나를 확실히 버틴다' },
   { id:'a_thorn',  sigil:'warden', name:'가시 갑주', icon:'🌵', grade:'rare', cost:88, mp:22, cd:20, lane:'bottom',
     desc:'10초간 근접으로 받은 피해의 45%를 되돌린다',
     note:'맞을수록 이득이 되는 유일한 스킬' },
@@ -316,7 +316,7 @@ const SIGIL_ACTIVE_POOL = [
     desc:'영웅이 보는 방향으로 관통하는 화살 · 맞은 전부에 공격력 ×3.4',
     note:'줄지어 오는 적을 한 줄로 꿴다' },
   { id:'a_mark',   sigil:'ranger', name:'사냥 표식', icon:'🎯', grade:'rare', cost:84, mp:20, cd:18, lane:'both',
-    desc:'양쪽 전선에서 가장 단단한 적에게 12초간 받는 피해 +60%',
+    desc:'영웅이 선 쪽에서 가장 단단한 적에게 12초간 받는 피해 +60%',
     note:'보스와 정예를 녹이는 준비 동작' },
 ];
 
@@ -741,14 +741,36 @@ function heroSpot(gs) {
   return arenaCenter();
 }
 
+// ── 영웅이 서 있는 전선 ──────────────────────────────────────────────────────
+// 'top' 상단 방어선 · 'bottom' 하단 아레나 · null 미배치.
+// 액티브에 lane 값은 처음부터 있었는데 **아무 데서도 안 봤다.** 그래서
+// 하단에 세워둔 영웅이 ☄️유성으로 상단을 쓸고, ⚡과부하로 타워를 전부 켜고,
+// 🧱결계로 기지까지 지켰다 — 배치를 고르는 일이 의미가 없어진다.
+// 이제 스킬은 **영웅이 서 있는 쪽에서만** 듣는다.
+function heroLane(gsp) {
+  const p = gsp && gsp.hero && gsp.hero.placement;
+  return p === 'defense' || p === 'top' ? 'top' : p === 'battle' ? 'bottom' : null;
+}
+// 이 스킬을 지금 자리에서 쓸 수 있는가. 못 쓰면 그 이유를 돌려준다.
+function heroActiveLaneBlock(gsp, id) {
+  const d = activeDef(id); if (!d) return null;
+  const need = d.lane || 'bottom';
+  if (need === 'both') return null;              // 양쪽 스킬은 선 쪽 몫만 나간다
+  const at = heroLane(gsp);
+  if (!at)        return '영웅을 배치해야 씁니다';
+  if (at === need) return null;
+  return need === 'top' ? '🗼 상단에 선 영웅만 씁니다' : '⚔️ 하단에 선 영웅만 씁니다';
+}
+
 // ── 액티브 시전 ──────────────────────────────────────────────────────────────
 // 효과는 전부 여기 한 군데에 모은다. 상단·하단 어느 쪽을 건드리든
 // "어떤 스킬이 무엇을 하는가"를 한 화면에서 읽을 수 있어야 고칠 수 있다.
 //
-// 돌려주는 값: 시전했으면 true. MP·쿨다운·대상 없음은 전부 false.
+// 돌려주는 값: 시전했으면 true. MP·쿨다운·대상 없음·전선 불일치는 전부 false.
 function castHeroActive(gs, id, opts) {
   const def = activeDef(id);
   if (!def || !gs.hero || gs.hero.dead) return false;
+  if (heroActiveLaneBlock(gs, id)) return false;
   const cds = gs.hero.activeCd || (gs.hero.activeCd = {});
   if ((cds[id] || 0) > 0) return false;
   const mpCost = activeMpCost(id);
@@ -763,7 +785,7 @@ function castHeroActive(gs, id, opts) {
   let ok = false, msg = '';
 
   switch (id) {
-    // ⚡ 하단에 서 있어도 상단 전체를 밀어 올린다
+    // ⚡ 상단에 선 영웅만 쓴다 — 타워 전부를 한 번에 켠다
     case 'a_overload': {
       if (!gs.towers.length) break;
       for (const t of gs.towers) t.overloadUntil = OVERLOAD_DURATION;
@@ -796,13 +818,16 @@ function castHeroActive(gs, id, opts) {
       break;
     }
     case 'a_freeze': {
-      for (const e of tops) { e.slowTimer = Math.max(e.slowTimer || 0, 3.5); e.slowFactor = Math.max(e.slowFactor || 0, 0.7); }
-      for (const m of mobs) m.slowUntil = Math.max(m.slowUntil || 0, 3.5);
-      if (!tops.length && !mobs.length) break;
-      castFx('wash', { y:0, h:DEFENSE_H, color:'#67e8f9', dur:0.6 });
-      castFx('wash', { y:ARENA_Y, h:ARENA_H, color:'#67e8f9', dur:0.6 });
-      for (const m of mobs) castFx('runes', { x:m.x, y:m.y, r:16, color:'#67e8f9', dur:0.7 });
-      ok = true; msg = `🕐 ${tops.length + mobs.length}마리 정지`;
+      // 양쪽을 한꺼번에 얼리던 스킬. 이제 **영웅이 선 쪽만** 선다.
+      const up = heroLane(gs) === 'top';
+      const hit = up ? tops : mobs;
+      if (!hit.length) break;
+      if (up) for (const e of tops) { e.slowTimer = Math.max(e.slowTimer || 0, 3.5); e.slowFactor = Math.max(e.slowFactor || 0, 0.7); }
+      else    for (const m of mobs) m.slowUntil = Math.max(m.slowUntil || 0, 3.5);
+      castFx('wash', up ? { y:0, h:DEFENSE_H, color:'#67e8f9', dur:0.6 }
+                        : { y:ARENA_Y, h:ARENA_H, color:'#67e8f9', dur:0.6 });
+      for (const m of hit) castFx('runes', { x:m.x, y:m.y, r:16, color:'#67e8f9', dur:0.7 });
+      ok = true; msg = `🕐 ${up ? '상단' : '하단'} ${hit.length}마리 정지`;
       break;
     }
     case 'a_smite': {
@@ -916,16 +941,22 @@ function castHeroActive(gs, id, opts) {
       break;
     }
     case 'a_aegis': {
-      arena.buffs = (arena.buffs || []).filter(b => b.kind !== 'guard');
-      arena.buffs.push({ kind:'guard', mult:0.40, until: arena.elapsed + 7 });
-      gs.baseWardUntil = Math.max(gs.baseWardUntil || 0, 7);
-      const bc = cellCenter(CASTLE_C, CASTLE_R);
-      castFx('runes', { x:bc.x, y:bc.y, r:44, color:'#93c5fd', dur:0.8 });
-      castFx('wash',  { y:0, h:DEFENSE_H, color:'#93c5fd', dur:0.55 });
-      castFx('wash',  { y:ARENA_Y, h:ARENA_H, color:'#93c5fd', dur:0.55 });
-      for (const u of gs.battle.ourTeam)
-        if (!u.dead) castFx('runes', { x:u.x, y:u.y, r:16, color:'#93c5fd', dur:0.8 });
-      ok = true; msg = '🛡 7초 피해 60%↓ · 기지 보호';
+      // 부대와 기지를 동시에 지키던 스킬. 선 쪽 하나만 지킨다 —
+      // 상단이면 성문을, 하단이면 부대를.
+      if (heroLane(gs) === 'top') {
+        gs.baseWardUntil = Math.max(gs.baseWardUntil || 0, 7);
+        const bc = cellCenter(CASTLE_C, CASTLE_R);
+        castFx('runes', { x:bc.x, y:bc.y, r:44, color:'#93c5fd', dur:0.8 });
+        castFx('wash',  { y:0, h:DEFENSE_H, color:'#93c5fd', dur:0.55 });
+        ok = true; msg = '🛡 7초 기지 보호';
+      } else {
+        arena.buffs = (arena.buffs || []).filter(b => b.kind !== 'guard');
+        arena.buffs.push({ kind:'guard', mult:0.40, until: arena.elapsed + 7 });
+        castFx('wash',  { y:ARENA_Y, h:ARENA_H, color:'#93c5fd', dur:0.55 });
+        for (const u of gs.battle.ourTeam)
+          if (!u.dead) castFx('runes', { x:u.x, y:u.y, r:16, color:'#93c5fd', dur:0.8 });
+        ok = true; msg = '🛡 7초 부대 피해 60%↓';
+      }
       break;
     }
     case 'a_thorn': {
@@ -1033,22 +1064,22 @@ function castHeroActive(gs, id, opts) {
       break;
     }
     case 'a_mark': {
-      let n = 0;
-      if (mobs.length) {
+      // 양쪽에 하나씩 찍던 표식. 영웅이 선 쪽 하나에만 찍는다.
+      const up = heroLane(gs) === 'top';
+      if (up) {
+        if (!tops.length) break;
+        const e = tops.reduce((a, x) => (x.maxHp > a.maxHp ? x : a), tops[0]);
+        e.markedUntil = 12;   // 상단은 초 단위로 줄어드는 타이머를 쓴다
+        castFx('runes', { x:e.x, y:e.y, r:22, color:'#fbbf24', dur:0.9 });
+        ok = true; msg = '🎯 상단 표식';
+      } else {
+        if (!mobs.length) break;
         const t = mobs.reduce((a, m) => (m.maxHp > a.maxHp ? m : a), mobs[0]);
         t.markUntil = arena.elapsed + 12; t.markPct = 0.6;
         castFx('runes', { x:t.x, y:t.y, r:26, color:'#fbbf24', dur:0.9 });
         castSheet('fx.rune', t.x, t.y, 64, '#fbbf24', 0.6);
-        n++;
+        ok = true; msg = '🎯 하단 표식';
       }
-      if (tops.length) {
-        const e = tops.reduce((a, x) => (x.maxHp > a.maxHp ? x : a), tops[0]);
-        e.markedUntil = 12;   // 상단은 초 단위로 줄어드는 타이머를 쓴다
-        castFx('runes', { x:e.x, y:e.y, r:22, color:'#fbbf24', dur:0.9 });
-        n++;
-      }
-      if (!n) break;
-      ok = true; msg = `🎯 표식 ${n}곳`;
       break;
     }
 

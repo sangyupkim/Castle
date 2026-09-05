@@ -858,7 +858,9 @@ function tap({x,y}) {
         else {
           const d = activeDef(btn.id);
           const cd = activeCdLeft(gs, btn.id);
-          spawnFloaty(cd > 0 ? `재사용까지 ${Math.ceil(cd)}초`
+          const laneWhy = (typeof heroActiveLaneBlock === 'function') ? heroActiveLaneBlock(gs, btn.id) : null;
+          spawnFloaty(laneWhy ? laneWhy
+                             : cd > 0 ? `재사용까지 ${Math.ceil(cd)}초`
                              : (gs.hero.mp||0) < d.mp ? `💧 MP ${d.mp} 필요` : '지금은 쓸 수 없습니다',
                       x, y, '#ef4444');
           SFX.denied();

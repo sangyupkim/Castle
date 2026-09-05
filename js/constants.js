@@ -1359,10 +1359,14 @@ function rollInnOffers(innLv) {
 // 특수 용병 전용 슬롯 — 일반 편성 슬롯과 따로 센다.
 // 🏨 여관 레벨 두 단마다 한 칸. 예전에는 보석 트랙 하나에만 매달려 있어서
 // 여관을 Lv.10까지 올려도 자리가 늘지 않았다 — 건물을 올린 보람이 없었다.
+// 🚪 특수 용병 자리는 **사야 늘어난다.**
+// 예전에는 여관 레벨이 두 단 오를 때마다 한 칸씩 그냥 얹어 줬다(1 + lv/2).
+// 그러면 여관을 올리는 것만으로 자리가 따라와서, 자리를 늘리는 일이 결정이 아니라
+// 부수입이 된다 — 🚪별관 증축 트랙을 살 이유도 같이 사라진다.
+// 이제 기본 한 칸이고, 나머지는 전부 그 트랙에서 나온다.
+// (트랙은 perLevel이라 한 단에 하나씩만 열린다 — 자리를 원하면 여관도 올려야 한다.)
 function specialSlotMax() {
-  const lv = (typeof townBuildingLevel === 'function' && typeof gs !== 'undefined')
-    ? townBuildingLevel(gs, 'inn') : 0;
-  return 1 + Math.floor(lv / 2) + (BONUSES.specialSlotBonus || 0);
+  return 1 + (BONUSES.specialSlotBonus || 0);
 }
 // 일반 용병과 특수 용병을 한 표에서 찾을 수 있게 합쳐 둔다
 Object.assign(UNIT_TYPES, SPECIAL_UNIT_TYPES);
