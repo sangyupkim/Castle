@@ -40,6 +40,7 @@ body {
 <canvas id="gameCanvas"></canvas>
 <script src="assets/images/manifest.js"></script>
 <script src="js/version.js"></script>
+<script src="js/update.js"></script>
 <script src="js/constants.js"></script>
 <script src="js/sprites.js"></script>
 <script src="js/audio.js"></script>
@@ -90,7 +91,12 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
     const t = setInterval(() => { if (idle()) { clearInterval(t); location.reload(); } }, 2000);
   });
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').then(reg => {
+    // 워커 주소에 버전을 단다. sw.js의 **바이트가 판마다 똑같으면** 브라우저는
+      // 새 워커로 보지 않는다 — 버전은 importScripts로 읽어 오므로 sw.js 본문은
+      // 몇 달째 한 글자도 안 바뀐다. 주소가 달라지면 무조건 새 워커로 친다.
+      // (범위는 경로로 정해지므로 ?v=가 붙어도 스코프는 그대로 '/'다.)
+      const swUrl = 'sw.js?v=' + (window.GAME_VERSION || 'dev');
+      navigator.serviceWorker.register(swUrl).then(reg => {
       // 탭을 오래 열어 두는 사람을 위해 이따금 새 배포가 있는지 물어본다.
       // 브라우저는 탐색할 때만 sw.js를 다시 보므로, 안 물어보면 안 바뀐다.
       const poke = () => { try { reg.update(); } catch (e) {} };

@@ -16,7 +16,7 @@ const CACHE = 'dual-frontier-' + (self.GAME_VERSION || 'dev');
 
 const SHELL = [
   '.', 'index.html', 'manifest.webmanifest',
-  'assets/images/manifest.js', 'js/version.js', 'js/constants.js', 'js/sprites.js', 'js/audio.js', 'js/fx.js', 'js/upgrade.js', 'js/hero.js', 'js/forge.js', 'js/camp.js', 'js/town.js',
+  'assets/images/manifest.js', 'js/version.js', 'js/update.js', 'js/constants.js', 'js/sprites.js', 'js/audio.js', 'js/fx.js', 'js/upgrade.js', 'js/hero.js', 'js/forge.js', 'js/camp.js', 'js/town.js',
   'js/patch.js', 'js/save.js', 'js/rank.js', 'js/lobby.js', 'js/boss.js', 'js/defense.js', 'js/battle.js', 'js/arena.js',
   'js/formation.js', 'js/wave.js', 'js/tutorial.js', 'js/guide.js', 'js/guidescene.js', 'js/guidebook.js', 'js/render.js', 'js/game.js',
   'assets/images/mainpage.png',
@@ -73,6 +73,9 @@ self.addEventListener('fetch', e => {
   // 여기를 비켜서지 않으면 순위표가 처음 한 번 받은 옛 목록을 계속 보여준다.
   if (url.pathname.startsWith('/api/') ||
       url.pathname.startsWith('/.netlify/')) return;
+  // 🔄 최신판 확인 — js/update.js가 매번 다른 주소로 물어본다(`?_nocache=…`).
+  // 여기서 비켜서지 않으면 물어볼 때마다 캐시에 새 항목이 하나씩 쌓이기만 한다.
+  if (url.searchParams.has('_nocache')) return;
 
   const putCopy = res => {
     if (res && res.ok && res.type === 'basic') {

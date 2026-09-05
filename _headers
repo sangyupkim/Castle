@@ -4,7 +4,10 @@
 # (js/version.js에 적힌 v0.8.0 사고가 그것이었다).
 /sw.js
   Cache-Control: no-cache
-/js/version.js
+# 게임 코드 전체. version.js만 막아 두면 "버전 표시는 새것인데 내용은 옛것"이
+# 되는 길이 남는다 — 서비스 워커의 fetch도 결국 브라우저 HTTP 캐시를 지난다.
+# 파일이 작고 개수도 스물몇 개라 매번 확인해도 부담이 없다.
+/js/*
   Cache-Control: no-cache
 /index.html
   Cache-Control: no-cache
