@@ -208,6 +208,22 @@ const report = await pg.evaluate(({ scale, minPx, minLen }) => {
     '로비 · 해금':      () => renderLobbyUnlock(cx, st({ page:'lobby', soulStones:5000 })),
     '로비 · 서약':      () => renderLobbyPact(cx, st({ page:'lobby', soulStones:5000 })),
     '로비 · 기록':      () => renderLobbyRecord(cx, st({ page:'lobby' })),
+    // 📊 기록의 속페이지 다섯 장. 차례만 재면 접어 둔 안쪽을 영영 안 본다.
+    // 값이 들어차야 넘치는 줄(누적 처치 여섯 자리·업적 진행 막대)이 보이므로 채워서 잰다.
+    ...Object.fromEntries(['stats','ach','dex','rank','data'].map(id => [
+      `로비 · 기록 · ${id}`,
+      () => {
+        const d = st({ page:'lobby', soulStones:5000 });
+        d.stats.runs = 137; d.stats.bestEndless = 98; d.stats.bestWave = 6;
+        d.stats.totalKills = 248213; d.stats.totalGold = 9921378; d.stats.totalGems = 81219;
+        d.clearedGates = [10,20,30,40,50,60,70];
+        d.clearedStages = [true, true];
+        d.seenMobs = Object.keys(BATTLE_MOB_TYPES);
+        d.lobby.recordPage = id;
+        renderLobbyRecord(cx, d);
+        d.lobby.recordPage = null;
+      },
+    ])),
     '📋 소식':         () => renderPatchNotes(cx, st({ page:'lobby' })),
     // 하단 고정 출전 바 — 두 상태 모두 잰다. 잠긴 상태가 한 줄에 두 문구를 얹고 있었다.
     '출전 바 · 잠김':    () => renderSortieBar(cx, st({ page:'lobby' })),

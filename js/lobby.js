@@ -127,6 +127,7 @@ function createLobby() {
     tab: 'sortie',
     campGroup: 'tower',   // 🔥 단련 — 지금 펼친 무리
     cardCat: null,        // 🎴 패 — 기피 목록에서 지금 펼친 분류 (null이면 트랙 화면)
+    recordPage: null,     // 📊 기록 — 지금 펼친 속페이지 (null이면 차례 화면)
     skillTree: 'tower',   // 스킬 탭 안의 계열
     nightmare: 0,         // 🌑 고른 악몽 단계 (0 = 심연)
     scroll: 0

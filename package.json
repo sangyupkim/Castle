@@ -11,7 +11,13 @@
     "dist:win": "electron-builder --win",
     "dist:mac": "electron-builder --mac",
     "dist:linux": "electron-builder --linux",
-    "test:rank": "node tools/rank-test.mjs",
+    "test:rank":   "node tools/rank-test.mjs",
+    "test:text":   "node tools/text-size-check.mjs",
+    "test:maze":   "node tools/maze-check.mjs",
+    "test:wall":   "node tools/wall-check.mjs",
+    "test:abyss":  "node tools/abyss-check.mjs",
+    "test:tap":    "node tools/ui-tap-check.mjs",
+    "test:update": "node tools/update-check.mjs",
     "test:update": "node tools/update-check.mjs"
   },
   "devDependencies": {

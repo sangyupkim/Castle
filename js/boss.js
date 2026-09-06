@@ -663,27 +663,42 @@ function sellRelic(gs, id) {
   return v;
 }
 
-// 보스를 잡았을 때 — 유물 하나와 보석. '무작위'를 골랐으면 더 준다.
+// 보스를 잡았을 때 — 보석, 그리고 **마왕이면** 유물 하나.
+//
+// 예전에는 10층마다 나오는 중간보스도 유물을 떨궜다. 한 판에 열 개씩 쌓이니
+// 유물은 '보스를 잡았다는 증표'가 아니라 그냥 정산 항목이 됐고, 캠프의 유물
+// 목록은 무엇을 낄지 고르는 곳이 아니라 중복을 파는 곳이 됐다.
+// 이제 100층 마왕만 떨군다 — 한 판에 하나, 그것도 끝까지 갔을 때만.
+//
+// 중간보스는 대신 보석을 더 준다(18 → 30). 떨어진 것을 그냥 없애면 10층
+// 관문을 넘을 이유가 얇아진다 — 값을 옮긴 것이지 뺀 것이 아니다.
 function grantBossReward(gs) {
   const b = bossState(gs);
   const mult = b.wasRandom ? BOSS_RANDOM_REWARD : 1;
-  // 등급은 마왕일수록 좋은 쪽이 잘 나온다
-  const pool = RELICS.filter(r => b.kind === 'lord' ? true : r.rarity <= 2);
-  const weights = pool.map(r => (b.kind === 'lord' ? (4 - r.rarity) : (3 - r.rarity)) * 10);
-  let total = weights.reduce((a, x) => a + x, 0), roll = Math.random() * total, got = pool[0];
-  for (let i = 0; i < pool.length; i++) { roll -= weights[i]; if (roll <= 0) { got = pool[i]; break; } }
+  const isLord = b.kind === 'lord';
 
-  relicState(gs).owned.push(got.id);
-  const gems = Math.round((b.kind === 'lord' ? 60 : 18) * mult);
+  let got = null;
+  if (isLord) {
+    const pool = RELICS.slice();
+    const weights = pool.map(r => (4 - r.rarity) * 10);
+    let total = weights.reduce((a, x) => a + x, 0), roll = Math.random() * total;
+    got = pool[0];
+    for (let i = 0; i < pool.length; i++) { roll -= weights[i]; if (roll <= 0) { got = pool[i]; break; } }
+    relicState(gs).owned.push(got.id);
+  }
+
+  const gems = Math.round((isLord ? 60 : 30) * mult);
   gs.soulStones = (gs.soulStones || 0) + gems;
   gs.stats.totalGems = (gs.stats.totalGems || 0) + gems;
   if (typeof addRunGems === 'function') addRunGems(gs, 'boss', gems);
-  b.reward = { relic: got.id, gems, mult };
+  b.reward = { relic: got ? got.id : null, gems, mult };
 
   if (typeof addLog === 'function' && gs.battle)
-    addLog(gs.battle, `🏺 ${got.icon} ${got.name} 획득! 💎+${gems}${b.wasRandom ? ' (무작위 우대)' : ''}`, '#fbbf24');
+    addLog(gs.battle, got ? `🏺 ${got.icon} ${got.name} 획득! 💎+${gems}${b.wasRandom ? ' (무작위 우대)' : ''}`
+                          : `👑 중간보스 격파 💎+${gems}${b.wasRandom ? ' (무작위 우대)' : ''}`,
+           '#fbbf24');
   if (typeof spawnFloaty === 'function')
-    spawnFloaty(`🏺 ${got.name}`, CW/2, CH/2 - 40, '#fbbf24');
+    spawnFloaty(got ? `🏺 ${got.name}` : `💎 +${gems}`, CW/2, CH/2 - 40, '#fbbf24');
   if (typeof SaveManager !== 'undefined') SaveManager.save(gs);
   return got;
 }

@@ -3087,7 +3087,8 @@ function renderLobby(ctx, gs) {
 
   // 기록 탭은 내용이 화면을 넘는다 — 마을과 같은 드래그 스크롤을 붙인다.
   // 나머지 탭은 한 화면에 들어가므로 예전처럼 고정으로 둔다.
-  const scrollable = (L.tab === 'record' || L.tab === 'skill' || L.tab === 'sortie' || L.tab === 'camp');
+  const scrollable = (L.tab === 'record' || L.tab === 'skill' || L.tab === 'sortie'
+                   || L.tab === 'camp'   || L.tab === 'card');   // 패 탭은 부적이 들어와 길어졌다
   const sc = scrollable ? (gs.lobbyScroll || 0) : 0;
   _lobbyBottom = LOBBY_BODY_Y;
 
@@ -3268,9 +3269,12 @@ function _renderNightmareLadder(ctx, gs, y) {
   gs.ui.nightmareBtns = [];
   const openLv  = nightmareOpenLevel();
   const sel     = gs.lobby.nightmare || 0;
-  const rows    = 2, cols = 6;          // 심연 + 1~10 = 11칸을 6×2에 담는다
-  const cellW   = (CW - 20 - (cols - 1) * 5) / cols;
-  const cellH   = 40;
+  // 6×2에 72×40 칸으로 담고 있었다. 이 화면에서 정할 것은 사실 이것 하나뿐인데
+  // 가장 작은 버튼이 이것이었다 — 폰에서는 칸 하나가 54×30이라 옆 칸을 누르기 쉬웠다.
+  // 출격 화면의 나머지 상자를 전부 다른 탭으로 보내면서 생긴 자리를 여기에 준다.
+  const rows    = 4, cols = 3;          // 심연 + 1~10 = 11칸을 3×4에 담는다
+  const cellW   = (CW - 20 - (cols - 1) * 6) / cols;
+  const cellH   = 96;
   // 아래에 적을 서약 이름이 몇 줄이 되는지 **먼저** 재고 그만큼 상자를 키운다.
   // 상자를 고정해 두고 글자만 늘리면, 늘어난 줄이 상자 밖으로 나가 잘린다.
   const _pactsPre = nightmarePacts(sel);
@@ -3280,8 +3284,8 @@ function _renderNightmareLadder(ctx, gs, y) {
     const nm = _pactsPre.map(id => { const d = PACT_DEFS.find(x=>x.id===id); return d ? `${d.icon}${d.name}` : id; });
     _preLines = wrapLinesFirstNarrow(ctx, nm.join(' · '), CW-140, CW-36).length;
   }
-  const _preExtra = (_preLines - 1) * 11 + (_pactsPre.length > 3 ? 11 : 0);
-  const h       = 30 + rows * (cellH + 5) + 30 + _preExtra;
+  const _preExtra = (_preLines - 1) * 18 + (_pactsPre.length > 3 ? 18 : 0);
+  const h       = 30 + rows * (cellH + 6) + 38 + _preExtra;
 
   uiPanel(ctx, 10, y, CW-20, h, 8, '#12091c', nightmareColor(sel), 1.5);
 
@@ -3296,27 +3300,29 @@ function _renderNightmareLadder(ctx, gs, y) {
 
   for (let i = 0; i <= NIGHTMARE_MAX; i++) {
     const r = Math.floor(i / cols), c = i % cols;
-    const cx = 10 + c * (cellW + 5), cy = y + 26 + r * (cellH + 5);
+    const cx = 10 + c * (cellW + 6), cy = y + 26 + r * (cellH + 6);
     const can = nightmareAvailable(i);
     const on  = sel === i;
     const col = nightmareColor(i);
     uiPanel(ctx, cx, cy, cellW, cellH, 5, on ? '#2a1035' : can ? '#0e0a16' : '#08060c', on ? col : can ? '#3b2a4d' : '#1a1424', on ? 2 : 1);
     ctx.textAlign='center'; ctx.textBaseline='top';
     if (!can) {
-      ctx.fillStyle='#3a2f4a'; setFont(ctx, 'body');
-      ctx.fillText('🔒', cx+cellW/2, cy+7);
+      ctx.font='24px sans-serif'; ctx.fillStyle='#3a2f4a';
+      ctx.fillText('🔒', cx+cellW/2, cy+22);
       ctx.fillStyle='#3a2f4a'; setFont(ctx, 'body', 'bold');
-      ctx.fillText(`악몽 ${i}`, cx+cellW/2, cy+25);
+      ctx.fillText(`악몽 ${i}`, cx+cellW/2, cy+58);
     } else {
-      ctx.globalAlpha = on ? 1 : 0.75;
-      ctx.fillStyle = col; setFont(ctx, 'body', 'bold');
-      ctx.fillText(i === 0 ? '∞ 심연' : `악몽 ${i}`, cx+cellW/2, cy+7);
+      ctx.globalAlpha = on ? 1 : 0.8;
+      ctx.fillStyle = col; setFont(ctx, 'title', 'bold');
+      ctx.fillText(i === 0 ? '∞ 심연' : `악몽 ${i}`, cx+cellW/2, cy+18);
       ctx.fillStyle = on ? '#cbd5e1' : '#5b6b80'; setFont(ctx, 'body', 'bold');
-      ctx.fillText(i === 0 ? '서약 없음' : `서약 ${i}개`, cx+cellW/2, cy+22);
+      ctx.fillText(i === 0 ? '서약 없음' : `서약 ${i}개`, cx+cellW/2, cy+48);
+      ctx.fillStyle = on ? '#fbbf24' : '#475569'; setFont(ctx, 'body', 'bold');
+      ctx.fillText(`💎 ×${nightmareGemMult(i).toFixed(2)}`, cx+cellW/2, cy+70);
       // 이미 깬 갈래는 체크
       if (i < openLv) {
         ctx.fillStyle='#22c55e'; setFont(ctx, 'body', 'bold');
-        ctx.fillText('✓', cx+cellW-8, cy+3);
+        ctx.fillText('✓', cx+cellW-11, cy+5);
       }
       ctx.globalAlpha = 1;
     }
@@ -3329,7 +3335,7 @@ function _renderNightmareLadder(ctx, gs, y) {
   // 이름이 다섯 개라 두 번째 줄이 통째로 사라졌다 — 무엇이 걸리는지 모르는 채
   // 들어가게 된다. 걸리는 것을 다 못 적을 거면 개수를 적는 편이 낫지,
   // 절반만 적고 마는 것이 가장 나쁘다.
-  const ny = y + 26 + rows * (cellH + 5) + 2;
+  const ny = y + 26 + rows * (cellH + 6) + 6;
   const pacts = nightmarePacts(sel);
   ctx.textAlign='left'; ctx.textBaseline='top';
   let usedLines = 0;
@@ -3342,7 +3348,7 @@ function _renderNightmareLadder(ctx, gs, y) {
     const names = pacts.map(id => { const d = PACT_DEFS.find(x=>x.id===id); return d ? `${d.icon}${d.name}` : id; });
     // 첫 줄만 '보석 ×N'과 자리를 나눠 쓴다. 둘째 줄부터는 폭을 다 쓴다.
     const lines = wrapLinesFirstNarrow(ctx, names.join(' · '), CW-140, CW-36);
-    lines.forEach((ln, i) => ctx.fillText(ln, 18, ny + 4 + i*11));
+    lines.forEach((ln, i) => ctx.fillText(ln, 18, ny + 4 + i*18));
     usedLines = lines.length;
     ctx.textAlign='right'; ctx.fillStyle='#fbbf24'; setFont(ctx, 'body', 'bold');
     ctx.fillText(`보석 ×${nightmareGemMult(sel).toFixed(2)}`, CW-18, ny+4);
@@ -3352,8 +3358,8 @@ function _renderNightmareLadder(ctx, gs, y) {
   if (pacts.length > 3) {
     ctx.fillStyle='#5b6b80'; setFont(ctx, 'body');
     ctx.fillText(`서약 ${pacts.length}개가 한꺼번에 걸립니다 — 캠프에서 뺄 수 없습니다`,
-                 18, ny + 4 + usedLines*11 + 2);
-    extra = 11;
+                 18, ny + 4 + usedLines*18 + 2);
+    extra = 18;
   }
   ctx.textAlign='left'; ctx.textBaseline='top';
   return y + h + 10;
@@ -3463,148 +3469,20 @@ function renderLobbySortie(ctx, gs) {
   // 서약을 하나씩 얹은 열 개의 갈래를 놓는다. 여기가 이 게임의 진행 표다.
   if (open) y = _renderNightmareLadder(ctx, gs, y);
 
-  // 해금된 편성
-  const th = 126;   // 26px 칸에 13px 값을 우겨넣어 글자가 칸 밖으로 삐져나왔다
-  uiPanel(ctx, 10,y,CW-20,th,7, '#0c1220', '#1e293b', 1);
-  ctx.fillStyle='#f59e0b'; setFont(ctx, 'body', 'bold'); ctx.textBaseline='top';
-  ctx.fillText('🔓 사용 가능', 18, y+9);
-
-  const tws = unlockedTowers(), uns = unlockedUnits();
-  // 잠긴 것도 회색으로 자리를 지킨다 — 무엇이 남았는지 보여야 목표가 된다
-  // 값은 칸 **안 아래쪽**에 한 줄로 따로 적는다 — 아이콘 위에 겹쳐 놓으면 둘 다 안 읽힌다
-  const drawSlots = (label, ids, table, ty) => {
-    ctx.fillStyle='#64748b'; setFont(ctx, 'body', 'bold'); ctx.textAlign='left'; ctx.textBaseline='top';
-    ctx.fillText(label, 18, ty+12);
-    ids.forEach((id, i) => {
-      const t = table[id], on = isUnlocked(id);
-      const sx = 50 + i*42;
-      uiPanel(ctx, sx, ty, 36, 40, 5, on ? '#152238' : '#0e131e', on ? '#334155' : '#1a2130', 1);
-      ctx.globalAlpha = on ? 1 : 0.32;
-      // 잠긴 칸은 값 한 줄을 더 이고 있으므로 아이콘을 한 치수 줄인다
-      ctx.font = (on ? '18px' : '14px') + ' sans-serif'; ctx.fillStyle='#e2e8f0';
-      ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText(t.icon, sx+18, on ? ty+20 : ty+12);
-      ctx.globalAlpha = 1;
-      if (!on) {
-        ctx.fillStyle='#f59e0b'; setFont(ctx, 'label', 'bold');
-        ctx.fillText(`💎${unlockCost(id)}`, sx+18, ty+31);
-      }
-    });
-    ctx.textAlign='left'; ctx.textBaseline='top';
-  };
-  drawSlots('타워', TOWER_ORDER, TOWER_TYPES, y+28);
-  drawSlots('병력', UNIT_ORDER,  UNIT_TYPES,  y+76);
-  ctx.textAlign='right'; ctx.fillStyle='#475569'; setFont(ctx, 'body', 'bold');
-  ctx.fillText(`${tws.length}/${TOWER_ORDER.length} · ${uns.length}/${UNIT_ORDER.length}`, CW-18, y+9);
-  ctx.textAlign='left';
-  y += th + gap;
-
-  // 적용 중인 스킬
-  const sp = skillProgress(gs);
-  const sh = 88;   // 제목 + 아이콘 줄 + 13px 레벨 줄 + 진행 바가 서로 안 닿는 높이
-  roundRect(ctx,10,y,CW-20,sh,7);
-  ctx.fillStyle='#0c1220'; ctx.fill(); ctx.strokeStyle='#1e293b'; ctx.stroke();
-  ctx.fillStyle='#a78bfa'; setFont(ctx, 'body', 'bold');
-  ctx.fillText('🌳 적용 중인 스킬', 18, y+9);
-  ctx.textAlign='right'; ctx.fillStyle='#475569'; setFont(ctx, 'body', 'bold');
-  ctx.fillText(`${sp.owned}/${sp.total}`, CW-18, y+9);
-  ctx.textAlign='left';
-  const lvd = [];
-  for (const tid of SKILL_TREE_ORDER)
-    for (const sk of SKILL_TREES[tid].skills) {
-      const lv = skillLevel(gs, sk.id);
-      if (lv > 0) lvd.push([sk, lv]);
-    }
-  if (lvd.length) {
-    // 22px 간격에 13px 두 자리 숫자를 놓으니 옆 칸 숫자와 붙어 `2440443` 처럼 읽혔다
-    let sx = 18;
-    for (const [sk, lv] of lvd) {
-      if (sx > CW-52) { ctx.fillStyle='#475569'; setFont(ctx, 'body'); ctx.fillText('…', sx, y+36); break; }
-      ctx.font='15px sans-serif'; ctx.fillStyle='#e2e8f0';
-      ctx.fillText(sk.icon, sx, y+33);
-      setFont(ctx, 'body', 'bold'); ctx.fillStyle='#a78bfa';
-      ctx.fillText(String(lv), sx+2, y+54);
-      sx += 30;
-    }
-  } else {
-    ctx.fillStyle='#475569'; setFont(ctx, 'body');
-    ctx.fillText('아직 없습니다 — 🌳 스킬 탭에서 보석을 쓰세요', 18, y+36);
-  }
-  // 진행 바
-  ctx.fillStyle='#1e293b'; ctx.fillRect(18, y+76, CW-36, 5);
-  ctx.fillStyle='#a78bfa'; ctx.fillRect(18, y+76, (CW-36)*(sp.total ? sp.owned/sp.total : 0), 5);
-  y += sh + gap;
-
-  // 🎴 부적 — 출전 전에 끼우는 일회용. 보석이 계속 들어오는 게임이라
-  // 저축을 다시 목적으로 만들려면 확실한 소모처가 하나 있어야 한다.
-  y = _renderCharmBar(ctx, gs, y) + (gap - 10);
-
-  // 서약
-  const pacts = PACT_DEFS.filter(p => isPactOn(p.id));
-  // 62px에 13px 서약 줄을 12px 간격으로 세 줄 얹으니 글자가 서로 밟고 상자를 뚫었다.
-  // 줄 수만큼 상자가 자란다 — 서약은 최대 열 개까지 걸린다.
-  const pactRows = pacts.length ? Math.min(3, pacts.length) + (pacts.length > 3 ? 1 : 0) : 1;
-  const ph = 30 + pactRows*19 + 6;
-  roundRect(ctx,10,y,CW-20,ph,7);
-  ctx.fillStyle = pacts.length ? '#1a0d14' : '#0c1220'; ctx.fill();
-  ctx.strokeStyle = pacts.length ? '#7f1d3a' : '#1e293b'; ctx.stroke();
-  ctx.fillStyle='#f43f5e'; setFont(ctx, 'body', 'bold');
-  ctx.fillText('📜 서약', 18, y+9);
-  ctx.textAlign='right';
-  ctx.fillStyle = pacts.length ? '#fda4af' : '#475569'; setFont(ctx, 'body', 'bold');
-  ctx.fillText(`보석 ×${pactGemMult().toFixed(2)}`, CW-18, y+9);
-  ctx.textAlign='left';
-  if (pacts.length) {
-    ctx.fillStyle='#fda4af'; setFont(ctx, 'body');
-    let py = y+31;
-    for (const p of pacts.slice(0,3)) {
-      ctx.fillText(_ellipsize(ctx, `${p.icon} ${p.name} — ${p.desc}`, CW-46), 18, py); py += 19;
-    }
-    if (pacts.length > 3) ctx.fillText(`외 ${pacts.length-3}개`, 18, py);
-  } else {
-    ctx.fillStyle='#475569'; setFont(ctx, 'body');
-    ctx.fillText('없음 — 🔓 해금 탭에서 난이도를 올리고 보석을 더 받을 수 있습니다', 18, y+30);
-  }
-  y += ph + gap;
-
-  // 진행 상황
-  ctx.fillStyle='#64748b'; setFont(ctx, 'body', 'bold');
-  ctx.fillText(`관문 ${(gs.clearedGates||[]).length}개 돌파 · 누적 처치 ${gs.stats.totalKills||0} · 누적 보석 ${gs.stats.totalGems||0}`, 14, y);
-  y += 12 + gap;
-
-  // 다음 목표 — 보석을 어디에 쓰면 좋을지 한 줄로 짚어준다
-  const nextUnlock = UNLOCK_DEFS.find(u => !isUnlocked(u.id));
-  const gh = 92;   // 목표 세 줄이 13px로 겹치지 않는 높이
-  uiPanel(ctx, 10,y,CW-20,gh,7, '#0c1220', '#1e293b', 1);
-  ctx.fillStyle='#22c55e'; setFont(ctx, 'body', 'bold');
-  ctx.fillText('🎯 다음 목표', 18, y+9);
-  let gy = y+28;
-  if (nextUnlock) {
-    const short = gs.soulStones < nextUnlock.cost;
-    ctx.fillStyle = short ? '#64748b' : '#86efac'; setFont(ctx, 'body');
-    ctx.fillText(`${nextUnlock.icon} ${nextUnlock.name} 해금`, 18, gy);
-    ctx.textAlign='right';
-    ctx.fillStyle = short ? '#f59e0b' : '#22c55e'; setFont(ctx, 'body', 'bold');
-    ctx.fillText(short ? `💎 ${nextUnlock.cost - gs.soulStones} 더 필요` : `💎 ${nextUnlock.cost} — 지금 열 수 있습니다`, CW-18, gy);
-    ctx.textAlign='left';
-    gy += 20;
-  }
-  if (sp.owned < sp.total) {
-    ctx.fillStyle='#94a3b8'; setFont(ctx, 'body');
-    ctx.fillText(`🌳 스킬 ${sp.total - sp.owned}레벨 남음`, 18, gy);
-    ctx.textAlign='right'; ctx.fillStyle='#64748b'; setFont(ctx, 'body', 'bold');
-    ctx.fillText(`💎 ${sp.totalCost - sp.spent}`, CW-18, gy);
-    ctx.textAlign='left';
-    gy += 20;
-  }
-  if (!nextUnlock && sp.owned >= sp.total) {
-    ctx.fillStyle='#86efac'; setFont(ctx, 'body');
-    ctx.fillText('스킬·해금을 전부 올렸습니다 — 📜 서약으로 더 깊이 내려가세요', 18, gy);
-    gy += 20;
-  }
-  ctx.fillStyle='#475569'; setFont(ctx, 'body');
-  ctx.fillText(`이번 하강 예상 보석 배율 ×${pactGemMult().toFixed(2)}`, 18, gy);
-  _lobbyBottom = gy + 20;
+  // 출격 화면에는 **최고 도달 층과 난이도**만 둔다.
+  //
+  // 예전에는 여기에 상자가 여섯 개 더 있었다 — 🔓사용 가능(타워·병력),
+  // 🌳적용 중인 스킬, 🎴부적, 📜서약, 진행 상황 한 줄, 🎯다음 목표.
+  // 전부 제 탭이 따로 있는 것들이고, 여기서 할 일은 "어디로 들어갈까" 하나다.
+  // 정할 것 옆에 정하지 않을 것을 늘어놓으면 정하는 일이 느려진다.
+  //
+  //   🔓사용 가능 → 해금 탭   🌳적용 중인 스킬 → 스킬 탭
+  //   📜서약      → 서약 탭   🎴부적           → 패 탭
+  //   🎯다음 목표 → 각 탭이 이미 제 값과 조건을 적고 있다
+  //
+  // 그렇게 비운 자리를 난이도 사다리에 줬다 — 이 화면에서 유일하게 누르는 것이
+  // 가장 작은 버튼이었던 것을 되돌린다.
+  _lobbyBottom = y + 6;
   fitSortieGap();
 }
 
@@ -3838,6 +3716,7 @@ function renderLobbyCamp(ctx, gs) {
 // ── 🏺 유물 — 보스에게서 얻어 끼운다 ────────────────────────────────────────
 // 단련과 달리 값을 내고 굴리는 것이 없다. 여기서 하는 일은 두 가지뿐이다 —
 // 가진 것 중 세 개를 고르고, 남는 것을 판다. 그래서 화면도 줄 하나에 다 담는다.
+// 마왕(100층)만 떨군다 — 중간보스는 보석으로 준다.
 // 안 가진 유물도 흐리게 같이 보여 준다. 무엇이 더 있는지 모르면 보스를 잡을
 // 이유가 "보상이 나오니까"에서 멈추고, 무엇을 노리는 재미가 생기지 않는다.
 const RELIC_RARITY_NAME  = { 1:'평범', 2:'귀함', 3:'전설' };
@@ -3884,7 +3763,7 @@ function _renderCampRelics(ctx, gs, y) {
     uiPanel(ctx, 8, y, CW-16, 40, 7, '#0b1220', '#1e293b', 1);
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillStyle='#475569'; setFont(ctx, 'body', 'bold');
-    ctx.fillText('아직 유물이 없습니다 — 10층마다 오는 보스를 잡으세요', CW/2, y+20);
+    ctx.fillText(`아직 유물이 없습니다 — ${ABYSS_FINAL_FLOOR}층의 마왕을 잡으면 하나 떨어집니다`, CW/2, y+20);
     ctx.textAlign='left'; ctx.textBaseline='top';
     y += 46;
   }
@@ -3968,7 +3847,7 @@ function renderLobbyCardMeta(ctx, gs) {
 
   ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillStyle='#38bdf8'; setFont(ctx, 'body', 'bold');
-  ctx.fillText('🎴 패 — 무엇이 나올지를 삽니다', 14, y);
+  ctx.fillText('🎴 패 — 부적과, 무엇이 나올지를 삽니다', 14, y);
   ctx.textAlign='right'; ctx.fillStyle=COLORS.gem; setFont(ctx, 'body', 'bold');
   ctx.fillText(`💎 ${gs.soulStones||0}`, CW-14, y);
   y += 20;
@@ -3978,6 +3857,11 @@ function renderLobbyCardMeta(ctx, gs) {
 
   // ── 기피 목록 고르는 화면 ────────────────────────────────────────────────
   if (L.cardCat) { _renderCardBanPicker(ctx, gs, y); return; }
+
+  // 🎴 부적 — 출전 화면에서 옮겨 왔다. 같은 '패'다: 강화 카드가 판 안에서 뽑는
+  // 것이라면 부적은 판에 들어가기 전에 끼우는 것이고, 둘 다 보석으로 산다.
+  // 출전 화면은 어디로 들어갈지만 정하는 곳으로 두고 싶었다.
+  y = _renderCharmBar(ctx, gs, y) + 8;
 
   // ── 지금 내 뽑기가 어떤 모양인지 ─────────────────────────────────────────
   const odds = cardGradeOdds(gs);
@@ -4248,26 +4132,9 @@ function renderLobbyUnlock(ctx, gs) {
     y += rowH;
   }
 
-  // ── ♾️ 승천 — 끝이 없는 사용처 ────────────────────────────────────────────
-  y += 8;
-  const an = ascendLevel(gs), ac = ascendCost(gs), acan = gs.soulStones >= ac;
-  const ah = 116;   // 제목 + 두 줄 + 버튼이 13px로 들어가는 높이
-  uiPanel(ctx, 10,y,CW-20,ah,8, '#150f26', acan ? '#a78bfa' : '#3b2a5e', acan ? 2 : 1);
-  ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillStyle='#c4b5fd'; setFont(ctx, 'body', 'bold');
-  ctx.fillText('♾️ 승천 — 끝이 없습니다', 20, y+11);
-  ctx.textAlign='right'; ctx.fillStyle='#a78bfa'; setFont(ctx, 'title', 'bold');
-  ctx.fillText(`${an}단계`, CW-20, y+8);
-  ctx.textAlign='left'; ctx.fillStyle='#94a3b8'; setFont(ctx, 'body');
-  ctx.fillText(`현재 — 타워·아군 공격력 +${(an*ASCEND_DMG*100).toFixed(1)}% · 체력 +${(an*ASCEND_HP*100).toFixed(1)}%`, 20, y+36);
-  ctx.fillStyle='#64748b'; setFont(ctx, 'body');
-  ctx.fillText('한 단계마다 값이 12%씩 오릅니다 — 남는 보석이 갈 곳', 20, y+58);
-  const abw=CW-40, abh=28, aby=y+ah-abh-9;
-  uiPanel(ctx, 20,aby,abw,abh,5, acan ? '#2a1a05' : '#12161f', acan ? '#f59e0b' : '#293040', 1);
-  ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillStyle = acan ? '#fbbf24' : '#475569'; setFont(ctx, 'body', 'bold');
-  ctx.fillText(`💎 ${ac}  →  ${an+1}단계`, CW/2, aby+abh/2);
-  gs.ui.ascendBtn = {x:20,y:aby,w:abw,h:abh};
+  // ♾️ 승천은 이 탭에서 뺐다. 해금 탭은 "무엇을 열 수 있나"를 보는 곳인데,
+  // 끝이 없는 강화가 목록 아래 붙어 있으면 남은 해금이 몇 개인지가 안 읽힌다.
+  // 이미 올려 둔 단계는 그대로 효과가 붙는다(applyAscend) — 되사거나 잃지 않는다.
   ctx.textAlign='left'; ctx.textBaseline='top';
 }
 
@@ -4421,11 +4288,21 @@ function _renderRankBoard(ctx, gs, y) {
   return y + rh + 14;
 }
 
+// ─── 📊 기록 ──────────────────────────────────────────────────────────────────
+// 예전에는 이 탭 하나에 아홉 덩어리가 세로로 이어져 있었다 — 최고 기록, 관문,
+// 누적 기록, 훈련 스테이지, 업적 열여덟 줄, 몬스터 도감, 순위표, 세이브 백업,
+// 게임 안내. 화면 네 개 분량을 밀어서 내려야 원하는 것이 나왔다.
+//
+// 큰 버튼 다섯 개로 나눈다. 여기서 시트(openSheet)를 쓰지 않은 이유가 있다 —
+// 업적은 [받기]를 누르고, 순위표는 등록하고, 백업은 복사·복원한다. 시트는 읽기
+// 전용이라 그 버튼들이 죽는다. 그래서 **같은 탭 안의 속페이지**로 만들었다.
 function renderLobbyRecord(ctx, gs) {
+  const L  = gs.lobby;
   const st = gs.stats;
   let y = LOBBY_BODY_Y + 12;
   ctx.textAlign='left'; ctx.textBaseline='top';
   gs.ui.achBtns = []; gs.ui.achClaimAllBtn = null;
+  gs.ui.recordBtns = []; gs.ui.recordBackBtn = null;
 
   // ── 무한 최고 기록 — 이 게임의 점수판 ────────────────────────────────────
   const best = st.bestEndless || 0;
@@ -4446,6 +4323,80 @@ function renderLobbyRecord(ctx, gs) {
   ctx.textAlign='left';
   y += bh + 12;
 
+  // ── 속페이지 ────────────────────────────────────────────────────────────
+  const page = L.recordPage || null;
+  if (page) {
+    // 돌아가는 길 — 속으로 들어왔으면 나가는 문이 늘 보여야 한다
+    const bw3 = 96, bh3 = 30;
+    uiPanel(ctx, 10, y, bw3, bh3, 6, '#111c2e', '#334155', 1);
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle='#94a3b8'; setFont(ctx, 'body', 'bold');
+    ctx.fillText('‹ 기록', 10+bw3/2, y+bh3/2);
+    gs.ui.recordBackBtn = { x:10, y, w:bw3, h:bh3 };
+    const pg = RECORD_PAGES.find(p => p.id === page);
+    if (pg) {
+      ctx.textAlign='left'; ctx.fillStyle=pg.color; setFont(ctx, 'title', 'bold');
+      ctx.fillText(`${pg.icon} ${pg.name}`, 10+bw3+12, y+bh3/2+1);
+    }
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    y += bh3 + 12;
+
+    if      (page === 'stats') y = _recordStats(ctx, gs, y);
+    else if (page === 'ach')   y = _recordAch(ctx, gs, y);
+    else if (page === 'dex')   y = _recordDex(ctx, gs, y);
+    else if (page === 'rank')  y = _renderRankBoard(ctx, gs, y);
+    else if (page === 'data')  y = _recordData(ctx, gs, y);
+    _lobbyBottom = y;
+    return;
+  }
+
+  // ── 차례 ────────────────────────────────────────────────────────────────
+  for (const p of RECORD_PAGES) {
+    const rh2 = 62;
+    uiPanel(ctx, 10, y, CW-20, rh2, 8, '#0b1220', p.color, p.hot(gs) ? 2 : 1);
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.font='20px sans-serif'; ctx.fillStyle='#e2e8f0';
+    ctx.fillText(p.icon, 20, y+18);
+    ctx.fillStyle=p.color; setFont(ctx, 'title', 'bold');
+    ctx.fillText(p.name, 54, y+12);
+    ctx.fillStyle='#64748b'; setFont(ctx, 'body');
+    ctx.fillText(p.sub(gs), 54, y+37);
+    ctx.textAlign='right'; ctx.fillStyle=p.color; setFont(ctx, 'title', 'bold');
+    ctx.fillText('›', CW-20, y+rh2/2-9);
+    ctx.textAlign='left';
+    gs.ui.recordBtns.push({ x:10, y, w:CW-20, h:rh2, id:p.id });
+    y += rh2 + 8;
+  }
+  _lobbyBottom = y + 8;
+}
+
+// 차례에 놓을 다섯 갈래. sub()는 들어가 보지 않고도 알 만한 숫자 하나,
+// hot()은 지금 할 일이 있다는 표시(받을 업적이 있으면 테가 굵어진다).
+const RECORD_PAGES = [
+  { id:'stats', icon:'📊', name:'기록과 관문', color:'#60a5fa',
+    sub: gs => `${gs.stats.runs||0}회 하강 · 관문 ${(gs.clearedGates||[]).length}/8 · 처치 ${(gs.stats.totalKills||0).toLocaleString()}`,
+    hot: () => false },
+  { id:'ach',   icon:'🏅', name:'업적', color:'#fbbf24',
+    sub: gs => {
+      const done = ACHIEVEMENTS.filter(a => achClaimed(gs, a)).length;
+      const rdy  = achClaimable(gs).length;
+      return `${done}/${ACHIEVEMENTS.length}` + (rdy ? ` · 받을 것 ${rdy}개` : '');
+    },
+    hot: gs => achClaimable(gs).length > 0 },
+  { id:'dex',   icon:'📖', name:'몬스터 도감', color:'#a78bfa',
+    sub: gs => `${(gs.seenMobs||[]).length}/${Object.keys(BATTLE_MOB_TYPES).length}종 발견`,
+    hot: () => false },
+  { id:'rank',  icon:'🏆', name:'순위표', color:'#f59e0b',
+    sub: () => '내 기록을 올리고 남의 기록을 봅니다',
+    hot: () => false },
+  { id:'data',  icon:'💾', name:'세이브 · 안내 · 소리', color:'#22d3ee',
+    sub: () => '백업 코드 · 설명 다시 보기 · 소리 끄기',
+    hot: () => false },
+];
+
+function _recordStats(ctx, gs, y) {
+  const st = gs.stats;
+  const gates = gs.clearedGates || [];
   // ── 관문 기록 ────────────────────────────────────────────────────────────
   ctx.fillStyle='#fbbf24'; setFont(ctx, 'body', 'bold');
   ctx.fillText('🏁 관문', 14, y); y += 18;
@@ -4495,6 +4446,10 @@ function renderLobbyRecord(ctx, gs) {
   }
   y += 38;
 
+  return y;
+}
+
+function _recordAch(ctx, gs, y) {
   // ── 🏅 업적 ──────────────────────────────────────────────────────────────
   // 이미 쌓고 있던 숫자에 눈금을 붙인다. 받은 것은 다시 안 준다.
   {
@@ -4579,6 +4534,10 @@ function renderLobbyRecord(ctx, gs) {
     y += 4;
   }
 
+  return y;
+}
+
+function _recordDex(ctx, gs, y) {
   // 몬스터 도감
   ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillStyle='#60a5fa'; setFont(ctx, 'body', 'bold');
@@ -4590,7 +4549,10 @@ function renderLobbyRecord(ctx, gs) {
   ctx.textAlign='left';
   y += 18;
 
-  const mw = (CW-26)/4, mh = 46;
+  // 46px에 아이콘·이름·수치 세 줄을 넣고 있었다 — 이름(my+28)과 수치(my+37)가
+  // 9px 간격이라 13px 글자가 서로를 밟았다. 🛡저항 줄은 아이콘 위에 겹쳐 있었다.
+  // 속페이지로 옮겨 자리가 넉넉해졌으니 네 줄이 각자 제 줄을 갖게 한다.
+  const mw = (CW-26)/4, mh = 74;
   mobIds.forEach((id,i) => {
     const t = BATTLE_MOB_TYPES[id];
     const mx = 10 + (i%4)*(mw+5.33);
@@ -4599,30 +4561,30 @@ function renderLobbyRecord(ctx, gs) {
     uiPanel(ctx, mx,my,mw,mh,5, '#0a0e18', known ? '#334155' : '#161d2b', 1);
     ctx.textAlign='center'; ctx.textBaseline='top';
     if (known) {
-      ctx.font='16px sans-serif'; ctx.fillStyle='#e2e8f0';
-      ctx.fillText(t.icon, mx+mw/2, my+7);
+      ctx.font='18px sans-serif'; ctx.fillStyle='#e2e8f0';
+      ctx.fillText(t.icon, mx+mw/2, my+6);
       setFont(ctx, 'body', 'bold'); ctx.fillStyle='#94a3b8';
-      ctx.fillText(t.name, mx+mw/2, my+28);
+      ctx.fillText(t.name, mx+mw/2, my+30);
       setFont(ctx, 'body'); ctx.fillStyle='#475569';
-      ctx.fillText(`HP${t.hp} ATK${t.atk}`, mx+mw/2, my+37);
+      ctx.fillText(`HP${t.hp} ATK${t.atk}`, mx+mw/2, my+48);
       // 🛡 원거리 저항은 숫자만 봐서는 안 보이는 성질이라 따로 적는다
       if (t.rangedResist > 0) {
         setFont(ctx, 'body', 'bold'); ctx.fillStyle='#38bdf8';
-        ctx.fillText(`🛡원거리 −${Math.round(t.rangedResist*100)}%`, mx+mw/2, my+18);
+        ctx.fillText(`🛡−${Math.round(t.rangedResist*100)}%`, mx+mw/2, my+60);
       }
     } else {
-      ctx.font='16px sans-serif'; ctx.fillStyle='#1e293b';
-      ctx.fillText('?', mx+mw/2, my+9);
+      ctx.font='18px sans-serif'; ctx.fillStyle='#1e293b';
+      ctx.fillText('?', mx+mw/2, my+12);
       setFont(ctx, 'body'); ctx.fillStyle='#334155';
-      ctx.fillText('미발견', mx+mw/2, my+30);
+      ctx.fillText('미발견', mx+mw/2, my+42);
     }
   });
   y += Math.ceil(mobIds.length/4)*(mh+5) + 14;
 
-  // ── 🏆 순위표 ────────────────────────────────────────────────────────────
-  // 내 기록 바로 아래가 남의 기록이 있을 자리다. 탭을 새로 파지 않고 여기에 둔다.
-  y = _renderRankBoard(ctx, gs, y);
+  return y;
+}
 
+function _recordData(ctx, gs, y) {
   // ── 세이브 백업 ──────────────────────────────────────────────────────────
   // 기록이 이 브라우저 안에만 있다는 걸 알려 주고, 빠져나갈 길을 준다.
   ctx.textAlign='left'; ctx.textBaseline='top';
@@ -4692,7 +4654,9 @@ function renderLobbyRecord(ctx, gs) {
                           sfxOn?'#22c55e':'#475569', false);
   y += kh + 8;
   _lobbyBottom = y;
+  return y;
 }
+
 
 // ── 출격 버튼 ───────────────────────────────────────────────────────────────
 // 출격은 두 갈래다. 무한이 본편이므로 넓고 밝게, 훈련은 옆에 작게 둔다.

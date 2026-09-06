@@ -200,7 +200,7 @@ function newState() {
          pauseResumeBtn:null, pauseGiveUpBtn:null,
          titlePatchBtn:null, patchCloseBtn:null,
          backupExportBtn:null, backupImportBtn:null, backupMsg:null,
-         tutReplayBtn:null, achBtns:[], achClaimAllBtn:null, tutResetTipBtn:null, guideReplayBtn:null, campBtns:[], campGroupBtns:[], campRowBtns:[], relicBtns:[], relicSellBtns:[], cardMetaBtns:[], cardCatBtns:[], cardBanBtns:[], cardBackBtn:null,
+         tutReplayBtn:null, achBtns:[], achClaimAllBtn:null, recordBtns:[], recordBackBtn:null, tutResetTipBtn:null, guideReplayBtn:null, campBtns:[], campGroupBtns:[], campRowBtns:[], relicBtns:[], relicSellBtns:[], cardMetaBtns:[], cardCatBtns:[], cardBanBtns:[], cardBackBtn:null,
          rankSubmitBtn:null, rankBoardBtns:[], rankReloadBtn:null,
          pauseCardsBtn:null, runCardsCloseBtn:null, runCardsScroll:null, towerPromoteBtn:null, forgeAutoBtns:[],
          bossPickBtns:[], bgmToggleBtn:null, sfxToggleBtn:null,
@@ -1009,7 +1009,7 @@ function uiScopeKey() {
   if (gs.page === 'lobby') {
     return `lobby|${L.tab}|${L.tab === 'skill' ? (L.skillTree||'') : ''}|${L.tab === 'camp' ? ((L.campGroup||'') + (L.campGroup === 'relic'
         ? '|' + relicState(gs).equipped.join(',') + '|' + relicState(gs).owned.length : '')) : ''}|${L.tab === 'card' ? (L.cardCat||'-') : ''}|${
-      L.tab === 'record' ? achState(gs).claimed.length : ''}`;
+      L.tab === 'record' ? ((L.recordPage||'-') + '|' + achState(gs).claimed.length) : ''}`;
   }
   if (gs.page === 'town') {
     return `town|${t.screen||'main'}|${t.tab||''}|${t.heroView?'hero':''}|${t.forgeTab||''}|${t.shopTab||''}`;
@@ -1062,8 +1062,12 @@ function handleLobbyTap(x, y) {
     // 🌑 악몽 사다리 — 내려갈 단계를 고른다.
     // ⚔️출격 탭에서만 그려지므로 여기서만 검사한다. 예전에는 탭 밖에서 검사해
     // 🌳스킬 탭의 노드를 누를 때 같은 좌표의 악몽 칸이 함께 눌렸다.
+    // 출격 탭도 스크롤된 채 그려진다 — 버튼 좌표는 스크롤 이전 기준이므로
+    // 탭 좌표에 스크롤을 더해 같은 기준으로 맞춘다.
+    // (사다리만 이 보정 없이 검사하고 있었다. 화면이 짧아 티가 안 났을 뿐이다.)
+    const ry = y + (gs.lobbyScroll || 0);
     for (const b of gs.ui.nightmareBtns||[]) {
-      if (!hitTest(x,y,b)) continue;
+      if (!hitTest(x,ry,b)) continue;
       if (!b.can) {
         const prev = b.level - 1;
         spawnFloaty(`🔒 ${prev <= 0 ? '∞ 심연' : `악몽 ${prev}단계`}의 마왕을 먼저 잡으세요`, x, y, '#f43f5e');
@@ -1073,8 +1077,6 @@ function handleLobbyTap(x, y) {
       SFX.click(); return;
     }
 
-    // 출격 탭도 스크롤된 채 그려진다
-    const ry = y + (gs.lobbyScroll || 0);
     if (hitTest(x,ry,gs.ui.trainSkipBtn||{})) {
       if (skipTraining()) {
         spawnFloaty(`⏭ 훈련 건너뛰기 — 💎+${TRAIN_SKIP_GEMS}`, x, y, '#fbbf24');
@@ -1082,48 +1084,6 @@ function handleLobbyTap(x, y) {
         SFX.levelUp();
       } else SFX.denied();
       return;
-    }
-    if (hitTest(x,ry,gs.ui.charmRollBtn||{})) {
-      const e = rollCharm(gs);
-      if (e) {
-        const d = charmDef(e.charmId);
-        SFX.levelUp(); SaveManager.save(gs);
-        spawnFloaty(`${d.icon} ${d.name}!`, x, y, GRADE_COLOR[d.grade] || '#a78bfa');
-      } else {
-        SFX.denied();
-        spawnFloaty(charmBag(gs).length >= CHARM_BAG_MAX ? '보관함이 가득 찼습니다'
-                                                         : `💎 ${CHARM_ROLL_COST} 부족`, x, y, '#ef4444');
-      }
-      return;
-    }
-    for (const b of gs.ui.charmSlotBtns||[]) {
-      if (hitTest(x,ry,b)) {   // 낀 것을 다시 누르면 뺀다
-        setCharmSlot(gs, b.idx, null); SFX.click(); SaveManager.save(gs); return;
-      }
-    }
-    // 💰 팔기가 먼저다 — 카드 위에 얹힌 버튼이라 카드 판정보다 앞서야 한다
-    for (const c of gs.ui.charmSellBtns||[]) {
-      if (!hitTest(x,ry,c)) continue;
-      const e = charmEntry(gs, c.uid);
-      const nm = e ? (charmDef(e.charmId)||{}).name : '부적';
-      const v = sellCharm(gs, c.uid);
-      if (v > 0) { SFX.levelUp(); SaveManager.save(gs);
-                   spawnFloaty(`💎 +${v} — ${nm} 판매`, CW/2, 300, COLORS.gem); }
-      else { SFX.denied(); spawnFloaty('낀 부적은 못 팝니다', x, y, '#ef4444'); }
-      return;
-    }
-    for (const c of gs.ui.charmCards||[]) {
-      if (hitTest(x,ry,c)) {
-        const sl = charmSlots(gs);
-        if (isCharmSlotted(gs, c.uid)) {          // 이미 낀 것 → 뺀다
-          for (let i=0;i<sl.length;i++) if (sl[i]===c.uid) sl[i]=null;
-        } else {
-          let idx = sl.findIndex(v => v == null);
-          if (idx < 0) idx = 0;                    // 자리가 없으면 첫 칸을 갈아 끼운다
-          setCharmSlot(gs, idx, c.uid);
-        }
-        SFX.click(); SaveManager.save(gs); return;
-      }
     }
     // 나머지(출격 버튼 등)는 아래 공통 처리로
   }
@@ -1248,7 +1208,51 @@ function handleLobbyTap(x, y) {
 
   // 🎴 패 — 카드 선택 자체를 산다. 확정 구매라 실패 분기가 없다.
   if (L.tab === 'card') {
+    // 🎴 부적 — 출격 탭에서 옮겨 왔다. 패 탭도 스크롤된 채 그려진다.
     const ry = y + (gs.lobbyScroll || 0);
+    if (hitTest(x,ry,gs.ui.charmRollBtn||{})) {
+      const e = rollCharm(gs);
+      if (e) {
+        const d = charmDef(e.charmId);
+        SFX.levelUp(); SaveManager.save(gs);
+        spawnFloaty(`${d.icon} ${d.name}!`, x, y, GRADE_COLOR[d.grade] || '#a78bfa');
+      } else {
+        SFX.denied();
+        spawnFloaty(charmBag(gs).length >= CHARM_BAG_MAX ? '보관함이 가득 찼습니다'
+                                                         : `💎 ${CHARM_ROLL_COST} 부족`, x, y, '#ef4444');
+      }
+      return;
+    }
+    for (const b of gs.ui.charmSlotBtns||[]) {
+      if (hitTest(x,ry,b)) {   // 낀 것을 다시 누르면 뺀다
+        setCharmSlot(gs, b.idx, null); SFX.click(); SaveManager.save(gs); return;
+      }
+    }
+    // 💰 팔기가 먼저다 — 카드 위에 얹힌 버튼이라 카드 판정보다 앞서야 한다
+    for (const c of gs.ui.charmSellBtns||[]) {
+      if (!hitTest(x,ry,c)) continue;
+      const e = charmEntry(gs, c.uid);
+      const nm = e ? (charmDef(e.charmId)||{}).name : '부적';
+      const v = sellCharm(gs, c.uid);
+      if (v > 0) { SFX.levelUp(); SaveManager.save(gs);
+                   spawnFloaty(`💎 +${v} — ${nm} 판매`, CW/2, 300, COLORS.gem); }
+      else { SFX.denied(); spawnFloaty('낀 부적은 못 팝니다', x, y, '#ef4444'); }
+      return;
+    }
+    for (const c of gs.ui.charmCards||[]) {
+      if (hitTest(x,ry,c)) {
+        const sl = charmSlots(gs);
+        if (isCharmSlotted(gs, c.uid)) {          // 이미 낀 것 → 뺀다
+          for (let i=0;i<sl.length;i++) if (sl[i]===c.uid) sl[i]=null;
+        } else {
+          let idx = sl.findIndex(v => v == null);
+          if (idx < 0) idx = 0;                    // 자리가 없으면 첫 칸을 갈아 끼운다
+          setCharmSlot(gs, idx, c.uid);
+        }
+        SFX.click(); SaveManager.save(gs); return;
+      }
+    }
+
     if (gs.ui.cardBackBtn && hitTest(x, ry, gs.ui.cardBackBtn)) {
       L.cardCat = null; gs.lobbyScroll = 0; SFX.click(); return;
     }
@@ -1302,6 +1306,13 @@ function handleLobbyTap(x, y) {
 
   if (L.tab === 'record') {
     const ry0 = y + (gs.lobbyScroll || 0);
+    // 📊 속페이지 — 차례에서 하나를 고르고, 안에서는 되돌아온다
+    if (hitTest(x, ry0, gs.ui.recordBackBtn||{})) {
+      L.recordPage = null; gs.lobbyScroll = 0; SFX.click(); return;
+    }
+    for (const b of gs.ui.recordBtns||[]) {
+      if (hitTest(x, ry0, b)) { L.recordPage = b.id; gs.lobbyScroll = 0; SFX.click(); return; }
+    }
     for (const b of gs.ui.rankBoardBtns||[]) {
       if (hitTest(x,ry0,b)) { fetchRank(b.id, true); SFX.click(); return; }
     }
@@ -1338,12 +1349,6 @@ function handleLobbyTap(x, y) {
   }
 
   if (L.tab === 'unlock') {
-    if (hitTest(x,y,gs.ui.ascendBtn||{})) {
-      const c = ascendCost(gs);
-      if (buyAscend(gs)) { SaveManager.save(gs); spawnFloaty(`♾️ ${ascendLevel(gs)}단계!`,x,y,'#a78bfa'); SFX.levelUp(); }
-      else { spawnFloaty(`💎 ${c - gs.soulStones} 더 필요`,x,y,'#ef4444'); SFX.denied(); }
-      return;
-    }
     for (const b of gs.ui.unlockBtns||[]) {
       if (hitTest(x,y,b)) {
         if (buyUnlock(b.id, gs)) { spawnFloaty(`${b.icon} 해금!`,x,y,'#f59e0b'); SFX.levelUp(); }

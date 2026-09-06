@@ -149,6 +149,28 @@ for (const t of [99, F, 130]) {
   add('악몽 10을 깨면 ♾️ 무한 개방', r.unbounded, String(r.unbounded));
 }
 
+// ⑧ 🏺 유물은 마왕만 떨군다 — 중간보스는 보석으로 준다
+{
+  const r = await pg.evaluate(() => {
+    gs.stats.runs = 5; gs.nightmareOpen = NIGHTMARE_MAX + 1;
+    startRun('endless', 0);
+    const out = {};
+    for (const kind of ['mid', 'lord']) {
+      relicState(gs).owned.length = 0;
+      const gem0 = gs.soulStones || 0;
+      const b = bossState(gs);
+      b.kind = kind; b.wasRandom = false; b.reward = null;
+      grantBossReward(gs);
+      out[kind] = { relics: relicState(gs).owned.length, gems: (gs.soulStones || 0) - gem0 };
+    }
+    relicState(gs).owned.length = 0;
+    return out;
+  });
+  add('중간보스는 유물을 안 준다', r.mid.relics === 0, `유물 ${r.mid.relics}개 · 💎${r.mid.gems}`);
+  add('중간보스도 보석은 준다',   r.mid.gems > 0,      `💎${r.mid.gems}`);
+  add('마왕은 유물을 준다',       r.lord.relics === 1, `유물 ${r.lord.relics}개 · 💎${r.lord.gems}`);
+}
+
 await browser.close();
 server.close();
 
