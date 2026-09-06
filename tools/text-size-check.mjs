@@ -122,6 +122,24 @@ const report = await pg.evaluate(({ scale, minPx, minLen }) => {
                      result:'cleared', total:5005 };
       renderBriefing(cx, d, BATTLE_Y);
     },
+    // 📄 준비 화면의 정보 카드를 눌러 열리는 상세 시트 다섯 장.
+    // 카드로 접어 둔 만큼 **읽히는 곳은 여기**다 — 여기가 작으면 접은 의미가 없다.
+    ...Object.fromEntries(['arena','defense','team','rules','income'].map(id => [
+      `준비 시트 · ${id}`,
+      () => {
+        const d = st({ page:'battle', inRun:true, wave:46 });
+        d.battle.phase = 'hire';
+        d.gold = 1e6;
+        for (const t of ['swordsman','archer','guardian']) d.gold = hireUnit(d.battle, t, d.gold);
+        d.hero.placement = 'battle';
+        d.activeUpgrades = UPGRADE_CARDS.slice(0, 4).map(c => c.id);
+        d.lastWave = { idx:46, top:812, bot:1759, kill:388, win:100, clear:104, left:9,
+                       result:'cleared', total:3163 };
+        openBriefSheet(d, id);
+        renderSheet(cx, d);
+        closeSheet();
+      },
+    ])),
     '마을':            () => renderTownPage(cx, st({ page:'town', gold:420 })),
     '마을 · 병력':      () => renderTownPageArmy(cx, st({ page:'town', gold:420 }), 92),
     '마을 · 타워':      () => renderTownPageTowers(cx, st({ page:'town', gold:420 }), 92),

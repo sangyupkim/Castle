@@ -25,10 +25,15 @@ function nearestOf(list, from, range) {
 
 // 공격용 목표 선택 — 이미 죽을 만큼 피해가 예약된 적은 건너뛴다.
 // 아군 넷이 같은 고블린에 몰려 화살을 낭비하는 것을 막는다.
-// needLos — 원거리는 **벽 너머를 고르지 않는다.** 고르게 두면 벽에 대고
-// 계속 쏘거나(예전에는 그게 그대로 맞았다) 아무 일도 안 하고 서 있게 된다.
-// 못 고르면 호출부가 최근접 적 쪽으로 걸어가게 하므로, 미로에서는 원거리가
-// 자리를 옮겨 시야를 확보해야 한다 — 그게 '미로는 원거리가 손해'의 뜻이다.
+// needLos — **벽 너머는 고르지 않는다.** 고르게 두면 벽에 대고 계속 쏘거나
+// (예전에는 그게 그대로 맞았다) 아무 일도 안 하고 서 있게 된다.
+// 못 고르면 호출부가 최근접 적 쪽으로 걸어가게 하므로, 미로에서는 자리를 옮겨
+// 시야를 확보해야 한다 — 그게 '미로는 원거리가 손해'의 뜻이다.
+//
+// 근접도 이 판정을 받는다. 예전에는 원거리에만 걸었는데, 그러면 두께 12px 벽
+// 너머의 적을 사거리 14px 근접이 **때리는** 그림이 나온다(반지름 둘을 더하면
+// 실제로는 안 닿아서 눈에 안 띄었을 뿐, 규칙으로는 뚫려 있었다).
+// 이제 길찾기가 벽을 돌아가 주므로 근접도 정직하게 막아 둔다.
 function pickAttackTarget(list, from, range, needLos) {
   let best = null, bestD = range !== undefined ? range : Infinity;
   let fallback = null, fallbackD = bestD;
@@ -330,7 +335,7 @@ function updateAlly(gs, u, mobs, allies, dt) {
   // 목표: 사거리 안에서 가장 가까운 적
   // 🌀 추방 — 영웅만 10초 동안 아무것도 못 한다
   if (u.isHero && typeof bossEffect === 'function' && bossEffect(gs, 'nohero')) return;
-  const inRange = pickAttackTarget(mobs, u, u.range, !!u.ranged);
+  const inRange = pickAttackTarget(mobs, u, u.range, true);
   u.target = inRange;
 
   // 공격
@@ -391,15 +396,32 @@ function updateAlly(gs, u, mobs, allies, dt) {
 }
 
 function moveToward(e, tx, ty, spd, dt, stopDist) {
-  const dx = tx - e.x, dy = ty - e.y;
+  const ter = (typeof gs !== 'undefined' && gs.arena) ? gs.arena.terrain : null;
+
+  // 🧭 벽이 가로막으면 지도를 보고 돌아간다 (nav.js).
+  // 직선으로 갈 수 있으면 여기는 통째로 건너뛴다 — 개활지에서는 비용이 0이다.
+  let gx = tx, gy = ty, detour = false;
+  if (ter && ter.length && typeof navWaypoint === 'function' &&
+      segBlocksMove(ter, e.x, e.y, tx, ty)) {
+    const wp = navWaypoint(ter, e, tx, ty, dt);
+    if (wp) { gx = wp.x; gy = wp.y; detour = true; }
+  } else {
+    e._navWp = null;
+  }
+
+  // 멈춤 거리는 **직선으로 닿을 때만** 본다. 벽을 돌아가는 중에 목표까지의
+  // 직선 거리로 "도착했다"고 판단하면, 벽 반대편에 붙어 선 채 영영 멈춘다 —
+  // 미로에서 아군과 몹이 서로 마주 보고 굳어 있던 것이 정확히 이것이었다.
+  if (!detour && Math.hypot(tx - e.x, ty - e.y) <= (stopDist || 0)) return false;
+
+  const dx = gx - e.x, dy = gy - e.y;
   const d  = Math.hypot(dx, dy);
-  if (d <= (stopDist || 0)) return false;
+  if (d < 0.5) return false;
   const step = Math.min(d, spd * dt);
   const px = e.x, py = e.y;
   e.x += dx / d * step;
   e.y += dy / d * step;
   clampToArena(e, e.radius);
-  const ter = (typeof gs !== 'undefined' && gs.arena) ? gs.arena.terrain : null;
   if (ter && ter.length) {
     resolveTerrainCollision(ter, e);
     clampToArena(e, e.radius);
@@ -579,25 +601,29 @@ function updateMob(gs, m, allies, dt) {
   }
   const dashMult = m.dashing > 0 ? 3.2 : 1;
 
+  // 🪨 벽 너머는 근접이든 원거리든 때리지 못한다.
+  // 사거리 안이라고 그 자리에 서 있으면 벽을 사이에 두고 굳는다 — 못 보면 걷는다.
+  const seen  = !arenaLosBlocked(m.x, m.y, target.x, target.y);
+  const canHit = d <= m.range && seen;
+
   // 이동
   if (m.behavior === 'kite') {
     // 거리 유지 원거리 — 너무 붙으면 물러나고 멀면 다가온다
     const want = m.range * 0.8;
-    if (d > want)      moveToward(m, target.x, target.y, m.moveSpd * slowMult, dt, want);
+    if (d > want || !seen) moveToward(m, target.x, target.y, m.moveSpd * slowMult, dt, want);
     else if (d < want * 0.6) {
       const ang = Math.atan2(m.y - target.y, m.x - target.x);
       m.x += Math.cos(ang) * m.moveSpd * slowMult * dt;
       m.y += Math.sin(ang) * m.moveSpd * slowMult * dt;
       clampToArena(m, m.radius);
     }
-  } else if (d > m.range) {
+  } else if (!canHit) {
     moveToward(m, target.x, target.y, m.moveSpd * slowMult * dashMult, dt, m.range);
   }
 
   // 공격
   m.atkCd -= dt;
-  if (d <= m.range && m.atkCd <= 0 &&
-      !(m.ranged && arenaLosBlocked(m.x, m.y, target.x, target.y))) {   // 🪨 몹도 벽 너머로는 못 쏜다
+  if (canHit && m.atkCd <= 0) {
     m.atkCd = m.atkPeriod;
     if (m.ranged) {
       gs.arena.shots.push({

@@ -868,6 +868,10 @@ function tap({x,y}) {
         return;
       }
     }
+    // 준비 화면의 정보 카드 — 누르면 상세 시트가 열린다
+    for (const b of (gs.ui.briefInfoBtns || [])) {
+      if (hitTest(x, y, b)) { openBriefSheet(gs, b.id); SFX.click(); return; }
+    }
     if (hitTest(x,y,gs.ui.briefTownBtn||{})) { gs.page='town'; SFX.click(); return; }
   }
 

@@ -1623,6 +1623,7 @@ function renderBattle(ctx, gs) {
   // 예전 [🏰마을] 자리(아레나 위)를 누르면 마을로 튕겨 나갔다.
   // 매 프레임 비우고, 준비 화면일 때만 renderBriefing이 다시 등록한다.
   gs.ui.briefTownBtn = null; gs.ui.battleWaveStartBtn = null;
+  gs.ui.briefInfoBtns = [];
 
   if (wm.phase==='idle') {
     // 준비 화면은 층 정보가 늘면 아래가 잘린다 (층 이벤트 · 변형 · 이월 · 경로 변경…).
@@ -1823,245 +1824,33 @@ function renderBriefing(ctx, gs, top) {
 
   let y = TOP + (gate ? 44 : 24);
 
-  // ── 경로 변경 안내 ───────────────────────────────────────────────────────
-  const pc = gs.pathChanged;
-  if (pc && pc.wave === gs.wave) {
-    const ph2 = 26;
-    uiPanel(ctx, 6, y, CW-12, ph2, 6, 'rgba(8,47,73,0.55)', '#0891b2', 1);
-    ctx.fillStyle='#22d3ee'; setFont(ctx, 'body', 'bold');
-    ctx.textAlign='left'; ctx.textBaseline='middle';
-    ctx.fillText('🛤 경로가 바뀌었습니다', 12, y+ph2/2);
-    ctx.fillStyle='#0e7490'; setFont(ctx, 'body', 'bold'); ctx.textAlign='right';
-    ctx.fillText(pc.refunded
-        ? `타워 ${pc.moved}기 이설 · ${pc.refunded}기 환불 +${pc.gold}💰`
-        : `타워 ${pc.moved}기를 인접 칸으로 옮겼습니다 (레벨 유지)`, CW-12, y+ph2/2+1);
+  // ── 이 층에 대해 알아야 할 것 ────────────────────────────────────────────
+  // 예전에는 이 자리에 판이 일곱 개 쌓여 있었다 — 경로 변경 · 다음 경로 예고 ·
+  // 층 이벤트 · 변형 · 지난 수입 · 잔존 침입자 · 아레나 스폰 풀 · 상단 침입자 ·
+  // 내 편성. 세로로 350px가 넘어 다 보려면 스크롤을 해야 했고, 그중 매번 읽는
+  // 것은 사실 한둘이다. 나머지는 "봤다"는 느낌만 남기고 지나간다.
+  //
+  // 그래서 **첫 화면은 한 줄로 줄이고, 자세한 것은 눌러서 본다.** 카드에는
+  // 아이콘과 숫자 하나만 둔다 — 그것만으로 "지금 들어가도 되나"가 판단되도록.
+  // 판단이 안 서면 누르면 시트가 열린다. 조심할 것이 있는 카드는 테를 굵게 한다.
+  const cards = briefInfoCards(gs, st, def);
+  const cw2 = Math.floor((CW - 12 - 8) / 2), ch2 = 54;
+  gs.ui.briefInfoBtns = [];
+  cards.forEach((c, i) => {
+    const cx2 = 6 + (i % 2) * (cw2 + 8), cy2 = y + ((i / 2) | 0) * (ch2 + 8);
+    uiPanel(ctx, cx2, cy2, cw2, ch2, 7, c.bg, c.bd, c.hot ? 2 : 1);
     ctx.textAlign='left'; ctx.textBaseline='top';
-    y += ph2 + 5;
-  }
-
-  // ── 다음 층 경로 예고 ────────────────────────────────────────────────────
-  const nextPath = nextPathPreview(gs, gs.wave);
-  if (nextPath) {
-    const nh = 26;
-    uiPanel(ctx, 6, y, CW-12, nh, 6, 'rgba(8,47,73,0.35)', '#155e75', 1);
-    ctx.fillStyle='#67e8f9'; setFont(ctx, 'body', 'bold');
-    ctx.textAlign='left'; ctx.textBaseline='middle';
-    ctx.fillText('🛤 다음 층에서 경로가 바뀝니다', 12, y+nh/2);
-    ctx.fillStyle='#0e7490'; setFont(ctx, 'body', 'bold'); ctx.textAlign='right';
-    ctx.fillText('격자에 점선으로 표시 · 겹치는 칸에 지으면 안 옮겨집니다', CW-12, y+nh/2+1);
-    ctx.textAlign='left'; ctx.textBaseline='top';
-    y += nh + 5;
-  }
-
-  // ── 이 층의 이벤트 ───────────────────────────────────────────────────────
-  // 변형(적 숫자)과 달리 이벤트는 이 층 동안의 규칙을 바꾼다. 제일 먼저 보여야 한다.
-  const ev = gs.floorEvent;
-  if (st.endless && ev && ev.parts) {
-    // 심층 — 해로운 것과 이로운 것이 함께 걸린다. 한 줄에 우겨넣으면 못 읽으므로 나눠 쓴다.
-    const eh = 46;
-    uiPanel(ctx, 6, y, CW-12, eh, 6, 'rgba(49,10,84,0.48)', '#a855f7', 1.5);
-    ctx.textAlign='left'; ctx.textBaseline='middle';
-    ctx.fillStyle='#d8b4fe'; setFont(ctx, 'body', 'bold');
-    ctx.fillText('🌑 심층 — 두 규칙이 겹칩니다', 12, y+9);
-    ev.parts.forEach((pt, i) => {
-      const py = y + 24 + i*15;
-      const col = pt.tone === 'good' ? '#4ade80' : pt.tone === 'bad' ? '#f87171' : '#fbbf24';
-      ctx.fillStyle = col; setFont(ctx, 'body', 'bold');
-      ctx.fillText(`${pt.icon} ${pt.name}`, 12, py);
-      ctx.fillStyle = '#8b7bb8'; setFont(ctx, 'body');
-      ctx.fillText(pt.desc, 92, py+1);
-    });
-    ctx.textAlign='left'; ctx.textBaseline='top';
-    y += eh + 5;
-  } else if (st.endless && ev) {
-    const eh = 32;
-    const tone = ev.tone === 'good' ? { bg:'rgba(20,83,45,0.42)',  bd:'#22c55e', fg:'#4ade80', sub:'#15803d' }
-               : ev.tone === 'bad'  ? { bg:'rgba(127,29,29,0.42)', bd:'#ef4444', fg:'#f87171', sub:'#991b1b' }
-                                    : { bg:'rgba(120,53,15,0.42)', bd:'#f59e0b', fg:'#fbbf24', sub:'#b45309' };
-    uiPanel(ctx, 6, y, CW-12, eh, 6, tone.bg, tone.bd, 1.5);
-    ctx.fillStyle = tone.fg; setFont(ctx, 'body', 'bold');
-    ctx.textAlign='left'; ctx.textBaseline='middle';
-    ctx.fillText(`${ev.icon} ${ev.name}`, 12, y+eh/2-6);
-    ctx.fillStyle = tone.sub; setFont(ctx, 'body', 'bold');
-    ctx.fillText(ev.desc, 12, y+eh/2+8);
-    ctx.textAlign='right'; ctx.fillStyle = tone.sub; setFont(ctx, 'body', 'bold');
-    ctx.fillText('이 층에만 적용', CW-12, y+eh/2);
-    ctx.textAlign='left'; ctx.textBaseline='top';
-    y += eh + 5;
-  }
-
-  // ── 이 층의 변형 ─────────────────────────────────────────────────────────
-  // 같은 곡선을 올리기만 하면 40층과 41층이 구분되지 않는다.
-  // 층마다 붙는 성격을 먼저 보여줘야 "이번엔 뭘 세우지"를 묻게 된다.
-  const affixes = (def.affixes || []);
-  if (st.endless && (affixes.length || gate)) {
-    const ah = 30;
-    uiPanel(ctx, 6, y, CW-12, ah, 6, gate ? 'rgba(120,53,15,0.35)' : 'rgba(76,29,149,0.30)', gate ? '#f59e0b' : '#7c3aed', 1);
-    let ax = 12;
-    if (gate) {
-      ctx.fillStyle='#fbbf24'; setFont(ctx, 'body', 'bold');
-      ctx.textAlign='left'; ctx.textBaseline='middle';
-      ctx.fillText('🏁 관문 · 대형 집중', ax, y+ah/2);
-      ax += 108;
-    }
-    affixes.forEach(a => {
-      ctx.fillStyle='#c4b5fd'; setFont(ctx, 'body', 'bold');
-      ctx.textAlign='left'; ctx.textBaseline='middle';
-      ctx.fillText(`${a.icon} ${a.name}`, ax, y+ah/2-5);
-      ctx.fillStyle='#6d5b9e'; setFont(ctx, 'body', 'bold');
-      ctx.fillText(a.desc, ax, y+ah/2+7);
-      ax += Math.max(72, ctx.measureText(a.desc).width + 14);
-    });
-    ctx.textBaseline='top';
-    y += ah + 5;
-  }
-
-  // ── 🧾 지난 웨이브 수입 ──────────────────────────────────────────────────
-  // 전투 중에는 가운데 큰 골드 하나만 둔다. 그 숫자가 어디서 왔는지는 여기서 가른다 —
-  // 상단을 더 지어야 할지 하단을 더 뽑아야 할지가 이 두 줄에서 갈린다.
-  {
-    const lw = gs.lastWave;
-    if (lw && lw.total >= 0) {
-      const gh2 = 80;   // 제목 · 전선 두 갈래 · 보너스 — 13px 세 줄
-      uiPanel(ctx, 6, y, CW-12, gh2, 7, '#0f1208', '#3f3a12', 1);
-      ctx.textAlign='left'; ctx.textBaseline='top';
-      ctx.fillStyle='#fbbf24'; setFont(ctx, 'body', 'bold');
-      ctx.fillText(`🧾 ${lw.idx}웨이브 수입`, 12, y+8);
-      ctx.textAlign='right'; ctx.fillStyle='#fde68a'; setFont(ctx, 'title', 'bold');
-      ctx.fillText(`+${lw.total}💰`, CW-12, y+5);
-
-      // 어디서 벌었나 — 두 전선을 나란히 놓아야 어느 쪽이 굶고 있는지 보인다
-      ctx.textAlign='left'; setFont(ctx, 'body', 'bold');
-      ctx.fillStyle='#93c5fd';
-      ctx.fillText(`🗼 상단 ${lw.top}💰`, 12, y+32);
-      ctx.fillStyle='#c4b5fd';
-      ctx.fillText(`⚔️ 하단 ${lw.bot}💰`, 128, y+32);
-
-      // 보너스는 전선과 무관한 몫이라 제 줄에 따로 적는다 —
-      // 하단 금액 옆에 붙였더니 여섯 자리에서 서로 파고들었다
-      const bonus = lw.kill + lw.win + lw.clear;
-      ctx.fillStyle='#64748b'; setFont(ctx, 'body', 'bold');
-      ctx.fillText(bonus > 0
-        ? `✨ 보너스 ${bonus}💰 — 처치 ${lw.kill} · 승리 ${lw.win} · 완주 ${lw.clear}`
-        : '✨ 보너스 없음 — 완주하면 붙습니다', 12, y+54);
-      y += gh2 + 6;
-    }
-  }
-
-  // ── 잔존 침입자 ──────────────────────────────────────────────────────────
-  // 지난 웨이브에 못 잡고 넘긴 적. 이번 웨이브 물량 위에 그대로 얹히므로
-  // 배치를 바꿀지 현상수배를 참을지 판단하려면 먼저 보여야 한다.
-  const carried = gs.defenseEnemies.filter(e => !e.dead && !e.reached).length;
-  if (carried > 0) {
-    const ch = 26;
-    uiPanel(ctx, 6, y, CW-12, ch, 6, 'rgba(120,53,15,0.40)', '#f59e0b', 1);
-    ctx.fillStyle='#fbbf24'; setFont(ctx, 'body', 'bold');
-    ctx.textAlign='left'; ctx.textBaseline='middle';
-    ctx.fillText(`⚠️ 잔존 침입자 ${carried}기`, 12, y+ch/2);
-    ctx.fillStyle='#b45309'; setFont(ctx, 'body', 'bold'); ctx.textAlign='right';
-    ctx.fillText('지난 웨이브에 못 막은 적이 경로 위에서 계속 옵니다', CW-12, y+ch/2+1);
-    ctx.textAlign='left'; ctx.textBaseline='top';
-    y += ch + 5;
-  }
-
-  // ── 아레나 스폰 풀 ───────────────────────────────────────────────────────
-  const panelH = 90;   // 아이콘 + 비율 + 이름 세 줄이 13px로 겹치지 않는 높이
-  uiPanel(ctx, 6,y,CW-12,panelH,7, '#0a1019', '#3f1d1d', 1);
-  ctx.fillStyle='#f87171'; setFont(ctx, 'body', 'bold'); ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText('⚔️ 아레나 — 60초 내내 리젠 · 갈수록 촘촘하고 강해집니다', 12, y+7);
-  // 🗺 이 층의 지형 배치 — 편성을 바꿀 판단거리라 들어가기 전에 알려준다.
-  // (미로면 원거리가 손해, 호수면 근접이 돌아가야 한다.)
-  {
-    const _tier = getStageInfo(gs.wave).tier || 0;
-    const L = (_tier > 0 && typeof arenaLayoutFor === 'function')
-            ? arenaLayoutFor(_tier, gs.runSeed) : null;
-    if (L) {
-      ctx.textAlign='right'; ctx.fillStyle='#7dd3fc'; setFont(ctx, 'body', 'bold');
-      ctx.fillText(`${L.icon} ${L.name}`, CW-12, y+7);
-      ctx.textAlign='left';
-    }
-  }
-
-  const pool = def.arenaPool || [];
-  const total = pool.reduce((a,[,w])=>a+w, 0) || 1;
-  const pw = Math.floor((CW-24 - (pool.length-1)*5) / Math.max(1,pool.length));
-  pool.forEach(([id,w],i) => {
-    const t = BATTLE_MOB_TYPES[id]; if (!t) return;
-    const px = 12 + i*(pw+5);
-    uiPanel(ctx, px,y+22,pw,62,4, '#140c0c', '#5b2121', 1);
-    ctx.fillStyle='#e2e8f0'; ctx.font='16px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
-    ctx.fillText(t.icon, px+pw/2, y+26);
-    ctx.fillStyle='#94a3b8'; setFont(ctx, 'body', 'bold');
-    ctx.fillText(`${Math.round(w/total*100)}%`, px+pw/2, y+47);
-    ctx.fillStyle='#475569'; setFont(ctx, 'body');
-    ctx.fillText(t.name, px+pw/2, y+65);
-  });
-  y += panelH + 6;
-
-  // ── 상단 침입자 ──────────────────────────────────────────────────────────
-  const dh = 62;   // 이름 줄과 등급 태그 줄이 13px로 붙지 않는 높이
-  uiPanel(ctx, 6,y,CW-12,dh,7, '#0a1019', '#1e3a5f', 1);
-  ctx.fillStyle='#60a5fa'; setFont(ctx, 'body', 'bold'); ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText('🏰 상단 침입자 — 기지에 닿으면 HP 손실', 12, y+7);
-  const hasAir = def.defenseEnemies.some(d => (ENEMY_TYPES[d.type]||{}).flying);
-  if (hasAir) {
-    ctx.textAlign='right'; ctx.fillStyle='#c084fc'; setFont(ctx, 'body', 'bold');
-    ctx.fillText('🔺 비행 — 항로로 가로질러 옵니다', CW-14, y+7);
+    ctx.fillStyle = c.fg; setFont(ctx, 'body', 'bold');
+    ctx.fillText(c.title, cx2 + 10, cy2 + 8);
+    ctx.fillStyle = '#94a3b8'; setFont(ctx, 'body');
+    ctx.fillText(c.sub, cx2 + 10, cy2 + 30);
+    // 눌러서 여는 것임을 알리는 표시 — 없으면 그냥 글상자로 읽혀서 아무도 안 누른다
+    ctx.fillStyle = c.bd; setFont(ctx, 'label', 'bold'); ctx.textAlign='right';
+    ctx.fillText('자세히 ›', cx2 + cw2 - 9, cy2 + 9);
     ctx.textAlign='left';
-  }
-  let dx = 12;
-  const countMult = 1 + gs.wave * DEF_WAVE_COUNT_SCALE;
-  const perRow = Math.max(1, Math.floor((CW-24) / 104));
-  def.defenseEnemies.forEach((d, i) => {
-    const t = ENEMY_TYPES[d.type]; if (!t) return;
-    const n = Math.max(1, Math.round(d.count * countMult));
-    const col = i % perRow;
-    const ex = 12 + col*104;
-    const cls = MOB_CLASSES[t.cls] || MOB_CLASSES.medium;
-    ctx.fillStyle=t.color; setFont(ctx, 'body', 'bold'); ctx.textAlign='left';
-    ctx.fillText(`● ${t.name} ×${n}`, ex, y+26);
-    ctx.fillStyle=cls.color; setFont(ctx, 'body', 'bold');
-    ctx.fillText(`[${cls.tag}] ${cls.name}`, ex, y+44);
+    gs.ui.briefInfoBtns.push({ x:cx2, y:cy2, w:cw2, h:ch2, id:c.id });
   });
-  y += dh + 6;
-
-  // ── 내 편성 ──────────────────────────────────────────────────────────────
-  const mh = 78;
-  uiPanel(ctx, 6,y,CW-12,mh,7, '#0a1019', '#1e3a2f', 1);
-  ctx.fillStyle='#34d399'; setFont(ctx, 'body', 'bold'); ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText('🛡 내 편성', 12, y+7);
-
-  const hired = gs.battle.ourTeam.filter(u=>!u.isHero);
-  if (hired.length) {
-    let ux = 12;
-    for (const u of hired) {
-      ctx.fillStyle='#e2e8f0'; ctx.font='15px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
-      ctx.fillText(u.icon, ux, y+23);
-      ctx.fillStyle='#64748b'; setFont(ctx, 'body', 'bold');
-      ctx.fillText(`${Math.ceil(u.hp)}`, ux, y+41);
-      ux += 26;
-    }
-  } else {
-    ctx.fillStyle='#f87171'; setFont(ctx, 'body', 'bold');
-    ctx.fillText('⚠️ 병력 없음 — 마을 › 출전준비에서 고용하세요', 12, y+27);
-  }
-
-  const heroTxt = gs.hero.dead ? `💀 전사 — ${heroDownLabel(gs.hero)}`
-                : gs.hero.placement==='defense' ? '👑 상단 배치'
-                : gs.hero.placement==='battle'  ? '👑 하단 배치' : '👑 미배치';
-  ctx.fillStyle = gs.hero.dead ? '#f87171' : gs.hero.placement==='none' ? '#64748b' : COLORS.hero;
-  setFont(ctx, 'body', 'bold'); ctx.textAlign='right'; ctx.textBaseline='top';
-  ctx.fillText(`${heroTxt}  Lv.${gs.hero.level}`, CW-14, y+7);
-  ctx.fillStyle='#64748b'; setFont(ctx, 'body', 'bold');
-  ctx.fillText(`🏹 타워 ${gs.towers.length}기`, CW-14, y+23);
-  ctx.fillText(`🗿 케이브 Lv.${caveLevelOf(gs)}`, CW-14, y+44);   // 이모지가 붙은 13px 줄은 20px 넘게 띄워야 안 닿는다
-
-  ctx.fillStyle='#475569'; setFont(ctx, 'body', 'bold'); ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText('강화', 12, y+56);
-  const icons = (gs.activeUpgrades||[]).map(id=>(UPGRADE_CARDS.find(c=>c.id===id)||{}).icon||'').join(' ');
-  ctx.fillStyle='#a5b4fc'; setFont(ctx, 'body');
-  ctx.fillText(icons ? icons.slice(0,64) : '— 웨이브를 클리어하면 강화를 고를 수 있습니다', 40, y+56);
-  y += mh + 8;
+  y += Math.ceil(cards.length / 2) * (ch2 + 8) + 4;
 
   // ── 버튼 ─────────────────────────────────────────────────────────────────
   // 이 화면은 확인용이다 — 편성·배치·현상수배는 전부 🏰마을에서 한다.
@@ -2106,6 +1895,193 @@ function renderBriefing(ctx, gs, top) {
   y += 16;
   ctx.fillText('R 후퇴 · T 마을', CW/2, y);
   _briefBottom = y + 16;
+}
+
+// ─── 준비 화면의 정보 카드 · 상세 시트 ────────────────────────────────────────
+// 준비 화면은 "들어가도 되나"를 정하는 자리다. 그 판단에 필요한 것은 네댓 줄뿐인데
+// 예전에는 아는 것을 전부 펼쳐 놓았다. 카드로 줄이고 자세한 것은 시트로 옮긴다.
+//
+// 시트는 이미 있는 것을 그대로 쓴다(openSheet) — 화면 전체를 덮고, 스크롤되고,
+// 열려 있는 동안 뒤 버튼이 전부 막힌다. 읽다가 웨이브가 시작되면 안 된다.
+
+// 이 층에 걸린 규칙을 한 줄짜리 조각으로 모은다. 관문·이벤트·변형·경로가
+// 전부 "이번 층에만 해당하는 예외"라는 점에서 같은 성격이라 한 곳에 모았다.
+function briefRuleBits(gs, st, def) {
+  const bits = [];
+  if (st.endless && st.isBossStage)
+    bits.push({ icon:'🏁', name:'관문', tone:'bad',
+                desc:'대형이 집중해서 옵니다 — 여기를 넘겨야 다음 구간으로 갑니다' });
+  const ev = gs.floorEvent;
+  if (st.endless && ev && ev.parts) {
+    ev.parts.forEach(pt => bits.push({ icon:pt.icon, name:pt.name, tone:pt.tone, desc:pt.desc }));
+  } else if (st.endless && ev) {
+    bits.push({ icon:ev.icon, name:ev.name, tone:ev.tone, desc:ev.desc });
+  }
+  (def.affixes || []).forEach(a => bits.push({ icon:a.icon, name:a.name, tone:'bad', desc:a.desc }));
+  const pc = gs.pathChanged;
+  if (pc && pc.wave === gs.wave)
+    bits.push({ icon:'🛤', name:'경로가 바뀌었습니다', tone:'bad',
+                desc: pc.refunded
+                    ? `타워 ${pc.moved}기를 옮기고 ${pc.refunded}기를 환불했습니다 (+${pc.gold}💰)`
+                    : `타워 ${pc.moved}기를 인접 칸으로 옮겼습니다 — 레벨은 그대로입니다` });
+  if (typeof nextPathPreview === 'function' && nextPathPreview(gs, gs.wave))
+    bits.push({ icon:'🛤', name:'다음 층에서 경로가 바뀝니다', tone:'warn',
+                desc:'격자에 점선으로 미리 표시됩니다 — 겹치는 칸에 지으면 안 옮겨집니다' });
+  return bits;
+}
+
+function briefLayoutOf(gs, st) {
+  const t = st.tier || 0;
+  return (t > 0 && typeof arenaLayoutFor === 'function') ? arenaLayoutFor(t, gs.runSeed) : null;
+}
+
+function briefDefenseCount(gs, def) {
+  const mult = 1 + gs.wave * DEF_WAVE_COUNT_SCALE;
+  return (def.defenseEnemies || []).reduce((a, d) => a + Math.max(1, Math.round(d.count * mult)), 0);
+}
+
+function briefInfoCards(gs, st, def) {
+  const out = [];
+
+  const pool = def.arenaPool || [];
+  const L = briefLayoutOf(gs, st);
+  out.push({ id:'arena', title:'⚔️ 아레나 (하단)',
+             sub: `적 ${pool.length}종` + (L ? ` · ${L.icon} ${L.name}` : ''),
+             bg:'#0a1019', bd:'#7f1d1d', fg:'#f87171' });
+
+  const carried = gs.defenseEnemies.filter(e => !e.dead && !e.reached).length;
+  out.push({ id:'defense', title:'🏰 상단 침입자',
+             sub: `${(def.defenseEnemies||[]).length}종 ×${briefDefenseCount(gs, def)}기`
+                  + (carried ? ` · ⚠️ 잔존 ${carried}` : ''),
+             bg:'#0a1019', bd: carried ? '#f59e0b' : '#1e3a5f',
+             fg: carried ? '#fbbf24' : '#60a5fa', hot: carried > 0 });
+
+  const hired = gs.battle.ourTeam.filter(u => !u.isHero);
+  const hp = gs.hero.dead ? '💀 전사' : gs.hero.placement === 'defense' ? '👑 상단'
+           : gs.hero.placement === 'battle' ? '👑 하단' : '👑 미배치';
+  const teamBad = !hired.length || (gs.hero.placement === 'none' && !gs.hero.dead);
+  out.push({ id:'team', title:'🛡 내 편성',
+             sub: `용병 ${hired.length} · 타워 ${gs.towers.length}기 · ${hp}`,
+             bg:'#0a1019', bd: teamBad ? '#dc2626' : '#1e3a2f',
+             fg: teamBad ? '#f87171' : '#34d399', hot: teamBad });
+
+  const bits = briefRuleBits(gs, st, def);
+  out.push({ id:'rules', title:'🌑 이 층 규칙',
+             sub: bits.length ? bits.slice(0, 3).map(b => b.icon).join(' ') + ` ${bits.length}가지`
+                              : '특별한 규칙 없음',
+             bg: bits.length ? 'rgba(49,10,84,0.40)' : '#0a1019',
+             bd: bits.length ? '#a855f7' : '#334155',
+             fg: bits.length ? '#d8b4fe' : '#64748b', hot: bits.length > 0 });
+
+  const lw = gs.lastWave;
+  if (lw && lw.total >= 0)
+    out.push({ id:'income', title:'🧾 지난 수입',
+               sub: `+${lw.total}💰 · 🗼${lw.top} ⚔️${lw.bot}`,
+               bg:'#0f1208', bd:'#3f3a12', fg:'#fbbf24' });
+
+  return out;
+}
+
+function openBriefSheet(gs, id) {
+  const st  = getStageInfo(gs.wave);
+  const def = waveDefFor(gs.wave) || { arenaPool:[], defenseEnemies:[] };
+  const B = [];
+
+  if (id === 'arena') {
+    const L = briefLayoutOf(gs, st);
+    B.push({ h:'🗺 이 층의 지형' });
+    B.push({ p: L ? `**${L.icon} ${L.name}** — ${L.desc}`
+                  : '지형이 없습니다 — 가릴 것 없이 힘으로 붙습니다' });
+    const pool = def.arenaPool || [];
+    const total = pool.reduce((a, [, w]) => a + w, 0) || 1;
+    if (pool.length) {
+      B.push({ h:'👾 나오는 적' });
+      B.push({ table: { head:['적', '비율', '성격'], rows: pool.map(([mid, w]) => {
+        const t = BATTLE_MOB_TYPES[mid] || {};
+        return [`${t.icon || ''} ${t.name || mid}`,
+                `${Math.round(w / total * 100)}%`,
+                t.ranged ? '원거리 — 거리를 둡니다' : '근접 — 달라붙습니다'];
+      }) } });
+    }
+    B.push({ tip:'아레나는 60초 내내 새 적이 나옵니다. 다 잡는 곳이 아니라 **버티는 곳**입니다 — 갈수록 촘촘하고 강해집니다.' });
+    openSheet('⚔️ 아레나 (하단)', `${st.tier || gs.wave + 1}층 · 60초`, B);
+
+  } else if (id === 'defense') {
+    const mult = 1 + gs.wave * DEF_WAVE_COUNT_SCALE;
+    const rows = (def.defenseEnemies || []).map(d => {
+      const t = ENEMY_TYPES[d.type] || {};
+      const cls = MOB_CLASSES[t.cls] || MOB_CLASSES.medium;
+      return [`${t.name || d.type} ×${Math.max(1, Math.round(d.count * mult))}`,
+              `[${cls.tag}] ${cls.name}`, cls.desc];
+    });
+    B.push({ h:'이번 웨이브에 오는 적' });
+    if (rows.length) B.push({ table: { head:['침입자', '등급', '성격'], rows } });
+    else B.push({ p:'이번 웨이브에는 상단으로 오는 적이 없습니다' });
+    if ((def.defenseEnemies || []).some(d => (ENEMY_TYPES[d.type] || {}).flying))
+      B.push({ tip:'🔺 **비행**이 섞여 있습니다 — 지상 경로를 무시하고 항로로 가로질러 옵니다. 대공이 되는 타워가 없으면 그대로 통과합니다.' });
+    const carried = gs.defenseEnemies.filter(e => !e.dead && !e.reached).length;
+    if (carried > 0)
+      B.push({ tip:`⚠️ 지난 웨이브에 못 막은 **잔존 침입자 ${carried}기**가 경로 위에 그대로 있습니다. 이번 물량 위에 얹혀 옵니다.` });
+    B.push({ p:'기지에 닿으면 성벽 HP가 깎입니다. 성벽이 0이 되면 판이 끝납니다.' });
+    openSheet('🏰 상단 침입자', `${st.tier || gs.wave + 1}층 · ×${briefDefenseCount(gs, def)}기`, B);
+
+  } else if (id === 'team') {
+    const hired = gs.battle.ourTeam.filter(u => !u.isHero);
+    B.push({ h:'⚔️ 하단 용병' });
+    if (hired.length) B.push({ table: { head:['용병', 'HP'],
+      rows: hired.map(u => [`${u.icon} ${u.name || ''}`, `${Math.ceil(u.hp)} / ${Math.ceil(u.maxHp)}`]) } });
+    else B.push({ p:'**병력이 없습니다** — 🏰마을 › 출전준비에서 고용하세요' });
+
+    B.push({ h:'👑 영웅' });
+    B.push({ p: gs.hero.dead ? `**전사** — ${heroDownLabel(gs.hero)}`
+             : gs.hero.placement === 'defense' ? `**상단 배치** · Lv.${gs.hero.level} — 타워 곁에서 싸웁니다`
+             : gs.hero.placement === 'battle'  ? `**하단 배치** · Lv.${gs.hero.level} — 부대와 함께 싸웁니다`
+             : '**미배치** — 배치하지 않으면 웨이브를 시작할 수 없습니다' });
+    B.push({ p:'영웅의 액티브 스킬은 **선 쪽에서만** 듣습니다. 반대편 스킬은 흐려집니다.' });
+
+    B.push({ h:'🗼 상단' });
+    B.push({ p:`타워 ${gs.towers.length}기 · 🗿 케이브 Lv.${caveLevelOf(gs)}` });
+
+    const ids = gs.activeUpgrades || [];
+    B.push({ h:'✨ 적용 중인 강화' });
+    if (ids.length) {
+      const cnt = {};
+      ids.forEach(i2 => { cnt[i2] = (cnt[i2] || 0) + 1; });
+      B.push({ table: { head:['강화', '겹침'], rows: Object.keys(cnt).map(k => {
+        const c = UPGRADE_CARDS.find(u => u.id === k) || {};
+        return [`${c.icon || '✨'} ${c.name || k}`, `×${cnt[k]}`];
+      }) } });
+    } else B.push({ p:'아직 없습니다 — 웨이브를 클리어하면 하나씩 고릅니다' });
+    openSheet('🛡 내 편성', `용병 ${hired.length} · 타워 ${gs.towers.length}기`, B);
+
+  } else if (id === 'rules') {
+    const bits = briefRuleBits(gs, st, def);
+    B.push({ h:'이 층에만 걸리는 것' });
+    if (bits.length) B.push({ steps: bits.map(b => [`${b.icon} ${b.name}`, b.desc]) });
+    else B.push({ p:'이번 층에는 특별한 규칙이 없습니다 — 평소대로입니다' });
+    B.push({ h:'항상 걸리는 것' });
+    B.push({ steps: [
+      ['★ 완주', `클리어하면 +${clearBonusGold(gs.wave)}💰 · 성벽 +${clearRepair(gs.wave)}HP`],
+      ['🛡 후퇴', `남은 시간 × ${RETREAT_DPS} 만큼 성벽이 깎입니다`],
+    ] });
+    if (st.endless)
+      B.push({ p:`적 HP **×${endlessStatMult(gs.wave).toFixed(1)}** · 이동 **×${endlessSpdMult(gs.wave).toFixed(2)}** — 층마다 오릅니다` });
+    openSheet('🌑 이 층 규칙', `${st.tier || gs.wave + 1}층`, B);
+
+  } else if (id === 'income') {
+    const lw = gs.lastWave || { idx:0, top:0, bot:0, kill:0, win:0, clear:0, total:0 };
+    B.push({ h:'어디서 벌었나' });
+    B.push({ table: { head:['출처', '금액'], rows: [
+      ['🗼 상단 — 침입자 처치', `${lw.top}💰`],
+      ['⚔️ 하단 — 아레나 처치·드랍', `${lw.bot}💰`],
+      ['✨ 처치 보너스', `${lw.kill}💰`],
+      ['✨ 승리 보너스', `${lw.win}💰`],
+      ['✨ 완주 보너스', `${lw.clear}💰`],
+      ['합계', `${lw.total}💰`],
+    ] } });
+    B.push({ tip:'한쪽이 유난히 적으면 그쪽이 굶고 있는 것입니다 — 상단이 적으면 타워를, 하단이 적으면 용병을 손봐야 합니다.' });
+    openSheet('🧾 지난 수입', `${lw.idx}웨이브 · +${lw.total}💰`, B);
+  }
 }
 
 // ─── 실시간 아레나 ───────────────────────────────────────────────────────────
@@ -7686,8 +7662,10 @@ function renderDocBlocks(ctx, blocks, y) {
 
     } else if (b.table) {                        // 표
       const cols = b.table.head.length;
-      // 첫 칸은 좁게, 마지막 칸이 설명을 받는다
-      const w0 = cols === 2 ? 104 : 78;
+      // 첫 칸은 좁게, 마지막 칸이 설명을 받는다.
+      // 104/78이었는데 '다크아처'·'날카로운 화살' 같은 이름이 한 글자씩 흘러넘쳐
+      // 두 줄이 됐다 — 이름 칸은 안 접히는 게 표의 값어치다. 조금 넓혔다.
+      const w0 = cols === 2 ? 118 : 94;
       const ws = cols === 2 ? [w0, CW-28-w0]
                             : [w0, (CW-28-w0)*0.42, (CW-28-w0)*0.58];
       setFont(ctx,'body','bold'); ctx.fillStyle='#475569';
@@ -7776,7 +7754,9 @@ function sheetScrollMax() {
   return Math.max(0, _sheetBottom - (CH - SHEET_HEAD_H));
 }
 
-const SHEET_HEAD_H = 52;
+// 제목(17px)과 부제(13px) 두 줄이 들어간다. 52였을 때 이모지가 붙은 제목이
+// 부제에 1px 닿았다 — 이모지는 같은 글자 크기에서도 위아래로 더 크다.
+const SHEET_HEAD_H = 60;
 
 function renderSheet(ctx, gs) {
   if (!_sheet) return;
@@ -7792,10 +7772,10 @@ function renderSheet(ctx, gs) {
   const cbw = 58, cbh = 30, cbx = CW - cbw - 10, cby = (SHEET_HEAD_H - cbh) / 2;
   ctx.textAlign='left'; ctx.textBaseline='middle';
   ctx.fillStyle='#fbbf24'; setFont(ctx, 'title', 'bold');
-  ctx.fillText(_sheet.title, 14, _sheet.sub ? SHEET_HEAD_H/2 - 8 : SHEET_HEAD_H/2);
+  ctx.fillText(_sheet.title, 14, _sheet.sub ? SHEET_HEAD_H/2 - 11 : SHEET_HEAD_H/2);
   if (_sheet.sub) {
     ctx.fillStyle='#94a3b8'; setFont(ctx, 'body');
-    ctx.fillText(_sheet.sub, 14, SHEET_HEAD_H/2 + 12);
+    ctx.fillText(_sheet.sub, 14, SHEET_HEAD_H/2 + 15);
   }
   drawBtn(ctx, cbx, cby, cbw, cbh, '닫기', '#1e293b', '#cbd5e1', true);
   gs.ui.sheetCloseBtn = { x:cbx, y:cby, w:cbw, h:cbh };
