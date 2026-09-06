@@ -1,46 +1,259 @@
 'use strict';
 
+// v3.5 재구성. v2.1에서 20단계까지 불어난 것이 문제였다 —
+// 게임을 처음 켠 사람이 아무것도 만져보기 전에 20장의 설명을 넘겨야 했고,
+// 그중 절반은 열 층은 내려가야 만나는 이야기였다.
+//
+// 그래서 둘로 갈랐다.
+//   TUTORIAL_STEPS — 첫 실행에 보여줄 6장. "이 게임이 무엇인가"만 담는다.
+//   TUTORIAL_TIPS  — 그 일이 실제로 벌어질 때 한 번씩 뜨는 쪽지.
+// 비행이 처음 날아올 때 비행 설명을 읽는 편이, 시작 화면에서 읽는 것보다 낫다.
+
 const TUTORIAL_STEPS = [
   {
     title: '듀얼 프론티어',
-    text: '상단에서는 타워로 적을 막고\n하단에서는 병력을 지휘하여 전투합니다.\n\n탭하여 계속'
+    text: '한 화면에서 두 개의 전선을 동시에 굴립니다.\n\n' +
+          '위 — 타워를 배치해서 지킨다\n' +
+          '아래 — 직접 뛰어들어 벌어온다\n\n' +
+          '설명은 짧습니다. 나머지는 그때그때 알려드립니다.'
   },
   {
-    title: '상단: 타워 건설',
-    text: '빈 격자 칸을 탭하면 화살 타워가 세워집니다.\n화살 타워: 💰5골드 / 공격력 2 / 초당 1발\n\n초기 골드 10으로 2기 건설 가능!'
+    title: '⛺ 캠프에서 시작합니다',
+    text: '게임을 켜면 먼저 캠프입니다.\n\n' +
+          '하강에서 모은 💎보석으로\n스킬을 찍고 새 타워·병력을 해금한 뒤\n다시 내려갑니다.\n\n' +
+          '한 판은 언제나 끝나지만, 캠프에 쌓인 것은 남습니다.'
   },
   {
-    title: '∞ 경로',
-    text: '적은 ∞(8자) 모양의 경로를 따라 이동합니다.\n좌측 루프와 우측 루프로 나뉘어 기지로 향합니다.\n\n타워로 경로 주변을 막으세요!'
+    title: '∞ 심연이 본편입니다',
+    text: '이 게임에 클리어는 없습니다.\n얼마나 깊이 내려갔는지가 기록입니다.\n\n' +
+          '층마다 적이 강해지고 새 변형이 붙습니다.\n죽으면 그때까지의 층수만큼 보석을 받고,\n그 보석으로 강해져 다시 내려갑니다.\n\n' +
+          '훈련을 한 판 치르면 심연이 열립니다.'
   },
   {
-    title: '하단: 병력 고용',
-    text: '웨이브 시작 전, 하단 카드를 탭하여\n병력을 고용하세요.\n\n검사💰8 / 궁수💰6 / 치유사💰10\n최대 4명 고용 가능 (탭하여 해제 가능)'
+    title: '🏰 준비는 전부 마을에서',
+    text: '타워 배치 · 병력 고용 · 건물 강화 —\n전부 🏰마을에서 합니다.\n\n' +
+          '웨이브 시작 화면은 확인용입니다.\n적 구성과 층 정보를 보는 곳입니다.\n\n' +
+          '👑 영웅을 배치하지 않으면 시작할 수 없습니다.'
   },
   {
-    title: '턴제 자동전투',
-    text: '전투는 1초마다 자동으로 진행됩니다.\n5턴마다 스킬이 자동 발동됩니다.\n\n치유사는 아군을 치유하고\n검사/궁수는 강력한 스킬로 공격합니다!'
+    title: '⚔️ 아래쪽은 실시간입니다',
+    text: '아레나 가장자리에서 몬스터가 계속 리젠됩니다.\n\n' +
+          '병력은 사거리 안의 적을 자동으로 공격하고\n스킬도 쿨다운마다 알아서 나갑니다.\n\n' +
+          '아레나를 탭하면 부대가 그 자리로 이동합니다.\n' +
+          '골드는 처치하는 순간 들어오고,\n값나가는 드랍만 주우러 가면 됩니다.'
   },
   {
     title: '출발!',
-    text: '병력을 고용한 후\n[웨이브 시작] 버튼을 누르세요.\n\n3웨이브를 모두 막으면 스테이지 클리어!'
+    text: '🏰 마을에서 병력을 고용하고\n[웨이브 시작]을 누르세요.\n\n' +
+          '시계 60초는 몬스터가 나오는 시간입니다 —\n다 나온 뒤에도 남은 것을 정리해야 끝납니다.\n\n' +
+          '먼저 훈련을 한 판 치르고, 그다음 ∞심연으로.\n\n' +
+          'Space 시작 · A 자동/수동 · R 후퇴 · T 마을 · S 배속'
   }
 ];
+
+// ─── 상황별 쪽지 ─────────────────────────────────────────────────────────────
+// 각 항목은 그 일이 처음 벌어질 때 딱 한 번 뜬다. 본 것은 localStorage에 남는다.
+const TUTORIAL_TIPS = {
+  gear: {
+    title: '🎒 산 장비는 끼워야 힘이 됩니다',
+    text: '영웅 상점에서 산 장비는 보관함으로 들어갑니다.\n\n' +
+          '🏰마을 › ⚔️출전준비에서 👑영웅 카드를 탭하면\n' +
+          '무기 · 투구 · 갑옷 · 장갑 · 신발 · 악세 2칸에\n직접 끼우고 뺄 수 있습니다.\n\n' +
+          '보관함에서 하나 고르면 옆 스탯창이\n바뀔 값을 미리 보여줍니다.'
+  },
+  skillslot: {
+    title: '🧬 패시브 스킬 — 레벨이 칸을 엽니다',
+    text: '영웅 레벨 3 · 7 · 12 · 18에서 패시브 칸이 하나씩 열립니다.\n\n' +
+          '스킬은 🏪영웅 상점을 Lv.3까지 올리면 팔기 시작합니다.\n' +
+          '같은 스킬도 굴림값(★)에 따라 성능이 다릅니다 —\n좋은 것이 뜨면 그때 사세요.\n\n' +
+          '장착은 장비와 같은 화면에서 합니다.'
+  },
+  grade: {
+    title: '🔹 등급과 상성 — 조합이 답이다',
+    text: '적은 네 등급으로 나뉩니다.\n\n' +
+          '🔹 소형 S — 빠르고 약하다 · 물량\n' +
+          '🔸 중형 M — 균형\n' +
+          '🔶 대형 L — 느리지만 단단하다\n' +
+          '🔺 비행 A — 다른 항로로 가로질러 온다\n\n' +
+          '타워마다 잘 잡는 등급이 다릅니다.\n같은 타워만 도배하면 어느 등급엔가 반드시 막힙니다.'
+  },
+  overload: {
+    title: '⚡ 웨이브 중에도 할 일이 있습니다',
+    text: '전투 중 상단에서 —\n\n' +
+          '타워를 탭하면 5초간 공격속도 3배 (20초 쿨다운)\n' +
+          '빈 칸을 탭하면 영웅이 그리로 이동합니다\n\n' +
+          '배치가 끝이 아닙니다.'
+  },
+  drop: {
+    title: '💰 값나가는 것만 떨어집니다',
+    text: '기본 골드는 처치하는 순간 바로 들어옵니다 —\n동전을 하나하나 주우러 다닐 필요가 없습니다.\n\n' +
+          '대신 가끔 값나가는 것이 떨어집니다.\n' +
+          '💰금화 더미 · ✨전투 기록 · ❤️응급 치료\n🔥분노 · 💨질풍 · 🛡수호(9초 버프)\n\n' +
+          '이것만 병력이 가까이 가야 얻습니다. 9초 뒤 사라집니다.'
+  },
+  endwave: {
+    title: '🏁 웨이브를 끝내는 세 가지 방법',
+    text: '시계는 몬스터가 나오는 시간입니다.\n0이 되어도 판에 남은 것이 있으면 계속됩니다 —\n양쪽이 다 비어야 웨이브가 끝납니다.\n\n' +
+          '★ 완주 — 끝까지 정리했다\n     완주 보너스 + 성벽 수리\n\n' +
+          '🛡 후퇴 — 하단을 비웠다\n     남은 무리가 성문으로 달려듭니다\n     일찍 뺄수록 비쌉니다\n\n' +
+          '☠️ 전멸 — 병력을 잃었다\n     후퇴보다 더 크게 성벽이 깎입니다'
+  },
+  air: {
+    title: '🔺 비행이 왔습니다',
+    text: '비행은 ∞ 경로를 따르지 않습니다.\n판 바깥을 크게 돌아 기지로 곧장 옵니다.\n\n' +
+          '경로에만 촘촘히 지어두면 하늘은 그대로 뚫립니다.\n' +
+          '항로는 준비 화면에 점선으로 표시됩니다.\n\n' +
+          '⚡ 번개탑이 대공 특화입니다 — 캠프에서 해금하세요.'
+  },
+  bounty: {
+    title: '💰 현상수배 — 보석을 벌 기회',
+    text: '마을에서 강한 적을 직접 불러올 수 있습니다.\n잡으면 💎보석, 놓치면 성벽에 큰 피해.\n\n' +
+          '층마다 기회가 한 번씩 생기고,\n부를수록 강해지고 보상도 올라갑니다.\n\n' +
+          '대형에 강한 타워가 없으면 부르지 마세요.'
+  },
+  town: {
+    title: '🏗 건물은 10레벨까지',
+    text: '건물마다 강화 항목이 있고,\n살 때마다 효과도 비용도 함께 올라갑니다.\n\n' +
+          '승급하면 새 항목이 열립니다 —\n무엇을 먼저 올릴지가 판단거리입니다.\n\n' +
+          '최고 레벨(10)에 닿으면 ♾️ 무한 강화가 열립니다.\n끝없이 살 수 있고, 살수록 비싸집니다.'
+  },
+  inn: {
+    title: '🏨 여관 — 오늘은 누가 왔나',
+    text: '여관을 지으면 웨이브마다 병력이 더 회복되고,\n특수 용병이 찾아옵니다.\n\n' +
+          '🗡️도적 · ✝️성기사 · 🎯명사수 —\n매 웨이브 확률로 등장하고, 그 웨이브에만 고용됩니다.\n\n' +
+          '전용 슬롯을 쓰므로 일반 편성은 그대로입니다.\n여관 레벨이 오르면 더 자주, 더 많이 옵니다.'
+  },
+  terrain: {
+    title: '🗺 아레나에 지형이 깔렸습니다',
+    text: '심연은 판마다 시드가 다릅니다.\n같은 층이라도 나오는 적과 지형이 달라집니다.\n\n' +
+          '🪨 바위는 못 지나가고 화살도 막습니다\n🌿 수렁은 느려지고, 🔺 가시는 서 있으면 깎입니다\n\n' +
+          '지형은 적에게도 똑같이 적용됩니다. 끼고 싸우세요.'
+  },
+  event: {
+    title: '🎯 층 이벤트',
+    text: '4층부터 절반 정도의 층에\n그 층에만 걸리는 규칙이 붙습니다.\n\n' +
+          '🌫 안개 — 타워 사거리 −30%\n🔒 봉인 — 타워 한 종류가 침묵\n💰 노다지 — 골드 ×2\n🪙 탐욕 — 골드 ×2.5, 대신 적이 단단해집니다\n\n' +
+          '나쁜 층은 버티고, 좋은 층은 밀어붙이세요.\n준비 화면 맨 위에 뜹니다.'
+  },
+  path: {
+    title: '🛤 경로가 바뀝니다',
+    text: '10층마다 상단 ∞ 경로가 통째로 바뀝니다.\n한 층 전에 격자에 점선으로 미리 보입니다.\n\n' +
+          '새 경로에 깔린 타워는 사라지지 않습니다 —\n인접한 빈 칸으로 옮겨지고 레벨도 그대로입니다.\n(옮길 자리가 없을 때만 전액 환불)\n\n' +
+          '두 경로가 겹치는 칸에 지으면 아예 안 옮겨집니다.'
+  },
+  gate: {
+    title: '🏁 관문입니다',
+    text: '심연은 10층마다 관문입니다.\n물량이 줄고 대형이 몰려옵니다 —\n조합이 안 맞으면 여기서 막힙니다.\n\n' +
+          '관문을 처음 넘으면 보석이 따로 붙고,\n그 기록은 캠프에 남습니다.\n\n' +
+          '깊이 갈수록 층당 보석이 커집니다.'
+  },
+  deep: {
+    title: '🌑 심층 — 40층부터',
+    text: '여기서부터 층 이벤트가 겹칩니다.\n하나는 해롭고 하나는 이롭게 붙습니다.\n\n' +
+          '심층에서만 나오는 변형도 열립니다 —\n재생 · 가시껍질 · 분열 · 폭발.\n\n' +
+          '이제부터는 강해지는 게 아니라 달라집니다.'
+  }
+};
+
+// 쪽지 내용이 바뀌면 이 숫자를 올린다. 표시 기록이 판별로 갈라지므로,
+// 예전 판을 본 사람도 고쳐 쓴 쪽지는 다시 한 번 보게 된다.
+// (게임이 바뀌었는데 옛 설명만 본 채로 남는 것이 문제였다 —
+//  드랍 자동 수거도, 시계가 스폰 시간이 된 것도 쪽지에는 반영돼 있지 않았다.)
+const TUTORIAL_VERSION = 3;
+const TIP_KEY_PREFIX = `df_tip${TUTORIAL_VERSION}_`;
+
+// 한 번 끝냈거나 건너뛴 안내는 다시 자동으로 뜨지 않는다.
+// 이 표시만 데이터 초기화에서 살아남는다 — 테스트든 새 출발이든 안내를 또 보는 건
+// "처음부터"가 아니라 그냥 성가신 일이다. 캠프의 📖 다시 보기로는 여전히 볼 수 있다.
+const TUT_SEEN_KEY   = 'df_tut_seen';
+// 건너뛰면 안내를 끝까지 봤을 때 벌었을 만큼(평균)을 보석으로 대신 준다
+const TUTORIAL_SKIP_GEMS = 3;
+
+function tutorialEverSeen() {
+  try { return localStorage.getItem(TUT_SEEN_KEY) === '1'; } catch (e) { return false; }
+}
+function markTutorialSeen() {
+  try { localStorage.setItem(TUT_SEEN_KEY, '1'); } catch (e) {}
+}
 
 function createTutorial() {
   return {
     active: false, step: 0, done: false,
+    tip: null,          // 지금 떠 있는 쪽지 (있으면 본 튜토리얼보다 우선)
+
     start() {
-      if (localStorage.getItem('df_tut2')===  '1') { this.done=true; return; }
+      if (tutorialEverSeen() || localStorage.getItem('df_tut9') === '1') { this.done = true; return; }
       this.active = true; this.step = 0;
     },
+
+    // 상황별 쪽지 — 처음 한 번만. 이미 본 것이거나 튜토리얼 중이면 무시한다.
+    showTip(key) {
+      if (this.active || this.tip) return false;
+      if (!TUTORIAL_TIPS[key]) return false;
+      try { if (localStorage.getItem(TIP_KEY_PREFIX + key) === '1') return false; }
+      catch (e) { return false; }
+      try { localStorage.setItem(TIP_KEY_PREFIX + key, '1'); } catch (e) {}
+      this.tip = key;
+      this.active = true;
+      return true;
+    },
+
     next() {
+      if (this.tip) { this.tip = null; this.active = false; return; }
       this.step++;
       if (this.step >= TUTORIAL_STEPS.length) {
         this.active = false; this.done = true;
-        localStorage.setItem('df_tut2','1');
+        localStorage.setItem('df_tut9', '1');
+        markTutorialSeen();
       }
     },
-    current() { return TUTORIAL_STEPS[this.step]||null; }
+
+    back() {
+      if (this.tip) return;
+      this.step = Math.max(0, this.step - 1);
+    },
+
+    // 건너뛰기는 "전부"를 뜻한다. 본 튜토리얼만 끄고 쪽지 14장이 층마다 계속 뜨면
+    // 플레이어가 보기엔 튜토리얼이 안 꺼진 것이다 — 실제로 그렇게 보고가 왔다.
+    // 건너뛰기는 "전부"를 뜻한다. 본 튜토리얼만 끄고 쪽지 14장이 층마다 계속 뜨면
+    // 플레이어가 보기엔 튜토리얼이 안 꺼진 것이다.
+    // 끝까지 본 사람만 손해 보면 안 되므로, 처음 건너뛸 때 보석을 대신 준다.
+    // 돌려주는 값: 이미 받았는지 여부(true/false).
+    skip() {
+      const first = !tutorialEverSeen();
+      this.tip = null;
+      this.active = false; this.done = true;
+      this.step = TUTORIAL_STEPS.length;
+      try { localStorage.setItem('df_tut9', '1'); } catch (e) {}
+      markTutorialSeen();
+      markAllTipsSeen();
+      return first;
+    },
+
+    current() {
+      if (this.tip) return TUTORIAL_TIPS[this.tip];
+      return TUTORIAL_STEPS[this.step] || null;
+    }
   };
+}
+
+// 남은 쪽지를 전부 본 것으로 처리한다 (건너뛰기 · 안내 끄기)
+function markAllTipsSeen() {
+  try {
+    for (const key of Object.keys(TUTORIAL_TIPS)) localStorage.setItem(TIP_KEY_PREFIX + key, '1');
+  } catch (e) {}
+}
+
+// 아직 안 뜬 쪽지가 몇 장 남았는지 — 버튼에 적어 준다
+function tipsRemaining() {
+  try {
+    return Object.keys(TUTORIAL_TIPS).filter(k => localStorage.getItem(TIP_KEY_PREFIX + k) !== '1').length;
+  } catch (e) { return 0; }
+}
+
+// 쪽지 기록도 초기화 대상이다 — 데이터 초기화가 "처음부터"를 뜻하려면.
+function clearTipMarks() {
+  try {
+    for (const key of Object.keys(TUTORIAL_TIPS)) localStorage.removeItem(TIP_KEY_PREFIX + key);
+  } catch (e) {}
 }

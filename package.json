@@ -1,0 +1,61 @@
+{
+  "name": "dual-frontier",
+  "productName": "듀얼 프론티어",
+  "version": "0.5.1",
+  "description": "한 화면에서 두 개의 전선을 동시에 굴리는 로그라이트",
+  "main": "desktop/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux",
+    "test:rank":   "node tools/rank-test.mjs",
+    "test:text":   "node tools/text-size-check.mjs",
+    "test:maze":   "node tools/maze-check.mjs",
+    "test:wall":   "node tools/wall-check.mjs",
+    "test:abyss":  "node tools/abyss-check.mjs",
+    "test:tap":    "node tools/ui-tap-check.mjs",
+    "test:update": "node tools/update-check.mjs",
+    "test:update": "node tools/update-check.mjs"
+  },
+  "devDependencies": {
+    "electron": "^44.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.sangyupkim.dualfrontier",
+    "productName": "Dual Frontier",
+    "files": [
+      "index.html",
+      "js/**/*",
+      "assets/**/*",
+      "desktop/**/*"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.games"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Game"
+    }
+  },
+  "dependencies": {
+    "@netlify/blobs": "^8.1.0"
+  }
+}

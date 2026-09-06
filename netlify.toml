@@ -1,0 +1,30 @@
+# ─── Netlify ─────────────────────────────────────────────────────────────────
+# 빌드 단계가 없다. 저장소를 그대로 퍼블리시하고, 랭킹만 함수로 돈다.
+[build]
+  publish   = "."
+  command   = ""
+  functions = "netlify/functions"
+
+# 웹 배포에 devDependencies는 필요 없다. 그대로 두면 Netlify가 npm install에서
+# Electron 바이너리(수백 MB)를 내려받는다 — 데스크톱 빌드용이라 여기선 쓸 데가 없고,
+# 느려지거나 그대로 실패한다. 함수가 쓰는 @netlify/blobs는 dependencies라 남는다.
+[build.environment]
+  NPM_FLAGS                    = "--omit=dev"
+  ELECTRON_SKIP_BINARY_DOWNLOAD = "1"
+  # 함수는 Functions v2(export default) 문법이다 — Node 18 미만에서는 아예 안 뜬다.
+  # Netlify의 기본 Node 버전은 계정 설정과 시기에 따라 달라지므로 여기서 못 박는다.
+  # 여기가 흔들리면 **함수 번들이 실패하고 그러면 배포 전체가 실패한다** —
+  # 그리고 실패한 배포는 조용히 옛 사이트를 그대로 살려 둔다.
+  NODE_VERSION                 = "20"
+
+# 함수 파일은 .mjs다. package.json에 "type":"module"을 넣는 길도 있지만
+# 그러면 desktop/main.js(Electron, require 사용)가 통째로 깨진다.
+# 확장자로 정하면 번들러·Node 버전이 무엇이든 해석이 갈릴 여지가 없다.
+[functions]
+  node_bundler = "esbuild"
+
+# 랭킹 API — 짧은 주소로 쓴다. 서비스 워커도 이 접두사를 보고 비켜선다.
+[[redirects]]
+  from = "/api/*"
+  to   = "/.netlify/functions/:splat"
+  status = 200

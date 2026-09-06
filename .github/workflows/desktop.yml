@@ -1,0 +1,70 @@
+# 데스크톱 설치 파일 빌드
+#
+# 크로스 빌드는 불가능하다 — Windows 설치본은 Windows에서, .dmg는 macOS에서만 만들어진다.
+# 그래서 세 OS 러너에서 각각 돌리고 결과를 한 릴리스에 모은다.
+#
+#   태그를 밀면      → 릴리스에 세 OS 설치 파일이 붙는다
+#   수동 실행하면    → Actions 아티팩트로만 받는다 (릴리스 없이 시험용)
+name: 데스크톱 빌드
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows
+            cmd: npm run dist:win
+          - os: macos-latest
+            name: macos
+            cmd: npm run dist:mac
+          - os: ubuntu-latest
+            name: linux
+            cmd: npm run dist:linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: 빌드
+        run: ${{ matrix.cmd }}
+        env:
+          # 서명 키가 없을 때 macOS 빌드가 실패하지 않도록
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dual-frontier-${{ matrix.name }}
+          retention-days: 14
+          path: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*.AppImage
+            dist/*.zip
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: artifacts }
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          generate_release_notes: true

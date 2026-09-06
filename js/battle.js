@@ -1,99 +1,138 @@
 'use strict';
 
+// 유닛 생성 · 스탯 계산 · 고용/해고만 담당한다.
+// 전투 진행(이동 · 충돌 · 타게팅 · 스킬 발동)은 arena.js로 옮겼다.
+
 let _uid = 0;
 
 // ─── 유닛 생성 ────────────────────────────────────────────────────────────────
 function makeUnit(typeId) {
-  const t  = UNIT_TYPES[typeId];
-  const hp = t.hp  + BONUSES.unitHp;
-  const ak = t.atk + BONUSES.unitAtk;
-  const df = t.def + BONUSES.unitDef + BONUSES.heroAura;
-  return {
+  const t = UNIT_TYPES[typeId];
+  const u = {
     id:++_uid, typeId, isPlayer:true, isHero:false,
     name:t.name, icon:t.icon, color:t.color,
-    hp, maxHp:hp, atk:ak, def:df,
-    mp:t.mp, maxMp:t.maxMp,
-    skillName:t.skillName, skillAtk: t.skillAtk + BONUSES.unitAtk,
-    skillCost:t.skillCost, skillColor:t.skillColor,
-    healAmt:t.healAmt||0,
-    ticksSinceSkill:0, dead:false, undyingUsed:false,
-    flashTimer:0, flashColor:'#fff',
-    drawX: BATTLE_TEAM_X
+    hp:0, maxHp:0, atk:0, def:0, shield:0,
+    // 실시간 전투 필드
+    atkPeriod:t.atkPeriod, atkCd:0,
+    range:t.range, moveSpd:t.moveSpd, radius:bodyRadius(t.radius),
+    ranged:!!t.ranged, isTank:!!t.isTank,
+    skillName:t.skillName, skillKind:t.skillKind, skillCd:t.skillCd, skillCdLeft:t.skillCd,
+    skillRadius:t.skillRadius||0, skillHits:t.skillHits||1, skillColor:t.skillColor,
+    skillAtk:0, healAmt:0, shieldAmt:0,
+    x:0, y:0, slotX:0, slotY:0,
+    // 🗡️ 도적 — 은신 남은 시간 · 기습 대기 · 주우러 간 드랍
+    stealthLeft:0, ambushReady:false, greedTarget:null,
+    dead:false, undyingUsed:false,
+    flashTimer:0, flashColor:'#fff'
   };
+  applyUnitStats(u, 1);
+  return u;
 }
 
-function makeMob(typeId) {
-  const t = BATTLE_MOB_TYPES[typeId];
-  return {
-    id:++_uid, typeId, isPlayer:false,
-    name:t.name, icon:t.icon, color:t.color,
-    hp:t.hp, maxHp:t.hp, atk:t.atk, def:t.def,
-    mp:t.mp, maxMp:t.maxMp,
-    skillAtk:t.skillAtk, skillCost:t.skillCost,
-    goldReward:t.goldReward,
-    ticksSinceSkill:0, dead:false,
-    flashTimer:0, flashColor:'#fff',
-    drawX: BATTLE_ENEMY_SPAWN_X, drawY: 0, deadTimer: 0
-  };
+// 현재 BONUSES를 유닛에 반영. hpRatio를 주면 그 비율로 HP를 맞춘다.
+function applyUnitStats(u, hpRatio) {
+  const t = UNIT_TYPES[u.typeId];
+  if (!t) return;
+  const ratio = hpRatio !== undefined ? hpRatio : (u.maxHp > 0 ? u.hp / u.maxHp : 1);
+  // 🏨 여관의 '명성' — 특수 용병에게만 붙는 배율
+  const sp = t.special ? (BONUSES.specialUnitMult || 1) : 1;
+  // 🔥 캠프 단련 — 이 병종만 오르는 배율. 조합을 정해 놓고 그쪽을 키우게 한다.
+  const cHp  = campUnitMult(u.typeId, 'hp');
+  const cAtk = campUnitMult(u.typeId, 'atk');
+  const cDef = campUnitMult(u.typeId, 'def');
+  u.maxHp     = Math.max(1, Math.round((t.hp + BONUSES.unitHp) * (BONUSES.unitHpMult || 1)
+                                       * (BONUSES.pactUnitHpMult || 1) * sp * cHp));
+  u.atk       = Math.round((t.atk + BONUSES.unitAtk) * (BONUSES.unitAtkMult || 1) * sp * cAtk);
+  // 방어력은 0 아래로 내려가지 않는다 — ★영웅 카드의 대가(방어 -5 등)가 겹치면
+  // 음수가 되어 '맞을수록 튼튼해지는' 식으로 뒤집힐 수 있다.
+  // 방어력에는 특수 배율(sp)을 곱하지 않는다.
+  // HP·공격력·방어력 셋에 같은 배율을 다 걸면 체감 성능이 배율의 세제곱처럼
+  // 벌어진다 — 특수 용병이 '더 좋은 병종'이 아니라 '다른 병종을 무의미하게
+  // 만드는 것'이 된다. 특수 용병의 단단함은 원래 높은 기본 방어력(성기사 19 대
+  // 검사 6)으로 충분히 드러난다.
+  u.def       = Math.max(0, Math.round((t.def + BONUSES.unitDef + BONUSES.heroAura) * cDef));
+  u.skillAtk  = t.skillAtk  ? Math.round((t.skillAtk + BONUSES.unitAtk) * sp * cAtk) : 0;
+  u.healAmt   = t.healAmt   ? t.healAmt   + BONUSES.healBonus   : 0;
+  u.shieldAmt = t.shieldAmt ? t.shieldAmt + BONUSES.shieldBonus : 0;
+  u.hp        = Math.max(1, Math.min(u.maxHp, Math.round(u.maxHp * ratio)));
 }
 
-// 처치 수 + 케이브 레벨 반영 스케일링 몹
-function makeScaledMob(typeId, killCount, caveLevel) {
-  const t  = BATTLE_MOB_TYPES[typeId];
-  const cv = CAVE_LEVELS[caveLevel] || CAVE_LEVELS[1];
-  const km = 1 + killCount * KILL_SCALE;
-  const sm = km * cv.statMult;
-  const gm = km * cv.goldMult;
-  return {
-    id:++_uid, typeId, isPlayer:false,
-    name:t.name, icon:t.icon, color:t.color,
-    hp:      Math.max(1, Math.round(t.hp * sm * BONUSES.mobHpMult)),
-    maxHp:   Math.max(1, Math.round(t.hp * sm * BONUSES.mobHpMult)),
-    atk:     Math.max(1, Math.round(t.atk      * sm)),
-    def:     Math.max(0, Math.round(t.def      * sm)),
-    mp:t.mp, maxMp:t.maxMp,
-    skillAtk:Math.max(1, Math.round(t.skillAtk * sm)),
-    skillCost:t.skillCost,
-    goldReward: Math.max(1, Math.round(t.goldReward * gm)),
-    ticksSinceSkill:0, dead:false,
-    flashTimer:0, flashColor:'#fff',
-    drawX: BATTLE_ENEMY_SPAWN_X, drawY: 0, deadTimer: 0
-  };
+// 강화를 산 뒤 이미 고용한 병력에도 즉시 반영
+function refreshTeamStats(battle) {
+  if (!battle) return;
+  for (const u of battle.ourTeam) {
+    if (u.isHero || u.dead) continue;
+    applyUnitStats(u);
+  }
+}
+
+// 웨이브 종료 후 생존 병력 휴식 회복
+function restHealTeam(battle) {
+  const pct = Math.max(0, REST_HEAL_PCT + BONUSES.restHealBonus);
+  let healed = 0;
+  for (const u of battle.ourTeam) {
+    if (u.dead) continue;
+    u.shield = 0;
+    u.undyingUsed = false;
+    const before = u.hp;
+    const full = u.isHero && BONUSES.heroFullRest;   // 여관 Lv.3 — 영웅 대접
+    u.hp = full ? u.maxHp : Math.min(u.maxHp, u.hp + Math.ceil(u.maxHp * pct));
+    healed += Math.max(0, u.hp - before);
+  }
+  if (healed > 0) {
+    const inn = (typeof gs !== 'undefined' && gs.town?.buildings?.inn?.built);
+    addLog(battle, `${inn ? '🏨 여관' : '휴식'} — 병력 회복 +${Math.round(healed)}HP`, '#34d399');
+  }
 }
 
 function makeHeroUnit(hero) {
   const lv  = HERO_LEVELS[hero.level];
   const sm  = BONUSES.heroStatMult;
-  const atk = Math.round((lv.atk + BONUSES.heroAtk) * sm);
-  const hp  = Math.round(lv.hp * sm);
-  const def = Math.round(lv.def * sm);
+  const atk = Math.round((lv.atk + BONUSES.heroAtk) * sm * BONUSES.sigilHeroAtkMult);
+  const hp  = Math.round((lv.hp + BONUSES.heroHpFlat) * sm * BONUSES.sigilHeroHpMult);
+  const def = Math.max(0, Math.round((lv.def + BONUSES.heroAura) * sm));
+  const A   = HERO_ARENA;
+  // 각인이 아레나 스킬을 통째로 갈아치운다 — 이름·종류·쿨다운·범위 전부
+  const sg  = activeSigil();
+  const sk  = sg.skill;
   return {
     id:++_uid, typeId:'hero', isPlayer:true, isHero:true,
     name:'영웅', icon:'👑', color:COLORS.hero,
-    hp:Math.min(hp, hero.hp), maxHp:hp, atk, def,
-    mp:30, maxMp:30,
-    skillName:'영웅 일격', skillAtk: Math.floor(atk * 2.2),
-    skillCost:15, skillColor:'#fbbf24', healAmt:0,
-    ticksSinceSkill:0, dead:false, undyingUsed:false,
-    flashTimer:0, flashColor:'#fff',
-    drawX: BATTLE_TEAM_X
+    sigil:sg.id,
+    hp:Math.min(hp, Math.max(1, hero.hp)), maxHp:hp, atk, def, shield:0,
+    atkPeriod:A.atkPeriod / (BONUSES.sigilHeroSpdMult * BONUSES.heroSpdMult), atkCd:0,
+    range:A.range * BONUSES.sigilHeroRangeMult * BONUSES.heroRangeMult, moveSpd:A.moveSpd, radius:bodyRadius(A.radius),
+    // 🏹 신궁은 붙지 않는다 — 각인이 원거리를 선언하면 평타도 날아간다
+    ranged:!!sg.ranged, isTank:false,
+    skillName:sk.name, skillKind:sk.kind, skillCd:sk.cd, skillCdLeft:sk.cd,
+    skillRadius:sk.radius, skillHits:sk.hits || 1, skillColor:sk.color,
+    skillAtk:Math.floor(atk * sk.mult * BONUSES.sigilSkillMult * BONUSES.heroSkillMult),
+    healAmt:0,
+    // 🛡 수호자의 함성은 최대 HP에 비례한다 — 단단할수록 부대를 더 감싼다
+    shieldAmt: sk.kind === 'bulwark' ? Math.max(6, Math.round(hp * 0.32)) : 0,
+    x:0, y:0, slotX:0, slotY:0,
+    // 🗡️ 도적 — 은신 남은 시간 · 기습 대기 · 주우러 간 드랍
+    stealthLeft:0, ambushReady:false, greedTarget:null,
+    dead:false, undyingUsed:false,
+    flashTimer:0, flashColor:'#fff'
   };
 }
 
 // ─── 배틀 상태 ────────────────────────────────────────────────────────────────
 function createBattle() {
   return {
-    phase: 'hire',
+    phase: 'hire',       // 'hire' | 'fighting' | 'won' | 'retreated' | 'lost' | 'idle_defeated'
     ourTeam: [],
-    enemyTeam: [],
     maxSlots: 4,
-    tickTimer: 0,
-    tickCount: 0,
     goldEarned: 0,
     totalGoldEarned: 0,
+    // 이번 웨이브에 **어느 전선이** 벌었나 — 웨이브가 끝나면 정산에 나눠 적는다.
+    // 전투 중에는 합계 하나만 보여준다(가운데 큰 골드). 같은 값을 작게 또 적으면
+    // 어느 쪽이 보유액이고 어느 쪽이 적립액인지가 헷갈릴 뿐이다.
+    goldTop: 0,
+    goldBot: 0,
     killCount: 0,
-    scrollX: 0,       // 배경 스크롤 (전진 연출)
-    playerDrift: 0,   // 아군 전진 드리프트
+    runKills: 0,
     log: [],
     floaties: [],
     result: null
@@ -101,10 +140,55 @@ function createBattle() {
 }
 
 // ─── 고용 / 해고 ─────────────────────────────────────────────────────────────
+// 같은 용병을 더 뽑을수록 값이 오른다. 정액이던 시절에는 골드가 모이는 순간
+// **가장 센 용병 하나로 칸을 다 채우는 것**이 늘 정답이었다 — 고를 것이 없으면
+// 편성은 결정이 아니라 절차가 된다. 종류마다 따로 오르므로, 값이 오른 쪽 대신
+// 아직 싼 다른 종류를 섞는 선택지가 생긴다.
+const HIRE_STEP     = 1.34;   // 같은 종류 한 명 늘 때마다 이만큼
+const HIRE_STEP_CAP = 6;      // 이 이상은 안 오른다 (칸을 다 채워도 계산이 터지지 않게)
+
+function hireCountOf(battle, typeId) {
+  if (!battle || !Array.isArray(battle.ourTeam)) return 0;
+  return battle.ourTeam.filter(u => !u.isHero && u.typeId === typeId).length;
+}
+
+// n번째(0부터)로 뽑는 그 종류의 값
+function hireCostAt(typeId, n) {
+  const t = UNIT_TYPES[typeId];
+  if (!t) return 1;
+  // 특수 용병은 여관에 뜬 그 자리를 사는 것이라 '더 뽑을수록'이 성립하지 않는다
+  const step = t.special ? 1
+    : Math.pow(HIRE_STEP, Math.min(HIRE_STEP_CAP, Math.max(0, n | 0)));
+  const base = t.cost * step;
+  return Math.max(1, Math.round(base * (1 - Math.min(0.75, BONUSES.hireCostPct || 0)))
+                     - BONUSES.hireCostDiscount);
+}
+
+// battle을 넘기면 지금 편성 기준의 '다음 한 명' 값. 안 넘기면 첫 명 값.
+function hireCost(typeId, battle) {
+  return hireCostAt(typeId, hireCountOf(battle, typeId));
+}
+
 function hireUnit(battle, typeId, gold) {
   const t = UNIT_TYPES[typeId];
-  const cost = Math.max(1, t.cost - BONUSES.hireCostDiscount);
-  if (!t || battle.ourTeam.length >= battle.maxSlots || gold < cost) return gold;
+  if (!t) return gold;
+  const cost = hireCost(typeId, battle);
+  if (gold < cost) return gold;
+
+  if (t.special) {
+    // 이번 웨이브에 여관에 와 있어야 하고, 전용 슬롯을 쓴다
+    if (typeof gs === 'undefined' || !availableSpecialUnits(gs).includes(typeId)) return gold;
+    if (specialHiredCount(battle) >= specialSlotMax()) return gold;
+    battle.ourTeam.push(makeUnit(typeId));
+    // 고용하면 그 자리는 사라진다 — 같은 웨이브에 둘을 뽑을 수 없다
+    const i = gs.innOffers.indexOf(typeId);
+    if (i >= 0) gs.innOffers.splice(i, 1);
+    return gold - cost;
+  }
+
+  if (!isUnlocked(typeId)) return gold;
+  const normal = battle.ourTeam.filter(u => !u.isHero && !(UNIT_TYPES[u.typeId]||{}).special).length;
+  if (normal >= battle.maxSlots) return gold;
   battle.ourTeam.push(makeUnit(typeId));
   return gold - cost;
 }
@@ -113,7 +197,9 @@ function fireUnit(battle, idx) {
   if (idx < 0 || idx >= battle.ourTeam.length) return 0;
   const u = battle.ourTeam[idx];
   if (u.isHero) return 0;
-  const refund = Math.floor(UNIT_TYPES[u.typeId].cost / 2);
+  // 값이 오르는 만큼, 돌려받는 것도 **방금 낸 그 값**의 절반이어야 한다.
+  // 늘 첫 명 값으로 돌려주면 비싸게 뽑고 싸게 무르는 구멍이 된다.
+  const refund = Math.floor(hireCostAt(u.typeId, hireCountOf(battle, u.typeId) - 1) / 2);
   battle.ourTeam.splice(idx, 1);
   return refund;
 }
@@ -121,191 +207,40 @@ function fireUnit(battle, idx) {
 // ─── 전투 시작 ────────────────────────────────────────────────────────────────
 function startFighting(battle) {
   if (battle.ourTeam.length === 0) return false;
-  battle.phase       = 'fighting';
-  battle.tickTimer   = 0;
-  battle.tickCount   = 0;
-  battle.killCount   = 0;
-  battle.scrollX     = 0;
-  battle.playerDrift = 0;
-  battle.result      = null;
-  battle.goldEarned  = 0;
-  for (const u of [...battle.ourTeam, ...battle.enemyTeam]) u.ticksSinceSkill = 0;
+  battle.phase      = 'fighting';
+  battle.killCount  = 0;
+  battle.result     = null;
+  battle.goldEarned = 0;
+  for (const u of battle.ourTeam) {
+    u.shield = 0;
+    u.undyingUsed = false;
+    u.skillCdLeft = u.skillCd;
+  }
   return true;
-}
-
-// ─── 전투 틱 ─────────────────────────────────────────────────────────────────
-function battleTick(battle) {
-  battle.tickCount++;
-
-  const our = battle.ourTeam.filter(u => !u.dead);
-  // 전투 대상: 화면에 도착한 적만 (아직 걸어오는 중이면 제외)
-  const foe = battle.enemyTeam.filter(u => !u.dead && u.drawX <= BATTLE_ENEMY_X + 10);
-  if (!our.length || !foe.length) return;
-
-  // 아군 공격
-  for (const u of our) {
-    u.ticksSinceSkill++;
-    const useSkill = u.ticksSinceSkill >= SKILL_TICK_CD && u.mp >= u.skillCost;
-
-    if (useSkill) {
-      u.ticksSinceSkill = 0;
-      u.mp -= u.skillCost;
-
-      if (u.healAmt > 0) {
-        const target = our.slice().sort((a,b) => (a.hp/a.maxHp)-(b.hp/b.maxHp))[0];
-        const healed = Math.min(target.maxHp - target.hp, u.healAmt);
-        target.hp += healed;
-        const idx = battle.ourTeam.indexOf(target);
-        addFloaty(battle, `+${healed}`, target.drawX, unitY(idx), '#34d399');
-        addLog(battle, `${u.name}의 ${u.skillName}! +${healed}회복`, u.skillColor);
-      } else {
-        const target = foe[Math.floor(Math.random()*foe.length)];
-        const dmg = Math.max(1, u.skillAtk - target.def);
-        applyDamage(target, dmg, battle, u.skillColor, true);
-        addLog(battle, `${u.name}의 ${u.skillName}! ${dmg}피해`, u.skillColor);
-      }
-    } else {
-      const target = foe[Math.floor(Math.random()*foe.length)];
-      const dmg = Math.max(1, u.atk - target.def);
-      applyDamage(target, dmg, battle, '#fbbf24', true);
-      // 연속 공격 (콤보)
-      if (BONUSES.comboChance > 0 && Math.random() < BONUSES.comboChance) {
-        const foe2 = battle.enemyTeam.filter(u => !u.dead && u.drawX <= BATTLE_ENEMY_X + 10);
-        if (foe2.length) {
-          const t2 = foe2[Math.floor(Math.random()*foe2.length)];
-          applyDamage(t2, Math.max(1, u.atk - t2.def), battle, '#fb923c', true);
-        }
-      }
-    }
-    u.mp = Math.min(u.maxMp, u.mp + MP_REGEN_TICK);
-    // 영웅 오라: 영웅이 살아있으면 아군 방어력 보너스는 makeUnit 시 적용됨
-  }
-
-  // 적 공격
-  for (const mob of foe) {
-    mob.ticksSinceSkill++;
-    const useSkill = mob.ticksSinceSkill >= SKILL_TICK_CD && mob.mp >= mob.skillCost;
-    const target = our[Math.floor(Math.random()*our.length)];
-
-    if (useSkill) {
-      mob.ticksSinceSkill = 0;
-      mob.mp -= mob.skillCost;
-      const dmg = Math.max(1, mob.skillAtk - target.def);
-      applyDamage(target, dmg, battle, '#ef4444', false);
-      addLog(battle, `${mob.name} 스킬! ${dmg}피해`, '#ef4444');
-    } else {
-      const dmg = Math.max(1, mob.atk - target.def);
-      applyDamage(target, dmg, battle, '#fca5a5', false);
-    }
-    mob.mp = Math.min(mob.maxMp, mob.mp + MP_REGEN_TICK);
-  }
-
-  // 아군 전멸 시에만 즉시 패배 처리
-  if (!battle.ourTeam.some(u => !u.dead)) { battle.phase='lost'; battle.result='lost'; }
-}
-
-// ─── 피해 적용 ────────────────────────────────────────────────────────────────
-function applyDamage(target, dmg, battle, color, isMobTarget) {
-  target.hp -= dmg;
-  target.flashTimer = 0.25; target.flashColor = color;
-  const arr = isMobTarget ? battle.enemyTeam : battle.ourTeam;
-  const idx = arr.indexOf(target);
-  const x   = isMobTarget ? (target.drawX || BATTLE_ENEMY_X) : (target.drawX || BATTLE_TEAM_X);
-  const y   = isMobTarget ? (target.drawY || unitY(idx)) : unitY(idx);
-  addFloaty(battle, `-${dmg}`, x, y, color);
-
-  if (target.hp <= 0) {
-    // 불굴의 의지: 최초 사망 시 HP 1로 생존
-    if (!isMobTarget && BONUSES.undying && !target.undyingUsed) {
-      target.undyingUsed = true;
-      target.hp = 1;
-      addFloaty(battle, '불굴!', x, y - 22, '#fbbf24');
-      return;
-    }
-    target.dead = true; target.hp = 0;
-    if (isMobTarget) {
-      battle.killCount++;
-      if (target.goldReward) {
-        const reward = Math.round(target.goldReward * BONUSES.battleGoldMult);
-        battle.goldEarned      += reward;
-        battle.totalGoldEarned += reward;
-        addFloaty(battle, `+${reward}💰`, x, y - 22, COLORS.gold);
-      }
-      // 처치 시 아군 회복
-      if (BONUSES.killHeal > 0) {
-        for (const u of battle.ourTeam.filter(u => !u.dead)) {
-          u.hp = Math.min(u.maxHp, u.hp + BONUSES.killHeal);
-        }
-      }
-    }
-  }
-}
-
-// ─── 업데이트 ─────────────────────────────────────────────────────────────────
-function updateBattle(battle, dt) {
-  if (battle.phase !== 'fighting') return;
-
-  // 플래시/플로티/로그
-  for (const u of [...battle.ourTeam, ...battle.enemyTeam]) {
-    if (u.flashTimer > 0) u.flashTimer = Math.max(0, u.flashTimer - dt);
-  }
-  for (let i = battle.floaties.length-1; i >= 0; i--) {
-    const f = battle.floaties[i];
-    f.y += f.vy*dt; f.life -= dt;
-    if (f.life <= 0) battle.floaties.splice(i,1);
-  }
-  for (let i = battle.log.length-1; i >= 0; i--) {
-    battle.log[i].timer -= dt;
-    if (battle.log[i].timer <= 0) battle.log.splice(i,1);
-  }
-
-  // 적 걷기 애니메이션: 오른쪽에서 왼쪽으로 이동
-  for (const e of battle.enemyTeam) {
-    if (e.dead) {
-      e.deadTimer += dt;
-    } else {
-      e.drawX = Math.max(BATTLE_ENEMY_X, e.drawX - BATTLE_ENEMY_WALK_SPD * dt);
-    }
-  }
-  // 사망 후 0.7초 지난 적 제거
-  battle.enemyTeam = battle.enemyTeam.filter(e => !e.dead || e.deadTimer < 0.7);
-
-  // 아군 전진 연출: 생존 적이 없을 때 배경 스크롤 + 아군 드리프트
-  const hasLiveEnemies = battle.enemyTeam.some(e => !e.dead);
-  if (!hasLiveEnemies && battle.ourTeam.some(u => !u.dead)) {
-    battle.scrollX    += BATTLE_MARCH_SPD * dt;
-    battle.playerDrift = Math.min(55, battle.playerDrift + 75 * dt);
-  } else if (hasLiveEnemies) {
-    battle.playerDrift = Math.max(0, battle.playerDrift - 250 * dt);
-  }
-
-  // 영웅 유닛 HP 재생
-  if (BONUSES.heroRegen > 0) {
-    const heroUnit = battle.ourTeam.find(u => u.isHero && !u.dead);
-    if (heroUnit) heroUnit.hp = Math.min(heroUnit.maxHp, heroUnit.hp + BONUSES.heroRegen * dt);
-  }
-
-  // 전투 틱
-  battle.tickTimer += dt;
-  if (battle.tickTimer >= TICK_INTERVAL) {
-    battle.tickTimer -= TICK_INTERVAL;
-    battleTick(battle);
-  }
 }
 
 // ─── 헬퍼 ────────────────────────────────────────────────────────────────────
 function addLog(battle, text, color) {
+  if (!battle) return;
   battle.log.unshift({text, color, timer:2.5});
   if (battle.log.length > 5) battle.log.pop();
 }
 
 function addFloaty(battle, text, x, y, color) {
-  battle.floaties.push({text, x, y:y-BATTLE_UNIT_R, vy:-40, life:1.2, color});
+  if (!battle) return;
+  battle.floaties.push({text, x, y, vy:-38, life:1.0, color});
+  if (battle.floaties.length > 40) battle.floaties.shift();
 }
 
-function unitY(idx) {
-  return BATTLE_UNIT_START_Y + 40 + idx * BATTLE_UNIT_GAP + BATTLE_UNIT_R;
+// 플로티/로그 수명 — 전투 종료 후에도 잔여 표시를 정리한다
+function updateBattleFx(battle, dt) {
+  for (let i = battle.floaties.length - 1; i >= 0; i--) {
+    const f = battle.floaties[i];
+    f.y += f.vy * dt; f.life -= dt;
+    if (f.life <= 0) battle.floaties.splice(i, 1);
+  }
+  for (let i = battle.log.length - 1; i >= 0; i--) {
+    battle.log[i].timer -= dt;
+    if (battle.log[i].timer <= 0) battle.log.splice(i, 1);
+  }
 }
-
-function serializeEnemies() { return []; }
-function restoreEnemies()   { return []; }

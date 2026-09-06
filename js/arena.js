@@ -1,0 +1,1204 @@
+'use strict';
+
+// ─── 실시간 아레나 ────────────────────────────────────────────────────────────
+// v1.0의 1초 1틱 계산을 대체한다. 고정 크기(480×330) 아레나에서 몬스터가
+// 가장자리에 랜덤 리젠되고, 아군은 사거리 안의 적을 자동으로 공격한다.
+// 이동만 플레이어가 개입할 수 있다 (formation.js).
+
+let _aid = 0;
+
+function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+
+// 🗡️ 은신 중인 도적은 없는 것으로 친다 — 표적이 되지도, 맞지도 않는다
+function isHidden(u) { return !!u && (u.stealthLeft || 0) > 0; }
+
+// 사거리 안에서 가장 가까운 대상. range를 주지 않으면 무제한.
+function nearestOf(list, from, range) {
+  let best = null, bestD = range !== undefined ? range : Infinity;
+  for (const e of list) {
+    if (e.dead || isHidden(e)) continue;
+    const d = dist(e, from) - (e.radius || 0);
+    if (d <= bestD) { bestD = d; best = e; }
+  }
+  return best;
+}
+
+// 공격용 목표 선택 — 이미 죽을 만큼 피해가 예약된 적은 건너뛴다.
+// 아군 넷이 같은 고블린에 몰려 화살을 낭비하는 것을 막는다.
+// needLos — **벽 너머는 고르지 않는다.** 고르게 두면 벽에 대고 계속 쏘거나
+// (예전에는 그게 그대로 맞았다) 아무 일도 안 하고 서 있게 된다.
+// 못 고르면 호출부가 최근접 적 쪽으로 걸어가게 하므로, 미로에서는 자리를 옮겨
+// 시야를 확보해야 한다 — 그게 '미로는 원거리가 손해'의 뜻이다.
+//
+// 근접도 이 판정을 받는다. 예전에는 원거리에만 걸었는데, 그러면 두께 12px 벽
+// 너머의 적을 사거리 14px 근접이 **때리는** 그림이 나온다(반지름 둘을 더하면
+// 실제로는 안 닿아서 눈에 안 띄었을 뿐, 규칙으로는 뚫려 있었다).
+// 이제 길찾기가 벽을 돌아가 주므로 근접도 정직하게 막아 둔다.
+function pickAttackTarget(list, from, range, needLos) {
+  let best = null, bestD = range !== undefined ? range : Infinity;
+  let fallback = null, fallbackD = bestD;
+  for (const e of list) {
+    if (e.dead || isHidden(e)) continue;
+    const d = dist(e, from) - (e.radius || 0);
+    if (d > (range !== undefined ? range : Infinity)) continue;
+    if (needLos && arenaLosBlocked(from.x, from.y, e.x, e.y)) continue;
+    if (d < fallbackD) { fallbackD = d; fallback = e; }
+    if ((e.pendingDmg || 0) >= e.hp) continue;   // 곧 죽는다 — 다른 적을 노린다
+    if (d <= bestD) { bestD = d; best = e; }
+  }
+  return best || fallback;
+}
+
+// ─── 아군 개체를 아레나에 올린다 ──────────────────────────────────────────────
+function spawnAllyIntoArena(arena, u, i, n) {
+  const c = arenaCenter();
+  const ang = (i / Math.max(1, n)) * Math.PI * 2;
+  u.x = c.x + Math.cos(ang) * FORMATION_RADIUS;
+  u.y = c.y + Math.sin(ang) * FORMATION_RADIUS;
+  clampToArena(u, u.radius);
+  u.atkCd = Math.random() * u.atkPeriod;   // 첫 공격 타이밍을 흩어 동시 발사를 막는다
+  u.skillCdLeft = u.skillCd;
+  u.noHitFor = ARENA_REGEN_DELAY;
+  u.vx = 0; u.vy = 0;
+  u.target = null;
+  u.tauntedBy = null;
+}
+
+// ─── 몬스터 생성 ─────────────────────────────────────────────────────────────
+function makeArenaMob(typeId, waveIndex, killCount, _unusedCaveLevel, eliteBonus) {
+  const t  = BATTLE_MOB_TYPES[typeId] || BATTLE_MOB_TYPES.goblin;
+  // 🗿 케이브가 건물이 되면서 CAVE_LEVELS 다섯 칸 사다리가 트랙으로 바뀌었다.
+  // ⛏️갱도 심화가 몹을 세게 만들고(statMult) 그만큼 보상을 더 준다(goldMult).
+  const cv = { statMult: 1 + (BONUSES.mobStatMult || 0),
+               goldMult: 1 + (BONUSES.mobGoldMult || 0) };
+  // 정예 확률은 아무리 쌓아도 상한을 넘지 않는다 — 전부 정예면 정예가 아니다
+  const eChance = Math.min(ELITE_CHANCE_CAP, (BONUSES.eliteChance || 0) + (eliteBonus || 0));
+  const isElite = Math.random() < eChance;
+  // 훈련은 웨이브 선형, 무한은 층 곡선. 처치 누적분은 두 모드 모두 적용된다.
+  const endless = endlessTier(waveIndex) > 0;
+  const base = endless ? endlessArenaMult(waveIndex)
+                       : (1 + (waveIndex || 0) * WAVE_STAT_SCALE);
+  const sm = base * (1 + (killCount || 0) * KILL_SCALE)
+           * cv.statMult * (isElite ? ELITE_STAT_MULT : 1);
+  const goldBase = endless ? (1 + endlessTier(waveIndex) * WAVE_GOLD_SCALE)
+                           : (1 + (waveIndex || 0) * WAVE_GOLD_SCALE);
+  const gm = goldBase * (1 + (killCount || 0) * KILL_SCALE)
+           * cv.goldMult * (isElite ? ELITE_GOLD_MULT : 1);
+  // ♾️ 무한은 하단에도 같은 무게가 붙는다 — 한쪽만 어려우면 갈래가 아니라 편식이다
+  const unb = (typeof gs !== 'undefined' && gs && gs.unbounded)
+            ? unboundedFloorMult(endlessTier(waveIndex)) : 1;
+  const hp = Math.max(1, Math.round(t.hp * sm * BONUSES.mobHpMult * unb));
+  // 방어력만 sm을 그대로 먹으면 층이 깊어질수록 아군 공격이 통째로 막힌다.
+  // 아군 공격력은 정액 합산(마을 트랙·트리)이라 곱셈 곡선을 따라갈 수가 없다 —
+  // 40층 마왕이 방어력 111인데 궁수 공격력이 117이라 유효타가 6이었다.
+  // 방어력은 지수를 눌러 완만하게, 공격력은 조금만 눌러 위협은 남긴다.
+  const defSm = Math.pow(Math.max(1, sm), ARENA_DEF_EXP);
+  const atkSm = Math.pow(Math.max(1, sm), ARENA_ATK_EXP);
+
+  return {
+    id: ++_aid, typeId, isPlayer: false, isBoss: !!t.isBoss, isElite,
+    name: isElite ? `정예 ${t.name}` : t.name,
+    icon: t.icon, color: isElite ? '#f43f5e' : t.color,
+    behavior: t.behavior, ranged: !!t.ranged,
+    hp, maxHp: hp,
+    // 🪢길들이기 — 케이브에서 산 안전판. 위험만 도로 깎는다.
+    atk: Math.max(1, Math.round(t.atk * atkSm * (BONUSES.mobAtkMult || 1))),
+    def: Math.max(0, Math.round(t.def * defSm)),
+    atkPeriod: t.atkPeriod, atkCd: Math.random() * t.atkPeriod,
+    range: t.range, moveSpd: t.moveSpd * (isElite ? 1.1 : 1),
+    radius: bodyRadius(t.radius) * (isElite ? 1.25 : 1),
+    goldReward: Math.max(1, Math.round(t.goldReward * gm)),
+    x: 0, y: 0, vx: 0, vy: 0,
+    target: null, dead: false, deadTimer: 0,
+    flashTimer: 0, flashColor: '#fff',
+    // 🛡 원거리 저항 — 템플릿에 있으면 그대로 들고 간다
+    rangedResist: t.rangedResist || 0,
+    slowUntil: 0, dashCd: 3 + Math.random() * 2, dashing: 0
+  };
+}
+
+// 아레나 피해 계산 — 방어력을 빼되 원 공격력의 ARENA_DMG_FLOOR 아래로는 안 내려간다.
+// "아무리 때려도 1씩만 들어가는" 상황을 없애려는 것이지 방어력을 무의미하게 만드는 게 아니다.
+function arenaDamage(atk, def) {
+  return Math.max(Math.ceil(atk * ARENA_DMG_FLOOR), Math.round(atk - (def || 0)), 1);
+}
+
+// 가장자리 밴드에서, 아군 부대 중심으로부터 SPAWN_SAFE_RADIUS 밖에 자리를 잡는다
+function pickSpawnPoint(arena, allies) {
+  const cx = allies.length ? allies.reduce((a, u) => a + u.x, 0) / allies.length : arenaCenter().x;
+  const cy = allies.length ? allies.reduce((a, u) => a + u.y, 0) / allies.length : arenaCenter().y;
+
+  for (let tries = 0; tries < 24; tries++) {
+    const side = Math.floor(Math.random() * 4);
+    const b = ARENA_SPAWN_BAND;
+    let x, y;
+    if (side === 0)      { x = ARENA_X + Math.random() * ARENA_W;       y = ARENA_Y + Math.random() * b; }
+    else if (side === 1) { x = ARENA_X + Math.random() * ARENA_W;       y = ARENA_Y + ARENA_H - Math.random() * b; }
+    else if (side === 2) { x = ARENA_X + Math.random() * b;             y = ARENA_Y + Math.random() * ARENA_H; }
+    else                 { x = ARENA_X + ARENA_W - Math.random() * b;   y = ARENA_Y + Math.random() * ARENA_H; }
+    if (terrainAt(arena.terrain, x, y)) continue;   // 바위·가시 위에 소환하지 않는다
+    if (Math.hypot(x - cx, y - cy) >= SPAWN_SAFE_RADIUS) return { x, y };
+  }
+  // 아군이 구석에 몰려 안전 반경을 만족할 수 없으면 가장 먼 모서리에 붙인다
+  const corners = [
+    { x: ARENA_X + 14,           y: ARENA_Y + 14 },
+    { x: ARENA_X + ARENA_W - 14, y: ARENA_Y + 14 },
+    { x: ARENA_X + 14,           y: ARENA_Y + ARENA_H - 14 },
+    { x: ARENA_X + ARENA_W - 14, y: ARENA_Y + ARENA_H - 14 }
+  ];
+  corners.sort((a, b2) => Math.hypot(b2.x - cx, b2.y - cy) - Math.hypot(a.x - cx, a.y - cy));
+  return corners[0];
+}
+
+// ─── 아레나 상태 ─────────────────────────────────────────────────────────────
+function createArena() {
+  return {
+    mobs: [],
+    drops: [],
+    shots: [],       // 원거리 투사체
+    bursts: [],      // 스킬 시각 효과 (원형 파동)
+    buffs: [],       // 드랍으로 얻은 일시 버프 {kind, mult, until}
+    mode: 'auto',    // 'auto' | 'manual'
+    rally: null,     // 수동 집결 지점 {x,y}
+    facing: { x: 0, y: -1 },
+    elapsed: 0,
+    spawnTimer: 0.6,
+    waveIndex: 0,
+    terrain: [],
+    pool: [['goblin', 10]],
+    eliteBonus: 0,
+    spawnMult: 1,
+    surgeAt: null, surgeWarn: 0, surgeFlash: 0,
+    goldCollected: 0
+  };
+}
+
+// ─── 스폰 ────────────────────────────────────────────────────────────────────
+// ─── 🌊 쇄도 — 한 번에 몰려오는 순간 ─────────────────────────────────────────
+// 예고 2초 → 가장자리 곳곳에서 한꺼번에 등장. 스폰 상한은 잠시 무시한다.
+// 상한에 걸려 반만 나오면 쇄도가 쇄도로 안 읽힌다.
+function updateSurge(gs, dt) {
+  const a = gs.arena, b = gs.battle;
+  if (b.phase !== 'fighting') return;
+  if (a.surgeAt === undefined || a.surgeAt === null) return;
+  // 스폰 시간이 끝났으면 새 쇄도를 예약하지 않는다
+  if (typeof wm !== 'undefined' && wm && wm.timer <= 0) { a.surgeWarn = 0; return; }
+
+  if (a.surgeWarn > 0) {
+    a.surgeWarn -= dt;
+    if (a.surgeWarn <= 0) { fireSurge(gs); scheduleSurge(a, false); }
+    return;
+  }
+  a.surgeAt -= dt;
+  if (a.surgeAt <= 0) {
+    a.surgeWarn = SURGE_WARN;
+    addLog(b, '🌊 몬스터 무리가 몰려옵니다!', '#f97316');
+    if (typeof SFX !== 'undefined') SFX.denied();
+    if (typeof FX !== 'undefined') FX.shake(3, 0.3);
+  }
+}
+function scheduleSurge(a, first) {
+  a.surgeAt   = (first ? SURGE_FIRST_AT : SURGE_EVERY) + (Math.random() - 0.5) * SURGE_EVERY_JIT;
+  a.surgeWarn = 0;
+}
+function fireSurge(gs) {
+  const a = gs.arena, b = gs.battle;
+  const n = surgeCount(a.waveIndex + 1);
+  const allies = b.ourTeam.filter(u => !u.dead);
+  let made = 0;
+  for (let i = 0; i < n; i++) {
+    const p = pickSpawnPoint(a, allies);
+    const mob = makeArenaMob(rollArenaMob(a.pool), a.waveIndex, b.killCount, 0, a.eliteBonus);
+    mob.x = p.x; mob.y = p.y;
+    clampToArena(mob, mob.radius);
+    a.mobs.push(mob);
+    markMobSeen(gs, mob.typeId);
+    made++;
+  }
+  a.surgeFlash = 0.9;
+  addLog(b, `🌊 쇄도! ${made}마리가 한꺼번에 들이닥칩니다`, '#f97316');
+  if (typeof SFX !== 'undefined') SFX.baseHit();
+  if (typeof FX !== 'undefined') FX.shake(6, 0.45);
+}
+
+function updateArenaSpawn(gs, dt) {
+  const a = gs.arena, b = gs.battle;
+  if (b.phase !== 'fighting') return;
+  // 👹 보스 층은 한쪽 전선만 쓴다 — 상단 보스면 여기는 한 마리도 안 나온다
+  if (typeof laneInUse === 'function' && !laneInUse(gs, 'bottom')) return;
+  // 스폰 시간이 끝나면 더 나오지 않는다 — 남은 것을 정리하면 웨이브가 끝난다
+  if (typeof wm !== 'undefined' && wm && wm.timer <= 0) return;
+
+  a.spawnTimer -= dt;
+  if (a.spawnTimer > 0) return;
+
+  const live = a.mobs.filter(m => !m.dead).length;
+  a.spawnTimer = spawnInterval(a.elapsed) * (a.spawnMult || 1);
+  if (live >= ARENA_MAX_MOBS) return;   // 상한 초과 시 스폰 보류
+
+  const allies = b.ourTeam.filter(u => !u.dead);
+  const p = pickSpawnPoint(a, allies);
+  const mob = makeArenaMob(rollArenaMob(a.pool), a.waveIndex, b.killCount, 0, a.eliteBonus);
+  mob.x = p.x; mob.y = p.y;
+  clampToArena(mob, mob.radius);
+  a.mobs.push(mob);
+  markMobSeen(gs, mob.typeId);
+}
+
+// ─── 메인 업데이트 ───────────────────────────────────────────────────────────
+function updateArena(gs, dt) {
+  const a = gs.arena, b = gs.battle;
+  if (!a) return;
+
+  // 효과는 전투가 끝난 뒤에도 잠깐 남는다
+  updateArenaFx(a, dt);
+
+  if (b.phase !== 'fighting') return;
+  a.elapsed += dt;
+
+  if (a.surgeFlash > 0) a.surgeFlash = Math.max(0, a.surgeFlash - dt);
+  updateSurge(gs, dt);
+
+  // 예약해둔 소환 정예
+  if (a.eliteTimer !== null && a.eliteTimer !== undefined) {
+    a.eliteTimer -= dt;
+    if (a.eliteTimer <= 0) { a.eliteTimer = null; spawnSummonedElite(gs, a.eliteN || 0); }
+  }
+
+  const allies = b.ourTeam.filter(u => !u.dead);
+  const mobs   = a.mobs.filter(m => !m.dead);
+
+  updateFormation(gs, allies, dt);
+  for (const u of allies) updateAlly(gs, u, mobs, allies, dt);
+  for (const m of mobs)   updateMob(gs, m, allies, dt);
+
+  separate(allies.concat(mobs), dt);
+  // 🪨 막는 지형 밖으로 밀어낸다.
+  // resolveTerrainCollision은 예전부터 있었는데 **아무도 부르지 않았다** —
+  // 그래서 바위가 blocksMove:true 인데도 실제로는 통과됐고, 지형이
+  // '느려지는 칸 + 아픈 칸'뿐이라 판마다 달라지는 느낌이 거의 없었다.
+  // 분리(separate) 뒤에 밀어야 한다. 순서가 반대면 서로 밀다가 벽에 박힌다.
+  if (a.terrain && a.terrain.length) {
+    for (const u of allies) resolveTerrainCollision(a.terrain, u);
+    for (const m of mobs)   resolveTerrainCollision(a.terrain, m);
+    for (const u of allies) clampToArena(u, u.radius);
+    for (const m of mobs)   clampToArena(m, m.radius);
+  }
+  updateShots(gs, dt);
+  updateDrops(gs, allies, dt);
+  updateArenaSpawn(gs, dt);
+
+  // 사망 정리
+  for (const m of a.mobs) if (m.dead) m.deadTimer += dt;
+  a.mobs = a.mobs.filter(m => !m.dead || m.deadTimer < 0.5);
+
+  // 영웅 재생
+  if (BONUSES.heroRegenPct > 0) {
+    const h = gs.battle.ourTeam.find(u => u.isHero && !u.dead);
+    if (h) h.hp = Math.min(h.maxHp, h.hp + h.maxHp * BONUSES.heroRegenPct * dt);
+  }
+  if (BONUSES.heroRegen > 0) {
+    const h = allies.find(u => u.isHero);
+    if (h) h.hp = Math.min(h.maxHp, h.hp + BONUSES.heroRegen * dt);
+  }
+
+  if (!b.ourTeam.some(u => !u.dead)) { b.phase = 'lost'; b.result = 'lost'; }
+}
+
+function updateArenaFx(a, dt) {
+  for (let i = a.bursts.length - 1; i >= 0; i--) {
+    const f = a.bursts[i];
+    f.t += dt;
+    if (f.t >= f.dur) a.bursts.splice(i, 1);
+  }
+}
+
+// ─── 아군 ────────────────────────────────────────────────────────────────────
+function updateAlly(gs, u, mobs, allies, dt) {
+  if (u.flashTimer > 0) u.flashTimer = Math.max(0, u.flashTimer - dt);
+
+  // 🗡️ 은신 — 시간이 다 되면 기습 기회도 같이 사라진다
+  if (u.stealthLeft > 0) {
+    u.stealthLeft = Math.max(0, u.stealthLeft - dt);
+    if (u.stealthLeft === 0) u.ambushReady = false;
+  }
+
+  // 전투 이탈 회복 — 맞지 않고 버틴 시간에 값을 준다
+  u.noHitFor = (u.noHitFor || 0) + dt;
+  // regenBonus는 이제 "기본값에 곱하는 보너스"가 아니라 초당 최대 HP 비율 그 자체다.
+  // 기본값이 0이 됐으므로 곱셈으로 두면 카드를 아무리 먹어도 0에 머문다.
+  const regenPct = ARENA_REGEN_PCT + (BONUSES.regenBonus || 0);
+  if (regenPct > 0 && u.noHitFor >= ARENA_REGEN_DELAY && u.hp < u.maxHp) {
+    u.hp = Math.min(u.maxHp, u.hp + u.maxHp * regenPct * (BONUSES.pactRegenMult || 1) * dt);
+  }
+
+  // 목표: 사거리 안에서 가장 가까운 적
+  // 🌀 추방 — 영웅만 10초 동안 아무것도 못 한다
+  if (u.isHero && typeof bossEffect === 'function' && bossEffect(gs, 'nohero')) return;
+  const inRange = pickAttackTarget(mobs, u, u.range, true);
+  u.target = inRange;
+
+  // 공격
+  u.atkCd -= dt;
+  if (inRange && u.atkCd <= 0) {
+    // 🕸 점착 — 보스 기믹이 걸린 동안은 공격이 느려진다
+    const gSlowAtk = (typeof bossEffect === 'function' && bossEffect(gs, 'slowatk')) ? 0.5 : 1;
+    u.atkCd = u.atkPeriod / ((BONUSES.unitAtkSpdMult || 1) * arenaBuff(gs, 'haste') * gSlowAtk);
+    allyAttack(gs, u, inRange);
+  } else if (u.atkCd <= 0) {
+    u.atkCd = 0;
+  }
+
+  // 스킬 — 쿨다운마다 자동 발동
+  u.skillCdLeft -= dt;
+  if (u.skillCdLeft <= 0 && !isHidden(u) &&
+      (inRange || u.skillKind === 'heal' || u.skillKind === 'bulwark' || u.skillKind === 'stealth')) {
+    u.skillCdLeft = u.skillCd;
+    allySkill(gs, u, mobs, allies);
+  }
+
+  // 이동 — 수렁 위에서는 느려진다
+  applyTerrainTick(gs, u, dt, true);
+  if (u.dead) return;
+  const gSlowMove = (typeof bossEffect === 'function' && bossEffect(gs, 'slowmove')) ? 0.5 : 1;
+  const spd = u.moveSpd * gSlowMove * terrainSpeedMult(gs.arena.terrain, u)
+            * (isHidden(u) ? ROGUE_STEALTH_SPD : 1);
+
+  // 🗡️ 탐욕 — 점찍은 드랍이 아직 살아 있으면 그쪽이 우선이다.
+  // 전열에서 빠지는 값을 치르고 바닥의 것을 챙긴다.
+  if (u.greedTarget) {
+    const dp = gs.arena.drops.indexOf(u.greedTarget) >= 0 ? u.greedTarget : null;
+    if (!dp) { u.greedTarget = null; }
+    else {
+      moveToward(u, dp.x, dp.y, spd, dt, 2);
+      return;
+    }
+  }
+
+  if (gs.arena.mode === 'manual' && gs.arena.rally) {
+    moveToward(u, u.slotX, u.slotY, spd, dt, 3);
+  } else if (!inRange) {
+    // 자동: 사거리 밖이면 최근접 적 쪽으로 천천히 접근
+    const near = nearestOf(mobs, u);
+    if (near) moveToward(u, near.x, near.y, spd * AUTO_ADVANCE_PCT, dt, u.range * 0.8);
+  } else if (u.ranged) {
+    // 원거리는 너무 붙으면 물러난다 (카이팅)
+    const d = dist(inRange, u);
+    if (d < u.range * 0.45) {
+      const ang = Math.atan2(u.y - inRange.y, u.x - inRange.x);
+      u.x += Math.cos(ang) * spd * 0.7 * dt;
+      u.y += Math.sin(ang) * spd * 0.7 * dt;
+      clampToArena(u, u.radius);
+      resolveTerrainCollision(gs.arena.terrain, u);
+      clampToArena(u, u.radius);
+    }
+  }
+}
+
+function moveToward(e, tx, ty, spd, dt, stopDist) {
+  const ter = (typeof gs !== 'undefined' && gs.arena) ? gs.arena.terrain : null;
+
+  // 🧭 벽이 가로막으면 지도를 보고 돌아간다 (nav.js).
+  // 직선으로 갈 수 있으면 여기는 통째로 건너뛴다 — 개활지에서는 비용이 0이다.
+  let gx = tx, gy = ty, detour = false;
+  if (ter && ter.length && typeof navWaypoint === 'function' &&
+      segBlocksMove(ter, e.x, e.y, tx, ty)) {
+    const wp = navWaypoint(ter, e, tx, ty, dt);
+    if (wp) { gx = wp.x; gy = wp.y; detour = true; }
+  } else {
+    e._navWp = null;
+  }
+
+  // 멈춤 거리는 **직선으로 닿을 때만** 본다. 벽을 돌아가는 중에 목표까지의
+  // 직선 거리로 "도착했다"고 판단하면, 벽 반대편에 붙어 선 채 영영 멈춘다 —
+  // 미로에서 아군과 몹이 서로 마주 보고 굳어 있던 것이 정확히 이것이었다.
+  if (!detour && Math.hypot(tx - e.x, ty - e.y) <= (stopDist || 0)) return false;
+
+  const dx = gx - e.x, dy = gy - e.y;
+  const d  = Math.hypot(dx, dy);
+  if (d < 0.5) return false;
+  const step = Math.min(d, spd * dt);
+  const px = e.x, py = e.y;
+  e.x += dx / d * step;
+  e.y += dy / d * step;
+  clampToArena(e, e.radius);
+  if (ter && ter.length) {
+    resolveTerrainCollision(ter, e);
+    clampToArena(e, e.radius);
+    // 바위에 정면으로 막히면 옆으로 미끄러진다 — 붙어서 떠는 것을 막는다
+    if (Math.hypot(e.x - px, e.y - py) < step * 0.25) {
+      const sx = -(dy / d), sy = (dx / d);
+      const side = ((e.slideDir = e.slideDir || (Math.random() < 0.5 ? -1 : 1)));
+      e.x = px + sx * side * step; e.y = py + sy * side * step;
+      clampToArena(e, e.radius);
+      resolveTerrainCollision(ter, e);
+      clampToArena(e, e.radius);
+    } else {
+      e.slideDir = 0;
+    }
+  }
+  return true;
+}
+
+// 지형이 개체에 매 프레임 주는 효과 — 수렁은 이동에서, 가시는 여기서
+function applyTerrainTick(gs, e, dt, isAlly) {
+  const ter = gs.arena.terrain;
+  if (!ter || !ter.length) return;
+  const t = terrainAt(ter, e.x, e.y);
+  if (!t || !t.dpsPct) return;
+  const dmg = (e.maxHp || 1) * t.dpsPct * dt;
+  e.hp -= dmg;
+  e._spikeAccum = (e._spikeAccum || 0) + dmg;
+  if (e._spikeAccum >= 1) {
+    e._spikeAccum = 0;
+    if (typeof FX !== 'undefined') FX.burst(e.x, e.y, '#f43f5e', 3, 7);
+  }
+  if (e.hp <= 0 && !e.dead) {
+    e.hp = 0;
+    if (isAlly) hurtAlly(gs, e, 0, '#f43f5e');
+    else        hurtMob(gs, e, 0, '#f43f5e');
+  }
+}
+
+function allyAttack(gs, u, target) {
+  const crit = BONUSES.critChance > 0 && Math.random() < BONUSES.critChance;
+  const rage = arenaBuff(gs, 'rage');   // 🔥 분노
+  // 🗡️ 기습 — 은신을 풀며 넣는 첫 타격. 여기서 은신도 함께 끝난다.
+  const ambush = !!u.ambushReady && isHidden(u);
+  const mult   = ambush ? ROGUE_AMBUSH_MULT : 1;
+  if (ambush) {
+    u.stealthLeft = 0; u.ambushReady = false;
+    gs.arena.bursts.push({ x: target.x, y: target.y, r: 30, color: '#c084fc', t: 0, dur: 0.3 });
+    addFloaty(gs.battle, '기습!', u.x, u.y - u.radius - 14, '#c084fc');
+  }
+  const dmg  = arenaDamage((crit ? u.atk * 1.8 : u.atk) * rage * mult, target.def);
+  if (u.ranged) {
+    target.pendingDmg = (target.pendingDmg || 0) + dmg;
+    gs.arena.shots.push({
+      x: u.x, y: u.y, tx: target.x, ty: target.y, target,
+      dmg, color: crit ? '#f43f5e' : u.color, spd: 420, fromAlly: true, life: 1.2, shooter: u
+    });
+  } else {
+    hurtMob(gs, target, dmg, crit ? '#f43f5e' : '#fbbf24');
+    if (typeof SFX !== 'undefined') SFX.hit();
+    // 🌵 가시껍질 — 근접에만 반사한다. 원거리를 섞을 이유를 만드는 게 목적이다.
+    const th = gs.arena.thorns || 0;
+    if (th > 0 && !u.dead) hurtAlly(gs, u, Math.max(1, Math.round(dmg * th)), '#84cc16');
+  }
+  if (BONUSES.comboChance > 0 && Math.random() < BONUSES.comboChance) {
+    hurtMob(gs, target, arenaDamage(u.atk, target.def), '#fb923c');
+  }
+}
+
+// ─── 아군 스킬 — 위치 기반 ───────────────────────────────────────────────────
+function allySkill(gs, u, mobs, allies) {
+  const a = gs.arena;
+  const kind = u.skillKind;
+
+  if (kind === 'heal') {
+    let healed = 0;
+    for (const t of allies) {
+      if (dist(t, u) > u.skillRadius) continue;
+      const amt = Math.min(t.maxHp - t.hp, u.healAmt);
+      t.hp += amt; healed += amt;
+    }
+    if (!healed) { u.skillCdLeft = 1.5; return; }   // 다 찼으면 금방 다시 시도
+    a.bursts.push({ x: u.x, y: u.y, r: u.skillRadius, color: '#34d399', t: 0, dur: 0.45 });
+    addFloaty(gs.battle, `+${healed}`, u.x, u.y, '#34d399');
+    if (typeof SFX !== 'undefined') SFX.heal();
+    return;
+  }
+
+  if (kind === 'bulwark') {
+    for (const t of allies) {
+      if (dist(t, u) <= u.skillRadius) t.shield = (t.shield || 0) + u.shieldAmt;
+    }
+    // 도발: 주변 몹의 목표를 방패병으로 강제한다
+    let taunted = 0;
+    for (const m of mobs) {
+      if (dist(m, u) <= u.skillRadius) { m.tauntTarget = u; m.tauntTimer = 3; taunted++; }
+    }
+    a.bursts.push({ x: u.x, y: u.y, r: u.skillRadius, color: COLORS.shield, t: 0, dur: 0.5 });
+    addFloaty(gs.battle, `🛡+${u.shieldAmt}${taunted ? ` 도발${taunted}` : ''}`, u.x, u.y, COLORS.shield);
+    if (typeof SFX !== 'undefined') SFX.skill();
+    return;
+  }
+
+  if (kind === 'nova' || kind === 'spin' || kind === 'cleave') {
+    const rad = u.skillRadius;
+    let hits = 0;
+    for (const m of mobs) {
+      if (dist(m, u) > rad + m.radius) continue;
+      // 🪨 벽 너머는 못 때린다. 반경만 재면 미로 벽을 통과해서, 몹의 원거리는
+      // 막히는데 아군 광역만 들어가는 한쪽짜리 판이 된다.
+      if (arenaLosBlocked(u.x, u.y, m.x, m.y)) continue;
+      // 🔥 화염 폭발은 맞은 적을 둔화시킨다 — 술사가 거리를 유지할 수 있는 이유
+      if (kind === 'nova') m.slowUntil = Math.max(m.slowUntil || 0, 2.0);
+      hurtMob(gs, m, arenaDamage(u.skillAtk, m.def), u.skillColor);
+      hits++;
+    }
+    a.bursts.push({ x: u.x, y: u.y, r: rad, color: u.skillColor, t: 0, dur: 0.4 });
+    if (hits && typeof SFX !== 'undefined') SFX.cannon();
+    if (!hits) u.skillCdLeft = 1.0;
+    return;
+  }
+
+  // 🗡️ 은신 — 사라진다. 다음 한 방이 기습이 된다.
+  if (kind === 'stealth') {
+    u.stealthLeft = ROGUE_STEALTH_DUR;
+    u.ambushReady = true;
+    a.bursts.push({ x: u.x, y: u.y, r: 26, color: '#c084fc', t: 0, dur: 0.35 });
+    addFloaty(gs.battle, '🌫 은신', u.x, u.y - u.radius - 8, '#c084fc');
+    if (typeof SFX !== 'undefined') SFX.skill();
+    return;
+  }
+
+  if (kind === 'volley') {
+    const targets = mobs.filter(m => dist(m, u) <= u.range && (m.pendingDmg||0) < m.hp
+                                     && !arenaLosBlocked(u.x, u.y, m.x, m.y))   // 🪨 벽 너머는 안 쏜다
+                        .sort((m1, m2) => dist(m1, u) - dist(m2, u))
+                        .slice(0, u.skillHits || 3);
+    if (!targets.length) { u.skillCdLeft = 1.0; return; }
+    targets.forEach((t, i) => {
+      const dmg = arenaDamage(u.skillAtk, t.def);
+      t.pendingDmg = (t.pendingDmg || 0) + dmg;
+      a.shots.push({
+        x: u.x, y: u.y, tx: t.x, ty: t.y, target: t,
+        dmg, color: u.skillColor, spd: 520, fromAlly: true, life: 1.2, delay: i * 0.08, shooter: u
+      });
+    });
+    if (typeof SFX !== 'undefined') SFX.skill();
+    return;
+  }
+}
+
+// ─── 몬스터 ──────────────────────────────────────────────────────────────────
+function updateMob(gs, m, allies, dt) {
+  if (m.flashTimer > 0) m.flashTimer = Math.max(0, m.flashTimer - dt);
+  applyTerrainTick(gs, m, dt, false);
+  if (m.dead) return;
+  if (!allies.length) return;
+
+  if (m.tauntTimer > 0) {
+    m.tauntTimer -= dt;
+    if (m.tauntTimer <= 0) m.tauntTarget = null;
+  }
+
+  // 목표: 도발 중이면 방패병, 아니면 최근접 아군
+  let target = (m.tauntTarget && !m.tauntTarget.dead) ? m.tauntTarget : nearestOf(allies, m);
+  if (!target) return;
+  m.target = target;
+
+  const d = dist(m, target) - target.radius;
+  const slowMult = (m.slowUntil > 0 ? 0.55 : 1) * terrainSpeedMult(gs.arena.terrain, m);
+  if (m.slowUntil > 0) m.slowUntil -= dt;
+
+  // 돌진 패턴 (보스)
+  if (m.behavior === 'dash') {
+    m.dashCd -= dt;
+    if (m.dashing > 0) m.dashing -= dt;
+    else if (m.dashCd <= 0 && d > 40) { m.dashing = 0.6; m.dashCd = 5; }
+  }
+  const dashMult = m.dashing > 0 ? 3.2 : 1;
+
+  // 🪨 벽 너머는 근접이든 원거리든 때리지 못한다.
+  // 사거리 안이라고 그 자리에 서 있으면 벽을 사이에 두고 굳는다 — 못 보면 걷는다.
+  const seen  = !arenaLosBlocked(m.x, m.y, target.x, target.y);
+  const canHit = d <= m.range && seen;
+
+  // 이동
+  if (m.behavior === 'kite') {
+    // 거리 유지 원거리 — 너무 붙으면 물러나고 멀면 다가온다
+    const want = m.range * 0.8;
+    if (d > want || !seen) moveToward(m, target.x, target.y, m.moveSpd * slowMult, dt, want);
+    else if (d < want * 0.6) {
+      const ang = Math.atan2(m.y - target.y, m.x - target.x);
+      m.x += Math.cos(ang) * m.moveSpd * slowMult * dt;
+      m.y += Math.sin(ang) * m.moveSpd * slowMult * dt;
+      clampToArena(m, m.radius);
+    }
+  } else if (!canHit) {
+    moveToward(m, target.x, target.y, m.moveSpd * slowMult * dashMult, dt, m.range);
+  }
+
+  // 공격
+  m.atkCd -= dt;
+  if (canHit && m.atkCd <= 0) {
+    m.atkCd = m.atkPeriod;
+    if (m.ranged) {
+      gs.arena.shots.push({
+        x: m.x, y: m.y, tx: target.x, ty: target.y, target,
+        dmg: arenaDamage(m.atk, target.def), color: m.color, spd: 320, fromAlly: false, life: 1.5
+      });
+    } else if (m.behavior === 'slam') {
+      // 마왕 — 광역 내려찍기
+      const rad = 52;
+      for (const t of allies) {
+        if (dist(t, m) > rad) continue;
+        if (arenaLosBlocked(m.x, m.y, t.x, t.y)) continue;   // 벽 너머는 못 때린다 — 아군 광역과 같은 규칙
+        hurtAlly(gs, t, arenaDamage(m.atk, t.def), '#db2777', m);
+      }
+      gs.arena.bursts.push({ x: m.x, y: m.y, r: rad, color: '#db2777', t: 0, dur: 0.4 });
+      if (typeof FX !== 'undefined') FX.shake(3, 0.15);
+    } else {
+      hurtAlly(gs, target, arenaDamage(m.atk, target.def), '#fca5a5', m);
+    }
+  }
+}
+
+// ─── 개체 분리 — 완전히 겹치지 않게 밀어낸다 ─────────────────────────────────
+let _terrainRef = null;
+function separate(all, dt) {
+  _terrainRef = (typeof gs !== 'undefined' && gs.arena) ? gs.arena.terrain : null;
+  for (let i = 0; i < all.length; i++) {
+    const a = all[i];
+    for (let j = i + 1; j < all.length; j++) {
+      const b = all[j];
+      const minD = a.radius + b.radius;
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 >= minD * minD || d2 < 0.0001) continue;
+      const d = Math.sqrt(d2);
+      const push = (minD - d) * 0.5;
+      const nx = dx / d, ny = dy / d;
+      a.x -= nx * push; a.y -= ny * push;
+      b.x += nx * push; b.y += ny * push;
+      clampToArena(a, a.radius); clampToArena(b, b.radius);
+      if (_terrainRef && _terrainRef.length) {
+        resolveTerrainCollision(_terrainRef, a); clampToArena(a, a.radius);
+        resolveTerrainCollision(_terrainRef, b); clampToArena(b, b.radius);
+      }
+    }
+  }
+}
+
+// ─── 투사체 ──────────────────────────────────────────────────────────────────
+function updateShots(gs, dt) {
+  const a = gs.arena;
+  const liveMobs = a.mobs.filter(m => !m.dead);
+
+  for (let i = a.shots.length - 1; i >= 0; i--) {
+    const s = a.shots[i];
+    if (s.delay > 0) { s.delay -= dt; continue; }
+    s.life -= dt;
+
+    // 목표가 비행 중 죽으면 근처 다른 적으로 넘긴다.
+    // 그냥 사라지면 원거리 유닛의 DPS가 통째로 새어나간다.
+    if (s.target && s.target.dead) {
+      if (s.fromAlly) {
+        s.target.pendingDmg = Math.max(0, (s.target.pendingDmg || 0) - s.dmg);
+        const alt = nearestOf(liveMobs, s, 70);
+        if (alt) { s.target = alt; alt.pendingDmg = (alt.pendingDmg || 0) + s.dmg; }
+        else     { a.shots.splice(i, 1); continue; }
+      } else {
+        a.shots.splice(i, 1); continue;
+      }
+    }
+
+    const t = s.target;
+    if (t && !t.dead) { s.tx = t.x; s.ty = t.y; }
+    const dx = s.tx - s.x, dy = s.ty - s.y;
+    const d  = Math.hypot(dx, dy);
+
+    const ter = a.terrain;
+    // 🪨 벽에 막힌다. **지나온 구간 전체**를 본다 —
+    // 예전에는 이번 스텝의 끝점 한 점만 봤다. 스텝은 60fps에서 7px인데 미로 벽은
+    // 12px이라 보통은 걸렸지만, 배속(x2·x3)이나 프레임이 한 번 튀면 스텝이
+    // 14~35px이 되어 **벽을 통째로 건너뛰었다.** 테스터가 본 "일부만 맞는다"가 이것이다.
+    const wallHit = (x1, y1, x2, y2) =>
+      !!(ter && ter.length && losBlocked(ter, x1, y1, x2, y2));
+    const killShot = () => {
+      if (s.fromAlly && t) t.pendingDmg = Math.max(0, (t.pendingDmg||0) - s.dmg);
+      if (typeof FX !== 'undefined') FX.burst(s.x, s.y, '#94a3b8', 3, 6);
+      a.shots.splice(i, 1);
+    };
+
+    if (d < 8 || s.life <= 0) {
+      // 코앞에서 터질 때도 사이에 벽이 있으면 안 맞는다 —
+      // 벽에 딱 붙은 적이 벽 너머로 맞던 자리다.
+      if (t && !t.dead && d < 16 && !wallHit(s.x, s.y, t.x, t.y)) {
+        if (s.fromAlly) { t.pendingDmg = Math.max(0, (t.pendingDmg||0) - s.dmg); hurtMob(gs, t, s.dmg, s.color, true, s.shooter); }
+        else            hurtAlly(gs, t, s.dmg, s.color);
+      } else if (t && s.fromAlly) {
+        t.pendingDmg = Math.max(0, (t.pendingDmg||0) - s.dmg);
+      }
+      a.shots.splice(i, 1);
+      continue;
+    }
+    const step = Math.min(d, s.spd * dt);
+    const nx = s.x + dx / d * step, ny = s.y + dy / d * step;
+    if (wallHit(s.x, s.y, nx, ny)) { killShot(); continue; }
+    s.x = nx;
+    s.y = ny;
+  }
+}
+
+// ─── 드랍 ────────────────────────────────────────────────────────────────────
+// 바닥에 떨어지는 것은 이제 "값나가는 것"뿐이다. 기본 골드는 처치 즉시 들어온다.
+// 그래서 움직일 이유는 남되, 60초 내내 동전을 줍는 잡일은 없어진다.
+function updateDrops(gs, allies, dt) {
+  const a = gs.arena;
+  for (let i = a.drops.length - 1; i >= 0; i--) {
+    const dp = a.drops[i];
+    dp.life -= dt;
+    if (dp.life <= 0) { releaseGreed(allies, dp); a.drops.splice(i, 1); continue; }
+
+    let picker = null;
+    for (const u of allies) {
+      if (dist(u, dp) <= DROP_PICKUP_RADIUS) { picker = u; break; }
+    }
+    if (!picker) continue;
+
+    collectDrop(gs, dp, picker);
+    releaseGreed(allies, dp);
+    a.drops.splice(i, 1);
+  }
+  // 지난 버프 정리
+  if (a.buffs && a.buffs.length) a.buffs = a.buffs.filter(b => b.until > a.elapsed);
+}
+
+function releaseGreed(allies, dp) {
+  for (const u of allies) if (u.greedTarget === dp) u.greedTarget = null;
+}
+
+function collectDrop(gs, dp, picker) {
+  const a = gs.arena;
+  if (dp.kind === 'gold') {
+    gs.battle.goldEarned      += dp.amount;
+    gs.battle.goldBot         += dp.amount;
+    gs.battle.totalGoldEarned += dp.amount;
+    a.goldCollected           += dp.amount;
+    addFloaty(gs.battle, `+${dp.amount}💰`, dp.x, dp.y, COLORS.gold);
+    if (typeof SFX !== 'undefined') SFX.coin ? SFX.coin() : SFX.click();
+
+  } else if (dp.kind === 'exp') {
+    if (typeof grantHeroExp === 'function') grantHeroExp(dp.amount, 'battle', true, dp.x, dp.y);
+    addFloaty(gs.battle, `EXP +${Math.round(dp.amount)}`, dp.x, dp.y, '#f59e0b');
+    if (typeof SFX !== 'undefined') SFX.upgrade();
+
+  } else if (dp.kind === 'heal') {
+    let healed = 0;
+    for (const u of gs.battle.ourTeam) {
+      if (u.dead) continue;
+      const before = u.hp;
+      u.hp = Math.min(u.maxHp, u.hp + u.maxHp * dp.amount);
+      healed += Math.max(0, u.hp - before);
+    }
+    addFloaty(gs.battle, `+${Math.round(healed)} HP`, dp.x, dp.y, '#22c55e');
+    if (typeof FX  !== 'undefined') FX.ring(dp.x, dp.y, '#22c55e', 26);
+    if (typeof SFX !== 'undefined') SFX.heal();
+
+  } else {
+    // 일시 버프 — 이번 웨이브 동안만
+    a.buffs = (a.buffs || []).filter(b => b.kind !== dp.buff.kind);
+    a.buffs.push({ kind: dp.buff.kind, mult: dp.buff.mult, until: a.elapsed + ARENA_BUFF_DURATION });
+    addFloaty(gs.battle, `${dp.icon} ${dp.label}!`, dp.x, dp.y, dp.color);
+    addLog(gs.battle, `${dp.icon} ${dp.label} — ${ARENA_BUFF_DURATION}초`, dp.color);
+    if (typeof FX  !== 'undefined') FX.ring(dp.x, dp.y, dp.color, 30);
+    if (typeof SFX !== 'undefined') SFX.levelUp();
+  }
+}
+
+// ─── 소환 정예 ───────────────────────────────────────────────────────────────
+// 플레이어가 마을에서 직접 부르는 한 마리. 부대가 정면으로 이길 수 있는지를 묻는다.
+function spawnSummonedElite(gs, n) {
+  const a = gs.arena;
+  const pool = (a.pool || [['goblin', 1]]);
+  // 이 층에서 가장 무거운 종류를 고른다 — 정예는 잡몹의 확대판이 아니라 벽이어야 한다
+  const typeId = pool.map(([t]) => t)
+    .sort((x, y) => (BATTLE_MOB_TYPES[y]?.hp || 0) - (BATTLE_MOB_TYPES[x]?.hp || 0))[0] || 'orc';
+
+  const m = makeArenaMob(typeId, a.waveIndex, gs.battle.killCount, 0, 0);
+  const scale = ELITE_STAT_BONUS * (1 + n * ELITE_HP_ESCALATION);
+  m.isElite = true;
+  m.isSummonedElite = true;
+  m.name  = `소환 정예 ${m.name}`;
+  m.color = '#fbbf24';
+  m.maxHp = Math.max(ELITE_MIN_HP, Math.round(m.maxHp * scale));
+  m.hp    = m.maxHp;
+  m.atk   = Math.round(m.atk * (1 + n * 0.25) * 2.0);
+  m.def   = Math.round(m.def * 1.3);
+  m.radius = Math.round(m.radius * 1.5);
+  m.goldReward = Math.round(m.goldReward * eliteGoldMult(n));
+  m.gems  = eliteGems(n);
+
+  const allies = gs.battle.ourTeam.filter(u => !u.dead);
+  const p = pickSpawnPoint(a, allies);
+  m.x = p.x; m.y = p.y;
+  a.mobs.push(m);
+
+  addLog(gs.battle, `⚔️ 소환 정예 등장 — 처치 시 보석 +${m.gems}`, '#fbbf24');
+  addFloaty(gs.battle, '⚔️ 소환 정예!', m.x, m.y - 24, '#fbbf24');
+  if (typeof FX  !== 'undefined') { FX.ring(m.x, m.y, '#fbbf24', 30); FX.shake(5, 0.35); }
+  if (typeof SFX !== 'undefined') SFX.waveStart();
+}
+
+// 🐲 하단 중간보스 — 부대가 정면으로 이겨야 하는 한 마리.
+// 소환 정예와 달리 플레이어가 부른 것이 아니라 **층이 데려온다**.
+function spawnMidBossMob(gs, tier) {
+  const a = gs.arena;
+  const pool = (a.pool || [['goblin', 1]]);
+  const typeId = pool.map(([t]) => t)
+    .sort((x, y) => (BATTLE_MOB_TYPES[y]?.hp || 0) - (BATTLE_MOB_TYPES[x]?.hp || 0))[0] || 'orc';
+
+  const m = makeArenaMob(typeId, a.waveIndex, gs.battle.killCount, 0, 0);
+  m.isElite = true;
+  m.isMidBoss = true;
+  m.name  = midBossName(tier);
+  m.color = '#f43f5e';
+  m.maxHp = Math.max(400, Math.round(m.maxHp * MIDBOSS_ARENA_MULT
+                                     * (1 + (gs.nightmare || 0) * NIGHTMARE_BOSS_HP_STEP)));
+  m.hp    = m.maxHp;
+  m.atk   = Math.round(m.atk * 2.2);
+  m.def   = Math.round(m.def * 1.5);
+  m.radius = Math.round(m.radius * 1.7);
+  m.goldReward = Math.round(m.goldReward * 12);
+  m.gems  = Math.round((2 + Math.floor(tier / 20)) * (BONUSES.summonRewardMult || 1));
+
+  const allies = gs.battle.ourTeam.filter(u => !u.dead);
+  const p = pickSpawnPoint(a, allies);
+  m.x = p.x; m.y = p.y;
+  a.mobs.push(m);
+
+  addLog(gs.battle, `🐲 ${m.name} — 아레나에 내려옵니다 (처치 시 💎+${m.gems})`, '#f43f5e');
+  addFloaty(gs.battle, `🐲 ${m.name}!`, m.x, m.y - 26, '#f43f5e');
+  if (typeof FX  !== 'undefined') { FX.ring(m.x, m.y, '#f43f5e', 36); FX.shake(7, 0.5); }
+  if (typeof SFX !== 'undefined') SFX.waveStart();
+  return m;
+}
+
+// 👹 하단 레이드 보스 — 아레나를 통째로 쓰는 한 마리.
+// 중간보스와 달리 **가까이 붙어 때리지 않는다.** 위쪽에 자리를 잡고 서서
+// 바닥에 장판을 예고했다 터뜨린다(boss.js). 그래서 스펙이 모자라도 비켜서면 버틴다.
+function spawnRaidBoss(gs, tier, kind) {
+  const a = gs.arena;
+  const m = spawnMidBossMob(gs, tier);
+  if (!m) return null;
+  m.isRaidBoss = true;
+  if (kind === 'lord') {
+    m.name  = '👹 마왕';
+    m.maxHp = Math.round(m.maxHp * 2.6);
+    m.hp    = m.maxHp;
+    m.atk   = Math.round(m.atk * 1.3);
+  }
+  // 위쪽 한가운데에 자리를 잡고 거의 움직이지 않는다 — 쫓아다니는 싸움이 아니다
+  m.x = ARENA_X + ARENA_W / 2;
+  m.y = ARENA_Y + Math.min(70, ARENA_H * 0.16);
+  m.moveSpd = (m.moveSpd || 40) * 0.18;
+  m.radius  = Math.round(m.radius * 1.25);
+  return m;
+}
+
+// 값나가는 드랍 하나를 처치 지점 바깥에 떨군다.
+// 발밑에 두면 제자리를 지키는 자동 모드가 그냥 주워버려 "가지러 간다"가 성립하지 않는다.
+function spawnSpecialDrop(gs, m, baseGold) {
+  const d = rollDropType();
+  const ang  = Math.random() * Math.PI * 2;
+  const away = DROP_SCATTER_MIN + Math.random() * (DROP_SCATTER_MAX - DROP_SCATTER_MIN);
+  const p = clampToArena({ x: m.x + Math.cos(ang) * away, y: m.y + Math.sin(ang) * away }, 8);
+
+  let amount = 0;
+  if (d.id === 'gold')      amount = Math.max(6, Math.round(baseGold * (5 + Math.random() * 5)));
+  else if (d.id === 'exp')  amount = Math.max(6, Math.round((m.goldReward || 3) * ARENA_EXP_BASE * 12));
+  else if (d.id === 'heal') amount = DROP_HEAL_PCT;
+
+  const dp = {
+    x: p.x, y: p.y, kind: d.id, icon: d.icon, color: d.color, label: d.label,
+    buff: d.buff || null, amount, life: DROP_LIFETIME,
+    big: d.id === 'gold' || !!d.buff
+  };
+  gs.arena.drops.push(dp);
+  claimDropForGreed(gs, dp);
+}
+
+// 🗡️ 떨어진 것을 주우러 갈 도적을 고른다. 확률에 걸리면 그쪽으로 달려간다.
+function claimDropForGreed(gs, dp) {
+  const greedy = (gs.battle.ourTeam || []).filter(
+    u => !u.dead && (UNIT_TYPES[u.typeId] || {}).greed > 0 && !u.greedTarget);
+  if (!greedy.length) return;
+  greedy.sort((a, b) => dist(a, dp) - dist(b, dp));
+  const u = greedy[0];
+  if (Math.random() >= (UNIT_TYPES[u.typeId].greed || 0)) return;
+  u.greedTarget = dp;
+  addFloaty(gs.battle, '👀', u.x, u.y - u.radius - 8, '#fbbf24');
+}
+
+// 지금 걸린 아레나 버프 배율
+function arenaBuff(gs, kind) {
+  const a = gs.arena;
+  if (!a.buffs || !a.buffs.length) return 1;
+  const b = a.buffs.find(x => x.kind === kind && x.until > a.elapsed);
+  return b ? b.mult : 1;
+}
+
+// ─── 피해 ────────────────────────────────────────────────────────────────────
+function hurtMob(gs, m, dmg, color, fromRanged, fromShooter) {
+  if (m.dead) return;
+  // 🏹 반사막 — 보스가 원거리 공격을 받지 않는다. 붙어서 때리라는 뜻이고,
+  // 장판을 피하면서 붙어야 하니 그 10초가 실제로 어려운 구간이 된다.
+  if (fromRanged && (m.isRaidBoss || m.isMidBoss)
+      && typeof bossEffect === 'function' && bossEffect(gs, 'noranged')) {
+    addFloaty(gs.battle, '🏹 튕김', m.x, m.y - m.radius, '#94a3b8');
+    return;
+  }
+  // 🛡 방패병 — 날아오는 것만 막는다. 붙어서 때리면 그대로 아프다.
+  // 궁수 한 종류로 칸을 다 채우는 것이 늘 정답이던 것을 되돌리는 자리다.
+  let real = dmg;
+  // 🏹 신궁은 방패를 뚫는다 — 원거리인데도 통하는 갈래가 하나는 있어야
+  // 방패병이 '원거리 금지'가 아니라 '원거리를 고르게 하는 적'이 된다
+  const shieldPierced = !!BONUSES.heroPierceRanged && fromShooter && fromShooter.isHero;
+  if (fromRanged && m.rangedResist > 0 && !shieldPierced) {
+    real = Math.max(1, Math.round(dmg * (1 - m.rangedResist)));
+    if (Math.random() < 0.3) addFloaty(gs.battle, '🛡', m.x, m.y - m.radius - 8, '#38bdf8');
+  }
+  // 🎯 사냥 표식(신궁) — 표식이 붙은 동안 받는 피해가 늘어난다
+  if ((m.markUntil || 0) > gs.arena.elapsed) real = Math.round(real * (1 + (m.markPct || 0.6)));
+  m.hp -= real;
+  m.flashTimer = 0.18; m.flashColor = color;
+  addFloaty(gs.battle, `-${real}`, m.x, m.y - m.radius, color);
+  if (typeof FX !== 'undefined') FX.burst(m.x, m.y, color, 2, 6);
+  if (m.hp > 0) return;
+
+  m.dead = true; m.hp = 0; m.deadTimer = 0; m.pendingDmg = 0;
+  // 👹 하단 레이드 보스를 잡았다 — 여기서 보스전이 끝나고 유물이 떨어진다
+  if ((m.isRaidBoss || m.isMidBoss) && typeof bossActive === 'function' && bossActive(gs)
+      && gs.boss.side === 'bottom') {
+    if (typeof grantBossReward === 'function') grantBossReward(gs);
+    endBossFight(gs, true);
+    if (m.isRaidBoss && !gs.bossDefeated && typeof markBossDefeated === 'function'
+        && gs.boss.kind === 'lord') markBossDefeated();
+  }
+  // 소환 정예 — 잡아야만 보석이 들어온다
+  if (m.gems > 0) {
+    gs.soulStones += m.gems;
+    gs.stats.totalGems = (gs.stats.totalGems || 0) + m.gems;
+    if (typeof addRunGems === 'function') addRunGems(gs, 'elite', m.gems);
+    gs.stats.eliteKills = (gs.stats.eliteKills || 0) + 1;
+    addFloaty(gs.battle, `💎 +${m.gems}`, m.x, m.y - 30, '#a78bfa');
+    addLog(gs.battle, `⚔️ 소환 정예 처치! 보석 +${m.gems}`, '#a78bfa');
+    if (typeof FX !== 'undefined') { FX.ring(m.x, m.y, '#fbbf24', 30); FX.shake(6, 0.4); }
+    if (typeof SaveManager !== 'undefined') SaveManager.save(gs);
+    m.gems = 0;
+  }
+  gs.battle.killCount++;
+  gs.battle.runKills = (gs.battle.runKills || 0) + 1;
+  gs.stats.totalKills++;
+  if (typeof FX  !== 'undefined') FX.burst(m.x, m.y, m.color, 10, 14);
+  if (typeof SFX !== 'undefined') SFX.kill();
+
+  // ── 기본 골드는 즉시 들어온다 ──
+  const amount = Math.max(1, Math.round((m.goldReward || 1) * ARENA_GOLD_SCALE
+                                       * BONUSES.battleGoldMult * fev('goldMult', 1)));
+  gs.battle.goldEarned      += amount;
+  gs.battle.goldBot         += amount;
+  gs.battle.totalGoldEarned += amount;
+  gs.arena.goldCollected    += amount;
+  addFloaty(gs.battle, `+${amount}💰`, m.x, m.y - m.radius - 4, COLORS.gold);
+
+  // ── 가끔 값나가는 것이 떨어진다 — 그것만 주우러 간다 ──
+  const chance = DROP_SPECIAL_CHANCE + (BONUSES.dropChance || 0)
+               + (m.isBoss ? 0.5 : m.isElite ? 0.22 : 0);
+  if (Math.random() < chance) spawnSpecialDrop(gs, m, amount);
+
+  if (typeof tut !== 'undefined' && tut && tut.showTip) tut.showTip('drop');
+
+  if (m.isBoss) {
+    if (typeof FX !== 'undefined') { FX.ring(m.x, m.y, '#fbbf24', 22); FX.shake(5, 0.3); }
+  }
+  // 처치 회복도 전반적으로 눌렀다 — 잡기만 하면 차오르면 자연 회복을 없앤 뜻이 없다
+  if (BONUSES.killHealPct > 0) {
+    for (const u of gs.battle.ourTeam)
+      if (!u.dead) u.hp = Math.min(u.maxHp, u.hp + u.maxHp * BONUSES.killHealPct);
+  }
+  if (BONUSES.killHeal > 0) {
+    for (const u of gs.battle.ourTeam) {
+      if (!u.dead) u.hp = Math.min(u.maxHp, u.hp + BONUSES.killHeal);
+    }
+  }
+
+  // 하단에서도 영웅이 큰다. 아레나는 처치 수가 훨씬 많으므로 한 마리 값을 낮춘다.
+  // 영웅이 상단에 서 있어도 소량은 들어온다 — 반대쪽 전선의 몫이다.
+  if (typeof grantHeroExp === 'function') {
+    const bt = BATTLE_MOB_TYPES[m.typeId];
+    const base = (bt ? bt.goldReward : 2) * ARENA_EXP_BASE;
+    grantHeroExp(base, 'battle', false, m.x, m.y);
+  }
+
+  applyDeathAffixes(gs, m);
+}
+
+// ─── 심층 변형 — 죽는 순간에 걸리는 것들 ─────────────────────────────────────
+// 💥 폭발과 🧬 분열은 "잡으면 끝"이라는 전제를 깬다.
+// 몰아치기로 한 무더기를 한꺼번에 녹이는 편성이 여기서는 오히려 손해가 된다.
+function applyDeathAffixes(gs, m) {
+  const a = gs.arena;
+  if (m._noAffixDeath) return;      // 분열로 나온 조각은 다시 나뉘지 않는다
+
+  if (a.volatile) {
+    const r = 34 + m.radius * 1.6;
+    const dmg = Math.max(2, Math.round((m.atk || 4) * 1.2));
+    for (const u of gs.battle.ourTeam) {
+      if (u.dead) continue;
+      if (Math.hypot(u.x - m.x, u.y - m.y) > r) continue;
+      hurtAlly(gs, u, dmg, '#f97316');
+    }
+    a.bursts.push({ x:m.x, y:m.y, r, color:'#f97316', t:0, dur:0.35 });
+    if (typeof FX !== 'undefined') FX.burst(m.x, m.y, '#f97316', 8, 12);
+  }
+
+  if (a.split && (m.radius >= 8 || m.isBoss)) {
+    // 상한을 넘겨서까지 나누지는 않는다 — 화면이 읽히지 않으면 변형이 아니라 사고다
+    const live = a.mobs.filter(x => !x.dead).length;
+    const n = Math.max(0, Math.min(a.split, ARENA_MAX_MOBS - live));
+    for (let i = 0; i < n; i++) {
+      const c = makeArenaMob('goblin', a.waveIndex, gs.battle.killCount, 0, 0);
+      c.hp = c.maxHp = Math.max(1, Math.round(m.maxHp * 0.22));
+      c.atk = Math.max(1, Math.round((m.atk || 4) * 0.5));
+      c.name = `${m.name} 조각`;
+      c._noAffixDeath = true;
+      const ang = (Math.PI * 2 * i) / n + Math.random();
+      const p = clampToArena({ x: m.x + Math.cos(ang) * 16, y: m.y + Math.sin(ang) * 16 }, c.radius);
+      c.x = p.x; c.y = p.y;
+      a.mobs.push(c);
+    }
+  }
+}
+
+function hurtAlly(gs, u, dmg, color, from) {
+  if (u.dead) return;
+  if (isHidden(u)) return;   // 🗡️ 은신 중에는 맞지 않는다
+  // 비율 방어 — 정액 방어(def)가 뺄셈으로 먼저 걸리고, 남은 피해에 이 비율이 곱해진다.
+  // 상한을 두는 이유는 기지 피해 감소와 같다: 100%에 닿으면 그 뒤로는 아무것도
+  // 위험하지 않아서 판이 끝난다.
+  const dpct = Math.min(UNIT_DEF_PCT_CAP, Math.max(0, BONUSES.unitDefPct || 0));
+  let remain = Math.max(1, Math.round(dmg * arenaBuff(gs, 'guard') * (1 - dpct)));   // 🛡️ 수호
+  if (dmg <= 0) remain = 0;
+  if (u.shield > 0) {
+    const absorbed = Math.min(u.shield, remain);
+    u.shield -= absorbed; remain -= absorbed;
+    addFloaty(gs.battle, `🛡-${absorbed}`, u.x, u.y - u.radius - 8, COLORS.shield);
+  }
+  if (remain <= 0) return;
+
+  u.hp -= remain;
+  u.noHitFor = 0;
+  u.flashTimer = 0.2; u.flashColor = color;
+  addFloaty(gs.battle, `-${remain}`, u.x, u.y - u.radius, color);
+  if (typeof SFX !== 'undefined') SFX.hit();
+  // 🌵 가시 갑주(파수꾼) — 근접으로 때린 쪽에만 되돌린다. 때린 놈을 알 수 있는
+  // 경로가 근접뿐이라 그렇고, "붙으면 아프다"는 규칙이 읽히기도 이쪽이 낫다.
+  const a0 = gs.arena;
+  if (from && !from.dead && (a0.allyThornUntil || 0) > a0.elapsed) {
+    const back = Math.max(1, Math.round(remain * (a0.allyThornPct || 0.45)));
+    hurtMob(gs, from, back, '#84cc16');
+  }
+  if (u.hp > 0) return;
+
+  // 불굴의 의지
+  if (BONUSES.undying && !u.undyingUsed) {
+    u.undyingUsed = true; u.hp = 1;
+    addFloaty(gs.battle, '불굴!', u.x, u.y - u.radius - 14, '#fbbf24');
+    return;
+  }
+  u.dead = true; u.hp = 0;
+  if (typeof FX !== 'undefined') FX.burst(u.x, u.y, u.color, 12, 14);
+  addLog(gs.battle, `☠️ ${u.name} 전사`, '#ef4444');
+}
+
+// ─── 웨이브 시작/종료 훅 ─────────────────────────────────────────────────────
+function startArena(gs, waveIndex) {
+  const a = gs.arena, def = waveDefFor(waveIndex) || {};
+  a.mobs = []; a.drops = []; a.shots = []; a.bursts = [];
+  a.allyThornUntil = 0;
+  a.elapsed = 0;
+  a.spawnTimer = 0.6;
+  a.waveIndex  = waveIndex;
+  a.pool       = def.arenaPool || [['goblin', 10]];
+  a.eliteBonus = def.eliteBonus || 0;
+  a.spawnMult  = def.spawnMult  || 1;
+  scheduleSurge(a, true);   // 🌊 첫 쇄도 예약
+  a.surgeFlash = 0;
+  // 심층 변형 — 몹마다 들고 다닐 필요가 없으므로 아레나에 한 벌만 둔다
+  a.thorns   = def.thorns   || 0;
+  a.split    = def.split    || 0;
+  a.volatile = def.volatile || 0;
+  // 웨이브가 새로 시작하면 자동으로 돌아간다.
+  // 예전에는 rally만 지우고 mode는 'manual'로 남겨둬서, 표시는 수동인데 행동은 자동이고
+  // 배속만 2배로 묶여 있는 상태가 됐다.
+  a.mode = 'auto';
+  a.rally = null;
+  a.buffs = [];
+  // 마을에서 예약해둔 소환 정예는 웨이브 시작 조금 뒤에 나온다
+  a.eliteTimer = gs.elitePending ? ELITE_SPAWN_DELAY : null;
+  a.eliteN     = Math.max(0, (gs.eliteUsed || 1) - 1);
+  gs.elitePending = false;
+  if (typeof releaseManualSpeed === 'function') releaseManualSpeed();
+  a.goldCollected = 0;
+  // 지형은 층마다 새로 생성된다 (훈련에는 없다 — 배우는 곳이므로 판을 비워둔다)
+  // 층마다 이름 있는 배치를 하나 뽑는다 — 브리핑에서 미리 보여주려고 id도 남긴다
+  const _tier = endlessTier(waveIndex);
+  a.layout  = _tier > 0 ? arenaLayoutFor(_tier, gs.runSeed).id : 'open';
+  a.terrain = _tier > 0 ? generateArenaTerrain(_tier, gs.runSeed) : [];
+  // 🛢 바닥 장식 — 판정에 관여하지 않는다. 지형과 같은 시드라 층마다 자리가 고정된다.
+  a.deco    = _tier > 0 ? generateArenaDeco(_tier, gs.runSeed, a.terrain) : [];
+
+  const allies = gs.battle.ourTeam.filter(u => !u.dead);
+  allies.forEach((u, i) => spawnAllyIntoArena(a, u, i, allies.length));
+}
+
+// ─── 🏳 하단을 비우면 남은 무리가 성으로 돌진한다 ────────────────────────────
+// 한때 이것들을 상단 경로로 올려보내 타워가 잡게 했었다. 그러면 게임이 바뀐다 —
+// 타워만 끝까지 올리면 하단을 통째로 버려도 되고, 위아래를 저울질하는 재미가 사라진다.
+// 그래서 값은 예전 그대로(성벽 HP)로 돌리되, **눈에 보이게** 만든다.
+// 숫자가 조용히 깎이는 것과, 열두 마리가 성문으로 달려드는 것을 보는 것은 다른 일이다.
+const CHARGE_MAX_SHOWN = 12;    // 화면에 세울 최대 돌격병 — 그 이상은 뭉쳐서 안 읽힌다
+const CHARGE_SPEED     = 165;   // px/초 — 연출이 늘어지면 안 된다
+const CHARGE_SPREAD    = 150;   // 출발 지점 좌우 퍼짐
+
+// 지금 하단을 비우면 성벽이 얼마나 깎이는지. 버튼에 띄우는 값과 실제가 같아야 한다.
+function spillPreview(gs) {
+  return retreatCost(typeof wm !== 'undefined' && wm ? wm.timer : 0);
+}
+
+// 남은 무리를 성으로 달려들게 한다. total만큼의 피해를 나눠 물고 간다.
+function launchCharge(gs, total, why) {
+  if (total <= 0) return 0;
+  const live = gs.arena.mobs.filter(m => !m.dead);
+  // 마릿수는 남은 몹과 피해량 둘 다를 본다. 아레나가 비어 있어도 값을 치렀다면
+  // 그만큼은 달려드는 것이 보여야 하고, 40HP가 한 마리로 들어오면 읽히지 않는다.
+  const n = Math.max(1, Math.min(CHARGE_MAX_SHOWN, Math.max(live.length, Math.ceil(total / 6))));
+  const base = cellCenter(CASTLE_C, CASTLE_R);                    // 기지 칸
+  gs.chargers = gs.chargers || [];
+
+  // 피해를 마릿수로 쪼갠다. 나머지는 앞쪽 몇에게 하나씩 더 얹어 총합을 정확히 맞춘다.
+  const each = Math.floor(total / n), extra = total - each * n;
+  for (let i = 0; i < n; i++) {
+    const src = live[i] || live[0];
+    gs.chargers.push({
+      typeId: src ? src.typeId : 'goblin',
+      x: base.x + (i - (n - 1) / 2) * (CHARGE_SPREAD / Math.max(1, n - 1)) * (n > 1 ? 1 : 0),
+      y: GRID_OY - 10 - Math.random() * 26,
+      dmg: each + (i < extra ? 1 : 0),
+      radius: src ? Math.max(9, src.radius * 0.7) : 10,
+      delay: i * 0.12,
+      hitFlash: 0, dead: false
+    });
+  }
+  addLog(gs.battle, why === 'wipe'
+    ? `☠️ 전멸 — 남은 ${live.length}마리가 성으로 달려듭니다`
+    : `🛡 후퇴 — 남은 무리가 성으로 달려듭니다`, '#f87171');
+  return n;
+}
+
+function clearArena(gs) {
+  const a = gs.arena;
+  a.mobs = []; a.drops = []; a.shots = []; a.bursts = [];
+  a.allyThornUntil = 0;
+  a.rally = null;
+}
+
+// 도감 — 만나본 몹을 기록한다
+function markMobSeen(gs, typeId) {
+  if (!gs.seenMobs) gs.seenMobs = [];
+  if (!gs.seenMobs.includes(typeId)) gs.seenMobs.push(typeId);
+}
